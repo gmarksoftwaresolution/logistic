@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Transporter Logistic",
+    "slug": "transporter-app-frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/GMLogo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./src/assets/GMLogo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/GMLogo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.gmarksoft.transporter",
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "favicon": "./src/assets/GMLogo.png"
+    },
+    "plugins": [
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-localization"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c6090192-ec67-4f14-b8a4-d9c8181324d4"
+      }
+    },
+    "owner": "vallabhg"
+  }
+}

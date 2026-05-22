@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Delivery Partner App",
+    "slug": "shg-logistics",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/GMU Logo.png",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/GMU Logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gmu.app",
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/images/GMU Logo.png",
+          "resizeMode": "contain"
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-web-browser",
+      "expo-localization"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "62c8a8e5-7dca-4cbe-840e-785c93ac3a15"
+      }
+    }
+  }
+}

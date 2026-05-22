@@ -1,0 +1,23 @@
+export enum UserRole {
+  SHG = 'SHG',
+  INDIVIDUAL = 'INDIVIDUAL',
+  TRANSPORTER = 'TRANSPORTER',
+  ADMIN = 'ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN',
+}
+
+export enum ApplicationStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum VehicleType {
+  TWO_WHEELER = 'TWO_WHEELER',
+  THREE_WHEELER = 'THREE_WHEELER',
+  FOUR_WHEELER = 'FOUR_WHEELER',
+  MILK_VAN = 'MILK_VAN',
+  OTHER = 'OTHER',
+}

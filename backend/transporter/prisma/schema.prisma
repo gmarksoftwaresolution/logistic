@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authId            String             @unique @db.Uuid
+  role              UserRole
+  phoneNumber       String             @unique
+  email             String?            @unique
+  fullName          String?
+  profilePhoto      String?
+  language          String?            @default("English")
+  isVerified        Boolean            @default(false)
+  currentStep       Int                @default(0)
+  profileCompletion Int                @default(0)
+  applicationStatus ApplicationStatus  @default(PENDING)
+  uniqueCode        String?            @unique
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+  address           Address?
+  applications      Application[]
+  auditLogs         AuditLog[]
+  bankDetails       BankDetail[]
+  businessDetail    BusinessDetail?
+  documents         Document?
+  drivingDetail     DrivingDetail?
+  milkVanDetail     MilkVanDetail?
+  products          Product[]
+  routeDetail       RouteDetail?
+  shgDetail         ShgDetail?
+  stepTracking      StepTracking[]
+  transporterDetail TransporterDetail?
+  vehicles          Vehicle[]
+
+  @@index([role])
+}
+
+model Address {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @unique @db.Uuid
+  addressLine1 String
+  addressLine2 String?
+  village      String?
+  taluka       String?
+  district     String
+  state        String
+  pincode      String
+  landmark     String?
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BankDetail {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @db.Uuid
+  accountHolderName String
+  bankName          String
+  accountNumber     String
+  ifscCode          String
+  branchName        String?
+  upiId             String?
+  isVerified        Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Document {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @unique @db.Uuid
+  aadhaarNumber     String?
+  panNumber         String?
+  drivingLicenseNo  String?
+  aadhaarFrontUrl   String?
+  aadhaarBackUrl    String?
+  panCardUrl        String?
+  drivingLicenseUrl String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Vehicle {
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String      @db.Uuid
+  vehicleType        VehicleType
+  vehicleName        String?
+  registrationNumber String?
+  licenseNumber      String?
+  rcUrl              String?
+  insuranceUrl       String?
+  vehicleImageUrl    String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  deletedAt          DateTime?
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Application {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String            @db.Uuid
+  status          ApplicationStatus @default(PENDING)
+  reviewedBy      String?
+  rejectionReason String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model StepTracking {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String     @db.Uuid
+  step       Int
+  status     StepStatus @default(PENDING)
+  data       Json?
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, step])
+}
+
+model ShgDetail {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @unique @db.Uuid
+  shgName          String?
+  shgLeaderName    String?
+  shgLeaderContact String?
+  shgRole          ShgRole?
+  crpName          String?
+  crpMobile        String?
+  crpEmail         String?
+  groupSize        Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BusinessDetail {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @unique @db.Uuid
+  producesProduct  Boolean  @default(false)
+  businessTeamSize Int?
+  storageSpace     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String          @db.Uuid
+  productName        String
+  category           ProductCategory
+  dailyProductionQty Float
+  weeklyProduction   Float?
+  monthlyProduction  Float?
+  unit               String
+  price              Float?
+  imageUrl           String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TransporterDetail {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String       @unique @db.Uuid
+  transporterCode   String?      @unique
+  vehicleCategory   VehicleType?
+  experienceYears   Int?
+  availableFullTime Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DrivingDetail {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @unique @db.Uuid
+  licenseNumber     String
+  expiryDate        DateTime
+  drivingExperience Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RouteDetail {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @unique @db.Uuid
+  operatingArea   String
+  pickupLocations Json?
+  dropLocations   Json?
+  workingDays     Json?
+  workingSchedule Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MilkVanDetail {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @unique @db.Uuid
+  sangathanName    String
+  centerName       String
+  assignedVillages Json?
+  morningShiftTime String?
+  eveningShiftTime String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String?  @db.Uuid
+  module    String
+  action    String
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model OTPVerification {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneNumber String
+  otp         String
+  type        String
+  attempts    Int      @default(0)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([phoneNumber])
+}
+
+enum UserRole {
+  SHG
+  INDIVIDUAL
+  TRANSPORTER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UNDER_REVIEW
+  COMPLETED
+}
+
+enum VehicleType {
+  TWO_WHEELER
+  THREE_WHEELER
+  FOUR_WHEELER
+  MILK_VAN
+  OTHER
+}
+
+enum ProductCategory {
+  FOOD
+  HANDMADE
+  AGRICULTURE
+  TEXTILE
+  DAIRY
+  OTHER
+}
+
+enum StepStatus {
+  PENDING
+  COMPLETED
+}
+
+enum ShgRole {
+  CRP
+  LEADER
+  MEMBER
+}

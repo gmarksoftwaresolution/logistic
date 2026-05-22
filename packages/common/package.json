@@ -1,0 +1,15 @@
+{
+  "name": "@logistic/common",
+  "version": "1.0.0",
+  "description": "Shared constants and type definitions for Logistic Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.3",
+    "@types/node": "^20.3.1"
+  }
+}

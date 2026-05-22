@@ -1,0 +1,45 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local environment variables (IMPORTANT: Protect Supabase credentials!)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+
+# NestJS build output
+dist/
+*.tsbuildinfo
+
+# Expo / React Native build and runtime caches
+.expo/
+web-build/
+*.jks
+*.keystore
+*.apk
+*.aab
+ipa/
+*.ipa
+
+# Shared libraries compiled output
+packages/db/dist/
+packages/common/dist/
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS metadata
+.DS_Store
+Thumbs.db
