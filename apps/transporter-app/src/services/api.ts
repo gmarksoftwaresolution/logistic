@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Expo public environment API URL or local transporter backend port fallback
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
@@ -53,8 +54,14 @@ export const uploadFile = async (uri: string) => {
     type = 'image/jpeg';
   }
 
+  // Ensure URI is correctly formatted for Android
+  let finalUri = uri;
+  if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://')) {
+    finalUri = `file://${uri}`;
+  }
+
   formData.append('file', {
-    uri,
+    uri: finalUri,
     name: filename,
     type,
   } as any);
@@ -63,6 +70,7 @@ export const uploadFile = async (uri: string) => {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    transformRequest: (data) => data, // Prevent Axios from serializing FormData as JSON
   });
 };
 
