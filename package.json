@@ -13,5 +13,9 @@
     "transporter-app:start": "npm start --workspace=@logistic/transporter-app",
     "shg-backend:dev": "npm run start:dev --workspace=@logistic/shg-backend",
     "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend"
+  },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1"
   }
 }
