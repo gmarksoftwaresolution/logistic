@@ -43,7 +43,7 @@ export class VerifyOtpDto {
 
 export class RefreshTokenDto {
   @IsNotEmpty()
-  userId: string;
+  userId: number;
 
   @IsString()
   @IsNotEmpty()

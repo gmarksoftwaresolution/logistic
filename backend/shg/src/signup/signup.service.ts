@@ -84,7 +84,7 @@ export class SignupService {
     };
   }
 
-  private async trackStep(userId: string, step: number, status: StepStatus = 'COMPLETED', data?: any) {
+  private async trackStep(userId: number, step: number, status: StepStatus = 'COMPLETED', data?: any) {
     await this.prisma.stepTracking.upsert({
       where: { userId_step: { userId, step } },
       create: {
@@ -103,7 +103,7 @@ export class SignupService {
 
   // ─── STEP 1: Profile + Role ──────────────────────────────────────────────────
 
-  async saveProfile(userId: string, dto: ProfileDto) {
+  async saveProfile(userId: number, dto: ProfileDto) {
     const userObj = await this.ensureVerified(userId);
 
     // Generate Unique ID early in Step 1
@@ -140,7 +140,7 @@ export class SignupService {
 
   // ─── SHG Details (SHG flow only) ────────────────────────────────────────────
 
-  async saveShgDetails(userId: string, dto: ShgDetailsDto) {
+  async saveShgDetails(userId: number, dto: ShgDetailsDto) {
     const user = await this.ensureVerified(userId);
     this.ensureUserType(user.role, UserRole.SHG);
     this.validateStep(user.currentStep, 1);
@@ -185,7 +185,7 @@ export class SignupService {
   }
 
   // Save Non-SHG role
-  async saveNonShgRole(userId: string, dto: NonShgRoleDto) {
+  async saveNonShgRole(userId: number, dto: NonShgRoleDto) {
     const user = await this.ensureVerified(userId);
     this.ensureUserType(user.role, UserRole.INDIVIDUAL);
     this.validateStep(user.currentStep, 1);
@@ -225,7 +225,7 @@ export class SignupService {
 
   // ─── STEP 2 (SHG): Products ─────────────────────────────────────────────────
 
-  async saveProducts(userId: string, dto: ProductsDto) {
+  async saveProducts(userId: number, dto: ProductsDto) {
     const user = await this.ensureVerified(userId);
     this.ensureUserType(user.role, UserRole.SHG);
     this.validateStep(user.currentStep, 2);
@@ -279,7 +279,7 @@ export class SignupService {
 
   // ─── STEP 3 (SHG) / STEP 2 (Non-SHG): Address ─────────────────────────────
 
-  async saveAddress(userId: string, dto: AddressDto) {
+  async saveAddress(userId: number, dto: AddressDto) {
     const user = await this.ensureVerified(userId);
     this.validateStep(user.currentStep, user.role === UserRole.SHG ? 3 : 2);
 
@@ -322,7 +322,7 @@ export class SignupService {
 
   // ─── STEP 4 (SHG) / STEP 3 (Non-SHG): Documents ──────────────────────────
 
-  async saveDocuments(userId: string, dto: DocumentsDto) {
+  async saveDocuments(userId: number, dto: DocumentsDto) {
     const user = await this.ensureVerified(userId);
     this.validateStep(user.currentStep, 4);
 
@@ -370,7 +370,7 @@ export class SignupService {
 
   // ─── STEP 5 (SHG) / STEP 4 (Non-SHG): Bank Details ───────────────────────
 
-  async saveBankDetails(userId: string, dto: BankDetailsDto) {
+  async saveBankDetails(userId: number, dto: BankDetailsDto) {
     const user = await this.ensureVerified(userId);
     this.validateStep(user.currentStep, 5);
 
@@ -405,7 +405,7 @@ export class SignupService {
 
   // ─── STEP 6 (SHG) / STEP 5 (Non-SHG): Other Details + Vehicle ────────────
 
-  async saveOtherDetails(userId: string, dto: OtherDetailsDto) {
+  async saveOtherDetails(userId: number, dto: OtherDetailsDto) {
     try {
       const user = await this.ensureVerified(userId);
 
@@ -487,7 +487,7 @@ export class SignupService {
 
   // ─── Get Signup Progress ─────────────────────────────────────────────────────
 
-  async getSignupProgress(userId: string) {
+  async getSignupProgress(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -663,7 +663,7 @@ export class SignupService {
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-  private async ensureVerified(userId: string) {
+  private async ensureVerified(userId: number) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new BadRequestException('User not found');

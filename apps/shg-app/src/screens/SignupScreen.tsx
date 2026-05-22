@@ -493,8 +493,12 @@ export default function SignupScreen({ navigation }: Props) {
             Toast.show({ type: 'success', text1: 'Welcome back!', text2: 'Resuming your registration progress' });
             return;
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Failed to fetch signup progress on mount:', err);
+          if (err.response?.status === 401) {
+            await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
+            await AsyncStorage.removeItem('user_profile');
+          }
         }
       }
 
@@ -1084,6 +1088,9 @@ export default function SignupScreen({ navigation }: Props) {
         if (shgRole === 'Member') {
           shgDetails.shgLeaderName = leaderName;
           shgDetails.shgLeaderContact = leaderMobile;
+        } else if (shgRole === 'Leader') {
+          shgDetails.shgLeaderName = fullName;
+          shgDetails.shgLeaderContact = mobile;
         }
       }
 
@@ -3346,7 +3353,7 @@ export default function SignupScreen({ navigation }: Props) {
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Village</Text>
-                {selectedData?.villages.map((opt: string) => {
+                {selectedData?.villages?.map((opt: string) => {
                   const isSelected = village === opt;
                   return (
                     <TouchableOpacity
@@ -3373,7 +3380,7 @@ export default function SignupScreen({ navigation }: Props) {
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Street / Area</Text>
-                {selectedData?.areas.map((opt: string) => {
+                {selectedData?.areas?.map((opt: string) => {
                   const isSelected = streetArea === opt;
                   return (
                     <TouchableOpacity

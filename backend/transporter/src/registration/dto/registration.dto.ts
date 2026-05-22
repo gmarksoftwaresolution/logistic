@@ -164,7 +164,7 @@ export class Step1PersonalDetailsDto {
   @IsString()
   @MinLength(3)
   @MaxLength(100)
-  @Matches(NAME_REGEX, { message: 'Address can contain only alphabets' })
+  @Matches(ADDRESS_REGEX, { message: 'Address contains invalid characters' })
   @Transform(({ value }) => value?.trim())
   residentialAddress: string;
 

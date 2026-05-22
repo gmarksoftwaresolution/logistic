@@ -35,14 +35,14 @@ export class AdminController {
   @Patch(':requestId/approve')
   @ApiOperation({ summary: 'Approve a signup request' })
   @ApiResponse({ status: 200, description: 'Request approved successfully' })
-  async approve(@Param('requestId') requestId: string) {
+  async approve(@Param('requestId', ParseIntPipe) requestId: number) {
     return this.adminService.approveRequest(requestId);
   }
 
   @Patch(':requestId/reject')
   @ApiOperation({ summary: 'Reject a signup request' })
   @ApiResponse({ status: 200, description: 'Request rejected successfully' })
-  async reject(@Param('requestId') requestId: string, @Body() dto: RejectRequestDto) {
+  async reject(@Param('requestId', ParseIntPipe) requestId: number, @Body() dto: RejectRequestDto) {
     return this.adminService.rejectRequest(requestId, dto);
   }
 }

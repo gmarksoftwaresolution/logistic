@@ -55,8 +55,12 @@ export default function LandingScreen({ navigation }: Props) {
                 return;
               }
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("Failed to check signup progress on app launch:", err);
+            if (err.response?.status === 401) {
+              await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
+              await AsyncStorage.removeItem('user_profile');
+            }
           }
         }
       } catch (error) {

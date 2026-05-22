@@ -45,7 +45,7 @@ export class AdminService {
     };
   }
 
-  async approveRequest(requestId: string) {
+  async approveRequest(requestId: number) {
     const application = await this.prisma.application.findUnique({
       where: { id: requestId },
     });
@@ -73,7 +73,7 @@ export class AdminService {
     };
   }
 
-  async rejectRequest(requestId: string, dto: RejectRequestDto) {
+  async rejectRequest(requestId: number, dto: RejectRequestDto) {
     const application = await this.prisma.application.findUnique({
       where: { id: requestId },
     });

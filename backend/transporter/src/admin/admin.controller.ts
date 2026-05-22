@@ -6,7 +6,7 @@ import {
   Query,
   Body,
   UseGuards,
-  ParseUUIDPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { IsString, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -47,7 +47,7 @@ export class AdminController {
   @Patch(':requestId/approve')
   @ApiOperation({ summary: 'Approve a transporter application' })
   @ApiResponse({ status: 200, description: 'Application approved successfully' })
-  approveRequest(@Param('requestId', ParseUUIDPipe) requestId: string) {
+  approveRequest(@Param('requestId', ParseIntPipe) requestId: number) {
     return this.adminService.approveRequest(requestId);
   }
 
@@ -56,7 +56,7 @@ export class AdminController {
   @ApiBody({ type: RejectionDto })
   @ApiResponse({ status: 200, description: 'Application rejected successfully' })
   rejectRequest(
-    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Param('requestId', ParseIntPipe) requestId: number,
     @Body() dto: RejectionDto,
   ) {
     return this.adminService.rejectRequest(requestId, dto.rejectionReason);

@@ -65,7 +65,7 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string) {
+  async refreshTokens(userId: number, refreshToken: string) {
     try {
       const payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET || 'super-refresh-secret',
@@ -87,7 +87,7 @@ export class AuthService {
     return tokens;
   }
 
-  async getTokens(userId: string, mobile: string) {
+  async getTokens(userId: number, mobile: string) {
     const payload = { sub: userId, mobile };
     
     const [accessToken, refreshToken] = await Promise.all([

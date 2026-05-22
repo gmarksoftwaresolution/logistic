@@ -395,7 +395,7 @@ export class RegistrationService {
       } as any,
     });
 
-    return this.completeRegistration(user.id as any);
+    return this.completeRegistration(user.id);
   }
 
   // MILK VAN BRANCH
@@ -485,7 +485,7 @@ export class RegistrationService {
       });
     }
 
-    return this.completeRegistration(user.id as any);
+    return this.completeRegistration(user.id);
   }
 
   private async validateStep(
@@ -516,8 +516,11 @@ export class RegistrationService {
     return user;
   }
 
-  private async completeRegistration(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  private async completeRegistration(id: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { drivingDetail: true }
+    });
 
     if (user.applicationStatus === ApplicationStatus.APPROVED ||
       user.applicationStatus === ApplicationStatus.UNDER_REVIEW ||
@@ -532,12 +535,26 @@ export class RegistrationService {
     const transporterUniqueId = await this.generateTransporterUniqueId();
 
     const updated = await this.prisma.user.update({
-      where: { id: id as any },
+      where: { id },
       data: {
         applicationStatus: ApplicationStatus.COMPLETED,
         currentStep: 7, // Set to 7 as per requirement
         uniqueCode: transporterUniqueId,
       },
+    });
+
+    // Save transporter details in TransporterDetail table
+    await this.prisma.transporterDetail.upsert({
+      where: { userId: id },
+      update: {
+        transporterCode: transporterUniqueId,
+        experienceYears: user.drivingDetail?.drivingExperience || null
+      },
+      create: {
+        userId: id,
+        transporterCode: transporterUniqueId,
+        experienceYears: user.drivingDetail?.drivingExperience || null
+      }
     });
 
     return {

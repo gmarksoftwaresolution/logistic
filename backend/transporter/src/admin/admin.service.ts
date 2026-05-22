@@ -21,9 +21,10 @@ export class AdminService {
     });
   }
 
-  async approveRequest(requestId: string) {
+  async approveRequest(requestId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: requestId },
+      include: { drivingDetail: true }
     });
 
     if (!user) {
@@ -46,6 +47,20 @@ export class AdminService {
       },
     });
 
+    // Make sure transporter details are saved in the TransporterDetail table upon approval as well
+    await this.prisma.transporterDetail.upsert({
+      where: { userId: user.id },
+      update: {
+        transporterCode: user.uniqueCode || updated.uniqueCode,
+        experienceYears: user.drivingDetail?.drivingExperience || null
+      },
+      create: {
+        userId: user.id,
+        transporterCode: user.uniqueCode || updated.uniqueCode,
+        experienceYears: user.drivingDetail?.drivingExperience || null
+      }
+    });
+
     return {
       success: true,
       message: 'Application processed successfully',
@@ -54,7 +69,7 @@ export class AdminService {
     };
   }
 
-  async rejectRequest(requestId: string, reason: string) {
+  async rejectRequest(requestId: number, reason: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: requestId },
     });

@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ApplicationService {
   constructor(private prisma: PrismaService) {}
 
-  async getStatus(userId: string) {
+  async getStatus(userId: number) {
     const application = await this.prisma.application.findFirst({
       where: { userId },
       orderBy: { createdAt: 'desc' },
