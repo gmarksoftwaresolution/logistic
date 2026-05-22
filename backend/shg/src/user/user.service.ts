@@ -35,7 +35,7 @@ export class UserService {
           panNumber: this.maskPan(user.documents[0].panNumber || ''),
         }
         : null,
-      bankDetails: user.bankDetails.map(bd => ({
+      bankDetails: user.bankDetails.map((bd: any) => ({
         ...bd,
         accountNumber: this.maskAccount(bd.accountNumber),
       })),

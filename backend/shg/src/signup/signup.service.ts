@@ -644,7 +644,7 @@ export class SignupService {
       frontendStep,
       signupData,
       steps,
-      history: user.stepTracking.map(s => ({
+      history: user.stepTracking.map((s: any) => ({
         step: s.step,
         status: s.status,
         updatedAt: s.updatedAt
