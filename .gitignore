@@ -43,3 +43,7 @@ packages/common/dist/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+
+# Ignore uploaded files
+backend/shg/uploads/

@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/storage';
 import { signupService } from '../services/signupService';
 import deliveryPartnerImage from '../../assets/images/GMUDeliveryPartner.png';
+import * as SplashScreen from 'expo-splash-screen';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ export default function LandingScreen({ navigation }: Props) {
                 try {
                   const statusRes = await signupService.getApplicationStatus();
                   if (statusRes.success && statusRes.status === 'APPROVED') {
+                    await SplashScreen.hideAsync();
                     navigation.reset({
                       index: 0,
                       routes: [{ name: 'Main' }],
@@ -38,28 +40,25 @@ export default function LandingScreen({ navigation }: Props) {
                 } catch (statusErr) {
                   console.error("Failed to check application status, routing to status screen:", statusErr);
                 }
+                await SplashScreen.hideAsync();
                 navigation.reset({
                   index: 0,
                   routes: [{ name: 'ApplicationStatus' }],
                 });
                 return;
-              } else if (progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
-                // Pre-populate keys for SignupScreen to seamlessly resume
-                await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_STEP, progressRes.frontendStep.toString());
-                await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_DATA, JSON.stringify({ ...progressRes.signupData }));
-                
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Signup' }],
-                });
-                return;
+              } else {
+                // Clear navigation state but keep data for potential verified restoration
+                await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_SHG);
+                await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL);
               }
             }
           } catch (err: any) {
-            console.error("Failed to check signup progress on app launch:", err);
-            if (err.response?.status === 401) {
+            if (err.response?.status === 401 || err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+              console.log("Session expired or unauthorized on app launch, clearing token.");
               await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
               await AsyncStorage.removeItem('user_profile');
+            } else {
+              console.error("Failed to check signup progress on app launch:", err);
             }
           }
         }
@@ -67,6 +66,7 @@ export default function LandingScreen({ navigation }: Props) {
         console.error("Failed to read token on app launch:", error);
       } finally {
         setCheckingAuth(false);
+        await SplashScreen.hideAsync();
       }
     };
     checkUserSession();
@@ -76,11 +76,7 @@ export default function LandingScreen({ navigation }: Props) {
   const { t } = context;
 
   if (checkingAuth) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#073318', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-      </View>
-    );
+    return null;
   }
 
   return (

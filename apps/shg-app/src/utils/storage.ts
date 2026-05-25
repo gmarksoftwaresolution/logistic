@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const STORAGE_KEYS = {
   JWT_TOKEN: 'jwt_token',
-  SIGNUP_DATA: 'signup_data',
-  CURRENT_STEP: 'current_step',
+  SIGNUP_DATA_SHG: 'signup_shg_progress',
+  SIGNUP_DATA_INDIVIDUAL: 'signup_individual_progress',
+  CURRENT_STEP_SHG: 'current_step_shg',
+  CURRENT_STEP_INDIVIDUAL: 'current_step_individual',
 };
 
 export const setItem = async (key: string, value: any) => {

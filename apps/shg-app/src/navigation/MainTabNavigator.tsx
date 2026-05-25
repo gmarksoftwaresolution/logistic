@@ -19,6 +19,7 @@ import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -117,7 +118,7 @@ export default function MainTabNavigator() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Orders" component={OrdersStackNavigator} />
       <Tab.Screen name="Earning" component={PlaceholderScreen} />
-      <Tab.Screen name="Profile" component={PlaceholderScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
