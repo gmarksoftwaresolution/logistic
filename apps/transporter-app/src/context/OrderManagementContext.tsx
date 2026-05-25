@@ -321,12 +321,26 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     const now = new Date();
     const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newEntry: ActivityEntry = {
-      id: `act-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
-      orderId, route, status, qty, weight,
-      timestamp: `${dateStr}, ${timeStr}`,
-    };
-    setActivities(prev => [newEntry, ...prev]);
+    
+    setActivities(prev => {
+      const existingIndex = prev.findIndex(act => act.orderId === orderId);
+      const newEntry: ActivityEntry = {
+        id: existingIndex !== -1 ? prev[existingIndex].id : `act-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+        orderId, 
+        route, 
+        status, 
+        qty, 
+        weight,
+        timestamp: `${dateStr}, ${timeStr}`,
+      };
+
+      if (existingIndex !== -1) {
+        const filtered = prev.filter(act => act.orderId !== orderId);
+        return [newEntry, ...filtered];
+      } else {
+        return [newEntry, ...prev];
+      }
+    });
   };
 
   const evaluateBatchCascade = (currentBatches: BatchOrder[], targetBatchId: string) => {

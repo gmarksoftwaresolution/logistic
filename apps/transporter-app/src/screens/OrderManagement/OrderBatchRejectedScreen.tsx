@@ -13,8 +13,10 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye, XCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { t } = useTranslation();
   const { batches } = useOrderManagement();
 
   // Track accordion expansion states per area.
@@ -61,8 +63,8 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenHeader
-        title="Rejected Orders"
-        subtitle="Historical non-compliance records"
+        title={t('orders.rejected_orders')}
+        subtitle={t('orders.rejected_orders_subtitle')}
         showBackButton={true}
         showProfile={false}
         showHelp={true}
@@ -74,7 +76,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
         {areas.length === 0 ? (
           <View style={styles.emptyCard}>
             <XCircle size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
-            <Text style={styles.emptyCardText}>No rejected batch records found.</Text>
+            <Text style={styles.emptyCardText}>{t('orders.no_rejected_batches')}</Text>
           </View>
         ) : (
           areas.map((areaName) => {
@@ -99,7 +101,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
 
                   <View style={styles.headerRightCol}>
                     <View style={styles.assignedBadgePill}>
-                      <Text style={styles.assignedBadgeText}>{areaEntries.length} Items</Text>
+                      <Text style={styles.assignedBadgeText}>{t('orders.items_count', { count: areaEntries.length })}</Text>
                     </View>
                     <View style={styles.chevronBox}>
                       {isExpanded ? (
@@ -131,7 +133,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                               <View style={styles.idGroup}>
                                 <Text style={styles.batchIdText}>{batch.id}</Text>
                                 <View style={styles.errorPill}>
-                                  <Text style={styles.errorPillText}>Rejected</Text>
+                                  <Text style={styles.errorPillText}>{t('orders.rejected')}</Text>
                                 </View>
                               </View>
                               <XCircle size={scale(18)} color="#EF4444" strokeWidth={3} />
@@ -148,19 +150,19 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                             <View style={styles.reasonStrip}>
                               <XCircle size={scale(14)} color="#DC2626" />
                               <Text style={styles.reasonText} numberOfLines={1}>
-                                {batch.rejectReason || 'Standard non-compliance'}
+                                {batch.rejectReason || t('orders.standard_non_compliance')}
                               </Text>
                             </View>
 
                             <View style={styles.metricsStrip}>
                               <View style={styles.metricItem}>
                                 <Text style={styles.metricValueText}>{isPickup ? batch.pickupCount : batch.dropCount}</Text>
-                                <Text style={styles.metricLabelText}>Items</Text>
+                                <Text style={styles.metricLabelText}>{t('orders.items_label')}</Text>
                               </View>
                               <View style={styles.metricLine} />
                               <View style={styles.metricItem}>
                                 <Text style={styles.metricValueText}>{batch.totalWeight}</Text>
-                                <Text style={styles.metricLabelText}>Weight</Text>
+                                <Text style={styles.metricLabelText}>{t('orders.weight_label')}</Text>
                               </View>
                             </View>
                           </TouchableOpacity>

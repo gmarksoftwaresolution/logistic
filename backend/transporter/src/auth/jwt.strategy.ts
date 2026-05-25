@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     const userId = payload.sub;
     
-    if (!userId || typeof userId !== 'number') {
+    if (!userId || typeof userId !== 'string') {
       throw new UnauthorizedException('Invalid user ID in token');
     }
 

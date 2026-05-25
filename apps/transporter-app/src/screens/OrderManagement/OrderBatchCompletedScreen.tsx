@@ -13,8 +13,10 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, ArrowRight, CheckCircle, History } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { t } = useTranslation();
   const { batches } = useOrderManagement();
 
   // Filter based on new lifecycle statuses
@@ -27,8 +29,8 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenHeader
-        title="Completed Orders"
-        subtitle="Fully completed multi-stop transfers"
+        title={t('orders.completed_orders')}
+        subtitle={t('orders.completed_orders_subtitle')}
         showBackButton={true}
         showProfile={false}
         showHelp={true}
@@ -48,19 +50,19 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               <History size={scale(20)} color={Colors.primary} />
             </View>
             <View>
-              <Text style={styles.historyCardTitle}>View Order History Master</Text>
-              <Text style={styles.historyCardSub}>Explore complete historical ledger view</Text>
+              <Text style={styles.historyCardTitle}>{t('orders.view_order_history_master')}</Text>
+              <Text style={styles.historyCardSub}>{t('orders.explore_complete_historical_ledger')}</Text>
             </View>
           </View>
           <ArrowRight size={scale(18)} color={Colors.primary} />
         </TouchableOpacity>
 
         {/* Pickup Completed Section */}
-        <Text style={styles.sectionHeadingText}>Pickup Completed Orders ({pickupCompleted.length})</Text>
+        <Text style={styles.sectionHeadingText}>{t('orders.pickup_completed_orders_count', { count: pickupCompleted.length })}</Text>
         {pickupCompleted.length === 0 ? (
           <View style={styles.emptyCard}>
             <CheckCircle size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
-            <Text style={styles.emptyCardText}>No pickup completions yet.</Text>
+            <Text style={styles.emptyCardText}>{t('orders.no_pickup_completions')}</Text>
           </View>
         ) : (
           pickupCompleted.map((batch) => (
@@ -74,7 +76,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
                 <View style={styles.idGroup}>
                   <Text style={styles.batchIdText}>{batch.id}</Text>
                   <View style={[styles.successPill, { backgroundColor: '#EFF6FF' }]}>
-                    <Text style={[styles.successPillText, { color: '#2563EB' }]}>Pickup Completed</Text>
+                    <Text style={[styles.successPillText, { color: '#2563EB' }]}>{t('orders.status_pickup_completed')}</Text>
                   </View>
                 </View>
                 <CheckCircle size={scale(18)} color="#2563EB" strokeWidth={3} />
@@ -91,16 +93,16 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               <View style={styles.metricsStrip}>
                 <View style={styles.metricItem}>
                   <Text style={styles.metricValueText}>{batch.pickupCount}</Text>
-                  <Text style={styles.metricLabelText}>Items</Text>
+                  <Text style={styles.metricLabelText}>{t('orders.items_label')}</Text>
                 </View>
                 <View style={styles.metricLine} />
                 <View style={styles.metricItem}>
                   <Text style={styles.metricValueText}>{batch.totalWeight}</Text>
-                  <Text style={styles.metricLabelText}>Weight</Text>
+                  <Text style={styles.metricLabelText}>{t('orders.weight_label')}</Text>
                 </View>
                 <View style={styles.metricLine} />
                 <View style={styles.metricItem}>
-                  <Text style={styles.timestampText}>{batch.timestamp || 'Just now'}</Text>
+                  <Text style={styles.timestampText}>{batch.timestamp || t('orders.just_now')}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -110,11 +112,11 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
         <View style={{ height: verticalScale(20) }} />
 
         {/* Drop Completed Section */}
-        <Text style={styles.sectionHeadingText}>Drop Completed Orders ({dropCompleted.length})</Text>
+        <Text style={styles.sectionHeadingText}>{t('orders.drop_completed_orders_count', { count: dropCompleted.length })}</Text>
         {dropCompleted.length === 0 ? (
           <View style={styles.emptyCard}>
             <CheckCircle size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
-            <Text style={styles.emptyCardText}>No drop completions yet.</Text>
+            <Text style={styles.emptyCardText}>{t('orders.no_drop_completions')}</Text>
           </View>
         ) : (
           dropCompleted.map((batch) => (
@@ -128,7 +130,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
                 <View style={styles.idGroup}>
                   <Text style={styles.batchIdText}>{batch.id}</Text>
                   <View style={[styles.successPill, { backgroundColor: '#ECFDF5' }]}>
-                    <Text style={[styles.successPillText, { color: '#059669' }]}>Drop Completed</Text>
+                    <Text style={[styles.successPillText, { color: '#059669' }]}>{t('orders.status_drop_completed')}</Text>
                   </View>
                 </View>
                 <CheckCircle size={scale(18)} color="#10B981" strokeWidth={3} />
@@ -145,16 +147,16 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               <View style={styles.metricsStrip}>
                 <View style={styles.metricItem}>
                   <Text style={styles.metricValueText}>{batch.dropCount || batch.totalQty}</Text>
-                  <Text style={styles.metricLabelText}>Items</Text>
+                  <Text style={styles.metricLabelText}>{t('orders.items_label')}</Text>
                 </View>
                 <View style={styles.metricLine} />
                 <View style={styles.metricItem}>
                   <Text style={styles.metricValueText}>{batch.totalWeight}</Text>
-                  <Text style={styles.metricLabelText}>Weight</Text>
+                  <Text style={styles.metricLabelText}>{t('orders.weight_label')}</Text>
                 </View>
                 <View style={styles.metricLine} />
                 <View style={styles.metricItem}>
-                  <Text style={styles.timestampText}>{batch.timestamp || 'Just now'}</Text>
+                  <Text style={styles.timestampText}>{batch.timestamp || t('orders.just_now')}</Text>
                 </View>
               </View>
             </TouchableOpacity>

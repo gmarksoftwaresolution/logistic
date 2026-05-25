@@ -27,8 +27,18 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS
-  app.enableCors();
+  // Increase express JSON body size limits to 10MB to fully support Base64 payloads
+  const express = require('express');
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+  // Enable highly permissive CORS
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
+    credentials: true,
+  });
 
   // Swagger Configuration
   const config = new DocumentBuilder()
@@ -41,7 +51,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   // Serve static files from uploads folder
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
   });
 

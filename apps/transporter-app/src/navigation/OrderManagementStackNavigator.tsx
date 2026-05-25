@@ -8,6 +8,7 @@ import OrderBatchRejectedScreen from '../screens/OrderManagement/OrderBatchRejec
 import OrderBatchCompletedScreen from '../screens/OrderManagement/OrderBatchCompletedScreen';
 import OrderBatchPickupDetailScreen from '../screens/OrderManagement/OrderBatchPickupDetailScreen';
 import CameraCaptureScreen from '../screens/OrderManagement/CameraCaptureScreen';
+import ActivityOrderDetailScreen from '../screens/OrderManagement/ActivityOrderDetailScreen';
 
 // Legacy components fallback import
 import GmuDetailScreen from '../screens/OrderManagement/GmuDetailScreen';
@@ -22,6 +23,7 @@ export type OrderManagementStackParamList = {
   OrderBatchCompleted: undefined;
   OrderBatchPickupDetail: { batchId: string };
   CameraCapture: { batchId: string; productId: string; context: 'pickup' | 'drop'; productName: string; shgId?: string };
+  ActivityOrderDetail: { batchId: string };
   
   // legacy backwards safety parameter map
   GmuDetail: undefined;
@@ -40,6 +42,14 @@ const OrderManagementStackNavigator = () => {
       <Stack.Screen name="OrderBatchRejected" component={OrderBatchRejectedScreen} />
       <Stack.Screen name="OrderBatchCompleted" component={OrderBatchCompletedScreen} />
       <Stack.Screen name="OrderBatchPickupDetail" component={OrderBatchPickupDetailScreen} />
+      <Stack.Screen 
+        name="ActivityOrderDetail" 
+        component={ActivityOrderDetailScreen} 
+        options={{ 
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom' 
+        }} 
+      />
       <Stack.Screen 
         name="CameraCapture" 
         component={CameraCaptureScreen} 
