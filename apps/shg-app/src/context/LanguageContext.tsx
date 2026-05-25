@@ -34,8 +34,19 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLocale(lang);
   };
 
+  const tWithFallback = (key: string) => {
+    const result = i18n.t(key);
+    if (result === key) {
+      // Missing translation fallback: format the raw key into readable text
+      let fallback = key.replace(/^(opt_|su_|common_)/, '').replace(/_+/g, ' ').trim();
+      fallback = fallback.replace(/\b\w/g, (l) => l.toUpperCase());
+      return fallback;
+    }
+    return result;
+  };
+
   return (
-    <LanguageContext.Provider value={{ locale, changeLanguage, t: (key: string) => i18n.t(key) }}>
+    <LanguageContext.Provider value={{ locale, changeLanguage, t: tWithFallback }}>
       {children}
     </LanguageContext.Provider>
   );

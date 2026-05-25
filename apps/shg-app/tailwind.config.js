@@ -7,11 +7,11 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        regular: ["PlusJakartaSans-Regular"],
-        medium: ["PlusJakartaSans-Medium"],
-        semibold: ["PlusJakartaSans-SemiBold"],
-        bold: ["PlusJakartaSans-Bold"],
-        extrabold: ["PlusJakartaSans-ExtraBold"],
+        regular: ["Mukta-Regular"],
+        medium: ["Mukta-Medium"],
+        semibold: ["Mukta-SemiBold"],
+        bold: ["Mukta-Bold"],
+        extrabold: ["Mukta-ExtraBold"],
       },
       colors: {
         primary: "#073318",

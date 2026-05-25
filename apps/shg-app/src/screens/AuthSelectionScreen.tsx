@@ -47,10 +47,10 @@ export default function AuthSelectionScreen({ navigation }: Props) {
         <View className="mb-10 items-center justify-center">
           <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
           <Text className="font-extrabold text-[36px] tracking-tight text-center">
-            <Text style={{ color: '#073318' }}>Gram</Text>
-            <Text style={{ color: '#84B827' }}>Unnati</Text>
+            <Text style={{ color: '#073318' }}>{t('gram')}</Text>
+            <Text style={{ color: '#84B827' }}>{t('unnati')}</Text>
           </Text>
-          <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">Delivery Partner</Text>
+          <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t('delivery_partner')}</Text>
         </View>
 
         {/* Big Container Card for Actions */}
@@ -108,7 +108,7 @@ export default function AuthSelectionScreen({ navigation }: Props) {
       <View className="items-center px-6 mb-6">
         <Text className="text-textSecondary text-xs text-center">
           {t('i_accept')}{"\n"}
-          <Text className="text-primary font-bold" onPress={() => navigation.navigate("Terms")}>{t('terms_conditions')}</Text> {t('and')} <Text className="text-primary font-bold" onPress={() => navigation.navigate("Privacy")}>{t('privacy_policy')}</Text>
+          <Text className="text-primary font-bold" onPress={() => navigation.navigate("Terms")}>{t('terms_conditions')}</Text> {t('and')} <Text className="text-primary font-bold" onPress={() => navigation.navigate("Privacy")}>{t('privacy_title')}</Text>
         </Text>
       </View>
     </SafeAreaView>

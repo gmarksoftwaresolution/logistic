@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { LanguageContext } from '../context/LanguageContext';
 import { View, Text, TextInput, TouchableOpacity, TextInputProps, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,6 +12,8 @@ interface FormContainerProps {
 }
 
 export const FormContainer: React.FC<FormContainerProps> = ({ children, style }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <View 
       className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
@@ -37,6 +40,8 @@ interface FormSectionProps {
 }
 
 export const FormSection: React.FC<FormSectionProps> = ({ iconName, title, subtitle }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <View className="items-center mb-6">
       <View className="w-14 h-14 rounded-full bg-[#EEF5F0] items-center justify-center mb-2">
@@ -57,6 +62,8 @@ interface LabelProps {
 }
 
 export const Label: React.FC<LabelProps> = ({ text, required = false }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <Text className="text-[10px] font-bold text-[#414651] uppercase tracking-wider mb-2 ml-1">
       {text} {required && <Text className="text-[#B42318] font-bold">*</Text>}
@@ -91,6 +98,8 @@ export const InputField = React.forwardRef<TextInput, InputFieldProps>(({
   ...props
 }, ref) => {
   const [isFocused, setIsFocused] = useState(false);
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
 
   return (
     <View className="mb-4 w-full">
@@ -149,6 +158,8 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
   required = false,
   onPress
 }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <View className="mb-4 w-full">
       <Label text={label} required={required} />
@@ -189,6 +200,8 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
   required = false,
   onSelect
 }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <View className="mb-4 w-full">
       <Label text={label} required={required} />
@@ -199,7 +212,7 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
             value === 'Yes' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
           }`}
         >
-          <Text className={`text-[16px] font-bold ${value === 'Yes' ? 'text-[#073318]' : 'text-[#111827]'}`}>Yes</Text>
+          <Text className={`text-[16px] font-bold ${value === 'Yes' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("Yes") || 'Yes'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -208,7 +221,7 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
             value === 'No' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
           }`}
         >
-          <Text className={`text-[16px] font-bold ${value === 'No' ? 'text-[#073318]' : 'text-[#111827]'}`}>No</Text>
+          <Text className={`text-[16px] font-bold ${value === 'No' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("No") || 'No'}</Text>
         </TouchableOpacity>
       </View>
       {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
@@ -234,6 +247,8 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   disabled = false,
   iconName = "arrow-forward"
 }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   return (
     <TouchableOpacity
       onPress={onPress}

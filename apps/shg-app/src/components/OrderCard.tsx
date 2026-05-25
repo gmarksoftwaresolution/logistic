@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useContext } from 'react';
+import { LanguageContext } from '../context/LanguageContext';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-
 interface OrderCardProps {
   orderIdText: string;
   source: string;
@@ -9,13 +9,11 @@ interface OrderCardProps {
   qty: string | number;
   date: string;
   time: string;
-  
   onPressCard?: () => void;
   showScanner?: boolean;
   onScan?: () => void;
 }
-
-export const OrderCard: React.FC<OrderCardProps> = ({ 
+export const OrderCard: React.FC<OrderCardProps> = ({
   orderIdText,
   source,
   destination,
@@ -24,26 +22,26 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   time,
   onPressCard,
   showScanner = false,
-  onScan,
-}) => (
-  <TouchableOpacity
-    onPress={onPressCard}
-    activeOpacity={0.85}
-    style={{
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.03,
-      shadowRadius: 8,
-      elevation: 2,
-      padding: 14,
-      marginBottom: 12,
-      borderRadius: 20,
-      borderColor: '#F1F5F9',
-      borderWidth: 1.5,
-      backgroundColor: 'white',
-    }}
-    className="flex-row items-center justify-between"
-  >
+  onScan
+}) => {
+  const context = useContext(LanguageContext);
+  const { t } = context!;
+  return <TouchableOpacity onPress={onPressCard} activeOpacity={0.85} style={{
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 4
+  },
+  shadowOpacity: 0.03,
+  shadowRadius: 8,
+  elevation: 2,
+  padding: 14,
+  marginBottom: 12,
+  borderRadius: 20,
+  borderColor: '#F1F5F9',
+  borderWidth: 1.5,
+  backgroundColor: 'white'
+}} className="flex-row items-center justify-between">
     {/* Left Content Side */}
     <View className="flex-1 pr-2">
       {/* Order ID Badge / Highlight */}
@@ -56,7 +54,9 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       {/* Route Visual Section (Horizontal) */}
       <View className="flex-row items-center mt-2.5 mb-1 flex-wrap">
         <Text className="text-[13px] font-bold text-[#073318]">{source}</Text>
-        <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+        <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
+        marginHorizontal: 6
+      }} />
         <Text className="text-[12.5px] font-bold text-[#073318]" numberOfLines={1}>{destination}</Text>
       </View>
 
@@ -65,8 +65,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         {/* Qty Badge */}
         <View className="bg-[#EEF2FF] px-2 py-0.5 rounded-[6px] flex-row items-center mr-1.5">
           <Feather name="package" size={9} color="#4F46E5" />
-          <Text className="text-[10px] font-black text-[#4F46E5] ml-1">
-            Qty: {qty}
+          <Text className="text-[10px] font-black text-[#4F46E5] ml-1">{t("su_qty_405")}{qty}
           </Text>
         </View>
 
@@ -93,18 +92,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     </View>
 
     {/* Right Icon - Circular Outline Style */}
-    <View
-      style={{
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        borderWidth: 2,
-        borderColor: '#CBD5E1',
-        backgroundColor: 'white',
-      }}
-      className="items-center justify-center ml-2"
-    >
+    <View style={{
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: 'white'
+  }} className="items-center justify-center ml-2">
       <Ionicons name="eye" size={24} color="#073318" />
     </View>
-  </TouchableOpacity>
-);
+  </TouchableOpacity>;
+};

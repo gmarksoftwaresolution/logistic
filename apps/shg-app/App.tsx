@@ -8,12 +8,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { 
   useFonts,
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold 
-} from '@expo-google-fonts/plus-jakarta-sans';
+  Mukta_400Regular,
+  Mukta_500Medium,
+  Mukta_600SemiBold,
+  Mukta_700Bold,
+  Mukta_800ExtraBold 
+} from '@expo-google-fonts/mukta';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { LanguageProvider } from './src/context/LanguageContext';
@@ -86,11 +86,11 @@ SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
-    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
-    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
-    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
-    'PlusJakartaSans-ExtraBold': PlusJakartaSans_800ExtraBold,
+    'Mukta-Regular': Mukta_400Regular,
+    'Mukta-Medium': Mukta_500Medium,
+    'Mukta-SemiBold': Mukta_600SemiBold,
+    'Mukta-Bold': Mukta_700Bold,
+    'Mukta-ExtraBold': Mukta_800ExtraBold,
   });
 
   const onLayoutRootView = useCallback(async () => {

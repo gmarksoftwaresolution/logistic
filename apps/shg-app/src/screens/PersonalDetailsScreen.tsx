@@ -8,15 +8,19 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
 type Props = NativeStackScreenProps<RootStackParamList, 'PersonalDetails'>;
-
-export default function PersonalDetailsScreen({ navigation }: Props) {
+export default function PersonalDetailsScreen({
+  navigation
+}: Props) {
   const context = useContext(LanguageContext);
-  const { user, updateUser } = useUser();
+  const {
+    user,
+    updateUser
+  } = useUser();
   if (!context || !user) return null;
-  const { t } = context;
-
+  const {
+    t
+  } = context;
   const [formData, setFormData] = useState({
     name: user?.name || '',
     mobile: user?.mobile || '',
@@ -27,27 +31,26 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
     aadhaar: user?.aadhaar || '',
     joiningDate: user?.joiningDate || ''
   });
-
   const [mobileError, setMobileError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [generalError, setGeneralError] = useState('');
-  
   const [showDobPicker, setShowDobPicker] = useState(false);
   const [showJoiningPicker, setShowJoiningPicker] = useState(false);
-
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 1
     });
     if (!result.canceled) {
-      setFormData({ ...formData, profileImage: result.assets[0].uri });
+      setFormData({
+        ...formData,
+        profileImage: result.assets[0].uri
+      });
       setGeneralError('');
     }
   };
-
   const hasChanges = () => {
     return JSON.stringify(formData) !== JSON.stringify({
       name: user?.name,
@@ -60,7 +63,6 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
       joiningDate: user?.joiningDate
     });
   };
-
   const handleSave = () => {
     if (!hasChanges()) {
       setGeneralError('Please make changes before saving');
@@ -81,30 +83,25 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
       navigation.goBack();
     }, 2000);
   };
-
-  const InputField = ({ label, value, onChangeText, placeholder, keyboardType = "default", editable = true }: any) => (
-    <View className="w-full mb-6">
+  const InputField = ({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType = "default",
+    editable = true
+  }: any) => <View className="w-full mb-6">
       <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{label}</Text>
       <View className={`flex-row items-center py-3 px-4 rounded-xl border ${editable ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-100 border-gray-100 opacity-70'}`}>
-        <TextInput 
-          value={value}
-          onChangeText={(val) => {
-            if (editable) {
-              onChangeText(val);
-              setGeneralError('');
-            }
-          }}
-          className={`flex-1 font-semibold text-base ${editable ? 'text-textPrimary' : 'text-textSecondary'}`}
-          placeholder={placeholder}
-          keyboardType={keyboardType}
-          editable={editable}
-        />
+        <TextInput value={value} onChangeText={val => {
+        if (editable) {
+          onChangeText(val);
+          setGeneralError('');
+        }
+      }} className={`flex-1 font-semibold text-base ${editable ? 'text-textPrimary' : 'text-textSecondary'}`} placeholder={placeholder} keyboardType={keyboardType} editable={editable} />
       </View>
-    </View>
-  );
-
-  return (
-    <SafeAreaView className="flex-1 bg-background">
+    </View>;
+  return <SafeAreaView className="flex-1 bg-background">
       <View className="px-6 py-4 bg-white border-b border-gray-50 flex-row items-center mt-2">
         <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
           <Ionicons name="arrow-back" size={24} color="#073318" />
@@ -119,11 +116,9 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
         <View className="items-center mb-10">
           <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-4 ml-1">{t('profile_photo')}</Text>
           <View className="w-32 h-32 bg-primary rounded-full items-center justify-center border-4 border-white shadow-xl overflow-hidden">
-            {formData.profileImage ? (
-              <Image source={{ uri: formData.profileImage }} className="w-full h-full" />
-            ) : (
-              <Text className="text-white font-bold text-5xl">{formData.name?.charAt(0) || 'U'}</Text>
-            )}
+            {formData.profileImage ? <Image source={{
+            uri: formData.profileImage
+          }} className="w-full h-full" /> : <Text className="text-white font-bold text-5xl">{formData.name?.charAt(0) || 'U'}</Text>}
           </View>
           <TouchableOpacity onPress={pickImage} className="absolute bottom-1 right-[35%] w-10 h-10 bg-[#073318] rounded-full border-2 border-white items-center justify-center shadow-md">
             <Feather name="camera" size={18} color="white" />
@@ -132,19 +127,28 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
 
         <View className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-50 mb-10">
           <View className="w-full mb-6">
-            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">GMU ID</Text>
+            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t("su_gmu_id_331")}</Text>
             <View className="bg-gray-100 py-3 px-4 rounded-xl border border-gray-100 opacity-70">
               <Text className="text-textSecondary font-bold text-base">{user?.gmuId || 'N/A'}</Text>
             </View>
           </View>
 
-          <InputField label={t('gmu_full_name')} value={formData.name} onChangeText={(val: string) => setFormData({...formData, name: val})} placeholder="Enter name" />
+          <InputField label={t('gmu_full_name')} value={formData.name} onChangeText={(val: string) => setFormData({
+          ...formData,
+          name: val
+        })} placeholder={t("su_enter_name_332")} />
 
           <View className="w-full mb-6">
             <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t('mobile_number')}</Text>
             <View className={`flex-row items-center bg-white py-3 px-4 rounded-xl border ${mobileError ? 'border-red-500' : 'border-gray-200'} shadow-sm`}>
               <Text className="text-textPrimary font-bold mr-3">+91</Text>
-              <TextInput value={formData.mobile} onChangeText={(val) => { setFormData({...formData, mobile: val}); setMobileError(''); }} className="flex-1 text-textPrimary font-semibold text-base" keyboardType="phone-pad" maxLength={10} />
+              <TextInput value={formData.mobile} onChangeText={val => {
+              setFormData({
+                ...formData,
+                mobile: val
+              });
+              setMobileError('');
+            }} className="flex-1 text-textPrimary font-semibold text-base" keyboardType="phone-pad" maxLength={10} />
             </View>
             {mobileError ? <Text className="text-red-500 text-xs mt-2 ml-1">{mobileError}</Text> : null}
           </View>
@@ -160,54 +164,44 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
              <InputField label={t('joining_date')} value={formData.joiningDate} editable={false} />
           </View>
 
-          {generalError ? (
-            <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
+          {generalError ? <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
               <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
               <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
-            </View>
-          ) : null}
+            </View> : null}
 
           <View className="flex-row gap-4 w-full">
             <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
-              <Text className="text-textPrimary font-bold text-base">Cancel</Text>
+              <Text className="text-textPrimary font-bold text-base">{t("cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
-              <Text className="text-white font-bold text-base">Save Changes</Text>
+              <Text className="text-white font-bold text-base">{t("save_changes")}</Text>
             </TouchableOpacity>
           </View>
         </View>
         <View className="mb-20" />
       </ScrollView>
 
-      {showDobPicker && (
-        <DateTimePicker
-          value={new Date()}
-          mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowDobPicker(false);
-            if (date) {
-              setFormData({...formData, dob: date.toLocaleDateString()});
-              setGeneralError('');
-            }
-          }}
-        />
-      )}
+      {showDobPicker && <DateTimePicker value={new Date()} mode="date" display="default" onChange={(event, date) => {
+      setShowDobPicker(false);
+      if (date) {
+        setFormData({
+          ...formData,
+          dob: date.toLocaleDateString()
+        });
+        setGeneralError('');
+      }
+    }} />}
 
-      {showJoiningPicker && (
-        <DateTimePicker
-          value={new Date()}
-          mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowJoiningPicker(false);
-            if (date) {
-              setFormData({...formData, joiningDate: date.toLocaleDateString()});
-              setGeneralError('');
-            }
-          }}
-        />
-      )}
+      {showJoiningPicker && <DateTimePicker value={new Date()} mode="date" display="default" onChange={(event, date) => {
+      setShowJoiningPicker(false);
+      if (date) {
+        setFormData({
+          ...formData,
+          joiningDate: date.toLocaleDateString()
+        });
+        setGeneralError('');
+      }
+    }} />}
 
       <Modal visible={showSuccess} transparent={true} animationType="fade">
         <View className="flex-1 justify-center items-center bg-black/60 px-10">
@@ -217,11 +211,10 @@ export default function PersonalDetailsScreen({ navigation }: Props) {
                 <Ionicons name="checkmark" size={32} color="white" />
               </View>
             </View>
-            <Text className="text-2xl font-bold text-textPrimary mb-2 text-center">Updated!</Text>
-            <Text className="text-textSecondary text-center text-sm">Personal details updated successfully.</Text>
+            <Text className="text-2xl font-bold text-textPrimary mb-2 text-center">{t("updated")}</Text>
+            <Text className="text-textSecondary text-center text-sm">{t("personal_details_success")}</Text>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
+    </SafeAreaView>;
 }

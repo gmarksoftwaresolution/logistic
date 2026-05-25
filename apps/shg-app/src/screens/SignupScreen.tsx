@@ -22,161 +22,307 @@ import StepIndicator from '../components/StepIndicator';
 import { FormContainer, FormSection, Label, InputField, DropdownField, ToggleButtonGroup, PrimaryButton } from '../components/SignupFormComponents';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/storage';
-
-const UNIT_DATA = [
-  { full_name_of_measurement: 'BAGS', unit_name: 'Quantity', uom_code: 'BAG' },
-  { full_name_of_measurement: 'BALE', unit_name: 'Quantity', uom_code: 'BAL' },
-  { full_name_of_measurement: 'BUNDLES', unit_name: 'Quantity', uom_code: 'BDL' },
-  { full_name_of_measurement: 'BUCKLES', unit_name: 'Quantity', uom_code: 'BKL' },
-  { full_name_of_measurement: 'BILLIONS OF UNITS', unit_name: 'Quantity', uom_code: 'BOU' },
-  { full_name_of_measurement: 'BOX', unit_name: 'Quantity', uom_code: 'BOX' },
-  { full_name_of_measurement: 'BOTTLES', unit_name: 'Quantity', uom_code: 'BTL' },
-  { full_name_of_measurement: 'BUNCHES', unit_name: 'Quantity', uom_code: 'BUN' },
-  { full_name_of_measurement: 'CANS', unit_name: 'Quantity', uom_code: 'CAN' },
-  { full_name_of_measurement: 'CUBIC METER', unit_name: 'Volume', uom_code: 'CBM' },
-  { full_name_of_measurement: 'CUBIC CENTIMETER', unit_name: 'Volume', uom_code: 'CCM' },
-  { full_name_of_measurement: 'CENTIMETER', unit_name: 'Length', uom_code: 'CMS' },
-  { full_name_of_measurement: 'CARTONS', unit_name: 'Quantity', uom_code: 'CTN' },
-  { full_name_of_measurement: 'DOZEN', unit_name: 'Quantity', uom_code: 'DOZ' },
-  { full_name_of_measurement: 'DRUM', unit_name: 'Quantity', uom_code: 'DRM' },
-  { full_name_of_measurement: 'GREAT GROSS', unit_name: 'Quantity', uom_code: 'GGR' },
-  { full_name_of_measurement: 'GRAMS', unit_name: 'Weight', uom_code: 'GMS' },
-  { full_name_of_measurement: 'GROSS', unit_name: 'Quantity', uom_code: 'GRS' },
-  { full_name_of_measurement: 'GROSS YARDS', unit_name: 'Length', uom_code: 'GYD' },
-  { full_name_of_measurement: 'KILOGRAMS', unit_name: 'Weight', uom_code: 'KGS' },
-  { full_name_of_measurement: 'KILOLITER', unit_name: 'Volume', uom_code: 'KLR' },
-  { full_name_of_measurement: 'KILOMETER', unit_name: 'Length', uom_code: 'KME' },
-  { full_name_of_measurement: 'MILLILITER', unit_name: 'Volume', uom_code: 'MLT' },
-  { full_name_of_measurement: 'METERS', unit_name: 'Length', uom_code: 'MTR' },
-  { full_name_of_measurement: 'METRIC TONS', unit_name: 'Weight', uom_code: 'MTS' },
-  { full_name_of_measurement: 'NUMBERS', unit_name: 'Quantity', uom_code: 'NOS' },
-  { full_name_of_measurement: 'PACKS', unit_name: 'Quantity', uom_code: 'PAC' },
-  { full_name_of_measurement: 'PIECES', unit_name: 'Quantity', uom_code: 'PCS' },
-  { full_name_of_measurement: 'PAIRS', unit_name: 'Quantity', uom_code: 'PRS' },
-  { full_name_of_measurement: 'QUINTAL', unit_name: 'Weight', uom_code: 'QTL' },
-  { full_name_of_measurement: 'ROLLS', unit_name: 'Quantity', uom_code: 'ROL' },
-  { full_name_of_measurement: 'SETS', unit_name: 'Quantity', uom_code: 'SET' },
-  { full_name_of_measurement: 'TABLETS', unit_name: 'Quantity', uom_code: 'TBS' },
-  { full_name_of_measurement: 'TEN GROSS', unit_name: 'Quantity', uom_code: 'TGM' },
-  { full_name_of_measurement: 'THOUSANDS', unit_name: 'Quantity', uom_code: 'THD' },
-  { full_name_of_measurement: 'TONNES', unit_name: 'Weight', uom_code: 'TON' },
-  { full_name_of_measurement: 'TUBES', unit_name: 'Quantity', uom_code: 'TUB' },
-  { full_name_of_measurement: 'US GALLONS', unit_name: 'Volume', uom_code: 'UGS' },
-  { full_name_of_measurement: 'UNITS', unit_name: 'Quantity', uom_code: 'UNT' },
-  { full_name_of_measurement: 'YARDS', unit_name: 'Length', uom_code: 'YDS' },
-  { full_name_of_measurement: 'MILLIMETER', unit_name: 'Length', uom_code: 'MMT' },
-  { full_name_of_measurement: 'Inch', unit_name: 'Length', uom_code: 'INH' },
-  { full_name_of_measurement: 'Foot', unit_name: 'Length', uom_code: 'FT' },
-  { full_name_of_measurement: 'MILE', unit_name: 'Length', uom_code: 'MIL' },
-  { full_name_of_measurement: 'MILLIGRAM', unit_name: 'Weight', uom_code: 'MGM' },
-  { full_name_of_measurement: 'POUND', unit_name: 'Weight', uom_code: 'LBS' },
-  { full_name_of_measurement: 'LITER', unit_name: 'Volume', uom_code: 'LTR' },
-  { full_name_of_measurement: 'SQUARE MILLIMETER', unit_name: 'Area', uom_code: 'SQMM' },
-  { full_name_of_measurement: 'SQUARE CENTIMETER', unit_name: 'Area', uom_code: 'SQCM' },
-  { full_name_of_measurement: 'ACRE', unit_name: 'Area', uom_code: 'ACR' },
-  { full_name_of_measurement: 'HECTARE', unit_name: 'Area', uom_code: 'HTR' },
-  { full_name_of_measurement: 'OTHERS', unit_name: '-', uom_code: 'OTH' },
-];
-
-const PINCODE_DATA = [
-  {
-    pincode: "416509",
-    state: "Maharashtra",
-    district: "Kolhapur",
-    taluka: "Chandgad",
-    villages: ["Halkarni", "Naganwadi", "Patne"],
-    areas: ["Main Road", "Market Area", "School Area"]
-  },
-  {
-    pincode: "416502",
-    state: "Maharashtra",
-    district: "Kolhapur",
-    taluka: "Gadhinglaj",
-    villages: ["Gadhinglaj", "Mahagaon", "Kadgaon"],
-    areas: ["Station Road", "Bazaar Peth", "College Road"]
-  },
-  {
-    pincode: "416507",
-    state: "Maharashtra",
-    district: "Kolhapur",
-    taluka: "Ajara",
-    villages: ["Ajara", "Uttur", "Nesari"],
-    areas: ["Bus Stand Area", "Market Yard", "Temple Road"]
-  },
-  {
-    pincode: "416504",
-    state: "Maharashtra",
-    district: "Kolhapur",
-    taluka: "Bhudargad",
-    villages: ["Gargoti", "Kadgaon", "Shindewadi"],
-    areas: ["Main Chowk", "Hospital Area", "School Road"]
-  }
-];
+const UNIT_DATA = [{
+  full_name_of_measurement: 'BAGS',
+  unit_name: 'Quantity',
+  uom_code: 'BAG'
+}, {
+  full_name_of_measurement: 'BALE',
+  unit_name: 'Quantity',
+  uom_code: 'BAL'
+}, {
+  full_name_of_measurement: 'BUNDLES',
+  unit_name: 'Quantity',
+  uom_code: 'BDL'
+}, {
+  full_name_of_measurement: 'BUCKLES',
+  unit_name: 'Quantity',
+  uom_code: 'BKL'
+}, {
+  full_name_of_measurement: 'BILLIONS OF UNITS',
+  unit_name: 'Quantity',
+  uom_code: 'BOU'
+}, {
+  full_name_of_measurement: 'BOX',
+  unit_name: 'Quantity',
+  uom_code: 'BOX'
+}, {
+  full_name_of_measurement: 'BOTTLES',
+  unit_name: 'Quantity',
+  uom_code: 'BTL'
+}, {
+  full_name_of_measurement: 'BUNCHES',
+  unit_name: 'Quantity',
+  uom_code: 'BUN'
+}, {
+  full_name_of_measurement: 'CANS',
+  unit_name: 'Quantity',
+  uom_code: 'CAN'
+}, {
+  full_name_of_measurement: 'CUBIC METER',
+  unit_name: 'Volume',
+  uom_code: 'CBM'
+}, {
+  full_name_of_measurement: 'CUBIC CENTIMETER',
+  unit_name: 'Volume',
+  uom_code: 'CCM'
+}, {
+  full_name_of_measurement: 'CENTIMETER',
+  unit_name: 'Length',
+  uom_code: 'CMS'
+}, {
+  full_name_of_measurement: 'CARTONS',
+  unit_name: 'Quantity',
+  uom_code: 'CTN'
+}, {
+  full_name_of_measurement: 'DOZEN',
+  unit_name: 'Quantity',
+  uom_code: 'DOZ'
+}, {
+  full_name_of_measurement: 'DRUM',
+  unit_name: 'Quantity',
+  uom_code: 'DRM'
+}, {
+  full_name_of_measurement: 'GREAT GROSS',
+  unit_name: 'Quantity',
+  uom_code: 'GGR'
+}, {
+  full_name_of_measurement: 'GRAMS',
+  unit_name: 'Weight',
+  uom_code: 'GMS'
+}, {
+  full_name_of_measurement: 'GROSS',
+  unit_name: 'Quantity',
+  uom_code: 'GRS'
+}, {
+  full_name_of_measurement: 'GROSS YARDS',
+  unit_name: 'Length',
+  uom_code: 'GYD'
+}, {
+  full_name_of_measurement: 'KILOGRAMS',
+  unit_name: 'Weight',
+  uom_code: 'KGS'
+}, {
+  full_name_of_measurement: 'KILOLITER',
+  unit_name: 'Volume',
+  uom_code: 'KLR'
+}, {
+  full_name_of_measurement: 'KILOMETER',
+  unit_name: 'Length',
+  uom_code: 'KME'
+}, {
+  full_name_of_measurement: 'MILLILITER',
+  unit_name: 'Volume',
+  uom_code: 'MLT'
+}, {
+  full_name_of_measurement: 'METERS',
+  unit_name: 'Length',
+  uom_code: 'MTR'
+}, {
+  full_name_of_measurement: 'METRIC TONS',
+  unit_name: 'Weight',
+  uom_code: 'MTS'
+}, {
+  full_name_of_measurement: 'NUMBERS',
+  unit_name: 'Quantity',
+  uom_code: 'NOS'
+}, {
+  full_name_of_measurement: 'PACKS',
+  unit_name: 'Quantity',
+  uom_code: 'PAC'
+}, {
+  full_name_of_measurement: 'PIECES',
+  unit_name: 'Quantity',
+  uom_code: 'PCS'
+}, {
+  full_name_of_measurement: 'PAIRS',
+  unit_name: 'Quantity',
+  uom_code: 'PRS'
+}, {
+  full_name_of_measurement: 'QUINTAL',
+  unit_name: 'Weight',
+  uom_code: 'QTL'
+}, {
+  full_name_of_measurement: 'ROLLS',
+  unit_name: 'Quantity',
+  uom_code: 'ROL'
+}, {
+  full_name_of_measurement: 'SETS',
+  unit_name: 'Quantity',
+  uom_code: 'SET'
+}, {
+  full_name_of_measurement: 'TABLETS',
+  unit_name: 'Quantity',
+  uom_code: 'TBS'
+}, {
+  full_name_of_measurement: 'TEN GROSS',
+  unit_name: 'Quantity',
+  uom_code: 'TGM'
+}, {
+  full_name_of_measurement: 'THOUSANDS',
+  unit_name: 'Quantity',
+  uom_code: 'THD'
+}, {
+  full_name_of_measurement: 'TONNES',
+  unit_name: 'Weight',
+  uom_code: 'TON'
+}, {
+  full_name_of_measurement: 'TUBES',
+  unit_name: 'Quantity',
+  uom_code: 'TUB'
+}, {
+  full_name_of_measurement: 'US GALLONS',
+  unit_name: 'Volume',
+  uom_code: 'UGS'
+}, {
+  full_name_of_measurement: 'UNITS',
+  unit_name: 'Quantity',
+  uom_code: 'UNT'
+}, {
+  full_name_of_measurement: 'YARDS',
+  unit_name: 'Length',
+  uom_code: 'YDS'
+}, {
+  full_name_of_measurement: 'MILLIMETER',
+  unit_name: 'Length',
+  uom_code: 'MMT'
+}, {
+  full_name_of_measurement: 'Inch',
+  unit_name: 'Length',
+  uom_code: 'INH'
+}, {
+  full_name_of_measurement: 'Foot',
+  unit_name: 'Length',
+  uom_code: 'FT'
+}, {
+  full_name_of_measurement: 'MILE',
+  unit_name: 'Length',
+  uom_code: 'MIL'
+}, {
+  full_name_of_measurement: 'MILLIGRAM',
+  unit_name: 'Weight',
+  uom_code: 'MGM'
+}, {
+  full_name_of_measurement: 'POUND',
+  unit_name: 'Weight',
+  uom_code: 'LBS'
+}, {
+  full_name_of_measurement: 'LITER',
+  unit_name: 'Volume',
+  uom_code: 'LTR'
+}, {
+  full_name_of_measurement: 'SQUARE MILLIMETER',
+  unit_name: 'Area',
+  uom_code: 'SQMM'
+}, {
+  full_name_of_measurement: 'SQUARE CENTIMETER',
+  unit_name: 'Area',
+  uom_code: 'SQCM'
+}, {
+  full_name_of_measurement: 'ACRE',
+  unit_name: 'Area',
+  uom_code: 'ACR'
+}, {
+  full_name_of_measurement: 'HECTARE',
+  unit_name: 'Area',
+  uom_code: 'HTR'
+}, {
+  full_name_of_measurement: 'OTHERS',
+  unit_name: '-',
+  uom_code: 'OTH'
+}];
+const PINCODE_DATA = [{
+  pincode: "416509",
+  state: "Maharashtra",
+  district: "Kolhapur",
+  taluka: "Chandgad",
+  villages: ["Halkarni", "Naganwadi", "Patne"],
+  areas: ["Main Road", "Market Area", "School Area"]
+}, {
+  pincode: "416502",
+  state: "Maharashtra",
+  district: "Kolhapur",
+  taluka: "Gadhinglaj",
+  villages: ["Gadhinglaj", "Mahagaon", "Kadgaon"],
+  areas: ["Station Road", "Bazaar Peth", "College Road"]
+}, {
+  pincode: "416507",
+  state: "Maharashtra",
+  district: "Kolhapur",
+  taluka: "Ajara",
+  villages: ["Ajara", "Uttur", "Nesari"],
+  areas: ["Bus Stand Area", "Market Yard", "Temple Road"]
+}, {
+  pincode: "416504",
+  state: "Maharashtra",
+  district: "Kolhapur",
+  taluka: "Bhudargad",
+  villages: ["Gargoti", "Kadgaon", "Shindewadi"],
+  areas: ["Main Chowk", "Hospital Area", "School Road"]
+}];
 
 // Validation Helper Functions
 const validateRequired = (val: string) => {
   return val.trim().length > 0;
 };
-
 const validateAadhaar = (val: string) => {
   return /^\d{12}$/.test(val.replace(/\s/g, ''));
 };
-
 const validatePan = (val: string) => {
   return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val.toUpperCase());
 };
-
 const validatePincode = (val: string) => {
   return /^\d{6}$/.test(val);
 };
-
 const validateMobileNumber = (val: string) => {
   return /^\d{10}$/.test(val);
 };
-
 const validateIfsc = (val: string) => {
   return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(val.toUpperCase());
 };
-
 const validateName = (val: string) => {
   return val.trim().length >= 2;
 };
-
 const validateEmail = (val: string) => {
   if (!val.trim()) return true; // Optional fields don't fail if empty
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 };
-
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
-
-export default function SignupScreen({ navigation }: Props) {
+export default function SignupScreen({
+  navigation
+}: Props) {
   const context = useContext(LanguageContext);
-  const { updateUser, login } = useUser();
+  const {
+    updateUser,
+    login
+  } = useUser();
   if (!context) return null;
-  const { locale, changeLanguage, t } = context;
-
+  const {
+    locale,
+    changeLanguage,
+    t
+  } = context;
   const [step, setStep] = useState<number>(0);
-
   const getStepDetails = () => {
     const isShg = selectedRole === 'SHG';
     const totalSteps = isShg ? 7 : 5;
-
     let currentStep = 1;
     if (isShg) {
       currentStep = Math.max(1, step - 2);
     } else {
-      if (step === 3) currentStep = 1;
-      else if (step === 6) currentStep = 2;
-      else if (step === 7) currentStep = 3;
-      else if (step === 8) currentStep = 4;
-      else if (step === 9) currentStep = 5;
+      if (step === 3) currentStep = 1;else if (step === 6) currentStep = 2;else if (step === 7) currentStep = 3;else if (step === 8) currentStep = 4;else if (step === 9) currentStep = 5;
     }
-    return { currentStep, totalSteps };
+    return {
+      currentStep,
+      totalSteps
+    };
   };
-
   const getStepIndicator = () => {
     if (step < 3 || step > 9) return null;
-    const { currentStep, totalSteps } = getStepDetails();
+    const {
+      currentStep,
+      totalSteps
+    } = getStepDetails();
     return `Step ${currentStep} of ${totalSteps}`;
   };
 
@@ -253,7 +399,6 @@ export default function SignupScreen({ navigation }: Props) {
   const [showIndividualRoleMenu, setShowIndividualRoleMenu] = useState(false);
   const [isRecentlyVerified, setIsRecentlyVerified] = useState(false);
   const [roleSelectionError, setRoleSelectionError] = useState('');
-
   const [shgRole, setShgRole] = useState('');
   const [shgRoleError, setShgRoleError] = useState('');
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -338,10 +483,18 @@ export default function SignupScreen({ navigation }: Props) {
   const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
 
   // Form handling
-  const { control, setValue, watch, trigger, getValues, formState: { errors } } = useForm({
-    mode: 'onBlur',
+  const {
+    control,
+    setValue,
+    watch,
+    trigger,
+    getValues,
+    formState: {
+      errors
+    }
+  } = useForm({
+    mode: 'onBlur'
   });
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadLoading, setUploadLoading] = useState<string | null>(null);
 
@@ -361,7 +514,6 @@ export default function SignupScreen({ navigation }: Props) {
       }
     }
   }, [storageWidth, storageLength]);
-
   const [hasVehicle, setHasVehicle] = useState<'Yes' | 'No' | null>(null);
   const [hasVehicleError, setHasVehicleError] = useState('');
   const [vehicleType, setVehicleType] = useState('');
@@ -448,14 +600,18 @@ export default function SignupScreen({ navigation }: Props) {
     if (data.generatedRequestId) setGeneratedRequestId(data.generatedRequestId);
     if (data.individualRole) setIndividualRole(data.individualRole);
   };
-
   const getStorageKeys = (role: string | null) => {
     if (role === 'Individual') {
-      return { dataKey: STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL, stepKey: STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL };
+      return {
+        dataKey: STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL,
+        stepKey: STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL
+      };
     }
-    return { dataKey: STORAGE_KEYS.SIGNUP_DATA_SHG, stepKey: STORAGE_KEYS.CURRENT_STEP_SHG };
+    return {
+      dataKey: STORAGE_KEYS.SIGNUP_DATA_SHG,
+      stepKey: STORAGE_KEYS.CURRENT_STEP_SHG
+    };
   };
-
   const handleRoleSelection = (role: 'SHG' | 'Individual') => {
     if (selectedRole !== null && selectedRole !== role) {
       resetSignupState();
@@ -464,7 +620,6 @@ export default function SignupScreen({ navigation }: Props) {
     setSelectedRole(role);
     setRoleSelectionError('');
   };
-
   const saveSignupProgress = async (currentStep: number) => {
     try {
       const signupData = {
@@ -524,16 +679,17 @@ export default function SignupScreen({ navigation }: Props) {
         individualRole
       };
       if (!selectedRole) return;
-      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      const {
+        dataKey,
+        stepKey
+      } = getStorageKeys(selectedRole);
       await AsyncStorage.setItem(dataKey, JSON.stringify(signupData));
       await AsyncStorage.setItem(stepKey, currentStep.toString());
     } catch (error) {
       console.error('Failed to save signup progress:', error);
     }
   };
-
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-
   const loadSignupProgress = async () => {
     // ALWAYS start fresh on mount. Clear navigation state.
     // Progress is ONLY restored AFTER OTP verification.
@@ -548,26 +704,17 @@ export default function SignupScreen({ navigation }: Props) {
       setIsInitialLoading(false);
     }
   };
-
   useEffect(() => {
     loadSignupProgress();
   }, []);
 
   // Auto-save whenever step or important data changes
   useEffect(() => {
-    if (step > 2) { // Only save after OTP is verified
+    if (step > 2) {
+      // Only save after OTP is verified
       saveSignupProgress(step);
     }
-  }, [
-    step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience,
-    shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader,
-    producesProducts, businessTeamSize, productName, productCategory, otherCategory,
-    dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName,
-    district, taluka, village, streetArea, houseNo, landmark, aadhaarNumber, panNumber,
-    aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber,
-    ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType,
-    vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole
-  ]);
+  }, [step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience, shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader, producesProducts, businessTeamSize, productName, productCategory, otherCategory, dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName, district, taluka, village, streetArea, houseNo, landmark, aadhaarNumber, panNumber, aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber, ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType, vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole]);
 
   // IFSC Auto-fetch Effect
   useEffect(() => {
@@ -583,7 +730,7 @@ export default function SignupScreen({ navigation }: Props) {
             setBankNameError('');
             setBranchNameError('');
           } else {
-            setIfscError('Invalid IFSC Code');
+            setIfscError(t("su_invalid_ifsc_code_1"));
           }
         } catch (error) {
           console.error('Error fetching bank details:', error);
@@ -592,7 +739,6 @@ export default function SignupScreen({ navigation }: Props) {
         }
       }
     };
-
     fetchBankDetails();
   }, [ifscCode]);
 
@@ -601,7 +747,7 @@ export default function SignupScreen({ navigation }: Props) {
     let interval: NodeJS.Timeout | undefined;
     if (step === 2 && timer > 0) {
       interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
+        setTimer(prev => prev - 1);
       }, 1000);
     }
     return () => {
@@ -645,7 +791,7 @@ export default function SignupScreen({ navigation }: Props) {
           }
           setIfscError('');
         } catch (error) {
-          setIfscError('Invalid IFSC code');
+          setIfscError(t("val_invalid_ifsc_code"));
           // Clear dependent fields if invalid
           setBankName('');
           setBranchName('');
@@ -673,34 +819,46 @@ export default function SignupScreen({ navigation }: Props) {
       await authService.sendSignupOtp(mobile);
       setOtp(['', '', '', '', '', '']);
       setStep(2);
-      Toast.show({ type: 'success', text1: 'OTP Sent Successfully' });
+      Toast.show({
+        type: 'success',
+        text1: t("su_otp_sent_successfull_3")
+      });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
       if (displayMessage && displayMessage.toLowerCase().includes('already registered')) {
-        setMobileError("This mobile number is already registered. Please log in or use a different number.");
+        setMobileError(t("su_this_mobile_number_i_4"));
       } else {
-        Toast.show({ type: 'error', text1: 'Failed to send OTP', text2: displayMessage || 'Please check your mobile number and try again.' });
+        Toast.show({
+          type: 'error',
+          text1: t("su_failed_to_send_otp_5"),
+          text2: displayMessage || 'Please check your mobile number and try again.'
+        });
       }
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleResendOtp = async () => {
     setIsSubmitting(true);
     try {
       await authService.sendSignupOtp(mobile);
       setTimer(60);
       setOtp(['', '', '', '', '', '']);
-      Toast.show({ type: 'success', text1: 'OTP Resent Successfully' });
+      Toast.show({
+        type: 'success',
+        text1: t("su_otp_resent_successfu_6")
+      });
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Failed to resend OTP', text2: 'Please try again after some time.' });
+      Toast.show({
+        type: 'error',
+        text1: t("su_failed_to_resend_otp_7"),
+        text2: t("su_please_try_again_aft_8")
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const resetSignupState = () => {
     setSelectedRole(null);
     setMobile('');
@@ -757,11 +915,9 @@ export default function SignupScreen({ navigation }: Props) {
     setVehicleImage(null);
     setGeneratedRequestId('');
   };
-
   const handleVerifyOtp = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) return;
-
     setIsSubmitting(true);
     try {
       const languageMap: Record<string, string> = {
@@ -799,28 +955,43 @@ export default function SignupScreen({ navigation }: Props) {
           if (progressRes.signupData.selectedRole === selectedRole) {
             populateSignupState(progressRes.signupData);
             setStep(progressRes.frontendStep);
-            const { dataKey, stepKey } = getStorageKeys(selectedRole);
+            const {
+              dataKey,
+              stepKey
+            } = getStorageKeys(selectedRole);
             await AsyncStorage.setItem(stepKey, progressRes.frontendStep.toString());
-            await AsyncStorage.setItem(dataKey, JSON.stringify({ ...progressRes.signupData, mobile }));
-            Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Resuming your registration progress' });
+            await AsyncStorage.setItem(dataKey, JSON.stringify({
+              ...progressRes.signupData,
+              mobile
+            }));
+            Toast.show({
+              type: 'success',
+              text1: t("su_mobile_verified_9"),
+              text2: t("su_resuming_your_regist_10")
+            });
             return;
           }
         }
       } catch (err) {
         console.error('Failed to fetch signup progress on verification:', err);
       }
-
-      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      const {
+        dataKey,
+        stepKey
+      } = getStorageKeys(selectedRole);
       const savedStep = await AsyncStorage.getItem(stepKey);
       const savedData = await AsyncStorage.getItem(dataKey);
-
       if (savedData && savedStep) {
         const data = JSON.parse(savedData);
         // Only resume if the verified mobile number matches the saved progress AND the selected role matches
         if (data.mobile === mobile && data.selectedRole === selectedRole && parseInt(savedStep, 10) > 2) {
           populateSignupState(data);
           setStep(parseInt(savedStep, 10));
-          Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Resuming your progress' });
+          Toast.show({
+            type: 'success',
+            text1: t("su_mobile_verified_9"),
+            text2: t("su_resuming_your_progre_12")
+          });
           return;
         } else {
           // Different user, role, or no progress beyond OTP, clear stale data and start fresh
@@ -832,7 +1003,11 @@ export default function SignupScreen({ navigation }: Props) {
           setStep(3); // Start from personal details step after verification
           await AsyncStorage.removeItem(dataKey);
           await AsyncStorage.removeItem(stepKey);
-          Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Starting new signup' });
+          Toast.show({
+            type: 'success',
+            text1: t("su_mobile_verified_9"),
+            text2: t("su_starting_new_signup_14")
+          });
           return;
         }
       }
@@ -840,14 +1015,21 @@ export default function SignupScreen({ navigation }: Props) {
       // If no saved progress at all
       setStep(3);
       setIsRecentlyVerified(true);
-      Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Starting new signup' });
+      Toast.show({
+        type: 'success',
+        text1: t("su_mobile_verified_9"),
+        text2: t("su_starting_new_signup_14")
+      });
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Verification Failed', text2: 'The OTP you entered is incorrect.' });
+      Toast.show({
+        type: 'error',
+        text1: t("su_verification_failed_17"),
+        text2: t("su_the_otp_you_entered__18")
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleOtpChange = (val: string, index: number) => {
     let newOtp = [...otp];
     newOtp[index] = val;
@@ -856,13 +1038,11 @@ export default function SignupScreen({ navigation }: Props) {
       inputRefs.current[index + 1]?.focus();
     }
   };
-
   const handleOtpKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
-
   const isOtpComplete = otp.every(d => d !== '');
 
   // Image Picker Logic
@@ -872,7 +1052,6 @@ export default function SignupScreen({ navigation }: Props) {
     try {
       // const baseUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api').replace('/api', '');
       const baseUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://immodest-duchess-tibia.ngrok-free.dev/api').replace('/api', '');
-
       let response;
       switch (uploadTarget) {
         case 'profile':
@@ -903,33 +1082,38 @@ export default function SignupScreen({ navigation }: Props) {
           setVehicleImage(baseUrl + response.url);
           break;
       }
-      Toast.show({ type: 'success', text1: 'Photo Uploaded' });
+      Toast.show({
+        type: 'success',
+        text1: t("su_photo_uploaded_19")
+      });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Upload Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_upload_failed_20"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
       setUploadLoading(null);
     }
   };
-
   const pickFromGallery = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
-      quality: 0.5,
+      quality: 0.5
     });
     if (!result.canceled) {
       handleImagePicked(result.assets[0].uri);
     }
     setShowPhotoMenu(false);
   };
-
   const takeSelfie = async () => {
     let result = await ImagePicker.launchCameraAsync({
       allowsEditing: false,
-      quality: 0.5,
+      quality: 0.5
     });
     if (!result.canceled) {
       handleImagePicked(result.assets[0].uri);
@@ -945,51 +1129,46 @@ export default function SignupScreen({ navigation }: Props) {
     setAgeError('');
     setIndividualRoleError('');
     setOtherOccupationError('');
-
     if (!fullName.trim()) {
-      setFullNameError('Full name is required');
+      setFullNameError(t("val_full_name_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = fullNameRef;
     }
-
     if (!age.trim()) {
-      setAgeError('Age is required');
+      setAgeError(t("val_age_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = ageRef;
     } else {
       const ageNum = Number(age);
       if (isNaN(ageNum)) {
-        setAgeError('Age must be a valid number');
+        setAgeError(t("su_age_must_be_a_valid__23"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = ageRef;
+        if (!firstInvalidRef) firstInvalidRef = ageRef;
       } else if (ageNum < 18) {
-        setAgeError('You must be at least 18 years old to create an account and continue using this service.');
+        setAgeError(t("su_you_must_be_at_least_24"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = ageRef;
+        if (!firstInvalidRef) firstInvalidRef = ageRef;
       } else if (ageNum > 99) {
-        setAgeError('Please enter a valid age (18-99)');
+        setAgeError(t("val_age_max_99"));
         isValid = false;
       }
     }
-
     if (selectedRole === 'Individual') {
       if (!individualRole) {
-        setIndividualRoleError('Please select your role');
+        setIndividualRoleError(t("su_please_select_your_r_26"));
         isValid = false;
       } else if (individualRole === 'Other' && !validateRequired(otherOccupation)) {
-        setOtherOccupationError('Please specify your occupation');
+        setOtherOccupationError(t("su_please_specify_your__27"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = otherOccupationRef;
+        if (!firstInvalidRef) firstInvalidRef = otherOccupationRef;
       }
     }
-
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       // 1. Submit Profile
@@ -997,13 +1176,15 @@ export default function SignupScreen({ navigation }: Props) {
         userType: selectedRole === 'Individual' ? 'INDIVIDUAL' : 'SHG',
         fullName,
         age: parseInt(age, 10),
-        photoUrl: profileImage || undefined,
+        photoUrl: profileImage || undefined
       });
 
       // Capture shgUniqueId and update context
       if (response.user?.shgUniqueId) {
         setGeneratedRequestId(response.user.shgUniqueId);
-        updateUser({ shgUniqueId: response.user.shgUniqueId });
+        updateUser({
+          shgUniqueId: response.user.shgUniqueId
+        });
       }
 
       // 2. Submit Role for Individual users
@@ -1021,7 +1202,6 @@ export default function SignupScreen({ navigation }: Props) {
           nonShgRole: roleMap[individualRole] || 'OTHER'
         });
       }
-
       if (selectedRole === 'Individual') {
         setStep(6);
       } else {
@@ -1030,12 +1210,15 @@ export default function SignupScreen({ navigation }: Props) {
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handlePincodeSelect = (pin: string) => {
     const data = PINCODE_DATA.find(p => p.pincode === pin);
     setPincode(pin);
@@ -1050,7 +1233,6 @@ export default function SignupScreen({ navigation }: Props) {
     }
     setShowPincodeMenu(false);
   };
-
   const handleNextStep4 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
@@ -1064,67 +1246,95 @@ export default function SignupScreen({ navigation }: Props) {
     setShgRoleError('');
     setIsShgLeaderError('');
     setShgGroupSizeError('');
-
-    if (!shgRole) { setShgRoleError('Please select your role'); isValid = false; }
-
+    if (!shgRole) {
+      setShgRoleError(t("su_please_select_your_r_26"));
+      isValid = false;
+    }
     if (shgRole === 'CRP') {
-      if (isShgLeader === null) { setIsShgLeaderError('Please select if you are the leader'); isValid = false; }
-      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = shgNameRef; }
-      if (!shgExperience) { setShgExperienceError('Please select experience'); isValid = false; }
-      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef; }
-      if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderNameRef; }
+      if (isShgLeader === null) {
+        setIsShgLeaderError(t("su_please_select_if_you_30"));
+        isValid = false;
+      }
+      if (!shgName.trim()) {
+        setShgNameError(t("su_shg_name_is_required_31"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = shgNameRef;
+      }
+      if (!shgExperience) {
+        setShgExperienceError(t("su_please_select_experi_32"));
+        isValid = false;
+      }
+      if (!shgGroupSize || isNaN(Number(shgGroupSize))) {
+        setShgGroupSizeError(t("su_group_size_is_requir_33"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef;
+      }
+      if (!leaderName.trim()) {
+        setLeaderNameError(t("su_leader_name_is_requi_34"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = leaderNameRef;
+      }
       if (leaderMobile.length !== 10) {
-        setLeaderMobileError('Enter 10-digit mobile number');
+        setLeaderMobileError(t("su_enter_10_digit_mobil_35"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
+        if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
       } else if (!/^[6-9]/.test(leaderMobile)) {
-        setLeaderMobileError('Mobile number must start from 6');
+        setLeaderMobileError(t("su_mobile_number_must_s_36"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
+        if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
       }
     } else if (shgRole && shgRole !== 'CRP') {
-      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = shgNameRef; }
-      if (!crpName.trim()) { setCrpNameError('CRP name is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = crpNameRef; }
-      if (crpMobile.length !== 10) {
-        setCrpMobileError('Enter 10-digit mobile number');
+      if (!shgName.trim()) {
+        setShgNameError(t("su_shg_name_is_required_31"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
-      } else if (!/^[6-9]/.test(crpMobile)) {
-        setCrpMobileError('Mobile number must start from 6');
-        isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
+        if (!firstInvalidRef) firstInvalidRef = shgNameRef;
       }
-      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef; }
-      if (!shgExperience) { setShgExperienceError('Please select experience'); isValid = false; }
-
+      if (!crpName.trim()) {
+        setCrpNameError(t("su_crp_name_is_required_38"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = crpNameRef;
+      }
+      if (crpMobile.length !== 10) {
+        setCrpMobileError(t("su_enter_10_digit_mobil_35"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
+      } else if (!/^[6-9]/.test(crpMobile)) {
+        setCrpMobileError(t("su_mobile_number_must_s_36"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
+      }
+      if (!shgGroupSize || isNaN(Number(shgGroupSize))) {
+        setShgGroupSizeError(t("su_group_size_is_requir_33"));
+        isValid = false;
+        if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef;
+      }
+      if (!shgExperience) {
+        setShgExperienceError(t("su_please_select_experi_32"));
+        isValid = false;
+      }
       if (shgRole === 'Member') {
-        if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderNameRef; }
+        if (!leaderName.trim()) {
+          setLeaderNameError(t("su_leader_name_is_requi_34"));
+          isValid = false;
+          if (!firstInvalidRef) firstInvalidRef = leaderNameRef;
+        }
         if (leaderMobile.length !== 10) {
-          setLeaderMobileError('Enter 10-digit mobile number');
+          setLeaderMobileError(t("su_enter_10_digit_mobil_35"));
           isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
+          if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
         } else if (!/^[6-9]/.test(leaderMobile)) {
-          setLeaderMobileError('Mobile number must start from 6');
+          setLeaderMobileError(t("su_mobile_number_must_s_36"));
           isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
+          if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
         }
       }
     }
-
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       const experienceMap: Record<string, string> = {
@@ -1137,11 +1347,9 @@ export default function SignupScreen({ navigation }: Props) {
         'Leader': 'LEADER',
         'Member': 'MEMBER'
       };
-
       const shgDetails: any = {
-        shgRole: roleMap[shgRole] || 'MEMBER',
+        shgRole: roleMap[shgRole] || 'MEMBER'
       };
-
       if (shgRole === 'CRP') {
         shgDetails.shgName = shgName;
         shgDetails.shgExperience = experienceMap[shgExperience] || 'LESS_THAN_1_YEAR';
@@ -1155,7 +1363,6 @@ export default function SignupScreen({ navigation }: Props) {
         shgDetails.crpEmail = crpEmail;
         shgDetails.shgExperience = experienceMap[shgExperience] || 'LESS_THAN_1_YEAR';
         shgDetails.shgGroupSize = parseInt(shgGroupSize, 10);
-
         if (shgRole === 'Member') {
           shgDetails.shgLeaderName = leaderName;
           shgDetails.shgLeaderContact = leaderMobile;
@@ -1164,19 +1371,20 @@ export default function SignupScreen({ navigation }: Props) {
           shgDetails.shgLeaderContact = mobile;
         }
       }
-
       await signupService.submitShgDetails(shgDetails);
-
       setStep(5);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleNextStep5 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
@@ -1187,51 +1395,47 @@ export default function SignupScreen({ navigation }: Props) {
     setDailyProductionError('');
     setProductUnitError('');
     setOtherCategoryError('');
-
     if (!producesProducts) {
-      setProducesProductsError('Please select if you produce any products');
+      setProducesProductsError(t("su_please_select_if_you_47"));
       isValid = false;
     }
-
     if (producesProducts === 'Yes') {
       if (!businessTeamSize || isNaN(Number(businessTeamSize))) {
-        setBusinessTeamSizeError('Business team size is required');
+        setBusinessTeamSizeError(t("su_business_team_size_i_48"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = businessTeamSizeRef;
+        if (!firstInvalidRef) firstInvalidRef = businessTeamSizeRef;
       }
       if (!productName.trim()) {
-        setProductNameError('Product name is required');
+        setProductNameError(t("su_product_name_is_requ_49"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = productNameRef;
+        if (!firstInvalidRef) firstInvalidRef = productNameRef;
       }
       if (!productCategory) {
-        setProductCategoryError('Please select category');
+        setProductCategoryError(t("su_please_select_catego_50"));
         isValid = false;
       } else if (productCategory === 'Other') {
         if (!otherCategory.trim()) {
-          setOtherCategoryError('Category name is required');
+          setOtherCategoryError(t("su_category_name_is_req_51"));
           isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = otherCategoryRef;
+          if (!firstInvalidRef) firstInvalidRef = otherCategoryRef;
         }
       }
       if (!dailyProduction.trim()) {
-        setDailyProductionError('Quantity is required');
+        setDailyProductionError(t("su_quantity_is_required_52"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = dailyProductionRef;
+        if (!firstInvalidRef) firstInvalidRef = dailyProductionRef;
       }
       if (!productUnit) {
-        setProductUnitError('Please select unit');
+        setProductUnitError(t("su_please_select_unit_53"));
         isValid = false;
       }
     }
-
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       const categoryMap: Record<string, string> = {
@@ -1240,7 +1444,6 @@ export default function SignupScreen({ navigation }: Props) {
         'Agriculture': 'AGRICULTURE',
         'Other': 'OTHER'
       };
-
       await signupService.submitProducts({
         producesProduct: producesProducts === 'Yes',
         businessTeamSize: businessTeamSize ? parseInt(businessTeamSize, 10) : undefined,
@@ -1250,20 +1453,22 @@ export default function SignupScreen({ navigation }: Props) {
           dailyProductionQty: parseFloat(dailyProduction),
           unit: productUnit.toUpperCase(),
           weeklyProduction: weeklyProduction ? parseFloat(weeklyProduction) : undefined,
-          price: productPrice ? parseFloat(productPrice) : undefined,
-        }] : [],
+          price: productPrice ? parseFloat(productPrice) : undefined
+        }] : []
       });
-
       setStep(6);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleNextStep6 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
@@ -1275,39 +1480,38 @@ export default function SignupScreen({ navigation }: Props) {
     setStateNameError('');
     setHouseNoError('');
     setLandmarkError('');
-
     if (!pincode) {
-      setPincodeError('Pincode is required');
+      setPincodeError(t("val_pincode_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = pincodeRef;
     }
     if (!village) {
-      setVillageError('Village is required');
+      setVillageError(t("su_village_is_required_56"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = villageRef;
     }
     if (!landmark) {
-      setLandmarkError('Delivery Address is required');
+      setLandmarkError(t("su_delivery_address_is__57"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = landmarkRef;
     }
     if (!taluka) {
-      setTalukaError('Taluka is required');
+      setTalukaError(t("val_taluka_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = talukaRef;
     }
     if (!district) {
-      setDistrictError('Please select district');
+      setDistrictError(t("su_please_select_distri_59"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = districtRef;
     }
     if (!stateName) {
-      setStateNameError('Please select state');
+      setStateNameError(t("su_please_select_state_60"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = stateNameRef;
     }
     if (!houseNo) {
-      setHouseNoError('House No is required');
+      setHouseNoError(t("su_house_no_is_required_61"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = houseNoRef;
     }
@@ -1317,7 +1521,6 @@ export default function SignupScreen({ navigation }: Props) {
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       await signupService.submitAddress({
@@ -1327,37 +1530,39 @@ export default function SignupScreen({ navigation }: Props) {
         district,
         state: stateName,
         houseNo,
-        landmark,
+        landmark
       });
       setStep(7);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleNextStep7 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
     setAadhaarError('');
     setPanError('');
     setDocPhotosError('');
-
     if (aadhaarNumber.replace(/\s/g, '').length !== 12) {
-      setAadhaarError('Enter 12-digit Aadhaar number');
+      setAadhaarError(t("su_enter_12_digit_aadha_63"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = aadhaarNumberRef;
     }
     if (panNumber.length !== 10) {
-      setPanError('Enter 10-character PAN number');
+      setPanError(t("su_enter_10_character_p_64"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = panNumberRef;
     }
     if (!aadhaarFront || !aadhaarBack || !panImage) {
-      setDocPhotosError('Please upload all required document photos');
+      setDocPhotosError(t("su_please_upload_all_re_65"));
       isValid = false;
     }
     if (!isValid) {
@@ -1366,7 +1571,6 @@ export default function SignupScreen({ navigation }: Props) {
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       await signupService.submitDocuments({
@@ -1374,18 +1578,21 @@ export default function SignupScreen({ navigation }: Props) {
         panNumber,
         aadhaarFrontUrl: aadhaarFront || undefined,
         aadhaarBackUrl: aadhaarBack || undefined,
-        panCardUrl: panImage || undefined,
+        panCardUrl: panImage || undefined
       });
       setStep(8);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleNextStep8 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
@@ -1394,40 +1601,37 @@ export default function SignupScreen({ navigation }: Props) {
     setIfscError('');
     setBankNameError('');
     setBranchNameError('');
-
     if (!accountName.trim()) {
-      setAccountNameError('Account holder name is required');
+      setAccountNameError(t("val_account_name_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = accountNameRef;
     }
     if (!accountNumber.trim()) {
-      setAccountNumberError('Account number is required');
+      setAccountNumberError(t("val_account_number_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = accountNumberRef;
     }
     if (!ifscCode.trim()) {
-      setIfscError('IFSC code is required');
+      setIfscError(t("val_ifsc_code_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = ifscCodeRef;
     }
     if (!bankName.trim()) {
-      setBankNameError('Bank name is required');
+      setBankNameError(t("val_bank_name_required"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = bankNameRef;
     }
     if (!branchName.trim()) {
-      setBranchNameError('Branch name is required');
+      setBranchNameError(t("su_branch_name_is_requi_71"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = branchNameRef;
     }
-
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       await signupService.submitBankDetails({
@@ -1435,18 +1639,21 @@ export default function SignupScreen({ navigation }: Props) {
         accountNumber,
         ifscCode,
         bankName,
-        upiId: upiId || undefined,
+        upiId: upiId || undefined
       });
       setStep(9);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_submission_failed_28"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const handleNextStep9 = async () => {
     let isValid = true;
     let firstInvalidRef: any = null;
@@ -1456,24 +1663,21 @@ export default function SignupScreen({ navigation }: Props) {
     setVehicleRegNoError('');
     setDlNumberError('');
     setTermsError('');
-
     let cleanRegNo = '';
     let cleanDl = '';
-
     if (!storageSpace.trim()) {
-      setStorageSpaceError('Storage space information is required');
+      setStorageSpaceError(t("su_storage_space_inform_73"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = storageSpaceRef;
     }
     if (!hasVehicle) {
-      setHasVehicleError('Please select vehicle status');
+      setHasVehicleError(t("su_please_select_vehicl_74"));
       isValid = false;
     } else if (hasVehicle === 'Yes') {
       if (!vehicleType) {
-        setVehicleTypeError('Vehicle type is required');
+        setVehicleTypeError(t("su_vehicle_type_is_requ_75"));
         isValid = false;
       }
-
       cleanRegNo = vehicleRegNo.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       if (cleanRegNo) {
         const isBH = cleanRegNo.length > 0 && /^[0-9O]/.test(cleanRegNo[0]);
@@ -1481,7 +1685,7 @@ export default function SignupScreen({ navigation }: Props) {
         for (let i = 0; i < cleanRegNo.length; i++) {
           let char = cleanRegNo[i];
           if (isBH) {
-            if ((i === 0 || i === 1 || (i >= 4 && i <= 7)) && char === 'O') {
+            if ((i === 0 || i === 1 || i >= 4 && i <= 7) && char === 'O') {
               char = '0';
             }
           } else {
@@ -1497,19 +1701,16 @@ export default function SignupScreen({ navigation }: Props) {
         cleanRegNo = normalized;
         setVehicleRegNo(cleanRegNo);
       }
-
       const indianVehicleRegRegex = /^(?:(?:[A-Z]{2}[0-9A-Z]{2}[A-Z]{0,3}[0-9]{4})|(?:[0-9]{2}BH[0-9]{4}[A-Z]{2}))$/;
-
       if (!cleanRegNo) {
-        setVehicleRegNoError('Registration number is required');
+        setVehicleRegNoError(t("su_registration_number__76"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
+        if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
       } else if (!indianVehicleRegRegex.test(cleanRegNo)) {
-        setVehicleRegNoError('Invalid vehicle number. Please enter a valid registration number');
+        setVehicleRegNoError(t("su_invalid_vehicle_numb_77"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
+        if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
       }
-
       cleanDl = dlNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       if (cleanDl) {
         let normalized = '';
@@ -1523,31 +1724,27 @@ export default function SignupScreen({ navigation }: Props) {
         cleanDl = normalized;
         setDlNumber(cleanDl);
       }
-
       const indianDlRegex = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
-
       if (!cleanDl) {
-        setDlNumberError('Driving License number is required');
+        setDlNumberError(t("su_driving_license_numb_78"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
+        if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
       } else if (!indianDlRegex.test(cleanDl)) {
-        setDlNumberError('Invalid Driving License format');
+        setDlNumberError(t("su_invalid_driving_lice_79"));
         isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
+        if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
       }
     }
     if (!termsAccepted) {
-      setTermsError('You must accept terms & conditions');
+      setTermsError(t("su_you_must_accept_term_80"));
       isValid = false;
     }
-
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
       }
       return;
     }
-
     setIsSubmitting(true);
     try {
       const vehicleTypeMap: Record<string, string> = {
@@ -1556,7 +1753,6 @@ export default function SignupScreen({ navigation }: Props) {
         'Car / Pickup': 'FOUR_WHEELER',
         'Other': 'OTHER'
       };
-
       const response = await signupService.submitOtherDetails({
         storageSpace: storageSpace.trim(),
         hasVehicle: hasVehicle === 'Yes',
@@ -1565,23 +1761,24 @@ export default function SignupScreen({ navigation }: Props) {
           vehicleRegistrationNo: cleanRegNo || undefined,
           drivingLicenseNumber: cleanDl || undefined,
           drivingLicenseImageUrl: dlImage || undefined,
-          vehicleImageUrl: vehicleImage || undefined,
+          vehicleImageUrl: vehicleImage || undefined
         } : undefined
       });
-
       if (response.shgUniqueId) {
         setGeneratedRequestId(response.shgUniqueId);
       } else if (response.requestId) {
         setGeneratedRequestId(response.requestId);
       }
-
       updateUser({
         name: fullName,
         mobile: mobile,
         profileImage: profileImage
       });
       setStep(10);
-      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      const {
+        dataKey,
+        stepKey
+      } = getStorageKeys(selectedRole);
       await AsyncStorage.removeItem(dataKey);
       await AsyncStorage.removeItem(stepKey);
     } catch (error: any) {
@@ -1591,11 +1788,11 @@ export default function SignupScreen({ navigation }: Props) {
         let mappedError = false;
         messages.forEach((msg: string) => {
           if (msg.toLowerCase().includes('driving license') || msg.toLowerCase().includes('dl ')) {
-            setDlNumberError('Invalid Driving License format');
+            setDlNumberError(t("su_invalid_driving_lice_79"));
             mappedError = true;
           }
           if (msg.toLowerCase().includes('registration') || msg.toLowerCase().includes('vehicle registration')) {
-            setVehicleRegNoError('Invalid vehicle number. Please enter a valid registration number');
+            setVehicleRegNoError(t("su_invalid_vehicle_numb_77"));
             mappedError = true;
           }
           if (msg.toLowerCase().includes('storage')) {
@@ -1604,200 +1801,189 @@ export default function SignupScreen({ navigation }: Props) {
           }
         });
         if (mappedError) {
-          Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Please correct the highlighted errors.' });
+          Toast.show({
+            type: 'error',
+            text1: t("su_validation_error_83"),
+            text2: t("su_please_correct_the_h_84")
+          });
           return;
         }
       }
       const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      Toast.show({ type: 'error', text1: 'Final Submission Failed', text2: displayMessage });
+      Toast.show({
+        type: 'error',
+        text1: t("su_final_submission_fai_85"),
+        text2: displayMessage
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
-
   if (isInitialLoading) {
-    return (
-      <SafeAreaView className="flex-1 bg-[#F5F7FA] justify-center items-center">
+    return <SafeAreaView className="flex-1 bg-[#F5F7FA] justify-center items-center">
         <ActivityIndicator size="large" color="#073318" />
-      </SafeAreaView>
-    );
+      </SafeAreaView>;
   }
-
-  return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAwareScrollView
-        className="flex-1"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
-        bounces={false}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        enableOnAndroid={true}
-        extraScrollHeight={160}
-        extraHeight={160}
-        enableAutomaticScroll={true}
-      >
+  return <SafeAreaView className="flex-1 bg-background">
+      <KeyboardAwareScrollView className="flex-1" contentContainerStyle={{
+      flexGrow: 1,
+      paddingBottom: 40
+    }} bounces={false} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={160} extraHeight={160} enableAutomaticScroll={true}>
 
         {/* Header */}
         <View className="px-6 pt-4 pb-4 bg-transparent mt-4">
           <View className="flex-row items-center justify-between mb-6 relative">
             <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => {
-                  if (step === 10) navigation.navigate("Login");
-                  else if (step > 0) {
-                    if (selectedRole === 'Individual' && step === 6) {
-                      setStep(3);
-                    } else {
-                      if (step === 2) setOtp(['', '', '', '', '', '']);
-                      setStep(step - 1);
-                    }
-                  } else navigation.navigate("AuthSelection");
-                }}
-                className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm mr-4"
-                style={{
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 4
-                }}
-              >
+              <TouchableOpacity onPress={() => {
+              if (step === 10) navigation.navigate("Login");else if (step > 0) {
+                if (selectedRole === 'Individual' && step === 6) {
+                  setStep(3);
+                } else {
+                  if (step === 2) setOtp(['', '', '', '', '', '']);
+                  setStep(step - 1);
+                }
+              } else navigation.navigate("AuthSelection");
+            }} className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm mr-4" style={{
+              shadowColor: "#000",
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 4
+            }}>
                 <Ionicons name="chevron-back" size={24} color="#073318" />
               </TouchableOpacity>
               <Text numberOfLines={1} className="text-[24px] font-extrabold text-[#111827]">{t('signup')}</Text>
             </View>
-            {step !== 0 && (
-              <View className="flex-row items-center z-10">
+            {step !== 0 && <View className="flex-row items-center z-10">
                 <TouchableOpacity onPress={() => navigation.navigate("Help")} className="mr-3 w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
                   <Ionicons name="help-outline" size={20} color="#073318" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowLangMenu(true)} className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
                   <Ionicons name="globe-outline" size={20} color="#073318" />
                 </TouchableOpacity>
-              </View>
-            )}
+              </View>}
           </View>
 
           {/* Progress Indicator */}
-          {step >= 3 && step <= 9 && (
-            <StepIndicator
-              currentStep={getStepDetails().currentStep}
-              totalSteps={getStepDetails().totalSteps}
-            />
-          )}
+          {step >= 3 && step <= 9 && <StepIndicator currentStep={getStepDetails().currentStep} totalSteps={getStepDetails().totalSteps} />}
         </View>
 
         {/* Step 0: Role Selection */}
-        {step === 0 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 0 && <View className="flex-1 px-6 pt-6 pb-10">
             {/* Massive Branding Section matching Login */}
             <View className="items-center justify-center mb-8 mt-2">
-              <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
+              <Image source={require('../../assets/images/GMU Logo.png')} style={{
+            width: 80,
+            height: 80
+          }} resizeMode="contain" className="mb-2" />
               <Text className="font-extrabold text-[36px] tracking-tight text-center">
-                <Text style={{ color: '#073318' }}>Gram</Text>
-                <Text style={{ color: '#84B827' }}>Unnati</Text>
+                <Text style={{
+              color: '#073318'
+            }}>{t("gram")}</Text>
+                <Text style={{
+              color: '#84B827'
+            }}>{t("unnati")}</Text>
               </Text>
-              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">Delivery Partner</Text>
+              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t("delivery_partner")}</Text>
             </View>
 
             {/* Big Container Card for Actions */}
-            <View
-              className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
-                elevation: 10,
-              }}
-            >
-              <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">Choose Your Role</Text>
-              <Text className="text-[#6B7280] text-[13px] font-semibold mb-6 text-center">
-                Select your user type to continue
-              </Text>
+            <View className="bg-white rounded-[32px] p-6 w-full border border-gray-100" style={{
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 10
+          },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 10
+        }}>
+              <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">{t("su_choose_your_role_89")}</Text>
+              <Text className="text-[#6B7280] text-[13px] font-semibold mb-6 text-center">{t("su_select_your_user_typ_90")}</Text>
 
               <View className="space-y-4 mb-4">
-                <TouchableOpacity
-                  onPress={() => handleRoleSelection('SHG')}
-                  className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center ${selectedRole === 'SHG' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}
-                >
+                <TouchableOpacity onPress={() => handleRoleSelection('SHG')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center ${selectedRole === 'SHG' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                   <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'SHG' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
                     <Ionicons name="people" size={24} color={selectedRole === 'SHG' ? 'white' : '#073318'} />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'SHG' ? 'text-[#073318]' : 'text-[#111827]'}`}>SHG (Self Help Group)</Text>
-                    <Text className="text-xs text-[#6B7280] font-medium leading-4">For women working in self-help groups and community delivery</Text>
+                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'SHG' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_shg_self_help_group_91")}</Text>
+                    <Text className="text-xs text-[#6B7280] font-medium leading-4">{t("su_for_women_working_in_92")}</Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => handleRoleSelection('Individual')}
-                  className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center mt-4 ${selectedRole === 'Individual' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}
-                >
+                <TouchableOpacity onPress={() => handleRoleSelection('Individual')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center mt-4 ${selectedRole === 'Individual' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                   <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'Individual' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
                     <Ionicons name="person" size={24} color={selectedRole === 'Individual' ? 'white' : '#073318'} />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'Individual' ? 'text-[#073318]' : 'text-[#111827]'}`}>Individual</Text>
-                    <Text className="text-xs text-[#6B7280] font-medium leading-4">For personal or business delivery needs</Text>
+                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'Individual' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_individual_93")}</Text>
+                    <Text className="text-xs text-[#6B7280] font-medium leading-4">{t("su_for_personal_or_busi_94")}</Text>
                   </View>
                 </TouchableOpacity>
               </View>
 
               {roleSelectionError ? <Text className="text-red-500 text-xs text-center mb-4 font-semibold">{roleSelectionError}</Text> : null}
 
-              <TouchableOpacity
-                onPress={() => {
-                  if (!selectedRole) {
-                    setRoleSelectionError('Please select your role to continue');
-                  } else {
-                    if (isRecentlyVerified) {
-                      setStep(3);
-                    } else {
-                      setStep(1);
-                    }
-                  }
-                }}
-                className="bg-[#073318] py-4 rounded-full items-center justify-center flex-row w-full mt-4"
-                style={{
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
-                  elevation: 8,
-                }}
-              >
-                <Text className="text-white text-[18px] font-bold tracking-wide mr-2">Continue</Text>
+              <TouchableOpacity onPress={() => {
+            if (!selectedRole) {
+              setRoleSelectionError(t("su_please_select_your_r_95"));
+            } else {
+              if (isRecentlyVerified) {
+                setStep(3);
+              } else {
+                setStep(1);
+              }
+            }
+          }} className="bg-[#073318] py-4 rounded-full items-center justify-center flex-row w-full mt-4" style={{
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4
+            },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8
+          }}>
+                <Text className="text-white text-[18px] font-bold tracking-wide mr-2">{t("continue")}</Text>
                 <Ionicons name="arrow-forward" size={20} color="white" />
               </TouchableOpacity>
             </View>
-          </View>
-        )}
+          </View>}
 
         {/* Step 1: Mobile Input */}
-        {step === 1 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 1 && <View className="flex-1 px-6 pt-6 pb-10">
             {/* Massive Branding Section matching Login */}
             <View className="items-center justify-center mb-8 mt-2">
-              <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
+              <Image source={require('../../assets/images/GMU Logo.png')} style={{
+            width: 80,
+            height: 80
+          }} resizeMode="contain" className="mb-2" />
               <Text className="font-extrabold text-[36px] tracking-tight text-center">
-                <Text style={{ color: '#073318' }}>Gram</Text>
-                <Text style={{ color: '#84B827' }}>Unnati</Text>
+                <Text style={{
+              color: '#073318'
+            }}>{t("gram")}</Text>
+                <Text style={{
+              color: '#84B827'
+            }}>{t("unnati")}</Text>
               </Text>
-              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">Delivery Partner</Text>
+              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t("delivery_partner")}</Text>
             </View>
 
             {/* Big Container Card for Actions */}
-            <View
-              className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
-                elevation: 10,
-              }}
-            >
+            <View className="bg-white rounded-[32px] p-6 w-full border border-gray-100" style={{
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 10
+          },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 10
+        }}>
               <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">{t('signup')}</Text>
               <Text className="text-[#6B7280] text-[13px] font-semibold mb-8 text-center">
                 {t('enter_mobile')}
@@ -1807,54 +1993,43 @@ export default function SignupScreen({ navigation }: Props) {
               <View className={`flex-row items-center bg-[#F9FAFB] py-4 px-4 rounded-[20px] shadow-sm border ${mobileError ? 'border-[#DC2626]' : mobile.length === 10 ? 'border-[#22C55E]' : 'border-gray-200'} mb-2`}>
                 <Text className="text-[#073318] font-bold mr-3">+91</Text>
                 <View className="w-[1px] h-6 bg-gray-300 mr-3" />
-                <TextInput
-                  ref={mobileRef}
-                  className="flex-1 text-[#111827] text-[16px] font-bold"
-                  placeholder={t('enter_10_digit')}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="number-pad"
-                  maxLength={10}
-                  value={mobile}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^0-9]/g, '');
-                    setMobile(cleaned);
-                    setOtp(['', '', '', '', '', '']);
-                    if (cleaned.length > 0 && cleaned.length < 10) {
-                      setMobileError("Enter valid 10-digit mobile number");
-                    } else if (cleaned.length === 0) {
-                      setMobileError("Mobile number is required");
-                    } else {
-                      setMobileError("");
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!mobile) setMobileError("Mobile number is required");
-                    else if (mobile.length < 10) setMobileError("Enter valid 10-digit mobile number");
-                  }}
-                  returnKeyType="done"
-                  onSubmitEditing={handleSendOtp}
-                />
+                <TextInput ref={mobileRef} className="flex-1 text-[#111827] text-[16px] font-bold" placeholder={t('enter_10_digit')} placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={10} value={mobile} onChangeText={val => {
+              const cleaned = val.replace(/[^0-9]/g, '');
+              setMobile(cleaned);
+              setOtp(['', '', '', '', '', '']);
+              if (cleaned.length > 0 && cleaned.length < 10) {
+                setMobileError(t("su_enter_valid_10_digit_100"));
+              } else if (cleaned.length === 0) {
+                setMobileError(t("val_mobile_number_required"));
+              } else {
+                setMobileError("");
+              }
+            }} onBlur={() => {
+              if (!mobile) setMobileError(t("val_mobile_number_required"));else if (mobile.length < 10) setMobileError(t("su_enter_valid_10_digit_100"));
+            }} returnKeyType="done" onSubmitEditing={handleSendOtp} />
               </View>
-              {mobileError ? <Text style={{ color: '#DC2626', fontSize: 12, marginTop: 4, marginLeft: 4, marginBottom: 16 }}>{mobileError}</Text> : <View className="mb-6" />}
+              {mobileError ? <Text style={{
+            color: '#DC2626',
+            fontSize: 12,
+            marginTop: 4,
+            marginLeft: 4,
+            marginBottom: 16
+          }}>{mobileError}</Text> : <View className="mb-6" />}
 
-              <TouchableOpacity
-                onPress={handleSendOtp}
-                disabled={mobile.length !== 10 || isSubmitting}
-                className={`${mobile.length !== 10 ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`}
-                style={{
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
-                  elevation: 8,
-                }}
-              >
-                {isSubmitting ? <ActivityIndicator color="white" /> : (
-                  <>
+              <TouchableOpacity onPress={handleSendOtp} disabled={mobile.length !== 10 || isSubmitting} className={`${mobile.length !== 10 ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`} style={{
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4
+            },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8
+          }}>
+                {isSubmitting ? <ActivityIndicator color="white" /> : <>
                     <Text numberOfLines={1} className="text-white text-[18px] font-bold tracking-wide mr-2">{t('send_otp')}</Text>
                     <Ionicons name="arrow-forward" size={20} color="white" />
-                  </>
-                )}
+                  </>}
               </TouchableOpacity>
 
               <View className="flex-row justify-center items-center mt-2 flex-wrap">
@@ -1864,111 +2039,89 @@ export default function SignupScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        )}
+          </View>}
 
         {/* Step 2: OTP Verification */}
-        {step === 2 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 2 && <View className="flex-1 px-6 pt-6 pb-10">
             {/* Massive Branding Section matching Login */}
             <View className="items-center justify-center mb-8 mt-2">
-              <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
+              <Image source={require('../../assets/images/GMU Logo.png')} style={{
+            width: 80,
+            height: 80
+          }} resizeMode="contain" className="mb-2" />
               <Text className="font-extrabold text-[36px] tracking-tight text-center">
-                <Text style={{ color: '#073318' }}>Gram</Text>
-                <Text style={{ color: '#84B827' }}>Unnati</Text>
+                <Text style={{
+              color: '#073318'
+            }}>{t("gram")}</Text>
+                <Text style={{
+              color: '#84B827'
+            }}>{t("unnati")}</Text>
               </Text>
-              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">Delivery Partner</Text>
+              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t("delivery_partner")}</Text>
             </View>
 
             {/* Big Container Card for Actions */}
-            <View
-              className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
-                elevation: 10,
-              }}
-            >
+            <View className="bg-white rounded-[32px] p-6 w-full border border-gray-100" style={{
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 10
+          },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 10
+        }}>
               <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">{t('verify_otp')}</Text>
               <Text className="text-[#6B7280] text-[13px] font-semibold mb-8 text-center">
                 {t('enter_otp_sent')} <Text className="text-[#073318] font-bold">+91 {mobile || "XXXXXXXXXX"}</Text>
               </Text>
 
               <View className="flex-row justify-between w-full mb-6">
-                {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <View
-                    key={i}
-                    className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'
-                      }`}
-                  >
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        textAlignVertical: 'center',
-                        includeFontPadding: false
-                      }}
-                      className="text-xl font-bold text-[#111827]"
-                    >
+                {[0, 1, 2, 3, 4, 5].map(i => <View key={i} className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'}`}>
+                    <Text style={{
+                textAlign: 'center',
+                textAlignVertical: 'center',
+                includeFontPadding: false
+              }} className="text-xl font-bold text-[#111827]">
                       {otp[i]}
                     </Text>
-                    <TextInput
-                      ref={(el) => { inputRefs.current[i] = el; }}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        opacity: 0,
-                        padding: 0,
-                      }}
-                      keyboardType="numeric"
-                      textContentType="oneTimeCode"
-                      autoComplete="sms-otp"
-                      maxLength={1}
-                      value={otp[i]}
-                      onChangeText={(val) => handleOtpChange(val, i)}
-                      onKeyPress={(e) => handleOtpKeyPress(e, i)}
-                      onFocus={() => setFocusedIndex(i)}
-                      onBlur={() => setFocusedIndex(null)}
-                    />
-                  </View>
-                ))}
+                    <TextInput ref={el => {
+                inputRefs.current[i] = el;
+              }} style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                opacity: 0,
+                padding: 0
+              }} keyboardType="numeric" textContentType="oneTimeCode" autoComplete="sms-otp" maxLength={1} value={otp[i]} onChangeText={val => handleOtpChange(val, i)} onKeyPress={e => handleOtpKeyPress(e, i)} onFocus={() => setFocusedIndex(i)} onBlur={() => setFocusedIndex(null)} />
+                  </View>)}
               </View>
 
               <View className="flex-row items-center justify-center mb-8">
                 <Feather name="clock" size={14} color="#6B7280" className="mr-1.5" />
                 <Text numberOfLines={1} className="text-[#6B7280] text-[13px] font-semibold">
-                  {timer > 0 ? (
-                    <>{t('resend_otp_in')} <Text className="text-[#073318] font-bold">{Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}</Text></>
-                  ) : (
-                    <TouchableOpacity onPress={handleResendOtp} disabled={isSubmitting}>
+                  {timer > 0 ? <>{t('resend_otp_in')} <Text className="text-[#073318] font-bold">{Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}</Text></> : <TouchableOpacity onPress={handleResendOtp} disabled={isSubmitting}>
                       <Text numberOfLines={1} className="text-[#073318] font-bold">{t('resend_otp')}</Text>
-                    </TouchableOpacity>
-                  )}
+                    </TouchableOpacity>}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                onPress={handleVerifyOtp}
-                disabled={!isOtpComplete || isSubmitting}
-                className={`${!isOtpComplete ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`}
-                style={{
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
-                  elevation: 8,
-                }}
-              >
-                {isSubmitting ? <ActivityIndicator color="white" /> : (
-                  <>
+              <TouchableOpacity onPress={handleVerifyOtp} disabled={!isOtpComplete || isSubmitting} className={`${!isOtpComplete ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`} style={{
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4
+            },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8
+          }}>
+                {isSubmitting ? <ActivityIndicator color="white" /> : <>
                     <Text numberOfLines={1} className="text-white text-[18px] font-bold tracking-wide mr-2">{t('verify_otp')}</Text>
                     <Ionicons name="arrow-forward" size={20} color="white" />
-                  </>
-                )}
+                  </>}
               </TouchableOpacity>
 
               <View className="items-center mt-2">
@@ -1978,1150 +2131,555 @@ export default function SignupScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        )}
+          </View>}
 
         {/* Step 3: Personal Details */}
-        {step === 3 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 3 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="person-outline"
-                title="Personal Details"
-                subtitle="Enter your details to create an account"
-              />
+              <FormSection iconName="person-outline" title={t("personal_details")} subtitle={t("su_enter_your_details_t_108")} />
 
               {/* Profile Image Picker */}
               <View className="items-center mb-6">
-                <TouchableOpacity
-                  onPress={() => { setUploadTarget('profile'); setShowPhotoMenu(true); }}
-                  className="w-24 h-24 rounded-full bg-[#F3F4F6] border-2 border-dashed border-[#073318] items-center justify-center overflow-hidden relative"
-                >
-                  {profileImage ? (
-                    <Image source={{ uri: profileImage }} className="w-full h-full" />
-                  ) : (
-                    <View className="items-center">
+                <TouchableOpacity onPress={() => {
+              setUploadTarget('profile');
+              setShowPhotoMenu(true);
+            }} className="w-24 h-24 rounded-full bg-[#F3F4F6] border-2 border-dashed border-[#073318] items-center justify-center overflow-hidden relative">
+                  {profileImage ? <Image source={{
+                uri: profileImage
+              }} className="w-full h-full" /> : <View className="items-center">
                       <Ionicons name="camera" size={32} color="#073318" />
-                      <Text className="text-[10px] text-[#073318] font-bold mt-1 uppercase text-center leading-3">Select Photo</Text>
-                    </View>
-                  )}
+                      <Text className="text-[10px] text-[#073318] font-bold mt-1 uppercase text-center leading-3">{t("select_photo")}</Text>
+                    </View>}
                 </TouchableOpacity>
 
-                {profileImage && (
-                  <TouchableOpacity
-                    onPress={() => setProfileImage(null)}
-                    className="absolute -top-1 -right-1 bg-white rounded-full shadow-md"
-                    style={{ zIndex: 20 }}
-                  >
+                {profileImage && <TouchableOpacity onPress={() => setProfileImage(null)} className="absolute -top-1 -right-1 bg-white rounded-full shadow-md" style={{
+              zIndex: 20
+            }}>
                     <Ionicons name="close-circle" size={28} color="#B42318" />
-                  </TouchableOpacity>
-                )}
+                  </TouchableOpacity>}
               </View>
 
               <View className="w-full">
-                <InputField
-                  ref={fullNameRef}
-                  label="Your Full Name"
-                  placeholder="Enter your full name"
-                  icon="person-outline"
-                  error={fullNameError}
-                  required={true}
-                  value={fullName}
-                  onChangeText={(v) => {
-                    const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                    setFullName(filtered);
-                    if (!validateRequired(filtered)) {
-                      setFullNameError("Full name is required");
-                    } else {
-                      setFullNameError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(fullName)) setFullNameError("Full name is required");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => ageRef.current?.focus()}
-                />
+                <InputField ref={fullNameRef} label={t("su_your_full_name_110")} placeholder={t("su_enter_your_full_name_111")} icon="person-outline" error={fullNameError} required={true} value={fullName} onChangeText={v => {
+              const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+              setFullName(filtered);
+              if (!validateRequired(filtered)) {
+                setFullNameError(t("val_full_name_required"));
+              } else {
+                setFullNameError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(fullName)) setFullNameError(t("val_full_name_required"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => ageRef.current?.focus()} />
 
-                <InputField
-                  label="Mobile Number"
-                  icon="call-outline"
-                  required={true}
-                  value={mobile}
-                  editable={false}
-                  suffixIcon="checkmark-circle"
-                />
+                <InputField label={t("mobile_number")} icon="call-outline" required={true} value={mobile} editable={false} suffixIcon="checkmark-circle" />
 
-                <InputField
-                  ref={ageRef}
-                  label="Your Age"
-                  placeholder="Enter age (e.g. 30)"
-                  icon="person-circle-outline"
-                  error={ageError}
-                  required={true}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  value={age}
-                  onChangeText={(v) => { 
-                    setAge(v); 
-                    if (!validateRequired(v)) {
-                      setAgeError("Age is required");
-                    } else if (parseInt(v) < 18) {
-                      setAgeError("Must be at least 18");
-                    } else {
-                      setAgeError(''); 
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(age)) setAgeError("Age is required");
-                    else if (parseInt(age) < 18) setAgeError("Must be at least 18");
-                  }}
-                  returnKeyType={selectedRole === 'Individual' ? 'next' : 'done'}
-                  onSubmitEditing={selectedRole === 'Individual' ? () => setShowIndividualRoleMenu(true) : handleNextStep3}
-                />
+                <InputField ref={ageRef} label={t("su_your_age_115")} placeholder={t("su_enter_age_e_g_30_116")} icon="person-circle-outline" error={ageError} required={true} keyboardType="numeric" maxLength={2} value={age} onChangeText={v => {
+              setAge(v);
+              if (!validateRequired(v)) {
+                setAgeError(t("val_age_required"));
+              } else if (parseInt(v) < 18) {
+                setAgeError(t("su_must_be_at_least_18_118"));
+              } else {
+                setAgeError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(age)) setAgeError(t("val_age_required"));else if (parseInt(age) < 18) setAgeError(t("su_must_be_at_least_18_118"));
+            }} returnKeyType={selectedRole === 'Individual' ? 'next' : 'done'} onSubmitEditing={selectedRole === 'Individual' ? () => setShowIndividualRoleMenu(true) : handleNextStep3} />
 
-                {selectedRole === 'Individual' && (
-                  <DropdownField
-                    label="Select Your Occupation"
-                    placeholder="Select your occupation"
-                    icon="briefcase-outline"
-                    value={individualRole}
-                    error={individualRoleError}
-                    required={true}
-                    onPress={() => setShowIndividualRoleMenu(true)}
-                  />
-                )}
+                {selectedRole === 'Individual' && <DropdownField label={t("su_select_your_occupati_121")} placeholder={t("su_select_your_occupati_122")} icon="briefcase-outline" value={individualRole} error={individualRoleError} required={true} onPress={() => setShowIndividualRoleMenu(true)} />}
 
-                {selectedRole === 'Individual' && individualRole === 'Other' && (
-                  <InputField
-                    ref={otherOccupationRef}
-                    label="Specify Your Occupation"
-                    placeholder="Enter your occupation"
-                    icon="briefcase-outline"
-                    error={otherOccupationError}
-                    required={true}
-                    value={otherOccupation}
-                    onChangeText={(val) => {
-                      setOtherOccupation(val);
-                      if (!validateRequired(val)) setOtherOccupationError("Please specify your occupation");
-                      else setOtherOccupationError('');
-                    }}
-                    onBlur={() => {
-                      if (!validateRequired(otherOccupation)) setOtherOccupationError("Please specify your occupation");
-                    }}
-                    returnKeyType="done"
-                    blurOnSubmit={true}
-                    onSubmitEditing={handleNextStep3}
-                  />
-                )}
+                {selectedRole === 'Individual' && individualRole === 'Other' && <InputField ref={otherOccupationRef} label={t("su_specify_your_occupat_123")} placeholder={t("su_enter_your_occupatio_124")} icon="briefcase-outline" error={otherOccupationError} required={true} value={otherOccupation} onChangeText={val => {
+              setOtherOccupation(val);
+              if (!validateRequired(val)) setOtherOccupationError(t("su_please_specify_your__27"));else setOtherOccupationError('');
+            }} onBlur={() => {
+              if (!validateRequired(otherOccupation)) setOtherOccupationError(t("su_please_specify_your__27"));
+            }} returnKeyType="done" blurOnSubmit={true} onSubmitEditing={handleNextStep3} />}
               </View>
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep3}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep3} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 4: SHG Details */}
-        {step === 4 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 4 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="people-outline"
-                title="SHG Details"
-                subtitle="Tell us about your SHG group"
-              />
+              <FormSection iconName="people-outline" title={t("su_shg_details_128")} subtitle={t("su_tell_us_about_your_s_129")} />
 
               <View className="w-full">
                 {/* Your Role Dropdown */}
-                <DropdownField
-                  label="Your Role"
-                  placeholder="Select your role"
-                  icon="people-circle-outline"
-                  value={shgRole}
-                  error={shgRoleError}
-                  required={true}
-                  onPress={() => setShowRoleMenu(true)}
-                />
+                <DropdownField label={t("su_your_role_130")} placeholder={t("su_select_your_role_131")} icon="people-circle-outline" value={shgRole} error={shgRoleError} required={true} onPress={() => setShowRoleMenu(true)} />
 
-                {shgRole === 'CRP' && (
-                  <View className="w-full">
-                    <ToggleButtonGroup
-                      label="Are you Leader of the SHG?"
-                      value={isShgLeader}
-                      error={isShgLeaderError}
-                      required={true}
-                      onSelect={(val) => {
-                        setIsShgLeader(val);
-                        setIsShgLeaderError('');
-                        if (val === 'Yes') {
-                          setLeaderName(fullName);
-                          setLeaderMobile(mobile);
-                        } else {
-                          setLeaderName('');
-                          setLeaderMobile('');
-                        }
-                      }}
-                    />
+                {shgRole === 'CRP' && <View className="w-full">
+                    <ToggleButtonGroup label={t("su_are_you_leader_of_th_132")} value={isShgLeader} error={isShgLeaderError} required={true} onSelect={val => {
+                setIsShgLeader(val);
+                setIsShgLeaderError('');
+                if (val === 'Yes') {
+                  setLeaderName(fullName);
+                  setLeaderMobile(mobile);
+                } else {
+                  setLeaderName('');
+                  setLeaderMobile('');
+                }
+              }} />
 
-                    {isShgLeader !== null && (
-                      <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
-                        <InputField
-                          ref={shgNameRef}
-                          label="SHG Name"
-                          placeholder="Enter SHG name"
-                          icon="business-outline"
-                          error={shgNameError}
-                          required={true}
-                          value={shgName}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                            setShgName(filtered);
-                            setShgNameError('');
-                          }}
-                          returnKeyType="next"
-                          blurOnSubmit={false}
-                          onSubmitEditing={() => shgGroupSizeRef.current?.focus()}
-                        />
+                    {isShgLeader !== null && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
+                        <InputField ref={shgNameRef} label={t("su_shg_name_133")} placeholder={t("su_enter_shg_name_134")} icon="business-outline" error={shgNameError} required={true} value={shgName} onChangeText={v => {
+                  const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                  setShgName(filtered);
+                  setShgNameError('');
+                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => shgGroupSizeRef.current?.focus()} />
 
-                        <DropdownField
-                          label="How long has your SHG been active?"
-                          placeholder="Select experience"
-                          icon="time-outline"
-                          value={shgExperience}
-                          error={shgExperienceError}
-                          required={true}
-                          onPress={() => setShowExperienceMenu(true)}
-                        />
+                        <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
 
-                        <InputField
-                          ref={shgGroupSizeRef}
-                          label="SHG Group Size"
-                          placeholder="Enter number of members"
-                          icon="people-outline"
-                          error={shgGroupSizeError}
-                          required={true}
-                          keyboardType="numeric"
-                          maxLength={3}
-                          value={shgGroupSize}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^0-9]/g, '');
-                            if (Number(filtered) <= 100) {
-                              setShgGroupSize(filtered);
-                              setShgGroupSizeError('');
-                            }
-                          }}
-                          returnKeyType={isShgLeader === 'No' ? 'next' : 'done'}
-                          blurOnSubmit={isShgLeader === 'No' ? false : true}
-                          onSubmitEditing={isShgLeader === 'No' ? () => leaderNameRef.current?.focus() : handleNextStep4}
-                        />
+                        <InputField ref={shgGroupSizeRef} label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
+                  const filtered = v.replace(/[^0-9]/g, '');
+                  if (Number(filtered) <= 100) {
+                    setShgGroupSize(filtered);
+                    setShgGroupSizeError('');
+                  }
+                }} returnKeyType={isShgLeader === 'No' ? 'next' : 'done'} blurOnSubmit={isShgLeader === 'No' ? false : true} onSubmitEditing={isShgLeader === 'No' ? () => leaderNameRef.current?.focus() : handleNextStep4} />
 
-                        <InputField
-                          ref={leaderNameRef}
-                          label="Group Leader Name"
-                          placeholder="Enter leader's name"
-                          icon="person-outline"
-                          error={leaderNameError}
-                          required={true}
-                          value={leaderName}
-                          editable={isShgLeader === 'No'}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                            setLeaderName(filtered);
-                            setLeaderNameError('');
-                          }}
-                          returnKeyType="next"
-                          blurOnSubmit={false}
-                          onSubmitEditing={() => leaderMobileRef.current?.focus()}
-                        />
+                        <InputField ref={leaderNameRef} label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} editable={isShgLeader === 'No'} onChangeText={v => {
+                  const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                  setLeaderName(filtered);
+                  setLeaderNameError('');
+                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => leaderMobileRef.current?.focus()} />
 
-                        <InputField
-                          ref={leaderMobileRef}
-                          label="Leader Mobile Number"
-                          placeholder="Enter 10-digit mobile number"
-                          icon="phone-portrait-outline"
-                          error={leaderMobileError}
-                          required={true}
-                          keyboardType="numeric"
-                          maxLength={10}
-                          value={leaderMobile}
-                          editable={isShgLeader === 'No'}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^0-9]/g, '');
-                            setLeaderMobile(filtered);
-                            setLeaderMobileError('');
-                          }}
-                          returnKeyType="done"
-                          onSubmitEditing={handleNextStep4}
-                        />
-                      </Animated.View>
-                    )}
-                  </View>
-                )}
+                        <InputField ref={leaderMobileRef} label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} editable={isShgLeader === 'No'} onChangeText={v => {
+                  const filtered = v.replace(/[^0-9]/g, '');
+                  setLeaderMobile(filtered);
+                  setLeaderMobileError('');
+                }} returnKeyType="done" onSubmitEditing={handleNextStep4} />
+                      </Animated.View>}
+                  </View>}
 
-                {shgRole && shgRole !== 'CRP' && (
-                  <View className="w-full">
-                    <InputField
-                      label="SHG Name"
-                      placeholder="Enter SHG name"
-                      icon="business-outline"
-                      error={shgNameError}
-                      required={true}
-                      value={shgName}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                        setShgName(filtered);
-                        setShgNameError('');
-                      }}
-                    />
+                {shgRole && shgRole !== 'CRP' && <View className="w-full">
+                    <InputField label={t("su_shg_name_133")} placeholder={t("su_enter_shg_name_134")} icon="business-outline" error={shgNameError} required={true} value={shgName} onChangeText={v => {
+                const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                setShgName(filtered);
+                setShgNameError('');
+              }} />
 
-                    <InputField
-                      label="CRP Name"
-                      placeholder="Enter CRP name"
-                      icon="person-outline"
-                      error={crpNameError}
-                      required={true}
-                      value={crpName}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                        setCrpName(filtered);
-                        setCrpNameError('');
-                      }}
-                    />
+                    <InputField label={t("su_crp_name_145")} placeholder={t("su_enter_crp_name_146")} icon="person-outline" error={crpNameError} required={true} value={crpName} onChangeText={v => {
+                const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                setCrpName(filtered);
+                setCrpNameError('');
+              }} />
 
-                    <InputField
-                      label="CRP Contact Number"
-                      placeholder="Enter 10-digit mobile number"
-                      icon="phone-portrait-outline"
-                      error={crpMobileError}
-                      required={true}
-                      keyboardType="numeric"
-                      maxLength={10}
-                      value={crpMobile}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^0-9]/g, '');
-                        setCrpMobile(filtered);
-                        setCrpMobileError('');
-                      }}
-                    />
+                    <InputField label={t("su_crp_contact_number_147")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={crpMobileError} required={true} keyboardType="numeric" maxLength={10} value={crpMobile} onChangeText={v => {
+                const filtered = v.replace(/[^0-9]/g, '');
+                setCrpMobile(filtered);
+                setCrpMobileError('');
+              }} />
 
-                    <InputField
-                      label="CRP Email ID (Optional)"
-                      placeholder="Enter email address"
-                      icon="mail-outline"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      value={crpEmail}
-                      onChangeText={(v) => setCrpEmail(v.replace(/[^a-zA-Z0-9@._-]/g, ''))}
-                    />
+                    <InputField label={t("su_crp_email_id_optiona_149")} placeholder={t("su_enter_email_address_150")} icon="mail-outline" keyboardType="email-address" autoCapitalize="none" value={crpEmail} onChangeText={v => setCrpEmail(v.replace(/[^a-zA-Z0-9@._-]/g, ''))} />
 
-                    {shgRole === 'Member' && (
-                      <View className="w-full">
-                        <InputField
-                          label="Group Leader Name"
-                          placeholder="Enter leader's name"
-                          icon="person-outline"
-                          error={leaderNameError}
-                          required={true}
-                          value={leaderName}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                            setLeaderName(filtered);
-                            setLeaderNameError('');
-                          }}
-                        />
+                    {shgRole === 'Member' && <View className="w-full">
+                        <InputField label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} onChangeText={v => {
+                  const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                  setLeaderName(filtered);
+                  setLeaderNameError('');
+                }} />
 
-                        <InputField
-                          label="Leader Mobile Number"
-                          placeholder="Enter 10-digit mobile number"
-                          icon="phone-portrait-outline"
-                          error={leaderMobileError}
-                          required={true}
-                          keyboardType="numeric"
-                          maxLength={10}
-                          value={leaderMobile}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^0-9]/g, '');
-                            setLeaderMobile(filtered);
-                            setLeaderMobileError('');
-                          }}
-                        />
-                      </View>
-                    )}
+                        <InputField label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} onChangeText={v => {
+                  const filtered = v.replace(/[^0-9]/g, '');
+                  setLeaderMobile(filtered);
+                  setLeaderMobileError('');
+                }} />
+                      </View>}
 
-                    <DropdownField
-                      label="How long has your SHG been active?"
-                      placeholder="Select experience"
-                      icon="time-outline"
-                      value={shgExperience}
-                      error={shgExperienceError}
-                      required={true}
-                      onPress={() => setShowExperienceMenu(true)}
-                    />
+                    <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
 
-                    <InputField
-                      label="SHG Group Size"
-                      placeholder="Enter number of members"
-                      icon="people-outline"
-                      error={shgGroupSizeError}
-                      required={true}
-                      keyboardType="numeric"
-                      maxLength={3}
-                      value={shgGroupSize}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^0-9]/g, '');
-                        if (Number(filtered) <= 100) {
-                          setShgGroupSize(filtered);
-                          setShgGroupSizeError('');
-                        }
-                      }}
-                    />
-                  </View>
-                )}
+                    <InputField label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
+                const filtered = v.replace(/[^0-9]/g, '');
+                if (Number(filtered) <= 100) {
+                  setShgGroupSize(filtered);
+                  setShgGroupSizeError('');
+                }
+              }} />
+                  </View>}
               </View>
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep4}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep4} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 5: Business Details */}
-        {step === 5 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 5 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="cube-outline"
-                title="Business Details"
-                subtitle="Tell us about your production"
-              />
+              <FormSection iconName="cube-outline" title={t("su_business_details_160")} subtitle={t("su_tell_us_about_your_p_161")} />
 
               <View className="w-full">
-                <ToggleButtonGroup
-                  label="Do you produce any products?"
-                  value={producesProducts}
-                  error={producesProductsError}
-                  required={true}
-                  onSelect={(val) => {
-                    setProducesProducts(val);
-                    setProducesProductsError('');
-                  }}
-                />
+                <ToggleButtonGroup label={t("su_do_you_produce_any_p_162")} value={producesProducts} error={producesProductsError} required={true} onSelect={val => {
+              setProducesProducts(val);
+              setProducesProductsError('');
+            }} />
 
-                {producesProducts === 'Yes' && (
-                  <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
+                {producesProducts === 'Yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
                     {/* Business Team Size */}
-                    <InputField
-                      ref={businessTeamSizeRef}
-                      label="Business Team Size"
-                      placeholder="Enter total team members"
-                      icon="people-outline"
-                      error={businessTeamSizeError}
-                      required={true}
-                      keyboardType="numeric"
-                      maxLength={3}
-                      value={businessTeamSize}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^0-9]/g, '');
-                        if (Number(filtered) <= 100) {
-                          setBusinessTeamSize(filtered);
-                          setBusinessTeamSizeError('');
-                        }
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => productNameRef.current?.focus()}
-                    />
+                    <InputField ref={businessTeamSizeRef} label={t("su_business_team_size_163")} placeholder={t("su_enter_total_team_mem_164")} icon="people-outline" error={businessTeamSizeError} required={true} keyboardType="numeric" maxLength={3} value={businessTeamSize} onChangeText={v => {
+                const filtered = v.replace(/[^0-9]/g, '');
+                if (Number(filtered) <= 100) {
+                  setBusinessTeamSize(filtered);
+                  setBusinessTeamSizeError('');
+                }
+              }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => productNameRef.current?.focus()} />
 
                     <View className="h-[1px] bg-gray-100 my-4" />
 
                     {/* Product Name */}
-                    <InputField
-                      ref={productNameRef}
-                      label="Product Name"
-                      placeholder="Enter product name"
-                      icon="cube-outline"
-                      error={productNameError}
-                      required={true}
-                      value={productName}
-                      onChangeText={(v) => {
-                        const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                        setProductName(filtered);
-                        setProductNameError('');
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => setShowCategoryMenu(true)}
-                    />
+                    <InputField ref={productNameRef} label={t("su_product_name_165")} placeholder={t("su_enter_product_name_166")} icon="cube-outline" error={productNameError} required={true} value={productName} onChangeText={v => {
+                const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                setProductName(filtered);
+                setProductNameError('');
+              }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => setShowCategoryMenu(true)} />
 
                     {/* Category Dropdown */}
-                    <DropdownField
-                      label="Category"
-                      placeholder="Select category"
-                      icon="grid-outline"
-                      value={productCategory}
-                      error={productCategoryError}
-                      required={true}
-                      onPress={() => setShowCategoryMenu(true)}
-                    />
+                    <DropdownField label={t("su_category_167")} placeholder={t("su_select_category_168")} icon="grid-outline" value={productCategory} error={productCategoryError} required={true} onPress={() => setShowCategoryMenu(true)} />
 
-                    {productCategory === 'Other' && (
-                      <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
-                        <InputField
-                          label="Specify Category Name"
-                          placeholder="Enter category name"
-                          icon="create-outline"
-                          error={otherCategoryError}
-                          required={true}
-                          value={otherCategory}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^a-zA-Z\s]/g, '');
-                            setOtherCategory(filtered);
-                            setOtherCategoryError('');
-                          }}
-                        />
-                      </Animated.View>
-                    )}
+                    {productCategory === 'Other' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
+                        <InputField label={t("su_specify_category_nam_169")} placeholder={t("su_enter_category_name_170")} icon="create-outline" error={otherCategoryError} required={true} value={otherCategory} onChangeText={v => {
+                  const filtered = v.replace(/[^a-zA-Z\s]/g, '');
+                  setOtherCategory(filtered);
+                  setOtherCategoryError('');
+                }} />
+                      </Animated.View>}
 
                     {/* Daily Production & Unit */}
                     <View className="flex-row w-full mt-4">
                       <View className="flex-1 mr-2">
-                        <InputField
-                          ref={dailyProductionRef}
-                          label="Daily Production"
-                          placeholder="Qty"
-                          icon="bar-chart-outline"
-                          error={dailyProductionError}
-                          required={true}
-                          keyboardType="numeric"
-                          value={dailyProduction}
-                          onChangeText={(v) => {
-                            const filtered = v.replace(/[^0-9.]/g, '');
-                            setDailyProduction(filtered);
-                            setDailyProductionError('');
-                          }}
-                          returnKeyType="next"
-                          blurOnSubmit={false}
-                          onSubmitEditing={() => weeklyProductionRef.current?.focus()}
-                        />
+                        <InputField ref={dailyProductionRef} label={t("su_daily_production_171")} placeholder={t("su_qty_172")} icon="bar-chart-outline" error={dailyProductionError} required={true} keyboardType="numeric" value={dailyProduction} onChangeText={v => {
+                    const filtered = v.replace(/[^0-9.]/g, '');
+                    setDailyProduction(filtered);
+                    setDailyProductionError('');
+                  }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => weeklyProductionRef.current?.focus()} />
                       </View>
 
                       <View className="flex-1 ml-2">
-                        <DropdownField
-                          label="Unit"
-                          placeholder="Unit"
-                          icon="options-outline"
-                          value={UNIT_DATA.find(u => u.uom_code === productUnit)?.full_name_of_measurement || ''}
-                          error={productUnitError}
-                          required={true}
-                          onPress={() => setShowUnitMenu(true)}
-                        />
+                        <DropdownField label={t("su_unit_173")} placeholder={t("su_unit_173")} icon="options-outline" value={productUnit ? t("unit_" + productUnit.toLowerCase()) : ''} error={productUnitError} required={true} onPress={() => setShowUnitMenu(true)} />
                       </View>
                     </View>
 
                     {/* Weekly Production & Price per Unit */}
                     <View className="flex-row w-full mt-4">
                       <View className="flex-1 mr-2">
-                        <InputField
-                          ref={weeklyProductionRef}
-                          label="Weekly Production (Optional)"
-                          placeholder="Qty"
-                          icon="stats-chart-outline"
-                          keyboardType="numeric"
-                          value={weeklyProduction}
-                          onChangeText={(v) => setWeeklyProduction(v.replace(/[^0-9.]/g, ''))}
-                          returnKeyType="next"
-                          blurOnSubmit={false}
-                          onSubmitEditing={() => productPriceRef.current?.focus()}
-                        />
+                        <InputField ref={weeklyProductionRef} label={t("su_weekly_production_op_175")} placeholder={t("su_qty_172")} icon="stats-chart-outline" keyboardType="numeric" value={weeklyProduction} onChangeText={v => setWeeklyProduction(v.replace(/[^0-9.]/g, ''))} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => productPriceRef.current?.focus()} />
                       </View>
 
                       <View className="flex-1 ml-2">
-                        <InputField
-                          ref={productPriceRef}
-                          label="Price per Unit (Optional)"
-                          placeholder="₹ Amount"
-                          icon="card-outline"
-                          keyboardType="numeric"
-                          value={productPrice}
-                          onChangeText={(v) => setProductPrice(v.replace(/[^0-9.]/g, ''))}
-                          returnKeyType="done"
-                          onSubmitEditing={handleNextStep5}
-                        />
+                        <InputField ref={productPriceRef} label={t("su_price_per_unit_optio_177")} placeholder={t("su_amount_178")} icon="card-outline" keyboardType="numeric" value={productPrice} onChangeText={v => setProductPrice(v.replace(/[^0-9.]/g, ''))} returnKeyType="done" onSubmitEditing={handleNextStep5} />
                       </View>
                     </View>
-                  </Animated.View>
-                )}
+                  </Animated.View>}
               </View>
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep5}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep5} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
 
 
         {/* Step 6: Address Details */}
-        {step === 6 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 6 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="location-outline"
-                title="Address Details"
-                subtitle="Enter your location details"
-              />
+              <FormSection iconName="location-outline" title={t("address_details")} subtitle={t("su_enter_your_location__181")} />
 
               <View className="w-full">
-                <InputField
-                  ref={pincodeRef}
-                  label="Pincode"
-                  placeholder="Enter 6-digit pincode"
-                  icon="location-outline"
-                  error={pincodeError}
-                  required={true}
-                  keyboardType="numeric"
-                  maxLength={6}
-                  value={pincode}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^0-9]/g, '');
-                    setPincode(cleaned);
-                    if (!validateRequired(cleaned)) {
-                      setPincodeError("Pincode is required");
-                    } else if (!validatePincode(cleaned)) {
-                      setPincodeError("Enter valid 6-digit pincode");
-                    } else {
-                      setPincodeError('');
+                <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
+              const cleaned = val.replace(/[^0-9]/g, '');
+              setPincode(cleaned);
+              if (!validateRequired(cleaned)) {
+                setPincodeError(t("val_pincode_required"));
+              } else if (!validatePincode(cleaned)) {
+                setPincodeError(t("su_enter_valid_6_digit__185"));
+              } else {
+                setPincodeError('');
+              }
+              if (cleaned.length === 6) {
+                const fetchPincode = async () => {
+                  try {
+                    const data = await signupService.getPincodeDetails(cleaned);
+                    if (data) {
+                      setStateName(data.state);
+                      setDistrict(data.district);
+                      setTaluka(data.taluka);
+                      if (data.villages && data.villages.length === 1) {
+                        setVillage(data.villages[0]);
+                      }
+                      setStateNameError('');
+                      setDistrictError('');
+                      setTalukaError('');
+                      houseNoRef.current?.focus();
                     }
-                    if (cleaned.length === 6) {
-                      const fetchPincode = async () => {
-                        try {
-                          const data = await signupService.getPincodeDetails(cleaned);
-                          if (data) {
-                            setStateName(data.state);
-                            setDistrict(data.district);
-                            setTaluka(data.taluka);
-                            if (data.villages && data.villages.length === 1) {
-                              setVillage(data.villages[0]);
-                            }
-                            setStateNameError('');
-                            setDistrictError('');
-                            setTalukaError('');
-                            houseNoRef.current?.focus();
-                          }
-                        } catch (error) {
-                          console.error('Pincode fetch error:', error);
-                          setPincodeError('Invalid pincode');
-                        }
-                      };
-                      fetchPincode();
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(pincode)) setPincodeError("Pincode is required");
-                    else if (!validatePincode(pincode)) setPincodeError("Enter valid 6-digit pincode");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => houseNoRef.current?.focus()}
-                />
+                  } catch (error) {
+                    console.error('Pincode fetch error:', error);
+                    setPincodeError(t("su_invalid_pincode_186"));
+                  }
+                };
+                fetchPincode();
+              }
+            }} onBlur={() => {
+              if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => houseNoRef.current?.focus()} />
 
-                <InputField
-                  ref={houseNoRef}
-                  label="House No"
-                  placeholder="Enter house number"
-                  icon="home-outline"
-                  error={houseNoError}
-                  required={true}
-                  value={houseNo}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
-                    setHouseNo(cleaned);
-                    if (!validateRequired(cleaned)) setHouseNoError("House number is required");
-                    else setHouseNoError('');
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(houseNo)) setHouseNoError("House number is required");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => landmarkRef.current?.focus()}
-                />
+                <InputField ref={houseNoRef} label={t("su_house_no_189")} placeholder={t("su_enter_house_number_190")} icon="home-outline" error={houseNoError} required={true} value={houseNo} onChangeText={val => {
+              const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
+              setHouseNo(cleaned);
+              if (!validateRequired(cleaned)) setHouseNoError(t("su_house_number_is_requ_191"));else setHouseNoError('');
+            }} onBlur={() => {
+              if (!validateRequired(houseNo)) setHouseNoError(t("su_house_number_is_requ_191"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => landmarkRef.current?.focus()} />
 
-                <InputField
-                  ref={landmarkRef}
-                  label="Delivery Address"
-                  placeholder="Enter full delivery address"
-                  icon="map-outline"
-                  error={landmarkError}
-                  required={true}
-                  value={landmark}
-                  onChangeText={(val) => {
-                    setLandmark(val);
-                    if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(landmark)) setLandmarkError("Address is required");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => villageRef.current?.focus()}
-                />
+                <InputField ref={landmarkRef} label={t("su_delivery_address_193")} placeholder={t("su_enter_full_delivery__194")} icon="map-outline" error={landmarkError} required={true} value={landmark} onChangeText={val => {
+              setLandmark(val);
+              if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
+            }} onBlur={() => {
+              if (!validateRequired(landmark)) setLandmarkError(t("su_address_is_required_195"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => villageRef.current?.focus()} />
 
                 {/* Village & Taluka Row */}
                 <View className="flex-row w-full mt-4">
                   <View className="flex-1 mr-2">
-                    <InputField
-                      ref={villageRef}
-                      label="Village / City"
-                      placeholder="Village/City"
-                      icon="flag-outline"
-                      error={villageError}
-                      required={true}
-                      value={village}
-                      onChangeText={(val) => {
-                    setVillage(val);
-                    if (villageError) setVillageError(validateRequired(val) ? '' : 'Village is required');
-                  }}
-                      onBlur={() => {
-                        if (!validateRequired(village)) setVillageError("Village is required");
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => talukaRef.current?.focus()}
-                    />
+                    <InputField ref={villageRef} label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" error={villageError} required={true} value={village} onChangeText={val => {
+                  setVillage(val);
+                  if (villageError) setVillageError(validateRequired(val) ? '' : 'Village is required');
+                }} onBlur={() => {
+                  if (!validateRequired(village)) setVillageError(t("su_village_is_required_56"));
+                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => talukaRef.current?.focus()} />
                   </View>
 
                   <View className="flex-1 ml-2">
-                    <InputField
-                      ref={talukaRef}
-                      label="Taluka"
-                      placeholder="Taluka"
-                      icon="flag-outline"
-                      error={talukaError}
-                      required={true}
-                      value={taluka}
-                      onChangeText={(val) => {
-                    setTaluka(val);
-                    if (talukaError) setTalukaError(validateRequired(val) ? '' : 'Taluka is required');
-                  }}
-                      onBlur={() => {
-                        if (!validateRequired(taluka)) setTalukaError("Taluka is required");
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => districtRef.current?.focus()}
-                    />
+                    <InputField ref={talukaRef} label={t("taluka")} placeholder={t("taluka")} icon="flag-outline" error={talukaError} required={true} value={taluka} onChangeText={val => {
+                  setTaluka(val);
+                  if (talukaError) setTalukaError(validateRequired(val) ? '' : 'Taluka is required');
+                }} onBlur={() => {
+                  if (!validateRequired(taluka)) setTalukaError(t("val_taluka_required"));
+                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => districtRef.current?.focus()} />
                   </View>
                 </View>
 
                 {/* District & State Row */}
                 <View className="flex-row w-full mt-4">
                   <View className="flex-1 mr-2">
-                    <InputField
-                      ref={districtRef}
-                      label="District"
-                      placeholder="District"
-                      icon="flag-outline"
-                      error={districtError}
-                      required={true}
-                      value={district}
-                      onChangeText={(val) => {
-                    setDistrict(val);
-                    if (districtError) setDistrictError(validateRequired(val) ? '' : 'Please select district');
-                  }}
-                      onBlur={() => {
-                        if (!validateRequired(district)) setDistrictError("District is required");
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => stateNameRef.current?.focus()}
-                    />
+                    <InputField ref={districtRef} label={t("district")} placeholder={t("district")} icon="flag-outline" error={districtError} required={true} value={district} onChangeText={val => {
+                  setDistrict(val);
+                  if (districtError) setDistrictError(validateRequired(val) ? '' : 'Please select district');
+                }} onBlur={() => {
+                  if (!validateRequired(district)) setDistrictError(t("val_district_required"));
+                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => stateNameRef.current?.focus()} />
                   </View>
 
                   <View className="flex-1 ml-2">
-                    <InputField
-                      ref={stateNameRef}
-                      label="State"
-                      placeholder="State"
-                      icon="flag-outline"
-                      error={stateNameError}
-                      required={true}
-                      value={stateName}
-                      onChangeText={(val) => {
-                    setStateName(val);
-                    if (stateNameError) setStateNameError(validateRequired(val) ? '' : 'Please select state');
-                  }}
-                      onBlur={() => {
-                        if (!validateRequired(stateName)) setStateNameError("State is required");
-                      }}
-                      returnKeyType="done"
-                      onSubmitEditing={handleNextStep6}
-                    />
+                    <InputField ref={stateNameRef} label={t("state")} placeholder={t("state")} icon="flag-outline" error={stateNameError} required={true} value={stateName} onChangeText={val => {
+                  setStateName(val);
+                  if (stateNameError) setStateNameError(validateRequired(val) ? '' : 'Please select state');
+                }} onBlur={() => {
+                  if (!validateRequired(stateName)) setStateNameError(t("val_state_required"));
+                }} returnKeyType="done" onSubmitEditing={handleNextStep6} />
                   </View>
                 </View>
               </View>
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep6}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep6} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 7: Documents */}
-        {step === 7 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 7 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="card-outline"
-                title="Documents"
-                subtitle="Verify your identity"
-              />
+              <FormSection iconName="card-outline" title={t("su_documents_209")} subtitle={t("su_verify_your_identity_210")} />
 
               <View className="w-full">
-                <InputField
-                  ref={aadhaarNumberRef}
-                  label="Aadhaar Number"
-                  placeholder="XXXX XXXX XXXX"
-                  icon="finger-print-outline"
-                  error={aadhaarError}
-                  required={true}
-                  keyboardType="number-pad"
-                  maxLength={14}
-                  value={aadhaarNumber}
-                  onChangeText={(val) => {
-                    const formatted = formatAadhaar(val);
-                    setAadhaarNumber(formatted);
-                    if (!validateRequired(formatted)) {
-                      setAadhaarError("Aadhaar number is required");
-                    } else if (!validateAadhaar(formatted)) {
-                      setAadhaarError("Enter valid 12-digit Aadhaar number");
-                    } else {
-                      setAadhaarError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(aadhaarNumber)) setAadhaarError("Aadhaar number is required");
-                    else if (!validateAadhaar(aadhaarNumber)) setAadhaarError("Enter valid 12-digit Aadhaar number");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => panNumberRef.current?.focus()}
-                />
+                <InputField ref={aadhaarNumberRef} label={t("su_aadhaar_number_211")} placeholder={t("su_xxxx_xxxx_xxxx_212")} icon="finger-print-outline" error={aadhaarError} required={true} keyboardType="number-pad" maxLength={14} value={aadhaarNumber} onChangeText={val => {
+              const formatted = formatAadhaar(val);
+              setAadhaarNumber(formatted);
+              if (!validateRequired(formatted)) {
+                setAadhaarError(t("su_aadhaar_number_is_re_213"));
+              } else if (!validateAadhaar(formatted)) {
+                setAadhaarError(t("su_enter_valid_12_digit_214"));
+              } else {
+                setAadhaarError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(aadhaarNumber)) setAadhaarError(t("su_aadhaar_number_is_re_213"));else if (!validateAadhaar(aadhaarNumber)) setAadhaarError(t("su_enter_valid_12_digit_214"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => panNumberRef.current?.focus()} />
 
-                <InputField
-                  ref={panNumberRef}
-                  label="PAN Number"
-                  placeholder="ABCDE1234F"
-                  icon="document-text-outline"
-                  error={panError}
-                  required={true}
-                  autoCapitalize="characters"
-                  maxLength={10}
-                  value={panNumber}
-                  onChangeText={(val) => {
-                    const upper = val.toUpperCase();
-                    setPanNumber(upper);
-                    if (!validateRequired(upper)) {
-                      setPanError("PAN number is required");
-                    } else if (!validatePan(upper)) {
-                      setPanError("Enter valid PAN number");
-                    } else {
-                      setPanError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(panNumber)) setPanError("PAN number is required");
-                    else if (!validatePan(panNumber)) setPanError("Enter valid PAN number");
-                  }}
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                />
+                <InputField ref={panNumberRef} label={t("su_pan_number_217")} placeholder={t("su_abcde1234f_218")} icon="document-text-outline" error={panError} required={true} autoCapitalize="characters" maxLength={10} value={panNumber} onChangeText={val => {
+              const upper = val.toUpperCase();
+              setPanNumber(upper);
+              if (!validateRequired(upper)) {
+                setPanError(t("su_pan_number_is_requir_219"));
+              } else if (!validatePan(upper)) {
+                setPanError(t("su_enter_valid_pan_numb_220"));
+              } else {
+                setPanError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(panNumber)) setPanError(t("su_pan_number_is_requir_219"));else if (!validatePan(panNumber)) setPanError(t("su_enter_valid_pan_numb_220"));
+            }} returnKeyType="done" blurOnSubmit={true} />
 
                 <View className="mt-6 flex-row justify-between space-x-4">
                   <View className="flex-1 mr-2">
-                    <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">
-                      Aadhaar Front Photo <Text className="text-[#B42318] font-semibold">*</Text>
+                    <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">{t("su_aadhaar_front_photo_223")}<Text className="text-[#B42318] font-semibold">*</Text>
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => { setUploadTarget('aadhaarFront'); setShowPhotoMenu(true); }}
-                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarFront ? 'border-[#DC2626]' : aadhaarFront ? 'border-[#22C55E]' : 'border-gray-300'}`}
-                    >
-                      {aadhaarFront ? (
-                        <>
-                          <Image source={{ uri: aadhaarFront }} className="w-full h-full" resizeMode="cover" />
-                          <TouchableOpacity
-                            onPress={(e) => { e.stopPropagation(); setAadhaarFront(''); }}
-                            className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                            style={{ zIndex: 10 }}
-                          >
+                    <TouchableOpacity onPress={() => {
+                  setUploadTarget('aadhaarFront');
+                  setShowPhotoMenu(true);
+                }} className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarFront ? 'border-[#DC2626]' : aadhaarFront ? 'border-[#22C55E]' : 'border-gray-300'}`}>
+                      {aadhaarFront ? <>
+                          <Image source={{
+                      uri: aadhaarFront
+                    }} className="w-full h-full" resizeMode="cover" />
+                          <TouchableOpacity onPress={e => {
+                      e.stopPropagation();
+                      setAadhaarFront('');
+                    }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md" style={{
+                      zIndex: 10
+                    }}>
                             <Ionicons name="close" size={18} color="#B42318" />
                           </TouchableOpacity>
-                        </>
-                      ) : (
-                        <View className="items-center">
+                        </> : <View className="items-center">
                           <Ionicons name="cloud-upload-outline" size={26} color="#073318" className="mb-1" />
-                          <Text className="text-[11px] text-gray-400 font-semibold">Front Side</Text>
-                        </View>
-                      )}
+                          <Text className="text-[11px] text-gray-400 font-semibold">{t("su_front_side_224")}</Text>
+                        </View>}
                     </TouchableOpacity>
                   </View>
                   <View className="flex-1 ml-2">
-                    <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">
-                      Aadhaar Back Photo <Text className="text-[#B42318] font-semibold">*</Text>
+                    <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">{t("su_aadhaar_back_photo_225")}<Text className="text-[#B42318] font-semibold">*</Text>
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => { setUploadTarget('aadhaarBack'); setShowPhotoMenu(true); }}
-                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarBack ? 'border-[#DC2626]' : aadhaarBack ? 'border-[#22C55E]' : 'border-gray-300'}`}
-                    >
-                      {aadhaarBack ? (
-                        <>
-                          <Image source={{ uri: aadhaarBack }} className="w-full h-full" resizeMode="cover" />
-                          <TouchableOpacity
-                            onPress={(e) => { e.stopPropagation(); setAadhaarBack(''); }}
-                            className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                            style={{ zIndex: 10 }}
-                          >
+                    <TouchableOpacity onPress={() => {
+                  setUploadTarget('aadhaarBack');
+                  setShowPhotoMenu(true);
+                }} className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarBack ? 'border-[#DC2626]' : aadhaarBack ? 'border-[#22C55E]' : 'border-gray-300'}`}>
+                      {aadhaarBack ? <>
+                          <Image source={{
+                      uri: aadhaarBack
+                    }} className="w-full h-full" resizeMode="cover" />
+                          <TouchableOpacity onPress={e => {
+                      e.stopPropagation();
+                      setAadhaarBack('');
+                    }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md" style={{
+                      zIndex: 10
+                    }}>
                             <Ionicons name="close" size={18} color="#B42318" />
                           </TouchableOpacity>
-                        </>
-                      ) : (
-                        <View className="items-center">
+                        </> : <View className="items-center">
                           <Ionicons name="cloud-upload-outline" size={26} color="#073318" className="mb-1" />
-                          <Text className="text-[11px] text-gray-400 font-semibold">Back Side</Text>
-                        </View>
-                      )}
+                          <Text className="text-[11px] text-gray-400 font-semibold">{t("su_back_side_226")}</Text>
+                        </View>}
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View className="mt-6">
-                  <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1">
-                    PAN Card Photo <Text className="text-[#B42318] font-semibold">*</Text>
+                  <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1">{t("su_pan_card_photo_227")}<Text className="text-[#B42318] font-semibold">*</Text>
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => { setUploadTarget('panImage'); setShowPhotoMenu(true); }}
-                    className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-32 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !panImage ? 'border-[#DC2626]' : panImage ? 'border-[#22C55E]' : 'border-gray-300'}`}
-                  >
-                    {panImage ? (
-                      <>
-                        <Image source={{ uri: panImage }} className="w-full h-full" resizeMode="cover" />
-                        <TouchableOpacity
-                          onPress={(e) => { e.stopPropagation(); setPanImage(''); }}
-                          className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                          style={{ zIndex: 10 }}
-                        >
+                  <TouchableOpacity onPress={() => {
+                setUploadTarget('panImage');
+                setShowPhotoMenu(true);
+              }} className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-32 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !panImage ? 'border-[#DC2626]' : panImage ? 'border-[#22C55E]' : 'border-gray-300'}`}>
+                    {panImage ? <>
+                        <Image source={{
+                    uri: panImage
+                  }} className="w-full h-full" resizeMode="cover" />
+                        <TouchableOpacity onPress={e => {
+                    e.stopPropagation();
+                    setPanImage('');
+                  }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md" style={{
+                    zIndex: 10
+                  }}>
                           <Ionicons name="close" size={18} color="#B42318" />
                         </TouchableOpacity>
-                      </>
-                    ) : (
-                      <View className="items-center">
+                      </> : <View className="items-center">
                         <Ionicons name="image-outline" size={32} color="#073318" className="mb-2" />
-                        <Text className="text-xs text-[#073318] font-bold">Upload PAN Card Image</Text>
-                        <Text className="text-[11px] text-gray-400 font-medium mt-1">PNG, JPG up to 5MB</Text>
-                      </View>
-                    )}
+                        <Text className="text-xs text-[#073318] font-bold">{t("su_upload_pan_card_imag_228")}</Text>
+                        <Text className="text-[11px] text-gray-400 font-medium mt-1">{t("su_png_jpg_up_to_5mb_229")}</Text>
+                      </View>}
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {docPhotosError ? (
-                <Text className="text-red-500 text-xs mt-4 text-center font-semibold">{docPhotosError}</Text>
-              ) : null}
+              {docPhotosError ? <Text className="text-red-500 text-xs mt-4 text-center font-semibold">{docPhotosError}</Text> : null}
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep7}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep7} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 8: Bank Details */}
-        {step === 8 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 8 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="card-outline"
-                title="Bank Details"
-                subtitle="Where should we send your earnings?"
-              />
+              <FormSection iconName="card-outline" title={t("su_bank_details_231")} subtitle={t("su_where_should_we_send_232")} />
 
               <View className="w-full">
-                <InputField
-                  ref={accountNameRef}
-                  label="Account Holder Name"
-                  placeholder="Enter account holder name"
-                  icon="person-outline"
-                  error={accountNameError}
-                  required={true}
-                  value={accountName}
-                  onChangeText={(val) => {
-                    const filtered = val.replace(/[^a-zA-Z\s]/g, '');
-                    setAccountName(filtered);
-                    if (!validateRequired(filtered)) {
-                      setAccountNameError("Account name is required");
-                    } else {
-                      setAccountNameError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(accountName)) setAccountNameError("Account name is required");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => accountNumberRef.current?.focus()}
-                />
+                <InputField ref={accountNameRef} label={t("su_account_holder_name_233")} placeholder={t("su_enter_account_holder_234")} icon="person-outline" error={accountNameError} required={true} value={accountName} onChangeText={val => {
+              const filtered = val.replace(/[^a-zA-Z\s]/g, '');
+              setAccountName(filtered);
+              if (!validateRequired(filtered)) {
+                setAccountNameError(t("su_account_name_is_requ_235"));
+              } else {
+                setAccountNameError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(accountName)) setAccountNameError(t("su_account_name_is_requ_235"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => accountNumberRef.current?.focus()} />
 
-                <InputField
-                  ref={accountNumberRef}
-                  label="Account Number"
-                  placeholder="Enter account number"
-                  icon="card-outline"
-                  error={accountNumberError}
-                  required={true}
-                  keyboardType="number-pad"
-                  maxLength={16}
-                  value={accountNumber}
-                  onChangeText={(val) => {
-                    const filtered = val.replace(/[^0-9]/g, '');
-                    setAccountNumber(filtered);
-                    if (!validateRequired(filtered)) {
-                      setAccountNumberError("Account number is required");
-                    } else if (filtered.length < 8) {
-                      setAccountNumberError("Enter valid account number");
-                    } else {
-                      setAccountNumberError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(accountNumber)) setAccountNumberError("Account number is required");
-                    else if (accountNumber.length < 8) setAccountNumberError("Enter valid account number");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => ifscCodeRef.current?.focus()}
-                />
+                <InputField ref={accountNumberRef} label={t("su_account_number_237")} placeholder={t("su_enter_account_number_238")} icon="card-outline" error={accountNumberError} required={true} keyboardType="number-pad" maxLength={16} value={accountNumber} onChangeText={val => {
+              const filtered = val.replace(/[^0-9]/g, '');
+              setAccountNumber(filtered);
+              if (!validateRequired(filtered)) {
+                setAccountNumberError(t("val_account_number_required"));
+              } else if (filtered.length < 8) {
+                setAccountNumberError(t("su_enter_valid_account__240"));
+              } else {
+                setAccountNumberError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(accountNumber)) setAccountNumberError(t("val_account_number_required"));else if (accountNumber.length < 8) setAccountNumberError(t("su_enter_valid_account__240"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => ifscCodeRef.current?.focus()} />
 
-                <InputField
-                  ref={ifscCodeRef}
-                  label="IFSC Code"
-                  placeholder="e.g. SBIN0001234"
-                  icon="pricetag-outline"
-                  error={ifscError}
-                  required={true}
-                  autoCapitalize="characters"
-                  maxLength={11}
-                  value={ifscCode}
-                  onChangeText={(val) => { 
-                    const upper = val.toUpperCase();
-                    setIfscCode(upper); 
-                    if (!validateRequired(upper)) {
-                      setIfscError("IFSC code is required");
-                    } else if (!validateIfsc(upper)) {
-                      setIfscError("Enter valid IFSC code");
-                    } else {
-                      setIfscError('');
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(ifscCode)) setIfscError("IFSC code is required");
-                    else if (!validateIfsc(ifscCode)) setIfscError("Enter valid IFSC code");
-                  }}
-                  loading={isFetchingIfsc}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => bankNameRef.current?.focus()}
-                />
+                <InputField ref={ifscCodeRef} label={t("su_ifsc_code_243")} placeholder={t("su_e_g_sbin0001234_244")} icon="pricetag-outline" error={ifscError} required={true} autoCapitalize="characters" maxLength={11} value={ifscCode} onChangeText={val => {
+              const upper = val.toUpperCase();
+              setIfscCode(upper);
+              if (!validateRequired(upper)) {
+                setIfscError(t("val_ifsc_code_required"));
+              } else if (!validateIfsc(upper)) {
+                setIfscError(t("su_enter_valid_ifsc_cod_246"));
+              } else {
+                setIfscError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(ifscCode)) setIfscError(t("val_ifsc_code_required"));else if (!validateIfsc(ifscCode)) setIfscError(t("su_enter_valid_ifsc_cod_246"));
+            }} loading={isFetchingIfsc} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => bankNameRef.current?.focus()} />
 
-                <InputField
-                  ref={bankNameRef}
-                  label={isFetchingIfsc ? "Bank Name (Auto-fetching...)" : "Bank Name"}
-                  placeholder="Enter bank name or auto-fill"
-                  icon="business-outline"
-                  error={bankNameError}
-                  required={true}
-                  value={bankName}
-                  onChangeText={(val) => { 
-                    setBankName(val); 
-                    if (!validateRequired(val)) {
-                      setBankNameError("Bank name is required");
-                    } else {
-                      setBankNameError(''); 
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!validateRequired(bankName)) setBankNameError("Bank name is required");
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => branchNameRef.current?.focus()}
-                />
+                <InputField ref={bankNameRef} label={isFetchingIfsc ? "Bank Name (Auto-fetching...)" : "Bank Name"} placeholder={t("su_enter_bank_name_or_a_249")} icon="business-outline" error={bankNameError} required={true} value={bankName} onChangeText={val => {
+              setBankName(val);
+              if (!validateRequired(val)) {
+                setBankNameError(t("val_bank_name_required"));
+              } else {
+                setBankNameError('');
+              }
+            }} onBlur={() => {
+              if (!validateRequired(bankName)) setBankNameError(t("val_bank_name_required"));
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => branchNameRef.current?.focus()} />
 
-                <InputField
-                  ref={branchNameRef}
-                  label={isFetchingIfsc ? "Branch Name (Auto-fetching...)" : "Branch Name"}
-                  placeholder="Enter branch name"
-                  icon="location-outline"
-                  error={branchNameError}
-                  required={true}
-                  value={branchName}
-                  onChangeText={(val) => {
-                    const filtered = val.replace(/[^a-zA-Z\s]/g, '');
-                    setBranchName(filtered);
-                    setBranchNameError('');
-                  }}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => upiIdRef.current?.focus()}
-                />
+                <InputField ref={branchNameRef} label={isFetchingIfsc ? "Branch Name (Auto-fetching...)" : "Branch Name"} placeholder={t("su_enter_branch_name_252")} icon="location-outline" error={branchNameError} required={true} value={branchName} onChangeText={val => {
+              const filtered = val.replace(/[^a-zA-Z\s]/g, '');
+              setBranchName(filtered);
+              setBranchNameError('');
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => upiIdRef.current?.focus()} />
 
-                <InputField
-                  ref={upiIdRef}
-                  label="UPI ID (Optional)"
-                  placeholder="example@upi"
-                  icon="wallet-outline"
-                  autoCapitalize="none"
-                  value={upiId}
-                  onChangeText={(val) => setUpiId(val.replace(/[^a-zA-Z0-9@.-]/g, ''))}
-                  suffixIcon={upiId.length > 0 ? (/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId) ? "checkmark-circle" : "close-circle") : undefined}
-                  returnKeyType="done"
-                  onSubmitEditing={handleNextStep8}
-                />
+                <InputField ref={upiIdRef} label={t("su_upi_id_optional_253")} placeholder={t("su_example_upi_254")} icon="wallet-outline" autoCapitalize="none" value={upiId} onChangeText={val => setUpiId(val.replace(/[^a-zA-Z0-9@.-]/g, ''))} suffixIcon={upiId.length > 0 ? /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId) ? "checkmark-circle" : "close-circle" : undefined} returnKeyType="done" onSubmitEditing={handleNextStep8} />
               </View>
 
-              <PrimaryButton
-                title="Continue"
-                onPress={handleNextStep8}
-                loading={isSubmitting}
-              />
+              <PrimaryButton title={t("continue")} onPress={handleNextStep8} loading={isSubmitting} />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 9: Other Details */}
-        {step === 9 && (
-          <View className="flex-1 px-6 pt-6 pb-10">
+        {step === 9 && <View className="flex-1 px-6 pt-6 pb-10">
             <FormContainer>
-              <FormSection
-                iconName="options-outline"
-                title="Other Details"
-                subtitle="Help us assign your work"
-              />
+              <FormSection iconName="options-outline" title={t("su_other_details_256")} subtitle={t("su_help_us_assign_your__257")} />
 
               <View className="w-full">
                 <View className="mb-4">
@@ -3130,229 +2688,152 @@ export default function SignupScreen({ navigation }: Props) {
                   {/* Width and Length fields */}
                   <View className="flex-row w-full mb-3 mt-1">
                     <View className="flex-1 mr-2">
-                      <InputField
-                        ref={storageWidthRef}
-                        label="Width (ft)"
-                        placeholder="ft"
-                        icon="resize-outline"
-                        keyboardType="numeric"
-                        value={storageWidth}
-                        onChangeText={(val) => setStorageWidth(val.replace(/[^0-9.]/g, ''))}
-                        returnKeyType="next"
-                        blurOnSubmit={false}
-                        onSubmitEditing={() => storageLengthRef.current?.focus()}
-                      />
+                      <InputField ref={storageWidthRef} label={t("su_width_ft_258")} placeholder={t("su_ft_259")} icon="resize-outline" keyboardType="numeric" value={storageWidth} onChangeText={val => setStorageWidth(val.replace(/[^0-9.]/g, ''))} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => storageLengthRef.current?.focus()} />
                     </View>
                     <View className="flex-1 ml-2">
-                      <InputField
-                        ref={storageLengthRef}
-                        label="Length (ft)"
-                        placeholder="ft"
-                        icon="resize-outline"
-                        keyboardType="numeric"
-                        value={storageLength}
-                        onChangeText={(val) => setStorageLength(val.replace(/[^0-9.]/g, ''))}
-                        returnKeyType="next"
-                        blurOnSubmit={false}
-                        onSubmitEditing={() => storageSpaceRef.current?.focus()}
-                      />
+                      <InputField ref={storageLengthRef} label={t("su_length_ft_260")} placeholder={t("su_ft_259")} icon="resize-outline" keyboardType="numeric" value={storageLength} onChangeText={val => setStorageLength(val.replace(/[^0-9.]/g, ''))} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => storageSpaceRef.current?.focus()} />
                     </View>
                   </View>
 
-                  <InputField
-                    ref={storageSpaceRef}
-                    label="Storage Space Description"
-                    placeholder="e.g. 100 sqft, 1 room, etc."
-                    icon="home-outline"
-                    error={storageSpaceError}
-                    required={false}
-                    value={storageSpace}
-                    onChangeText={(val) => { setStorageSpace(val); setStorageSpaceError(''); }}
-                    returnKeyType="done"
-                    blurOnSubmit={true}
-                  />
+                  <InputField ref={storageSpaceRef} label={t("su_storage_space_descri_262")} placeholder={t("su_e_g_100_sqft_1_room__263")} icon="home-outline" error={storageSpaceError} required={false} value={storageSpace} onChangeText={val => {
+                setStorageSpace(val);
+                setStorageSpaceError('');
+              }} returnKeyType="done" blurOnSubmit={true} />
                 </View>
 
-                <ToggleButtonGroup
-                  label="Do you have a vehicle for delivery?"
-                  value={hasVehicle}
-                  error={hasVehicleError}
-                  required={true}
-                  onSelect={(val) => {
-                    setHasVehicle(val);
-                    setHasVehicleError('');
-                  }}
-                />
-                {hasVehicle === 'Yes' && (
-                  <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full mt-4">
-                    <DropdownField
-                      label="Vehicle Type"
-                      placeholder="Select vehicle type"
-                      icon="car-sport-outline"
-                      required={true}
-                      value={vehicleType}
-                      error={vehicleTypeError}
-                      onPress={() => setShowVehicleMenu(true)}
-                    />
+                <ToggleButtonGroup label={t("su_do_you_have_a_vehicl_264")} value={hasVehicle} error={hasVehicleError} required={true} onSelect={val => {
+              setHasVehicle(val);
+              setHasVehicleError('');
+            }} />
+                {hasVehicle === 'Yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full mt-4">
+                    <DropdownField label={t("su_vehicle_type_265")} placeholder={t("su_select_vehicle_type_266")} icon="car-sport-outline" required={true} value={vehicleType} error={vehicleTypeError} onPress={() => setShowVehicleMenu(true)} />
 
-                    <InputField
-                      ref={vehicleRegNoRef}
-                      label="Vehicle Registration Number"
-                      placeholder="e.g. MH09AB1234"
-                      icon="card-outline"
-                      required={true}
-                      autoCapitalize="characters"
-                      maxLength={10}
-                      error={vehicleRegNoError}
-                      value={vehicleRegNo}
-                      onChangeText={(val) => {
-                        let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                        const isBH = clean.length > 0 && /^[0-9O]/.test(clean[0]);
-                        let normalized = '';
-                        for (let i = 0; i < clean.length; i++) {
-                          let char = clean[i];
-                          if (isBH) {
-                            if ((i === 0 || i === 1 || (i >= 4 && i <= 7)) && char === 'O') {
-                              char = '0';
-                            }
-                          } else {
-                            if ((i === 2 || i === 3) && char === 'O') {
-                              char = '0';
-                            }
-                            if (clean.length >= 6 && i >= clean.length - 4 && char === 'O') {
-                              char = '0';
-                            }
-                          }
-                          normalized += char;
-                        }
-                        setVehicleRegNo(normalized);
-                        setVehicleRegNoError('');
-                      }}
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => dlNumberRef.current?.focus()}
-                    />
+                    <InputField ref={vehicleRegNoRef} label={t("su_vehicle_registration_267")} placeholder={t("su_e_g_mh09ab1234_268")} icon="card-outline" required={true} autoCapitalize="characters" maxLength={10} error={vehicleRegNoError} value={vehicleRegNo} onChangeText={val => {
+                let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                const isBH = clean.length > 0 && /^[0-9O]/.test(clean[0]);
+                let normalized = '';
+                for (let i = 0; i < clean.length; i++) {
+                  let char = clean[i];
+                  if (isBH) {
+                    if ((i === 0 || i === 1 || i >= 4 && i <= 7) && char === 'O') {
+                      char = '0';
+                    }
+                  } else {
+                    if ((i === 2 || i === 3) && char === 'O') {
+                      char = '0';
+                    }
+                    if (clean.length >= 6 && i >= clean.length - 4 && char === 'O') {
+                      char = '0';
+                    }
+                  }
+                  normalized += char;
+                }
+                setVehicleRegNo(normalized);
+                setVehicleRegNoError('');
+              }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => dlNumberRef.current?.focus()} />
 
-                    <InputField
-                      ref={dlNumberRef}
-                      label="Driving License Number"
-                      placeholder="e.g. MH0920150123456"
-                      icon="document-text-outline"
-                      required={true}
-                      autoCapitalize="characters"
-                      maxLength={15}
-                      error={dlNumberError}
-                      value={dlNumber}
-                      onChangeText={(val) => {
-                        let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                        let normalized = '';
-                        for (let i = 0; i < clean.length; i++) {
-                          if (i >= 2 && clean[i] === 'O') {
-                            normalized += '0';
-                          } else {
-                            normalized += clean[i];
-                          }
-                        }
-                        setDlNumber(normalized);
-                        setDlNumberError('');
-                      }}
-                      returnKeyType="done"
-                      blurOnSubmit={true}
-                    />
+                    <InputField ref={dlNumberRef} label={t("su_driving_license_numb_269")} placeholder={t("su_e_g_mh0920150123456_270")} icon="document-text-outline" required={true} autoCapitalize="characters" maxLength={15} error={dlNumberError} value={dlNumber} onChangeText={val => {
+                let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                let normalized = '';
+                for (let i = 0; i < clean.length; i++) {
+                  if (i >= 2 && clean[i] === 'O') {
+                    normalized += '0';
+                  } else {
+                    normalized += clean[i];
+                  }
+                }
+                setDlNumber(normalized);
+                setDlNumberError('');
+              }} returnKeyType="done" blurOnSubmit={true} />
 
                     <View className="mt-4 flex-row justify-between space-x-4">
                       <View className="flex-1 mr-2">
-                        <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">
-                          DL Photo <Text className="text-gray-400 font-normal tracking-normal">(Optional)</Text>
+                        <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">{t("su_dl_photo_271")}<Text className="text-gray-400 font-normal tracking-normal">{t("su_optional_272")}</Text>
                         </Text>
-                        <TouchableOpacity
-                          onPress={() => { setUploadTarget('dlImage'); setShowPhotoMenu(true); }}
-                          className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${dlImage ? 'border-[#073318]' : 'border-gray-300'}`}
-                        >
-                          {dlImage ? (
-                            <>
-                              <Image source={{ uri: dlImage }} className="w-full h-full" resizeMode="cover" />
-                              <TouchableOpacity
-                                onPress={(e) => { e.stopPropagation(); setDlImage(''); }}
-                                className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                                style={{ zIndex: 10 }}
-                              >
+                        <TouchableOpacity onPress={() => {
+                    setUploadTarget('dlImage');
+                    setShowPhotoMenu(true);
+                  }} className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${dlImage ? 'border-[#073318]' : 'border-gray-300'}`}>
+                          {dlImage ? <>
+                              <Image source={{
+                        uri: dlImage
+                      }} className="w-full h-full" resizeMode="cover" />
+                              <TouchableOpacity onPress={e => {
+                        e.stopPropagation();
+                        setDlImage('');
+                      }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md" style={{
+                        zIndex: 10
+                      }}>
                                 <Ionicons name="close" size={18} color="#B42318" />
                               </TouchableOpacity>
-                            </>
-                          ) : (
-                            <View className="items-center">
+                            </> : <View className="items-center">
                               <Ionicons name="cloud-upload-outline" size={26} color="#073318" className="mb-1" />
-                              <Text className="text-[11px] text-gray-400 font-semibold">Upload DL</Text>
-                            </View>
-                          )}
+                              <Text className="text-[11px] text-gray-400 font-semibold">{t("su_upload_dl_273")}</Text>
+                            </View>}
                         </TouchableOpacity>
                       </View>
                       <View className="flex-1 ml-2">
-                        <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">
-                          Vehicle Photo <Text className="text-gray-400 font-normal tracking-normal">(Optional)</Text>
+                        <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-2 ml-1 text-center">{t("su_vehicle_photo_274")}<Text className="text-gray-400 font-normal tracking-normal">{t("su_optional_272")}</Text>
                         </Text>
-                        <TouchableOpacity
-                          onPress={() => { setUploadTarget('vehicleImage'); setShowPhotoMenu(true); }}
-                          className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${vehicleImage ? 'border-[#073318]' : 'border-gray-300'}`}
-                        >
-                          {vehicleImage ? (
-                            <>
-                              <Image source={{ uri: vehicleImage }} className="w-full h-full" resizeMode="cover" />
-                              <TouchableOpacity
-                                onPress={(e) => { e.stopPropagation(); setVehicleImage(''); }}
-                                className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                                style={{ zIndex: 10 }}
-                              >
+                        <TouchableOpacity onPress={() => {
+                    setUploadTarget('vehicleImage');
+                    setShowPhotoMenu(true);
+                  }} className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${vehicleImage ? 'border-[#073318]' : 'border-gray-300'}`}>
+                          {vehicleImage ? <>
+                              <Image source={{
+                        uri: vehicleImage
+                      }} className="w-full h-full" resizeMode="cover" />
+                              <TouchableOpacity onPress={e => {
+                        e.stopPropagation();
+                        setVehicleImage('');
+                      }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md" style={{
+                        zIndex: 10
+                      }}>
                                 <Ionicons name="close" size={18} color="#B42318" />
                               </TouchableOpacity>
-                            </>
-                          ) : (
-                            <View className="items-center">
+                            </> : <View className="items-center">
                               <Ionicons name="cloud-upload-outline" size={26} color="#073318" className="mb-1" />
-                              <Text className="text-[11px] text-gray-400 font-semibold">Upload Photo</Text>
-                            </View>
-                          )}
+                              <Text className="text-[11px] text-gray-400 font-semibold">{t("su_upload_photo_276")}</Text>
+                            </View>}
                         </TouchableOpacity>
                       </View>
                     </View>
-                  </Animated.View>
-                )}
+                  </Animated.View>}
 
                 <View className="flex-row items-center mb-6 px-2 mt-6">
-                  <TouchableOpacity
-                    onPress={() => { setTermsAccepted(!termsAccepted); setTermsError(''); }}
-                    className={`w-6 h-6 border-2 rounded mr-3 items-center justify-center ${termsAccepted ? 'border-[#073318] bg-[#073318]' : 'border-gray-300 bg-white'}`}
-                  >
+                  <TouchableOpacity onPress={() => {
+                setTermsAccepted(!termsAccepted);
+                setTermsError('');
+              }} className={`w-6 h-6 border-2 rounded mr-3 items-center justify-center ${termsAccepted ? 'border-[#073318] bg-[#073318]' : 'border-gray-300 bg-white'}`}>
                     {termsAccepted && <Ionicons name="checkmark" size={16} color="white" />}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    className="flex-1"
-                    onPress={() => { setTermsAccepted(!termsAccepted); setTermsError(''); }}
-                  >
-                    <Text className="text-textSecondary text-sm">
-                      I accept the <Text className="text-[#073318] font-bold" onPress={(e) => { e.stopPropagation(); navigation.navigate("Terms"); }}>Terms & Conditions</Text> and <Text className="text-[#073318] font-bold" onPress={(e) => { e.stopPropagation(); navigation.navigate("Privacy"); }}>Privacy Policy</Text>
+                  <TouchableOpacity activeOpacity={0.7} className="flex-1" onPress={() => {
+                setTermsAccepted(!termsAccepted);
+                setTermsError('');
+              }}>
+                    <Text className="text-textSecondary text-sm">{t("su_i_accept_the_277")}<Text className="text-[#073318] font-bold" onPress={e => {
+                    e.stopPropagation();
+                    navigation.navigate("Terms");
+                  }}>{t("terms_conditions")}</Text>{t("and")}<Text className="text-[#073318] font-bold" onPress={e => {
+                    e.stopPropagation();
+                    navigation.navigate("Privacy");
+                  }}>{t("privacy_title")}</Text>
                     </Text>
                     {termsError ? <Text className="text-red-500 text-xs mt-1">{termsError}</Text> : null}
                   </TouchableOpacity>
                 </View>
               </View>
 
-              <PrimaryButton
-                title="Submit Application"
-                onPress={handleNextStep9}
-                loading={isSubmitting}
-                iconName="checkmark-circle"
-              />
+              <PrimaryButton title={t("submit_application")} onPress={handleNextStep9} loading={isSubmitting} iconName="checkmark-circle" />
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Step 10: Application Pending */}
-        {step === 10 && (
-          <View className="flex-1 px-6 pt-10">
-            <FormContainer style={{ alignItems: 'center', padding: 32 }}>
+        {step === 10 && <View className="flex-1 px-6 pt-10">
+            <FormContainer style={{
+          alignItems: 'center',
+          padding: 32
+        }}>
               <View className="w-20 h-20 bg-[#FEF3C7] rounded-full items-center justify-center mb-6">
                 <Ionicons name="hourglass-outline" size={40} color="#D97706" />
               </View>
@@ -3370,64 +2851,62 @@ export default function SignupScreen({ navigation }: Props) {
                 </View>
                 <View className="border-t border-gray-200 pt-3">
                   <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-1">{t('estimated_time')}</Text>
-                  <Text className="text-sm font-bold text-[#111827]">24-48 Hours</Text>
+                  <Text className="text-sm font-bold text-[#111827]">{t("su_24_48_hours_282")}</Text>
                 </View>
               </View>
 
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Login")}
-                className="bg-[#073318] py-4 rounded-full items-center justify-center flex-row w-full mt-2"
-                style={{
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
-                  elevation: 8,
-                }}
-              >
+              <TouchableOpacity onPress={() => navigation.navigate("Login")} className="bg-[#073318] py-4 rounded-full items-center justify-center flex-row w-full mt-2" style={{
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4
+            },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8
+          }}>
                 <Text className="text-white text-[18px] font-bold tracking-wide mr-2">{t('login')}</Text>
                 <Ionicons name="log-in-outline" size={20} color="white" />
               </TouchableOpacity>
             </FormContainer>
-          </View>
-        )}
+          </View>}
 
         {/* Footer (Only for Step 0 and 1) */}
-        {(step === 0 || step === 1) && (
-          <View className="items-center px-6 mb-6 mt-auto">
+        {(step === 0 || step === 1) && <View className="items-center px-6 mb-6 mt-auto">
             <Text className="text-textSecondary text-xs text-center">
               {t('i_accept')}
-              <Text className="text-primary font-bold" onPress={() => navigation.navigate("Terms")}> {t('terms_conditions')} </Text>{t('and')}<Text className="text-primary font-bold" onPress={() => navigation.navigate("Privacy")}> {t('privacy_policy')}</Text>
+              <Text className="text-primary font-bold" onPress={() => navigation.navigate("Terms")}> {t('terms_conditions')} </Text>{t('and')}<Text className="text-primary font-bold" onPress={() => navigation.navigate("Privacy")}> {t('privacy_title')}</Text>
             </Text>
-          </View>
-        )}
+          </View>}
 
       </KeyboardAwareScrollView>
 
       {/* Language Menu Modal */}
       <Modal visible={showLangMenu} transparent={true} animationType="fade">
         <TouchableWithoutFeedback onPress={() => setShowLangMenu(false)}>
-          <View className="flex-1" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }}>
+          <View className="flex-1" style={{
+          backgroundColor: 'rgba(0,0,0,0.1)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="absolute top-20 right-6 bg-white rounded-2xl shadow-lg border border-gray-100 w-44 overflow-hidden">
-                <TouchableOpacity
-                  className={`p-4 border-b border-gray-100 flex-row items-center justify-between ${locale === "en" ? "bg-[#EEF5F0]" : ""}`}
-                  onPress={() => { changeLanguage("en"); setShowLangMenu(false); }}
-                >
+                <TouchableOpacity className={`p-4 border-b border-gray-100 flex-row items-center justify-between ${locale === "en" ? "bg-[#EEF5F0]" : ""}`} onPress={() => {
+                changeLanguage("en");
+                setShowLangMenu(false);
+              }}>
                   <Text className={`text-base font-bold ${locale === "en" ? "text-primary" : "text-textPrimary"}`}>{t('english')}</Text>
                   {locale === "en" && <Ionicons name="checkmark" size={18} color="#073318" />}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  className={`p-4 border-b border-gray-100 flex-row items-center justify-between ${locale === "hi" ? "bg-[#EEF5F0]" : ""}`}
-                  onPress={() => { changeLanguage("hi"); setShowLangMenu(false); }}
-                >
+                <TouchableOpacity className={`p-4 border-b border-gray-100 flex-row items-center justify-between ${locale === "hi" ? "bg-[#EEF5F0]" : ""}`} onPress={() => {
+                changeLanguage("hi");
+                setShowLangMenu(false);
+              }}>
                   <Text className={`text-base font-bold ${locale === "hi" ? "text-primary" : "text-textPrimary"}`}>{t('hindi')}</Text>
                   {locale === "hi" && <Ionicons name="checkmark" size={18} color="#073318" />}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  className={`p-4 flex-row items-center justify-between ${locale === "mr" ? "bg-[#EEF5F0]" : ""}`}
-                  onPress={() => { changeLanguage("mr"); setShowLangMenu(false); }}
-                >
+                <TouchableOpacity className={`p-4 flex-row items-center justify-between ${locale === "mr" ? "bg-[#EEF5F0]" : ""}`} onPress={() => {
+                changeLanguage("mr");
+                setShowLangMenu(false);
+              }}>
                   <Text className={`text-base font-bold ${locale === "mr" ? "text-primary" : "text-textPrimary"}`}>{t('marathi')}</Text>
                   {locale === "mr" && <Ionicons name="checkmark" size={18} color="#073318" />}
                 </TouchableOpacity>
@@ -3440,17 +2919,19 @@ export default function SignupScreen({ navigation }: Props) {
       {/* Photo Options Modal */}
       <Modal visible={showPhotoMenu} transparent={true} animationType="slide">
         <TouchableWithoutFeedback onPress={() => setShowPhotoMenu(false)}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-lg font-bold text-textPrimary mb-4">Upload Photo</Text>
+                <Text className="text-lg font-bold text-textPrimary mb-4">{t("su_upload_photo_276")}</Text>
                 <TouchableOpacity onPress={takeSelfie} className="flex-row items-center p-4 border-b border-gray-100">
                   <Ionicons name="camera-outline" size={24} color="#073318" />
-                  <Text className="text-base font-medium ml-4">Take Photo</Text>
+                  <Text className="text-base font-medium ml-4">{t("su_take_photo_284")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={pickFromGallery} className="flex-row items-center p-4">
                   <Ionicons name="image-outline" size={24} color="#073318" />
-                  <Text className="text-base font-medium ml-4">Upload from Gallery</Text>
+                  <Text className="text-base font-medium ml-4">{t("su_upload_from_gallery_285")}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -3460,25 +2941,27 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* SHG Experience Modal */}
       <Modal visible={showExperienceMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowExperienceMenu(false); if (!shgExperience) setShgExperienceError('Please select experience'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowExperienceMenu(false);
+        if (!shgExperience) setShgExperienceError(t("su_please_select_experi_32"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">SHG Experience</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_shg_experience_287")}</Text>
                 {['1-2 years', '3-5 years', '5+ years'].map(opt => {
-                  const isSelected = shgExperience === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setShgExperience(opt); setShgExperienceError(''); setShowExperienceMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = shgExperience === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setShgExperience(opt);
+                  setShgExperienceError('');
+                  setShowExperienceMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3487,25 +2970,27 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* Vehicle Type Menu */}
       <Modal visible={showVehicleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowVehicleMenu(false); if (!vehicleType) setVehicleTypeError('Please select vehicle type'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowVehicleMenu(false);
+        if (!vehicleType) setVehicleTypeError(t("su_please_select_vehicl_288"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Vehicle Type</Text>
-                {['Bike / Scooty', 'Auto / Cargo', 'Car / Pickup', 'Other'].map((opt) => {
-                  const isSelected = vehicleType === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setVehicleType(opt); setVehicleTypeError(''); setShowVehicleMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_vehicle_type_289")}</Text>
+                {['Bike / Scooty', 'Auto / Cargo', 'Car / Pickup', 'Other'].map(opt => {
+                const isSelected = vehicleType === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setVehicleType(opt);
+                  setVehicleTypeError('');
+                  setShowVehicleMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3514,25 +2999,27 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* SHG Role Modal */}
       <Modal visible={showRoleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowRoleMenu(false); if (!shgRole) setShgRoleError('Please select role'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowRoleMenu(false);
+        if (!shgRole) setShgRoleError(t("su_please_select_role_290"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Your Role</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_your_role_130")}</Text>
                 {['CRP', 'Leader', 'Member'].map(opt => {
-                  const isSelected = shgRole === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setShgRole(opt); setShgRoleError(''); setShowRoleMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = shgRole === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setShgRole(opt);
+                  setShgRoleError('');
+                  setShowRoleMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3540,25 +3027,27 @@ export default function SignupScreen({ navigation }: Props) {
       </Modal>
       {/* Category Menu */}
       <Modal visible={showCategoryMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowCategoryMenu(false); if (!productCategory) setProductCategoryError('Please select category'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowCategoryMenu(false);
+        if (!productCategory) setProductCategoryError(t("su_please_select_catego_50"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Category</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_category_167")}</Text>
                 {['Food', 'Handmade', 'Agriculture', 'Other'].map(opt => {
-                  const isSelected = productCategory === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setProductCategory(opt); setProductCategoryError(''); setShowCategoryMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = productCategory === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setProductCategory(opt);
+                  setProductCategoryError('');
+                  setShowCategoryMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3567,26 +3056,30 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* Unit Menu */}
       <Modal visible={showUnitMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowUnitMenu(false); if (!productUnit) setProductUnitError('Please select unit'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowUnitMenu(false);
+        if (!productUnit) setProductUnitError(t("su_please_select_unit_53"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Unit</Text>
-                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_unit_173")}</Text>
+                <ScrollView style={{
+                maxHeight: 400
+              }} showsVerticalScrollIndicator={false}>
                   {UNIT_DATA.map(opt => {
-                    const isSelected = productUnit === opt.uom_code;
-                    return (
-                      <TouchableOpacity
-                        key={opt.uom_code}
-                        onPress={() => { setProductUnit(opt.uom_code); setProductUnitError(''); setShowUnitMenu(false); }}
-                        className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                          }`}
-                      >
-                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt.full_name_of_measurement}</Text>
+                  const isSelected = productUnit === opt.uom_code;
+                  return <TouchableOpacity key={opt.uom_code} onPress={() => {
+                    setProductUnit(opt.uom_code);
+                    setProductUnitError('');
+                    setShowUnitMenu(false);
+                  }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("unit_" + opt.uom_code.toLowerCase())}</Text>
                         {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                      </TouchableOpacity>
-                    );
-                  })}
+                      </TouchableOpacity>;
+                })}
                 </ScrollView>
               </View>
             </TouchableWithoutFeedback>
@@ -3596,24 +3089,19 @@ export default function SignupScreen({ navigation }: Props) {
       {/* Pincode Menu */}
       <Modal visible={showPincodeMenu} transparent={true} animationType="fade">
         <TouchableWithoutFeedback onPress={() => setShowPincodeMenu(false)}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Pincode</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_pincode_296")}</Text>
                 {PINCODE_DATA.map(opt => {
-                  const isSelected = pincode === opt.pincode;
-                  return (
-                    <TouchableOpacity
-                      key={opt.pincode}
-                      onPress={() => handlePincodeSelect(opt.pincode)}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
+                const isSelected = pincode === opt.pincode;
+                return <TouchableOpacity key={opt.pincode} onPress={() => handlePincodeSelect(opt.pincode)} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                       <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt.pincode}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3623,24 +3111,23 @@ export default function SignupScreen({ navigation }: Props) {
       {/* Village Menu */}
       <Modal visible={showVillageMenu} transparent={true} animationType="fade">
         <TouchableWithoutFeedback onPress={() => setShowVillageMenu(false)}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Village</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_village_297")}</Text>
                 {selectedData?.villages?.map((opt: string) => {
-                  const isSelected = village === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setVillage(opt); setVillageError(''); setShowVillageMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = village === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setVillage(opt);
+                  setVillageError('');
+                  setShowVillageMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3650,24 +3137,23 @@ export default function SignupScreen({ navigation }: Props) {
       {/* Area Menu */}
       <Modal visible={showAreaMenu} transparent={true} animationType="fade">
         <TouchableWithoutFeedback onPress={() => setShowAreaMenu(false)}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Street / Area</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_street_area_298")}</Text>
                 {selectedData?.areas?.map((opt: string) => {
-                  const isSelected = streetArea === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setStreetArea(opt); setStreetAreaError(''); setShowAreaMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = streetArea === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setStreetArea(opt);
+                  setStreetAreaError('');
+                  setShowAreaMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -3675,30 +3161,31 @@ export default function SignupScreen({ navigation }: Props) {
       </Modal>
       {/* Individual Role Modal */}
       <Modal visible={showIndividualRoleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => { setShowIndividualRoleMenu(false); if (!individualRole) setIndividualRoleError('Please select occupation'); }}>
-          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <TouchableWithoutFeedback onPress={() => {
+        setShowIndividualRoleMenu(false);
+        if (!individualRole) setIndividualRoleError(t("su_please_select_occupa_299"));
+      }}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Your Occupation</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_your_occupati_121")}</Text>
                 {['Driver', 'Shopkeeper / Business Owner', 'Student / Job Seeker', 'Farmer', 'Self-employed', 'Other'].map(opt => {
-                  const isSelected = individualRole === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setIndividualRole(opt); setIndividualRoleError(''); setShowIndividualRoleMenu(false); }}
-                      className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
-                        }`}
-                    >
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                const isSelected = individualRole === opt;
+                return <TouchableOpacity key={opt} onPress={() => {
+                  setIndividualRole(opt);
+                  setIndividualRoleError('');
+                  setShowIndividualRoleMenu(false);
+                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>
-                  );
-                })}
+                    </TouchableOpacity>;
+              })}
               </View>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </SafeAreaView>
-  );
+    </SafeAreaView>;
 }

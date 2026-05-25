@@ -20,7 +20,7 @@ export default function PrivacyScreen({ navigation }: Props) {
           <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
             <Ionicons name="arrow-back" size={24} color="#073318" />
           </TouchableOpacity>
-          <Text numberOfLines={1} className="text-xl font-semibold text-textPrimary flex-1">{t('privacy_policy')}</Text>
+          <Text numberOfLines={1} className="text-xl font-semibold text-textPrimary flex-1">{t('privacy_title')}</Text>
         </View>
       </View>
       <ScrollView className="flex-1 p-6">
