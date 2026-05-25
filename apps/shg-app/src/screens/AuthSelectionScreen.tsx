@@ -20,13 +20,6 @@ export default function AuthSelectionScreen({ navigation }: Props) {
   const { t } = context;
 
   const handleAuthNavigation = async (route: keyof RootStackParamList) => {
-    if (route === 'Signup') {
-      const savedStep = await AsyncStorage.getItem(STORAGE_KEYS.CURRENT_STEP);
-      if (savedStep && parseInt(savedStep, 10) > 2) {
-        // If they have progress beyond OTP, start at Step 1 (Mobile)
-        // SignupScreen will load data and handle the jump after OTP verification
-      }
-    }
     navigation.navigate(route as any);
   };
 

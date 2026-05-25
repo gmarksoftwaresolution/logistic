@@ -1,227 +1,179 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Image, ScrollView, Modal, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Image, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import { LanguageContext } from '../context/LanguageContext';
+import { SharedHeader } from '../components/SharedHeader';
 import { useUser } from '../context/UserContext';
-import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 export default function ProfileScreen({ navigation }: Props) {
-  const context = useContext(LanguageContext);
-  const { user, updateUser } = useUser();
-  if (!context || !user) return null;
-  const { t } = context;
+  const { user } = useUser();
+  const [isOnline, setIsOnline] = useState(true);
 
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
-    mobile: user?.mobile || '',
-    profileImage: user?.profileImage || null,
-    gmuId: user?.gmuId || '',
-    role: user?.role || '',
-    dob: user?.dob || '',
-    aadhaar: user?.aadhaar || '',
-    joiningDate: user?.joiningDate || ''
-  });
-
-  const [mobileError, setMobileError] = useState('');
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [generalError, setGeneralError] = useState('');
-  
-  const [showDobPicker, setShowDobPicker] = useState(false);
-  const [showJoiningPicker, setShowJoiningPicker] = useState(false);
-
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      setFormData({ ...formData, profileImage: result.assets[0].uri });
-      setGeneralError('');
-    }
-  };
-
-  const hasChanges = () => {
-    return JSON.stringify(formData) !== JSON.stringify({
-      name: user?.name,
-      mobile: user?.mobile,
-      profileImage: user?.profileImage,
-      gmuId: user?.gmuId,
-      role: user?.role,
-      dob: user?.dob,
-      aadhaar: user?.aadhaar,
-      joiningDate: user?.joiningDate
-    });
-  };
-
-  const handleSave = () => {
-    if (!hasChanges()) {
-      setGeneralError('Please make changes before saving');
-      return;
-    }
-    if (formData.mobile.length !== 10) {
-      setMobileError('Please enter exactly 10 digits');
-      return;
-    }
-    if (!/^[6-9]/.test(formData.mobile)) {
-      setMobileError('Mobile number must start from 6');
-      return;
-    }
-    updateUser(formData);
-    setShowSuccess(true);
-    setTimeout(() => {
-      setShowSuccess(false);
-      navigation.goBack();
-    }, 2000);
-  };
-
-  const InputField = ({ label, value, onChangeText, placeholder, keyboardType = "default", editable = true }: any) => (
-    <View className="w-full mb-6">
-      <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{label}</Text>
-      <View className={`flex-row items-center py-3 px-4 rounded-xl border ${editable ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-100 border-gray-100 opacity-70'}`}>
-        <TextInput 
-          value={value}
-          onChangeText={(val) => {
-            if (editable) {
-              onChangeText(val);
-              setGeneralError('');
-            }
-          }}
-          className={`flex-1 font-semibold text-base ${editable ? 'text-textPrimary' : 'text-textSecondary'}`}
-          placeholder={placeholder}
-          keyboardType={keyboardType}
-          editable={editable}
-        />
+  const ActionRow = ({ icon, title, subtitle, onPress }: { icon: any, title: string, subtitle?: string, onPress?: () => void }) => (
+    <TouchableOpacity 
+      onPress={onPress}
+      className="flex-row items-center bg-white py-3 px-4 mb-1"
+    >
+      <View className="w-10 h-10 items-center justify-center mr-3">
+        {icon}
       </View>
-    </View>
+      <View className="flex-1">
+        <Text className="font-semibold text-[#1E293B] text-sm">{title}</Text>
+        {subtitle && <Text className="text-xs text-[#64748B] mt-0.5">{subtitle}</Text>}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="px-6 py-4 bg-white border-b border-gray-50 flex-row items-center mt-2">
-        <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
-          <Ionicons name="arrow-back" size={24} color="#073318" />
-        </TouchableOpacity>
-        <View className="flex-1">
-          <Text className="text-2xl font-bold text-textPrimary font-bold tracking-tight">{t('personal_details')}</Text>
-          <Text className="text-textSecondary text-xs font-medium font-medium mt-0.5">{t('profile_subtitle')}</Text>
-        </View>
-      </View>
+    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+      <SharedHeader title="Profile" subtitle="Manage your account details" navigation={navigation} />
 
-      <ScrollView className="flex-1 px-6 pt-10" showsVerticalScrollIndicator={false}>
-        <View className="items-center mb-10">
-          <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-4 ml-1">{t('profile_photo')}</Text>
-          <View className="w-32 h-32 bg-primary rounded-full items-center justify-center border-4 border-white shadow-xl overflow-hidden">
-            {formData.profileImage ? (
-              <Image source={{ uri: formData.profileImage }} className="w-full h-full" />
-            ) : (
-              <Text className="text-white font-bold text-5xl">{formData.name?.charAt(0) || 'U'}</Text>
-            )}
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* Profile Card Section */}
+        <View className="bg-white px-6 pt-6 pb-6 rounded-b-[40px] shadow-sm relative overflow-hidden mb-6">
+          {/* Subtle curved background decoration */}
+          <View className="absolute top-0 left-0 right-0 h-32 bg-[#EEF5F0] rounded-b-[100px]" style={{ transform: [{ scaleX: 1.5 }] }} />
+          
+          <View className="items-center z-10 pt-4">
+            <View className="relative">
+              <View className="w-24 h-24 bg-white rounded-full items-center justify-center border-4 border-white shadow-sm overflow-hidden">
+                {user?.profileImage ? (
+                  <Image source={{ uri: user.profileImage }} className="w-full h-full" />
+                ) : (
+                  <Text className="text-[#073318] font-bold text-3xl">{user?.name?.charAt(0) || 'U'}</Text>
+                )}
+              </View>
+              <TouchableOpacity className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-100 items-center justify-center shadow-sm">
+                <Feather name="camera" size={14} color="#073318" />
+              </TouchableOpacity>
+            </View>
+
+            <View className="flex-row items-center mt-3">
+              <Text className="text-xl font-bold text-[#1E293B]">{user?.name || 'User'}</Text>
+              <View className="flex-row items-center bg-[#EEF5F0] px-2 py-0.5 rounded-full ml-2">
+                <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
+                <Text className="text-[10px] text-[#16A34A] font-bold ml-1">Verified</Text>
+              </View>
+            </View>
+            
+            <Text className="text-sm text-[#64748B] mt-1">+91 {user?.mobile || '----------'}</Text>
+            <Text className="text-sm text-[#64748B]">{user?.name?.toLowerCase().replace(' ', '.')}@gmail.com</Text>
+
+            <View className="bg-[#F8FAFC] w-full rounded-2xl p-4 mt-6 flex-row items-center border border-gray-100">
+              <MaterialCommunityIcons name="moped-electric" size={24} color="#073318" className="mr-3" />
+              <Text className="flex-1 text-sm text-[#475569] font-medium leading-5 ml-3">
+                Delivering to make life easier, one order at a time.
+              </Text>
+            </View>
           </View>
-          <TouchableOpacity onPress={pickImage} className="absolute bottom-1 right-[35%] w-10 h-10 bg-[#073318] rounded-full border-2 border-white items-center justify-center shadow-md">
-            <Feather name="camera" size={18} color="white" />
+        </View>
+
+        {/* Statistics Card */}
+        <View className="px-6 mb-6">
+          <View className="bg-white rounded-3xl p-5 flex-row justify-between shadow-sm border border-gray-50">
+            <View className="items-center flex-1">
+              <Ionicons name="bag-handle" size={24} color="#16A34A" />
+              <Text className="text-xl font-bold text-[#1E293B] mt-2">128</Text>
+              <Text className="text-xs text-[#64748B] text-center mt-1">Orders{'\n'}Completed</Text>
+            </View>
+            <View className="w-[1px] bg-gray-100 my-2" />
+            <View className="items-center flex-1">
+              <Ionicons name="star" size={24} color="#FBBF24" />
+              <Text className="text-xl font-bold text-[#1E293B] mt-2">4.9</Text>
+              <Text className="text-xs text-[#64748B] text-center mt-1">Rating</Text>
+            </View>
+            <View className="w-[1px] bg-gray-100 my-2" />
+            <View className="items-center flex-1">
+              <Ionicons name="time" size={24} color="#16A34A" />
+              <Text className="text-xl font-bold text-[#1E293B] mt-2">98%</Text>
+              <Text className="text-xs text-[#64748B] text-center mt-1">On-time{'\n'}Delivery</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Access */}
+        <View className="px-6 mb-6">
+          <Text className="text-sm font-bold text-[#1E293B] mb-3 ml-1">Quick Access</Text>
+          <View className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50 py-2">
+            <ActionRow 
+              icon={<Ionicons name="bag-handle-outline" size={22} color="#16A34A" />} 
+              title="My Orders" subtitle="View your past deliveries" 
+              onPress={() => navigation.navigate("Orders")} 
+            />
+            <ActionRow 
+              icon={<Ionicons name="location-outline" size={22} color="#16A34A" />} 
+              title="My Addresses" subtitle="Manage saved addresses" 
+              onPress={() => navigation.navigate("Address")} 
+            />
+            <ActionRow 
+              icon={<Ionicons name="card-outline" size={22} color="#16A34A" />} 
+              title="Payment Methods" subtitle="Cards & wallets" 
+            />
+            <ActionRow 
+              icon={<Ionicons name="cash-outline" size={22} color="#16A34A" />} 
+              title="Earnings" subtitle="View your earnings & stats" 
+            />
+            <ActionRow 
+              icon={<Ionicons name="gift-outline" size={22} color="#16A34A" />} 
+              title="Refer & Earn" subtitle="Invite friends and earn rewards" 
+            />
+            <ActionRow 
+              icon={<Ionicons name="settings-outline" size={22} color="#16A34A" />} 
+              title="Settings" subtitle="Manage your app preferences" 
+              onPress={() => navigation.navigate("Settings")} 
+            />
+          </View>
+        </View>
+
+        {/* Online Toggle */}
+        <View className="px-6 mb-6">
+          <View className="bg-white rounded-3xl p-5 shadow-sm border border-gray-50 flex-row items-center">
+            <View className="w-10 h-10 items-center justify-center mr-3">
+              <MaterialCommunityIcons name="clock-check-outline" size={24} color="#16A34A" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-semibold text-[#1E293B] text-sm">Go Online</Text>
+              <Text className="text-xs text-[#64748B] mt-0.5">Start receiving delivery requests</Text>
+            </View>
+            <Switch
+              trackColor={{ false: "#E2E8F0", true: "#16A34A" }}
+              thumbColor={"#FFFFFF"}
+              ios_backgroundColor="#E2E8F0"
+              onValueChange={setIsOnline}
+              value={isOnline}
+            />
+          </View>
+        </View>
+
+        {/* Additional Links */}
+        <View className="px-6 mb-8">
+          <View className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50 py-2">
+            <ActionRow 
+              icon={<Ionicons name="help-circle-outline" size={22} color="#16A34A" />} 
+              title="Help & Support" subtitle="Get help and contact support" 
+              onPress={() => navigation.navigate("Help")} 
+            />
+            <ActionRow 
+              icon={<Ionicons name="information-circle-outline" size={22} color="#16A34A" />} 
+              title="About Us" subtitle="Learn more about our service" 
+            />
+          </View>
+        </View>
+
+        {/* Logout */}
+        <View className="px-6 mb-12">
+          <TouchableOpacity className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
+            <Ionicons name="log-out-outline" size={20} color="#EF4444" className="mr-2" />
+            <Text className="text-[#EF4444] font-bold text-base ml-2">Log Out</Text>
           </TouchableOpacity>
         </View>
 
-        <View className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-50 mb-10">
-          <View className="w-full mb-6">
-            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">GMU ID</Text>
-            <View className="bg-gray-100 py-3 px-4 rounded-xl border border-gray-100 opacity-70">
-              <Text className="text-textSecondary font-bold text-base">{user?.gmuId || 'N/A'}</Text>
-            </View>
-          </View>
-
-          <InputField label={t('gmu_full_name')} value={formData.name} onChangeText={(val: string) => setFormData({...formData, name: val})} placeholder="Enter name" />
-
-          <View className="w-full mb-6">
-            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t('mobile_number')}</Text>
-            <View className={`flex-row items-center bg-white py-3 px-4 rounded-xl border ${mobileError ? 'border-red-500' : 'border-gray-200'} shadow-sm`}>
-              <Text className="text-textPrimary font-bold mr-3">+91</Text>
-              <TextInput value={formData.mobile} onChangeText={(val) => { setFormData({...formData, mobile: val}); setMobileError(''); }} className="flex-1 text-textPrimary font-semibold text-base" keyboardType="phone-pad" maxLength={10} />
-            </View>
-            {mobileError ? <Text className="text-red-500 text-xs mt-2 ml-1">{mobileError}</Text> : null}
-          </View>
-          <InputField label={t('role_in_group')} value={formData.role} editable={false} />
-          
-          <View pointerEvents="none">
-             <InputField label={t('dob')} value={formData.dob} editable={false} />
-          </View>
-
-          <InputField label={t('aadhaar_optional')} value={formData.aadhaar} editable={false} />
-
-          <View pointerEvents="none">
-             <InputField label={t('joining_date')} value={formData.joiningDate} editable={false} />
-          </View>
-
-          {generalError ? (
-            <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
-              <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
-              <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
-            </View>
-          ) : null}
-
-          <View className="flex-row gap-4 w-full">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
-              <Text className="text-textPrimary font-bold text-base">Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
-              <Text className="text-white font-bold text-base">Save Changes</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View className="mb-20" />
       </ScrollView>
-
-      {showDobPicker && (
-        <DateTimePicker
-          value={new Date()}
-          mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowDobPicker(false);
-            if (date) {
-              setFormData({...formData, dob: date.toLocaleDateString()});
-              setGeneralError('');
-            }
-          }}
-        />
-      )}
-
-      {showJoiningPicker && (
-        <DateTimePicker
-          value={new Date()}
-          mode="date"
-          display="default"
-          onChange={(event, date) => {
-            setShowJoiningPicker(false);
-            if (date) {
-              setFormData({...formData, joiningDate: date.toLocaleDateString()});
-              setGeneralError('');
-            }
-          }}
-        />
-      )}
-
-      <Modal visible={showSuccess} transparent={true} animationType="fade">
-        <View className="flex-1 justify-center items-center bg-black/60 px-10">
-          <View className="bg-white p-10 rounded-[40px] items-center w-full shadow-2xl">
-            <View className="w-20 h-20 bg-green-100 rounded-full items-center justify-center mb-6">
-              <View className="w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg">
-                <Ionicons name="checkmark" size={32} color="white" />
-              </View>
-            </View>
-            <Text className="text-2xl font-bold text-textPrimary mb-2 text-center">Updated!</Text>
-            <Text className="text-textSecondary text-center text-sm">Personal details updated successfully.</Text>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

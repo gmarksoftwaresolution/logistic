@@ -14,6 +14,7 @@ import PrivacyScreen from '../screens/PrivacyScreen';
 import OrderManagementScreen from '../screens/OrderManagementScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import PersonalDetailsScreen from '../screens/PersonalDetailsScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AddressScreen from '../screens/AddressScreen';
 import OrdersOverviewScreen from '../screens/OrdersOverviewScreen';
@@ -56,6 +57,7 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Stock" component={StockManagementScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />
       <Stack.Screen name="Address" component={AddressScreen} />
       <Stack.Screen name="ApplicationStatus" component={ApplicationStatusScreen} />
       <Stack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />

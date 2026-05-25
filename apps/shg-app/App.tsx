@@ -94,9 +94,7 @@ export default function App() {
   });
 
   const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded || fontError) {
-      await SplashScreen.hideAsync();
-    }
+    // Splash screen will be hidden by LandingScreen after auth/API checks
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {

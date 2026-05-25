@@ -4,7 +4,7 @@
     "slug": "shg-logistics",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/GMU Logo.png",
+    "icon": "./assets/images/GMU Logo Splash.png",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

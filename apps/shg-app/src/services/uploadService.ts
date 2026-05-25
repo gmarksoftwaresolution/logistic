@@ -1,46 +1,43 @@
-import { Platform } from 'react-native';
-import axiosInstance from '../api/axiosInstance';
-
-const createFormData = (uri: string, fieldName: string) => {
-  const fileName = uri.split('/').pop() || 'upload.jpg';
-  const match = /\.(\w+)$/.exec(fileName);
-  const fileType = match ? match[1] : 'jpg';
-  
-  const formData = new FormData();
-  
-  // Ensure URI is correctly formatted for Android
-  let finalUri = uri;
-  if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://')) {
-    finalUri = `file://${uri}`;
-  }
-
-  const fileToUpload = {
-    uri: finalUri,
-    name: fileName,
-    type: `image/${fileType === 'jpg' ? 'jpeg' : fileType}`,
-  };
-
-  formData.append(fieldName, fileToUpload as any);
-  return formData;
-};
+import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/storage';
 
 const performUpload = async (endpoint: string, uri: string) => {
-  const formData = createFormData(uri, 'file');
-
   try {
-    const response = await axiosInstance.post(endpoint, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      transformRequest: (data) => data, // Essential for FormData to work correctly with Axios in some environments
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
+    const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+    const fullUrl = `${baseURL}${endpoint}`;
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await FileSystem.uploadAsync(fullUrl, uri, {
+      fieldName: 'file',
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType?.MULTIPART ?? 1,
+      headers,
     });
 
-    return response.data;
+    if (response.status >= 200 && response.status < 300) {
+      return JSON.parse(response.body);
+    } else {
+      let errorMessage = 'Upload failed';
+      try {
+        const errorData = JSON.parse(response.body);
+        errorMessage = errorData.message || errorMessage;
+      } catch (e) {
+        // body is not JSON
+      }
+      throw new Error(errorMessage);
+    }
   } catch (error: any) {
     console.error(`Upload error at ${endpoint}:`, error);
-    // Extract more meaningful error message from axios error
-    const message = error.response?.data?.message || error.message || 'Upload failed';
-    throw new Error(message);
+    throw new Error(error.message || 'Upload failed');
   }
 };
 

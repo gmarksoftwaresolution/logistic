@@ -97,7 +97,7 @@ export const InputField = React.forwardRef<TextInput, InputFieldProps>(({
       <Label text={label} required={required} />
       <View 
         className={`bg-[#F9FAFB] h-[58px] px-4 rounded-[20px] border flex-row items-center ${
-          error ? 'border-red-500' : isFocused ? 'border-[#073318]' : 'border-gray-200'
+          error ? 'border-[#EF4444]' : isFocused ? 'border-[#073318]' : (required && props.value && !error) ? 'border-[#22C55E]' : 'border-gray-200'
         } ${props.editable === false ? 'bg-[#F3F4F6]' : ''}`}
       >
         {icon && <Ionicons name={icon} size={20} color="#073318" className="mr-3" />}
@@ -107,7 +107,10 @@ export const InputField = React.forwardRef<TextInput, InputFieldProps>(({
           className="flex-1 text-[#111827] text-[16px] font-medium ml-1"
           placeholderTextColor="#9CA3AF"
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onBlur={(e) => {
+            setIsFocused(false);
+            if (props.onBlur) props.onBlur(e);
+          }}
           style={style}
           {...props}
         />
@@ -119,7 +122,7 @@ export const InputField = React.forwardRef<TextInput, InputFieldProps>(({
           </TouchableOpacity>
         ) : null}
       </View>
-      {error ? <Text className="text-red-500 text-xs mt-1 ml-1 font-semibold">{error}</Text> : null}
+      {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
     </View>
   );
 });
@@ -152,7 +155,7 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
       <TouchableOpacity
         onPress={onPress}
         className={`bg-[#F9FAFB] h-[58px] px-4 rounded-[20px] border flex-row justify-between items-center ${
-          error ? 'border-red-500' : 'border-gray-200'
+          error ? 'border-[#EF4444]' : (required && value && !error) ? 'border-[#22C55E]' : 'border-gray-200'
         }`}
       >
         <View className="flex-row items-center">
@@ -163,7 +166,7 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
         </View>
         <Ionicons name="chevron-down" size={20} color="#073318" />
       </TouchableOpacity>
-      {error ? <Text className="text-red-500 text-xs mt-1 ml-1 font-semibold">{error}</Text> : null}
+      {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
     </View>
   );
 };
@@ -189,7 +192,7 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
   return (
     <View className="mb-4 w-full">
       <Label text={label} required={required} />
-      <View className="flex-row w-full justify-between">
+      <View className={`flex-row w-full justify-between rounded-[20px] ${error ? 'border border-[#EF4444]' : ''}`}>
         <TouchableOpacity
           onPress={() => onSelect('Yes')}
           className={`flex-1 h-[58px] rounded-[20px] border-2 flex-row items-center justify-center mr-2 ${
@@ -208,7 +211,7 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
           <Text className={`text-[16px] font-bold ${value === 'No' ? 'text-[#073318]' : 'text-[#111827]'}`}>No</Text>
         </TouchableOpacity>
       </View>
-      {error ? <Text className="text-red-500 text-xs mt-1 ml-1 font-semibold">{error}</Text> : null}
+      {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
     </View>
   );
 };

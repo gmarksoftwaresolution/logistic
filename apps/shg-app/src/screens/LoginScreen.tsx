@@ -97,6 +97,7 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(true);
     try {
       await authService.sendLoginOtp(mobile);
+      setOtp(['', '', '', '', '', '']);
       setStep(2);
       Toast.show({ type: 'success', text1: 'OTP Sent Successfully' });
     } catch (error: any) {
@@ -136,8 +137,11 @@ export default function LoginScreen({ navigation }: Props) {
           try {
             const progressRes = await signupService.getProgress();
             if (progressRes.success && progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
-              await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_STEP, progressRes.frontendStep.toString());
-              await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_DATA, JSON.stringify({ ...progressRes.signupData, mobile }));
+              const role = progressRes.signupData.selectedRole;
+              const stepKey = role === 'Individual' ? STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL : STORAGE_KEYS.CURRENT_STEP_SHG;
+              const dataKey = role === 'Individual' ? STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL : STORAGE_KEYS.SIGNUP_DATA_SHG;
+              await AsyncStorage.setItem(stepKey, progressRes.frontendStep.toString());
+              await AsyncStorage.setItem(dataKey, JSON.stringify({ ...progressRes.signupData, mobile }));
               Toast.show({ type: 'info', text1: 'Incomplete Signup', text2: 'Resuming your registration progress' });
               navigation.navigate('Signup');
               return;
@@ -184,7 +188,10 @@ export default function LoginScreen({ navigation }: Props) {
         <View className="px-6 pt-6 pb-4 bg-transparent flex-row items-center">
           <TouchableOpacity 
             onPress={() => {
-              if (step === 2) setStep(1);
+              if (step === 2) {
+                setStep(1);
+                setOtp(['', '', '', '', '', '']);
+              }
               else navigation.goBack();
             }} 
             className="bg-white p-3 rounded-full shadow-sm mr-3" 
@@ -246,6 +253,7 @@ export default function LoginScreen({ navigation }: Props) {
                       const cleaned = val.replace(/[^0-9]/g, '');
                       setMobile(cleaned); 
                       setMobileError(""); 
+                      setOtp(['', '', '', '', '', '']);
                     }}
                   />
                 </View>
@@ -363,7 +371,7 @@ export default function LoginScreen({ navigation }: Props) {
                 </TouchableOpacity>
 
                 <View className="items-center mt-2">
-                  <TouchableOpacity onPress={() => setStep(1)} className="flex-row items-center">
+                  <TouchableOpacity onPress={() => { setStep(1); setOtp(['', '', '', '', '', '']); }} className="flex-row items-center">
                     <Ionicons name="pencil" size={16} color="#6B7280" className="mr-2" />
                     <Text numberOfLines={1} className="font-semibold text-[#6B7280] text-[14px] px-1">{t('edit_mobile')}</Text>
                   </TouchableOpacity>

@@ -113,6 +113,40 @@ const PINCODE_DATA = [
   }
 ];
 
+// Validation Helper Functions
+const validateRequired = (val: string) => {
+  return val.trim().length > 0;
+};
+
+const validateAadhaar = (val: string) => {
+  return /^\d{12}$/.test(val.replace(/\s/g, ''));
+};
+
+const validatePan = (val: string) => {
+  return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val.toUpperCase());
+};
+
+const validatePincode = (val: string) => {
+  return /^\d{6}$/.test(val);
+};
+
+const validateMobileNumber = (val: string) => {
+  return /^\d{10}$/.test(val);
+};
+
+const validateIfsc = (val: string) => {
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(val.toUpperCase());
+};
+
+const validateName = (val: string) => {
+  return val.trim().length >= 2;
+};
+
+const validateEmail = (val: string) => {
+  if (!val.trim()) return true; // Optional fields don't fail if empty
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+};
+
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 
 export default function SignupScreen({ navigation }: Props) {
@@ -194,6 +228,7 @@ export default function SignupScreen({ navigation }: Props) {
   const storageSpaceRef = useRef<TextInput>(null);
   const vehicleRegNoRef = useRef<TextInput>(null);
   const dlNumberRef = useRef<TextInput>(null);
+  const otherOccupationRef = useRef<TextInput>(null);
 
   // Step 3: Personal Details States
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -213,6 +248,8 @@ export default function SignupScreen({ navigation }: Props) {
   const [shgNameError, setShgNameError] = useState('');
   const [individualRole, setIndividualRole] = useState('');
   const [individualRoleError, setIndividualRoleError] = useState('');
+  const [otherOccupation, setOtherOccupation] = useState('');
+  const [otherOccupationError, setOtherOccupationError] = useState('');
   const [showIndividualRoleMenu, setShowIndividualRoleMenu] = useState(false);
   const [isRecentlyVerified, setIsRecentlyVerified] = useState(false);
   const [roleSelectionError, setRoleSelectionError] = useState('');
@@ -412,6 +449,22 @@ export default function SignupScreen({ navigation }: Props) {
     if (data.individualRole) setIndividualRole(data.individualRole);
   };
 
+  const getStorageKeys = (role: string | null) => {
+    if (role === 'Individual') {
+      return { dataKey: STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL, stepKey: STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL };
+    }
+    return { dataKey: STORAGE_KEYS.SIGNUP_DATA_SHG, stepKey: STORAGE_KEYS.CURRENT_STEP_SHG };
+  };
+
+  const handleRoleSelection = (role: 'SHG' | 'Individual') => {
+    if (selectedRole !== null && selectedRole !== role) {
+      resetSignupState();
+      setIsRecentlyVerified(false);
+    }
+    setSelectedRole(role);
+    setRoleSelectionError('');
+  };
+
   const saveSignupProgress = async (currentStep: number) => {
     try {
       const signupData = {
@@ -470,8 +523,10 @@ export default function SignupScreen({ navigation }: Props) {
         generatedRequestId,
         individualRole
       };
-      await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_DATA, JSON.stringify(signupData));
-      await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_STEP, currentStep.toString());
+      if (!selectedRole) return;
+      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      await AsyncStorage.setItem(dataKey, JSON.stringify(signupData));
+      await AsyncStorage.setItem(stepKey, currentStep.toString());
     } catch (error) {
       console.error('Failed to save signup progress:', error);
     }
@@ -480,38 +535,15 @@ export default function SignupScreen({ navigation }: Props) {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const loadSignupProgress = async () => {
+    // ALWAYS start fresh on mount. Clear navigation state.
+    // Progress is ONLY restored AFTER OTP verification.
     try {
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
-      if (token) {
-        try {
-          const progressRes = await signupService.getProgress();
-          if (progressRes.success && progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
-            populateSignupState(progressRes.signupData);
-            setStep(progressRes.frontendStep);
-            await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_STEP, progressRes.frontendStep.toString());
-            await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_DATA, JSON.stringify({ ...progressRes.signupData, mobile: progressRes.signupData.mobile || mobile }));
-            Toast.show({ type: 'success', text1: 'Welcome back!', text2: 'Resuming your registration progress' });
-            return;
-          }
-        } catch (err: any) {
-          console.error('Failed to fetch signup progress on mount:', err);
-          if (err.response?.status === 401) {
-            await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
-            await AsyncStorage.removeItem('user_profile');
-          }
-        }
-      }
-
-      const savedStep = await AsyncStorage.getItem(STORAGE_KEYS.CURRENT_STEP);
-      const savedData = await AsyncStorage.getItem(STORAGE_KEYS.SIGNUP_DATA);
-
-      if (savedData) {
-        const data = JSON.parse(savedData);
-        populateSignupState(data);
-      }
+      setStep(0);
+      setSelectedRole(null);
       setMobile('');
+      setOtp(['', '', '', '', '', '']);
     } catch (error) {
-      console.error('Failed to load signup progress:', error);
+      console.error('Failed to clear signup progress on mount:', error);
     } finally {
       setIsInitialLoading(false);
     }
@@ -639,6 +671,7 @@ export default function SignupScreen({ navigation }: Props) {
     setIsSubmitting(true);
     try {
       await authService.sendSignupOtp(mobile);
+      setOtp(['', '', '', '', '', '']);
       setStep(2);
       Toast.show({ type: 'success', text1: 'OTP Sent Successfully' });
     } catch (error: any) {
@@ -671,6 +704,7 @@ export default function SignupScreen({ navigation }: Props) {
   const resetSignupState = () => {
     setSelectedRole(null);
     setMobile('');
+    setOtp(['', '', '', '', '', '']);
     setFullName('');
     setAge('');
     setProfileImage(null);
@@ -762,24 +796,29 @@ export default function SignupScreen({ navigation }: Props) {
       try {
         const progressRes = await signupService.getProgress();
         if (progressRes.success && progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
-          populateSignupState(progressRes.signupData);
-          setStep(progressRes.frontendStep);
-          await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_STEP, progressRes.frontendStep.toString());
-          await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_DATA, JSON.stringify({ ...progressRes.signupData, mobile }));
-          Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Resuming your registration progress' });
-          return;
+          if (progressRes.signupData.selectedRole === selectedRole) {
+            populateSignupState(progressRes.signupData);
+            setStep(progressRes.frontendStep);
+            const { dataKey, stepKey } = getStorageKeys(selectedRole);
+            await AsyncStorage.setItem(stepKey, progressRes.frontendStep.toString());
+            await AsyncStorage.setItem(dataKey, JSON.stringify({ ...progressRes.signupData, mobile }));
+            Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Resuming your registration progress' });
+            return;
+          }
         }
       } catch (err) {
         console.error('Failed to fetch signup progress on verification:', err);
       }
 
-      const savedStep = await AsyncStorage.getItem(STORAGE_KEYS.CURRENT_STEP);
-      const savedData = await AsyncStorage.getItem(STORAGE_KEYS.SIGNUP_DATA);
+      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      const savedStep = await AsyncStorage.getItem(stepKey);
+      const savedData = await AsyncStorage.getItem(dataKey);
 
       if (savedData && savedStep) {
         const data = JSON.parse(savedData);
         // Only resume if the verified mobile number matches the saved progress AND the selected role matches
         if (data.mobile === mobile && data.selectedRole === selectedRole && parseInt(savedStep, 10) > 2) {
+          populateSignupState(data);
           setStep(parseInt(savedStep, 10));
           Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Resuming your progress' });
           return;
@@ -791,15 +830,17 @@ export default function SignupScreen({ navigation }: Props) {
           setMobile(mobile); // Keep the new number
           setIsRecentlyVerified(true);
           setStep(3); // Start from personal details step after verification
-          await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA);
-          await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP);
+          await AsyncStorage.removeItem(dataKey);
+          await AsyncStorage.removeItem(stepKey);
           Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Starting new signup' });
           return;
         }
       }
 
+      // If no saved progress at all
       setStep(3);
-      Toast.show({ type: 'success', text1: 'Mobile Verified' });
+      setIsRecentlyVerified(true);
+      Toast.show({ type: 'success', text1: 'Mobile Verified', text2: 'Starting new signup' });
     } catch (error: any) {
       Toast.show({ type: 'error', text1: 'Verification Failed', text2: 'The OTP you entered is incorrect.' });
     } finally {
@@ -899,26 +940,32 @@ export default function SignupScreen({ navigation }: Props) {
   // Validations & Submission Logic
   const handleNextStep3 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setFullNameError('');
     setAgeError('');
     setIndividualRoleError('');
+    setOtherOccupationError('');
 
     if (!fullName.trim()) {
       setFullNameError('Full name is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = fullNameRef;
     }
 
     if (!age.trim()) {
       setAgeError('Age is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = ageRef;
     } else {
       const ageNum = Number(age);
       if (isNaN(ageNum)) {
         setAgeError('Age must be a valid number');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = ageRef;
       } else if (ageNum < 18) {
         setAgeError('You must be at least 18 years old to create an account and continue using this service.');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = ageRef;
       } else if (ageNum > 99) {
         setAgeError('Please enter a valid age (18-99)');
         isValid = false;
@@ -929,10 +976,17 @@ export default function SignupScreen({ navigation }: Props) {
       if (!individualRole) {
         setIndividualRoleError('Please select your role');
         isValid = false;
+      } else if (individualRole === 'Other' && !validateRequired(otherOccupation)) {
+        setOtherOccupationError('Please specify your occupation');
+        isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = otherOccupationRef;
       }
     }
 
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -999,6 +1053,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep4 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setShgNameError('');
     setCrpNameError('');
     setCrpMobileError('');
@@ -1014,43 +1069,59 @@ export default function SignupScreen({ navigation }: Props) {
 
     if (shgRole === 'CRP') {
       if (isShgLeader === null) { setIsShgLeaderError('Please select if you are the leader'); isValid = false; }
-      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false; }
+      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = shgNameRef; }
       if (!shgExperience) { setShgExperienceError('Please select experience'); isValid = false; }
-      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false; }
-      if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false; }
+      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef; }
+      if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderNameRef; }
       if (leaderMobile.length !== 10) {
         setLeaderMobileError('Enter 10-digit mobile number');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
       } else if (!/^[6-9]/.test(leaderMobile)) {
         setLeaderMobileError('Mobile number must start from 6');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
       }
     } else if (shgRole && shgRole !== 'CRP') {
-      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false; }
-      if (!crpName.trim()) { setCrpNameError('CRP name is required'); isValid = false; }
+      if (!shgName.trim()) { setShgNameError('SHG name is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = shgNameRef; }
+      if (!crpName.trim()) { setCrpNameError('CRP name is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = crpNameRef; }
       if (crpMobile.length !== 10) {
         setCrpMobileError('Enter 10-digit mobile number');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
       } else if (!/^[6-9]/.test(crpMobile)) {
         setCrpMobileError('Mobile number must start from 6');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = crpMobileRef;
       }
-      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false; }
+      if (!shgGroupSize || isNaN(Number(shgGroupSize))) { setShgGroupSizeError('Group size is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = shgGroupSizeRef; }
       if (!shgExperience) { setShgExperienceError('Please select experience'); isValid = false; }
 
       if (shgRole === 'Member') {
-        if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false; }
+        if (!leaderName.trim()) { setLeaderNameError('Leader name is required'); isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderNameRef; }
         if (leaderMobile.length !== 10) {
           setLeaderMobileError('Enter 10-digit mobile number');
           isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
         } else if (!/^[6-9]/.test(leaderMobile)) {
           setLeaderMobileError('Mobile number must start from 6');
           isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
         }
       }
     }
 
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1108,6 +1179,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep5 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setProducesProductsError('');
     setBusinessTeamSizeError('');
     setProductNameError('');
@@ -1125,31 +1197,38 @@ export default function SignupScreen({ navigation }: Props) {
       if (!businessTeamSize || isNaN(Number(businessTeamSize))) {
         setBusinessTeamSizeError('Business team size is required');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = businessTeamSizeRef;
       }
       if (!productName.trim()) {
         setProductNameError('Product name is required');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = productNameRef;
       }
       if (!productCategory) {
-        setProductCategoryError('Category is required');
+        setProductCategoryError('Please select category');
         isValid = false;
       } else if (productCategory === 'Other') {
         if (!otherCategory.trim()) {
           setOtherCategoryError('Category name is required');
           isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = otherCategoryRef;
         }
       }
       if (!dailyProduction.trim()) {
         setDailyProductionError('Quantity is required');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = dailyProductionRef;
       }
       if (!productUnit) {
-        setProductUnitError('Unit is required');
+        setProductUnitError('Please select unit');
         isValid = false;
       }
     }
 
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1187,6 +1266,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep6 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setPincodeError('');
     setVillageError('');
     setStreetAreaError('');
@@ -1199,32 +1279,42 @@ export default function SignupScreen({ navigation }: Props) {
     if (!pincode) {
       setPincodeError('Pincode is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = pincodeRef;
     }
     if (!village) {
       setVillageError('Village is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = villageRef;
     }
     if (!landmark) {
       setLandmarkError('Delivery Address is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = landmarkRef;
     }
     if (!taluka) {
       setTalukaError('Taluka is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = talukaRef;
     }
     if (!district) {
-      setDistrictError('District is required');
+      setDistrictError('Please select district');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = districtRef;
     }
     if (!stateName) {
-      setStateNameError('State is required');
+      setStateNameError('Please select state');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = stateNameRef;
     }
     if (!houseNo) {
       setHouseNoError('House No is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = houseNoRef;
     }
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1251,6 +1341,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep7 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setAadhaarError('');
     setPanError('');
     setDocPhotosError('');
@@ -1258,16 +1349,21 @@ export default function SignupScreen({ navigation }: Props) {
     if (aadhaarNumber.replace(/\s/g, '').length !== 12) {
       setAadhaarError('Enter 12-digit Aadhaar number');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = aadhaarNumberRef;
     }
     if (panNumber.length !== 10) {
       setPanError('Enter 10-character PAN number');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = panNumberRef;
     }
     if (!aadhaarFront || !aadhaarBack || !panImage) {
       setDocPhotosError('Please upload all required document photos');
       isValid = false;
     }
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1292,6 +1388,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep8 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setAccountNameError('');
     setAccountNumberError('');
     setIfscError('');
@@ -1301,25 +1398,33 @@ export default function SignupScreen({ navigation }: Props) {
     if (!accountName.trim()) {
       setAccountNameError('Account holder name is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = accountNameRef;
     }
     if (!accountNumber.trim()) {
       setAccountNumberError('Account number is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = accountNumberRef;
     }
     if (!ifscCode.trim()) {
       setIfscError('IFSC code is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = ifscCodeRef;
     }
     if (!bankName.trim()) {
       setBankNameError('Bank name is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = bankNameRef;
     }
     if (!branchName.trim()) {
       setBranchNameError('Branch name is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = branchNameRef;
     }
 
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1344,6 +1449,7 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleNextStep9 = async () => {
     let isValid = true;
+    let firstInvalidRef: any = null;
     setStorageSpaceError('');
     setHasVehicleError('');
     setVehicleTypeError('');
@@ -1357,6 +1463,7 @@ export default function SignupScreen({ navigation }: Props) {
     if (!storageSpace.trim()) {
       setStorageSpaceError('Storage space information is required');
       isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = storageSpaceRef;
     }
     if (!hasVehicle) {
       setHasVehicleError('Please select vehicle status');
@@ -1396,9 +1503,11 @@ export default function SignupScreen({ navigation }: Props) {
       if (!cleanRegNo) {
         setVehicleRegNoError('Registration number is required');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
       } else if (!indianVehicleRegRegex.test(cleanRegNo)) {
         setVehicleRegNoError('Invalid vehicle number. Please enter a valid registration number');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = vehicleRegNoRef;
       }
 
       cleanDl = dlNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -1420,9 +1529,11 @@ export default function SignupScreen({ navigation }: Props) {
       if (!cleanDl) {
         setDlNumberError('Driving License number is required');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
       } else if (!indianDlRegex.test(cleanDl)) {
         setDlNumberError('Invalid Driving License format');
         isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = dlNumberRef;
       }
     }
     if (!termsAccepted) {
@@ -1431,6 +1542,9 @@ export default function SignupScreen({ navigation }: Props) {
     }
 
     if (!isValid) {
+      if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
+        firstInvalidRef.current.focus();
+      }
       return;
     }
 
@@ -1467,8 +1581,9 @@ export default function SignupScreen({ navigation }: Props) {
         profileImage: profileImage
       });
       setStep(10);
-      await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA);
-      await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP);
+      const { dataKey, stepKey } = getStorageKeys(selectedRole);
+      await AsyncStorage.removeItem(dataKey);
+      await AsyncStorage.removeItem(stepKey);
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
       if (serverMessage) {
@@ -1533,6 +1648,7 @@ export default function SignupScreen({ navigation }: Props) {
                     if (selectedRole === 'Individual' && step === 6) {
                       setStep(3);
                     } else {
+                      if (step === 2) setOtp(['', '', '', '', '', '']);
                       setStep(step - 1);
                     }
                   } else navigation.navigate("AuthSelection");
@@ -1602,7 +1718,7 @@ export default function SignupScreen({ navigation }: Props) {
 
               <View className="space-y-4 mb-4">
                 <TouchableOpacity
-                  onPress={() => { setSelectedRole('SHG'); setRoleSelectionError(''); }}
+                  onPress={() => handleRoleSelection('SHG')}
                   className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center ${selectedRole === 'SHG' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}
                 >
                   <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'SHG' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
@@ -1615,7 +1731,7 @@ export default function SignupScreen({ navigation }: Props) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  onPress={() => { setSelectedRole('Individual'); setRoleSelectionError(''); }}
+                  onPress={() => handleRoleSelection('Individual')}
                   className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center mt-4 ${selectedRole === 'Individual' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}
                 >
                   <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'Individual' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
@@ -1688,7 +1804,7 @@ export default function SignupScreen({ navigation }: Props) {
               </Text>
 
               <Text numberOfLines={1} className="text-[12px] font-bold text-[#6B7280] uppercase tracking-wider mb-2 ml-1">{t('mobile_number')}</Text>
-              <View className={`flex-row items-center bg-[#F9FAFB] py-4 px-4 rounded-[20px] shadow-sm border ${mobileError ? 'border-red-500' : 'border-gray-200'} mb-2`}>
+              <View className={`flex-row items-center bg-[#F9FAFB] py-4 px-4 rounded-[20px] shadow-sm border ${mobileError ? 'border-[#DC2626]' : mobile.length === 10 ? 'border-[#22C55E]' : 'border-gray-200'} mb-2`}>
                 <Text className="text-[#073318] font-bold mr-3">+91</Text>
                 <View className="w-[1px] h-6 bg-gray-300 mr-3" />
                 <TextInput
@@ -1702,13 +1818,24 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const cleaned = val.replace(/[^0-9]/g, '');
                     setMobile(cleaned);
-                    setMobileError("");
+                    setOtp(['', '', '', '', '', '']);
+                    if (cleaned.length > 0 && cleaned.length < 10) {
+                      setMobileError("Enter valid 10-digit mobile number");
+                    } else if (cleaned.length === 0) {
+                      setMobileError("Mobile number is required");
+                    } else {
+                      setMobileError("");
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!mobile) setMobileError("Mobile number is required");
+                    else if (mobile.length < 10) setMobileError("Enter valid 10-digit mobile number");
                   }}
                   returnKeyType="done"
                   onSubmitEditing={handleSendOtp}
                 />
               </View>
-              {mobileError ? <Text className="text-red-500 text-xs mb-4 ml-1">{mobileError}</Text> : <View className="mb-6" />}
+              {mobileError ? <Text style={{ color: '#DC2626', fontSize: 12, marginTop: 4, marginLeft: 4, marginBottom: 16 }}>{mobileError}</Text> : <View className="mb-6" />}
 
               <TouchableOpacity
                 onPress={handleSendOtp}
@@ -1903,7 +2030,14 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(v) => {
                     const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                     setFullName(filtered);
-                    setFullNameError('');
+                    if (!validateRequired(filtered)) {
+                      setFullNameError("Full name is required");
+                    } else {
+                      setFullNameError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(fullName)) setFullNameError("Full name is required");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -1929,7 +2063,20 @@ export default function SignupScreen({ navigation }: Props) {
                   keyboardType="numeric"
                   maxLength={2}
                   value={age}
-                  onChangeText={(v) => { setAge(v); setAgeError(''); }}
+                  onChangeText={(v) => { 
+                    setAge(v); 
+                    if (!validateRequired(v)) {
+                      setAgeError("Age is required");
+                    } else if (parseInt(v) < 18) {
+                      setAgeError("Must be at least 18");
+                    } else {
+                      setAgeError(''); 
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(age)) setAgeError("Age is required");
+                    else if (parseInt(age) < 18) setAgeError("Must be at least 18");
+                  }}
                   returnKeyType={selectedRole === 'Individual' ? 'next' : 'done'}
                   onSubmitEditing={selectedRole === 'Individual' ? () => setShowIndividualRoleMenu(true) : handleNextStep3}
                 />
@@ -1943,6 +2090,29 @@ export default function SignupScreen({ navigation }: Props) {
                     error={individualRoleError}
                     required={true}
                     onPress={() => setShowIndividualRoleMenu(true)}
+                  />
+                )}
+
+                {selectedRole === 'Individual' && individualRole === 'Other' && (
+                  <InputField
+                    ref={otherOccupationRef}
+                    label="Specify Your Occupation"
+                    placeholder="Enter your occupation"
+                    icon="briefcase-outline"
+                    error={otherOccupationError}
+                    required={true}
+                    value={otherOccupation}
+                    onChangeText={(val) => {
+                      setOtherOccupation(val);
+                      if (!validateRequired(val)) setOtherOccupationError("Please specify your occupation");
+                      else setOtherOccupationError('');
+                    }}
+                    onBlur={() => {
+                      if (!validateRequired(otherOccupation)) setOtherOccupationError("Please specify your occupation");
+                    }}
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    onSubmitEditing={handleNextStep3}
                   />
                 )}
               </View>
@@ -2426,7 +2596,13 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const cleaned = val.replace(/[^0-9]/g, '');
                     setPincode(cleaned);
-                    setPincodeError('');
+                    if (!validateRequired(cleaned)) {
+                      setPincodeError("Pincode is required");
+                    } else if (!validatePincode(cleaned)) {
+                      setPincodeError("Enter valid 6-digit pincode");
+                    } else {
+                      setPincodeError('');
+                    }
                     if (cleaned.length === 6) {
                       const fetchPincode = async () => {
                         try {
@@ -2435,14 +2611,12 @@ export default function SignupScreen({ navigation }: Props) {
                             setStateName(data.state);
                             setDistrict(data.district);
                             setTaluka(data.taluka);
-                            // Auto-fill village if only one exists
                             if (data.villages && data.villages.length === 1) {
                               setVillage(data.villages[0]);
                             }
                             setStateNameError('');
                             setDistrictError('');
                             setTalukaError('');
-                            // Auto-advance to house number after pincode fills
                             houseNoRef.current?.focus();
                           }
                         } catch (error) {
@@ -2452,6 +2626,10 @@ export default function SignupScreen({ navigation }: Props) {
                       };
                       fetchPincode();
                     }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(pincode)) setPincodeError("Pincode is required");
+                    else if (!validatePincode(pincode)) setPincodeError("Enter valid 6-digit pincode");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2469,7 +2647,11 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
                     setHouseNo(cleaned);
-                    setHouseNoError('');
+                    if (!validateRequired(cleaned)) setHouseNoError("House number is required");
+                    else setHouseNoError('');
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(houseNo)) setHouseNoError("House number is required");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2486,7 +2668,10 @@ export default function SignupScreen({ navigation }: Props) {
                   value={landmark}
                   onChangeText={(val) => {
                     setLandmark(val);
-                    setLandmarkError('');
+                    if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(landmark)) setLandmarkError("Address is required");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2504,7 +2689,13 @@ export default function SignupScreen({ navigation }: Props) {
                       error={villageError}
                       required={true}
                       value={village}
-                      onChangeText={(val) => { setVillage(val); setVillageError(''); }}
+                      onChangeText={(val) => {
+                    setVillage(val);
+                    if (villageError) setVillageError(validateRequired(val) ? '' : 'Village is required');
+                  }}
+                      onBlur={() => {
+                        if (!validateRequired(village)) setVillageError("Village is required");
+                      }}
                       returnKeyType="next"
                       blurOnSubmit={false}
                       onSubmitEditing={() => talukaRef.current?.focus()}
@@ -2520,7 +2711,13 @@ export default function SignupScreen({ navigation }: Props) {
                       error={talukaError}
                       required={true}
                       value={taluka}
-                      onChangeText={(val) => { setTaluka(val); setTalukaError(''); }}
+                      onChangeText={(val) => {
+                    setTaluka(val);
+                    if (talukaError) setTalukaError(validateRequired(val) ? '' : 'Taluka is required');
+                  }}
+                      onBlur={() => {
+                        if (!validateRequired(taluka)) setTalukaError("Taluka is required");
+                      }}
                       returnKeyType="next"
                       blurOnSubmit={false}
                       onSubmitEditing={() => districtRef.current?.focus()}
@@ -2539,7 +2736,13 @@ export default function SignupScreen({ navigation }: Props) {
                       error={districtError}
                       required={true}
                       value={district}
-                      onChangeText={(val) => { setDistrict(val); setDistrictError(''); }}
+                      onChangeText={(val) => {
+                    setDistrict(val);
+                    if (districtError) setDistrictError(validateRequired(val) ? '' : 'Please select district');
+                  }}
+                      onBlur={() => {
+                        if (!validateRequired(district)) setDistrictError("District is required");
+                      }}
                       returnKeyType="next"
                       blurOnSubmit={false}
                       onSubmitEditing={() => stateNameRef.current?.focus()}
@@ -2555,7 +2758,13 @@ export default function SignupScreen({ navigation }: Props) {
                       error={stateNameError}
                       required={true}
                       value={stateName}
-                      onChangeText={(val) => { setStateName(val); setStateNameError(''); }}
+                      onChangeText={(val) => {
+                    setStateName(val);
+                    if (stateNameError) setStateNameError(validateRequired(val) ? '' : 'Please select state');
+                  }}
+                      onBlur={() => {
+                        if (!validateRequired(stateName)) setStateNameError("State is required");
+                      }}
                       returnKeyType="done"
                       onSubmitEditing={handleNextStep6}
                     />
@@ -2596,7 +2805,17 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const formatted = formatAadhaar(val);
                     setAadhaarNumber(formatted);
-                    setAadhaarError('');
+                    if (!validateRequired(formatted)) {
+                      setAadhaarError("Aadhaar number is required");
+                    } else if (!validateAadhaar(formatted)) {
+                      setAadhaarError("Enter valid 12-digit Aadhaar number");
+                    } else {
+                      setAadhaarError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(aadhaarNumber)) setAadhaarError("Aadhaar number is required");
+                    else if (!validateAadhaar(aadhaarNumber)) setAadhaarError("Enter valid 12-digit Aadhaar number");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2613,7 +2832,21 @@ export default function SignupScreen({ navigation }: Props) {
                   autoCapitalize="characters"
                   maxLength={10}
                   value={panNumber}
-                  onChangeText={setPanNumber}
+                  onChangeText={(val) => {
+                    const upper = val.toUpperCase();
+                    setPanNumber(upper);
+                    if (!validateRequired(upper)) {
+                      setPanError("PAN number is required");
+                    } else if (!validatePan(upper)) {
+                      setPanError("Enter valid PAN number");
+                    } else {
+                      setPanError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(panNumber)) setPanError("PAN number is required");
+                    else if (!validatePan(panNumber)) setPanError("Enter valid PAN number");
+                  }}
                   returnKeyType="done"
                   blurOnSubmit={true}
                 />
@@ -2625,7 +2858,7 @@ export default function SignupScreen({ navigation }: Props) {
                     </Text>
                     <TouchableOpacity
                       onPress={() => { setUploadTarget('aadhaarFront'); setShowPhotoMenu(true); }}
-                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${aadhaarFront ? 'border-[#073318]' : 'border-gray-300'}`}
+                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarFront ? 'border-[#DC2626]' : aadhaarFront ? 'border-[#22C55E]' : 'border-gray-300'}`}
                     >
                       {aadhaarFront ? (
                         <>
@@ -2652,7 +2885,7 @@ export default function SignupScreen({ navigation }: Props) {
                     </Text>
                     <TouchableOpacity
                       onPress={() => { setUploadTarget('aadhaarBack'); setShowPhotoMenu(true); }}
-                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${aadhaarBack ? 'border-[#073318]' : 'border-gray-300'}`}
+                      className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-28 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !aadhaarBack ? 'border-[#DC2626]' : aadhaarBack ? 'border-[#22C55E]' : 'border-gray-300'}`}
                     >
                       {aadhaarBack ? (
                         <>
@@ -2681,7 +2914,7 @@ export default function SignupScreen({ navigation }: Props) {
                   </Text>
                   <TouchableOpacity
                     onPress={() => { setUploadTarget('panImage'); setShowPhotoMenu(true); }}
-                    className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-32 items-center justify-center overflow-hidden relative mt-1 ${panImage ? 'border-[#073318]' : 'border-gray-300'}`}
+                    className={`bg-[#F9FAFB] rounded-[24px] border border-dashed h-32 items-center justify-center overflow-hidden relative mt-1 ${docPhotosError && !panImage ? 'border-[#DC2626]' : panImage ? 'border-[#22C55E]' : 'border-gray-300'}`}
                   >
                     {panImage ? (
                       <>
@@ -2740,7 +2973,14 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const filtered = val.replace(/[^a-zA-Z\s]/g, '');
                     setAccountName(filtered);
-                    setAccountNameError('');
+                    if (!validateRequired(filtered)) {
+                      setAccountNameError("Account name is required");
+                    } else {
+                      setAccountNameError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(accountName)) setAccountNameError("Account name is required");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2760,7 +3000,17 @@ export default function SignupScreen({ navigation }: Props) {
                   onChangeText={(val) => {
                     const filtered = val.replace(/[^0-9]/g, '');
                     setAccountNumber(filtered);
-                    setAccountNumberError('');
+                    if (!validateRequired(filtered)) {
+                      setAccountNumberError("Account number is required");
+                    } else if (filtered.length < 8) {
+                      setAccountNumberError("Enter valid account number");
+                    } else {
+                      setAccountNumberError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(accountNumber)) setAccountNumberError("Account number is required");
+                    else if (accountNumber.length < 8) setAccountNumberError("Enter valid account number");
                   }}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2777,7 +3027,21 @@ export default function SignupScreen({ navigation }: Props) {
                   autoCapitalize="characters"
                   maxLength={11}
                   value={ifscCode}
-                  onChangeText={(val) => { setIfscCode(val.toUpperCase()); setIfscError(''); }}
+                  onChangeText={(val) => { 
+                    const upper = val.toUpperCase();
+                    setIfscCode(upper); 
+                    if (!validateRequired(upper)) {
+                      setIfscError("IFSC code is required");
+                    } else if (!validateIfsc(upper)) {
+                      setIfscError("Enter valid IFSC code");
+                    } else {
+                      setIfscError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(ifscCode)) setIfscError("IFSC code is required");
+                    else if (!validateIfsc(ifscCode)) setIfscError("Enter valid IFSC code");
+                  }}
                   loading={isFetchingIfsc}
                   returnKeyType="next"
                   blurOnSubmit={false}
@@ -2792,7 +3056,17 @@ export default function SignupScreen({ navigation }: Props) {
                   error={bankNameError}
                   required={true}
                   value={bankName}
-                  onChangeText={(val) => { setBankName(val); setBankNameError(''); }}
+                  onChangeText={(val) => { 
+                    setBankName(val); 
+                    if (!validateRequired(val)) {
+                      setBankNameError("Bank name is required");
+                    } else {
+                      setBankNameError(''); 
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!validateRequired(bankName)) setBankNameError("Bank name is required");
+                  }}
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => branchNameRef.current?.focus()}
@@ -3186,7 +3460,7 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* SHG Experience Modal */}
       <Modal visible={showExperienceMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowExperienceMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowExperienceMenu(false); if (!shgExperience) setShgExperienceError('Please select experience'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
@@ -3213,7 +3487,7 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* Vehicle Type Menu */}
       <Modal visible={showVehicleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowVehicleMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowVehicleMenu(false); if (!vehicleType) setVehicleTypeError('Please select vehicle type'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
@@ -3240,7 +3514,7 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* SHG Role Modal */}
       <Modal visible={showRoleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowRoleMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowRoleMenu(false); if (!shgRole) setShgRoleError('Please select role'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
@@ -3266,7 +3540,7 @@ export default function SignupScreen({ navigation }: Props) {
       </Modal>
       {/* Category Menu */}
       <Modal visible={showCategoryMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowCategoryMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowCategoryMenu(false); if (!productCategory) setProductCategoryError('Please select category'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
@@ -3293,7 +3567,7 @@ export default function SignupScreen({ navigation }: Props) {
 
       {/* Unit Menu */}
       <Modal visible={showUnitMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowUnitMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowUnitMenu(false); if (!productUnit) setProductUnitError('Please select unit'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
@@ -3401,7 +3675,7 @@ export default function SignupScreen({ navigation }: Props) {
       </Modal>
       {/* Individual Role Modal */}
       <Modal visible={showIndividualRoleMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowIndividualRoleMenu(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowIndividualRoleMenu(false); if (!individualRole) setIndividualRoleError('Please select occupation'); }}>
           <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">

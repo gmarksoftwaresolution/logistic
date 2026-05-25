@@ -76,8 +76,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     setStatus(null);
     await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
     await AsyncStorage.removeItem('user_profile');
-    await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA);
-    await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP);
+    await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA_SHG);
+    await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_SHG);
+    await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL);
+    await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL);
   };
 
   const updateUser = async (data: Partial<UserProfile>) => {

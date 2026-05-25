@@ -33,6 +33,7 @@ export type RootStackParamList = {
   RejectedOrders: undefined;
   Settings: undefined;
   Profile: undefined;
+  PersonalDetails: undefined;
   Address: undefined;
   Terms: undefined;
   Privacy: undefined;
