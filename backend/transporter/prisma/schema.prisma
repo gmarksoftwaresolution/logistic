@@ -8,262 +8,9 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model User {
-  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  authId            String             @unique @db.Uuid
-  role              UserRole
-  phoneNumber       String             @unique
-  email             String?            @unique
-  fullName          String?
-  profilePhoto      String?
-  language          String?            @default("English")
-  isVerified        Boolean            @default(false)
-  currentStep       Int                @default(0)
-  profileCompletion Int                @default(0)
-  applicationStatus ApplicationStatus  @default(PENDING)
-  uniqueCode        String?            @unique
-  approvedAt        DateTime?
-  rejectedAt        DateTime?
-  rejectionReason   String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  deletedAt         DateTime?
-  address           Address?
-  applications      Application[]
-  auditLogs         AuditLog[]
-  bankDetails       BankDetail[]
-  businessDetail    BusinessDetail?
-  documents         Document?
-  drivingDetail     DrivingDetail?
-  milkVanDetail     MilkVanDetail?
-  products          Product[]
-  routeDetail       RouteDetail?
-  shgDetail         ShgDetail?
-  stepTracking      StepTracking[]
-  transporterDetail TransporterDetail?
-  vehicles          Vehicle[]
-
-  @@index([role])
-}
-
-model Address {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId       String   @unique @db.Uuid
-  addressLine1 String
-  addressLine2 String?
-  village      String?
-  taluka       String?
-  district     String
-  state        String
-  pincode      String
-  landmark     String?
-  latitude     Float?
-  longitude    Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model BankDetail {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String    @db.Uuid
-  accountHolderName String
-  bankName          String
-  accountNumber     String
-  ifscCode          String
-  branchName        String?
-  upiId             String?
-  isVerified        Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  deletedAt         DateTime?
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model Document {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String   @unique @db.Uuid
-  aadhaarNumber     String?
-  panNumber         String?
-  drivingLicenseNo  String?
-  aadhaarFrontUrl   String?
-  aadhaarBackUrl    String?
-  panCardUrl        String?
-  drivingLicenseUrl String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Vehicle {
-  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId             String      @db.Uuid
-  vehicleType        VehicleType
-  vehicleName        String?
-  registrationNumber String?
-  licenseNumber      String?
-  rcUrl              String?
-  insuranceUrl       String?
-  vehicleImageUrl    String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  deletedAt          DateTime?
-  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model Application {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String            @db.Uuid
-  status          ApplicationStatus @default(PENDING)
-  reviewedBy      String?
-  rejectionReason String?
-  approvedAt      DateTime?
-  rejectedAt      DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model StepTracking {
-  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId     String     @db.Uuid
-  step       Int
-  status     StepStatus @default(PENDING)
-  data       Json?
-  reviewedBy String?
-  reviewedAt DateTime?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, step])
-}
-
-model ShgDetail {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String   @unique @db.Uuid
-  shgName          String?
-  shgLeaderName    String?
-  shgLeaderContact String?
-  shgRole          ShgRole?
-  crpName          String?
-  crpMobile        String?
-  crpEmail         String?
-  groupSize        Int?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model BusinessDetail {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String   @unique @db.Uuid
-  producesProduct  Boolean  @default(false)
-  businessTeamSize Int?
-  storageSpace     String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Product {
-  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId             String          @db.Uuid
-  productName        String
-  category           ProductCategory
-  dailyProductionQty Float
-  weeklyProduction   Float?
-  monthlyProduction  Float?
-  unit               String
-  price              Float?
-  imageUrl           String?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model TransporterDetail {
-  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String       @unique @db.Uuid
-  transporterCode   String?      @unique
-  vehicleCategory   VehicleType?
-  experienceYears   Int?
-  availableFullTime Boolean      @default(false)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model DrivingDetail {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String   @unique @db.Uuid
-  licenseNumber     String
-  expiryDate        DateTime
-  drivingExperience Int?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model RouteDetail {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String   @unique @db.Uuid
-  operatingArea   String
-  pickupLocations Json?
-  dropLocations   Json?
-  workingDays     Json?
-  workingSchedule Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model MilkVanDetail {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String   @unique @db.Uuid
-  sangathanName    String
-  centerName       String
-  assignedVillages Json?
-  morningShiftTime String?
-  eveningShiftTime String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model AuditLog {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String?  @db.Uuid
-  module    String
-  action    String
-  oldData   Json?
-  newData   Json?
-  ipAddress String?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model OTPVerification {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  phoneNumber String
-  otp         String
-  type        String
-  attempts    Int      @default(0)
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-
-  @@index([phoneNumber])
-}
+//////////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////////
 
 enum UserRole {
   SHG
@@ -307,4 +54,451 @@ enum ShgRole {
   CRP
   LEADER
   MEMBER
+}
+
+//////////////////////////////////////////////////////
+// USERS
+//////////////////////////////////////////////////////
+
+model User {
+  id                  Int       @id @default(autoincrement())
+
+  // Supabase Auth ID
+  authId              String    @unique @db.Uuid
+
+  role                UserRole
+  phoneNumber         String    @unique
+  email               String?   @unique
+
+  fullName            String?
+  profilePhoto        String?
+
+  language            String?   @default("English")
+
+  isVerified          Boolean   @default(false)
+
+  currentStep         Int       @default(0)
+  profileCompletion   Int       @default(0)
+
+  applicationStatus   ApplicationStatus @default(PENDING)
+
+  uniqueCode          String?   @unique
+
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  rejectionReason     String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+
+  address             Address?
+  bankDetails         BankDetail[]
+  documents           Document[]
+  vehicles            Vehicle[]
+
+  shgDetail           ShgDetail?
+  businessDetail      BusinessDetail?
+  products            Product[]
+
+  transporterDetail   TransporterDetail?
+  drivingDetail       DrivingDetail?
+  routeDetail         RouteDetail?
+  milkVanDetail       MilkVanDetail?
+
+  applications        Application[]
+  stepTracking        StepTracking[]
+  auditLogs           AuditLog[]
+  shgOrders           Order[]             @relation("ShgOrders")
+  transporterOrders   Order[]             @relation("TransporterOrders")
+
+  @@index([phoneNumber])
+  @@index([role])
+}
+
+//////////////////////////////////////////////////////
+// COMMON TABLES
+//////////////////////////////////////////////////////
+
+model Address {
+  id            Int      @id @default(autoincrement())
+
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id])
+
+  addressLine1  String
+  addressLine2  String?
+
+  village       String?
+  taluka        String?
+  district      String
+  state         String
+  pincode       String
+
+  landmark      String?
+
+  latitude      Float?
+  longitude     Float?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BankDetail {
+  id                  Int      @id @default(autoincrement())
+
+  userId              Int
+  user                User     @relation(fields: [userId], references: [id])
+
+  accountHolderName   String
+  bankName            String
+  accountNumber       String
+  ifscCode            String
+
+  branchName          String?
+  upiId               String?
+
+  isVerified          Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  @@index([userId])
+}
+
+model Document {
+  id                  Int      @id @default(autoincrement())
+
+  userId              Int
+  user                User     @relation(fields: [userId], references: [id])
+
+  aadhaarNumber       String?
+  panNumber           String?
+  drivingLicenseNo    String?
+
+  aadhaarFrontUrl     String?
+  aadhaarBackUrl      String?
+  panCardUrl          String?
+  drivingLicenseUrl   String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Vehicle {
+  id                    Int         @id @default(autoincrement())
+
+  userId                Int
+  user                  User        @relation(fields: [userId], references: [id])
+
+  vehicleType           VehicleType
+
+  vehicleName           String?
+  registrationNumber    String?
+  licenseNumber         String?
+
+  rcUrl                 String?
+  insuranceUrl          String?
+  vehicleImageUrl       String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  @@index([userId])
+}
+
+model Application {
+  id                  Int                 @id @default(autoincrement())
+
+  userId              Int
+  user                User                @relation(fields: [userId], references: [id])
+
+  status              ApplicationStatus   @default(PENDING)
+
+  reviewedBy          String?
+  rejectionReason     String?
+
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model StepTracking {
+  id            Int         @id @default(autoincrement())
+
+  userId        Int
+  user          User        @relation(fields: [userId], references: [id])
+
+  step          Int
+  status        StepStatus  @default(PENDING)
+
+  data          Json?
+
+  reviewedBy    String?
+  reviewedAt    DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, step])
+}
+
+//////////////////////////////////////////////////////
+// SHG MODULE
+//////////////////////////////////////////////////////
+
+model ShgDetail {
+  id                  Int         @id @default(autoincrement())
+
+  userId              Int         @unique
+  user                User        @relation(fields: [userId], references: [id])
+
+  shgName             String?
+  shgLeaderName       String?
+  shgLeaderContact    String?
+
+  shgRole             ShgRole?
+
+  crpName             String?
+  crpMobile           String?
+  crpEmail            String?
+
+  groupSize           Int?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model BusinessDetail {
+  id                  Int         @id @default(autoincrement())
+
+  userId              Int         @unique
+  user                User        @relation(fields: [userId], references: [id])
+
+  producesProduct     Boolean     @default(false)
+  businessTeamSize    Int?
+
+  storageSpace        String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Product {
+  id                    Int               @id @default(autoincrement())
+
+  userId                Int
+  user                  User              @relation(fields: [userId], references: [id])
+
+  productName           String
+  category              ProductCategory
+
+  dailyProductionQty    Float
+
+  weeklyProduction      Float?
+  monthlyProduction     Float?
+
+  unit                  String
+
+  price                 Float?
+
+  imageUrl              String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+}
+
+//////////////////////////////////////////////////////
+// TRANSPORTER MODULE
+//////////////////////////////////////////////////////
+
+model TransporterDetail {
+  id                    Int         @id @default(autoincrement())
+
+  userId                Int         @unique
+  user                  User        @relation(fields: [userId], references: [id])
+
+  transporterCode       String?     @unique
+
+  vehicleCategory       VehicleType?
+
+  experienceYears       Int?
+
+  availableFullTime     Boolean     @default(false)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model DrivingDetail {
+  id                    Int         @id @default(autoincrement())
+
+  userId                Int         @unique
+  user                  User        @relation(fields: [userId], references: [id])
+
+  licenseNumber         String
+  expiryDate            DateTime
+
+  drivingExperience     Int?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model RouteDetail {
+  id                    Int         @id @default(autoincrement())
+
+  userId                Int         @unique
+  user                  User        @relation(fields: [userId], references: [id])
+
+  operatingArea         String
+
+  pickupLocations       Json?
+  dropLocations         Json?
+
+  workingDays           Json?
+  workingSchedule       Json?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model MilkVanDetail {
+  id                    Int         @id @default(autoincrement())
+
+  userId                Int         @unique
+  user                  User        @relation(fields: [userId], references: [id])
+
+  sangathanName         String
+  centerName            String
+
+  assignedVillages      Json?
+
+  morningShiftTime      String?
+  eveningShiftTime      String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+//////////////////////////////////////////////////////
+// AUDIT LOGS
+//////////////////////////////////////////////////////
+
+model AuditLog {
+  id              Int      @id @default(autoincrement())
+
+  userId          Int?
+  user            User?    @relation(fields: [userId], references: [id])
+
+  module          String
+  action          String
+
+  oldData         Json?
+  newData         Json?
+
+  ipAddress       String?
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+}
+
+//////////////////////////////////////////////////////
+// OTP
+//////////////////////////////////////////////////////
+
+model OTPVerification {
+  id              Int      @id @default(autoincrement())
+
+  phoneNumber     String
+
+  otp             String
+  type            String
+
+  attempts        Int      @default(0)
+
+  expiresAt       DateTime
+
+  createdAt       DateTime @default(now())
+
+  @@index([phoneNumber])
+}
+
+//////////////////////////////////////////////////////
+// ORDER MODULE
+//////////////////////////////////////////////////////
+
+enum OrderStatus {
+  ASSIGNED
+  ACCEPTED
+  REJECTED
+  RECEIVED
+  COMPLETED
+}
+
+model Order {
+  id                Int         @id @default(autoincrement())
+  orderId           String      @unique
+  parcelName        String
+  category          String
+  mobile            String
+  amount            Float
+  payment           String
+  address           String
+  deliveryDay       String?
+  status            OrderStatus @default(ASSIGNED)
+  image             String?
+
+  // Transporter Info
+  transporterId     Int?
+  transporter       User?       @relation("TransporterOrders", fields: [transporterId], references: [id], onDelete: Cascade)
+  transporterName   String?
+  transporterMobile String?
+  pickupTime        String?
+  vehicleNumber     String?
+
+  // SHG Info
+  shgId             Int?
+  shg               User?       @relation("ShgOrders", fields: [shgId], references: [id], onDelete: Cascade)
+
+  currentHolder     String?     @default("Seller")
+  remainingQty      Int         @default(1)
+  weight            Float?
+  time              String?
+
+  // Rejection details
+  rejectReason      String?
+  rejectedAt        DateTime?
+  rejectedBy        String?
+
+  // Reschedule details
+  isRescheduled     Boolean     @default(false)
+  rescheduleDate    String?
+  rescheduleTime    String?
+  rescheduleReason  String?
+
+  // Timestamps
+  acceptedAt        DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
 }
