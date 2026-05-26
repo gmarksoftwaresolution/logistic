@@ -11,7 +11,7 @@ import { useUser } from '../context/UserContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { useOrders } from '../context/OrderContext';
 import { OrderCard } from '../components/OrderCard';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
 
@@ -22,7 +22,7 @@ export default function OrderHistoryScreen({ navigation }: Props) {
   const { user } = useUser();
   const { deliveredOrders } = useOrders();
   
-  const [filterState, setFilterState] = useState<FilterState>({ type: 'Today' });
+  const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   if (!context || !user) return null;
@@ -31,7 +31,7 @@ export default function OrderHistoryScreen({ navigation }: Props) {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <SharedHeader 
-        title="Completed Orders" 
+        title={t("title_completed_orders")} 
         subtitle={t('history_subtitle') || 'View your past performance'} 
         navigation={navigation} 
       />
@@ -46,7 +46,7 @@ export default function OrderHistoryScreen({ navigation }: Props) {
         >
           <Ionicons name="filter" size={14} color={isFilterModalVisible ? '#073318' : '#4B5563'} style={{ marginRight: 6 }} />
           <Text className={`text-[13px] font-bold ${isFilterModalVisible ? 'text-[#073318]' : 'text-textPrimary'}`}>
-            Filter
+            {t("filter_label")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -65,7 +65,7 @@ export default function OrderHistoryScreen({ navigation }: Props) {
                 <Ionicons name="file-tray-outline" size={32} color="#94A3B8" />
               </View>
               <Text className="text-textSecondary font-bold text-center">
-                No orders found
+                {t("no_orders_found")}
               </Text>
             </View>
           );
@@ -76,8 +76,8 @@ export default function OrderHistoryScreen({ navigation }: Props) {
             {filteredOrders.map(item => {
               const routeStr = getRouteForOrder(item);
               const routeParts = routeStr.split('>');
-              const source = routeParts[0]?.trim() || 'Transporter';
-              const destination = routeParts[1]?.trim() || 'Buyer';
+              const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+              const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
               const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
               const info = getInfoForOrder(item);
 

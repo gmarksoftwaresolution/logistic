@@ -6,10 +6,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { useUser } from '../context/UserContext';
 import Button from '../components/Button';
+import { LanguageContext } from '../context/LanguageContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ApplicationStatus'>;
 
 const ApplicationStatusScreen: React.FC<Props> = ({ navigation }) => {
+  const context = React.useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
   const { status, user, logout } = useUser();
 
   const handleLogout = async () => {
@@ -27,7 +30,7 @@ const ApplicationStatusScreen: React.FC<Props> = ({ navigation }) => {
           >
             <Ionicons name="chevron-back" size={24} color="#111827" />
           </TouchableOpacity>
-          <Text className="text-[28px] font-extrabold text-[#111827]">Sign Up</Text>
+          <Text className="text-[28px] font-extrabold text-[#111827]">{t("app_status_sign_up")}</Text>
           <View className="flex-row items-center">
             <TouchableOpacity className="mr-3 w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
               <Ionicons name="help-outline" size={20} color="#073318" />
@@ -46,26 +49,26 @@ const ApplicationStatusScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           <Text className="text-[26px] font-extrabold text-textPrimary mb-3 text-center">
-            Application Under Review
+            {t("app_status_under_review")}
           </Text>
           
           <Text className="text-textSecondary text-base text-center mb-10 leading-6">
-            Your application has been submitted successfully and is currently being reviewed by our team.
+            {t("app_status_desc")}
           </Text>
 
           <View className="bg-gray-50 w-full rounded-3xl p-6 mb-10">
             <View className="mb-4">
-              <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-widest mb-1">Request ID</Text>
+              <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-widest mb-1">{t("app_status_req_id")}</Text>
               <Text className="text-lg font-bold text-blue-600">{user?.shgUniqueId || 'Pending'}</Text>
             </View>
             <View>
-              <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-widest mb-1">Estimated Time</Text>
-              <Text className="text-lg font-bold text-textPrimary">24-48 Hours</Text>
+              <Text className="text-[10px] font-bold text-textSecondary uppercase tracking-widest mb-1">{t("app_status_est_time")}</Text>
+              <Text className="text-lg font-bold text-textPrimary">{t("app_status_24_48_hrs")}</Text>
             </View>
           </View>
 
           <Button 
-            title="Login" 
+            title={t("app_status_login")} 
             onPress={handleLogout}
             className="bg-[#073318]"
           />

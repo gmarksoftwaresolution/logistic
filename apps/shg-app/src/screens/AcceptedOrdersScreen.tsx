@@ -21,7 +21,7 @@ import { useOrders, Order } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'AcceptedOrders'>,
@@ -55,12 +55,12 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const handleQRScan = (order: Order) => {
     setModalConfig({
       visible: true,
-      title: "Confirm Pickup",
-      message: `Have you successfully collected and loaded the "${order.parcelName}"?`,
-      confirmText: 'Confirm',
+      title: t('confirm_pickup') || "Confirm Pickup",
+      message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
+      confirmText: t('su_confirm_358') || 'Confirm',
       onConfirm: () => {
         receiveOrder(order);
-        Toast.show({ type: 'success', text1: 'Success', text2: 'Parcel successfully received and moved to the Delivery tab.' });
+        Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
       }
     });
   };
@@ -73,8 +73,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       {/* Brand-Aligned GramUnnati Header */}
       <SharedHeader
-        title="Accepted Orders"
-        subtitle="Orders accepted for pickup & delivery"
+        title={t("title_accepted_orders")}
+        subtitle={t("subtitle_accepted_orders")}
         navigation={navigation}
       />
       {/* Mockup-Perfect Segment Tab Switcher */}
@@ -107,7 +107,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             color="#FFFFFF"
           />
           <Text className="font-bold text-[13px] ml-1.5 text-white">
-            Pickup
+            {t("tab_pickup")}
           </Text>
           <View className="px-2.5 py-0.5 rounded-full ml-2 bg-white/20">
             <Text className="text-[10px] font-extrabold text-white">
@@ -128,7 +128,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             color="#64748B"
           />
           <Text className="font-bold text-[13px] ml-1.5 text-slate-500">
-            Delivery
+            {t("tab_delivery")}
           </Text>
           <View className="px-2.5 py-0.5 rounded-full ml-2 bg-[#F1F5F9]">
             <Text className="text-[10px] font-extrabold text-slate-500">
@@ -149,15 +149,15 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
               <Ionicons name="cube-outline" size={32} color="#94A3B8" />
             </View>
             <Text className="text-textSecondary font-bold text-center">
-              No orders waiting for pickup
+              {t("no_orders_pickup")}
             </Text>
           </View>
         ) : (
           pickupOrders.map(item => {
             const routeStr = getRouteForOrder(item);
             const routeParts = routeStr.split('>');
-            const source = routeParts[0]?.trim() || 'Transporter';
-            const destination = routeParts[1]?.trim() || 'Buyer';
+            const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+            const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
             const info = getInfoForOrder(item);
 

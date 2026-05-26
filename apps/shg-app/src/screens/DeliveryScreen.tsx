@@ -18,7 +18,7 @@ import { useUser } from '../context/UserContext';
 import { useOrders, Order } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'Delivery'>,
@@ -48,8 +48,8 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       {/* Brand-Aligned GramUnnati Header */}
       <SharedHeader
-        title="Accepted Orders"
-        subtitle="Orders accepted for pickup & delivery"
+        title={t("title_accepted_orders")}
+        subtitle={t("subtitle_accepted_orders")}
         navigation={navigation}
       />
 
@@ -76,7 +76,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
             color="#64748B"
           />
           <Text className="font-bold text-[13px] ml-1.5 text-slate-500">
-            Pickup
+            {t("tab_pickup")}
           </Text>
           <View className="px-2.5 py-0.5 rounded-full ml-2 bg-[#F1F5F9]">
             <Text className="text-[10px] font-extrabold text-slate-500">
@@ -104,7 +104,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
             color="#FFFFFF"
           />
           <Text className="font-bold text-[13px] ml-1.5 text-white">
-            Delivery
+            {t("tab_delivery")}
           </Text>
           <View className="px-2.5 py-0.5 rounded-full ml-2 bg-white/20">
             <Text className="text-[10px] font-extrabold text-white">
@@ -125,15 +125,15 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
               <Ionicons name="cube-outline" size={32} color="#94A3B8" />
             </View>
             <Text className="text-textSecondary font-bold text-center">
-              No active delivery orders
+              {t("no_orders_delivery")}
             </Text>
           </View>
         ) : (
           deliveryOrders.map(item => {
             const routeStr = getRouteForOrder(item);
             const routeParts = routeStr.split('>');
-            const source = routeParts[0]?.trim() || 'Transporter';
-            const destination = routeParts[1]?.trim() || 'Buyer';
+            const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+            const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
             const info = getInfoForOrder(item);
 

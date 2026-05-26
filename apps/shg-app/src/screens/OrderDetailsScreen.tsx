@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
-import { getRouteForOrder, getFormattedOrderId } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
 import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
@@ -29,8 +29,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   } = useOrders();
   const routeStr = getRouteForOrder(order);
   const routeParts = routeStr.split('>');
-  const source = routeParts[0]?.trim() || 'Transporter';
-  const destination = routeParts[1]?.trim() || 'Buyer';
+  const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+  const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
 
   // 1. Determine if we are in Pickup or Delivery phase
   const isDeliveryPhase = order.status === 'Received';
@@ -52,23 +52,23 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const activeType = getEntityType(activeSideName);
 
   // 4. Set details values dynamically
-  let detailsTitle = "Transporter Details";
+  let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
-  let nameLabel = "Person Name";
+  let nameLabel = t('su_person_name') || "Person Name";
   let nameValue = order.transporterName || "Rahul Patil";
-  let mobileLabel = "Mobile Number";
+  let mobileLabel = t('su_mobile_number') || "Mobile Number";
   let mobileValue = order.transporterMobile || "+91 9123456789";
-  let addressOrVehicleLabel = "Vehicle Number";
+  let addressOrVehicleLabel = t('su_vehicle_number') || "Vehicle Number";
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "MH-09-AB-1234";
   if (activeType === 'seller') {
-    detailsTitle = "Seller Details";
+    detailsTitle = t('su_seller_details') || "Seller Details";
     headerIcon = "storefront-outline";
-    nameLabel = "Seller Name";
+    nameLabel = t('su_seller_name') || "Seller Name";
     nameValue = order.transporterName || "Sanjay Desai";
-    mobileLabel = "Seller Mobile Number";
+    mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
     mobileValue = order.transporterMobile || "9654782390";
-    addressOrVehicleLabel = "Shop Name / Seller Address";
+    addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
     addressOrVehicleIcon = "location-outline";
 
     // Dynamic detailed address logic
@@ -82,13 +82,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
     }
     addressOrVehicleValue = resolvedAddress;
   } else if (activeType === 'buyer') {
-    detailsTitle = "Buyer Details";
+    detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
-    nameLabel = "Buyer Name";
+    nameLabel = t('su_buyer_name') || "Buyer Name";
     nameValue = destination;
-    mobileLabel = "Buyer Mobile Number";
+    mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
     mobileValue = order.mobile || "+91 9876543210";
-    addressOrVehicleLabel = "Buyer Address";
+    addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
     addressOrVehicleIcon = "location-outline";
     addressOrVehicleValue = `${destination}, Chandgad, kolhapur, Maharastra`;
   }
@@ -97,44 +97,44 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const productCount = order.remainingQty || 1;
   const AVAILABLE_PRODUCTS = [{
     code: '#P101',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Raw Organic Turmeric Packs',
-    details: '2 items • 10 kg'
+    details: `2 ${t('su_items') || 'items'} • 10 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P102',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Cold Pressed Groundnut Oil',
-    details: '1 item • 5 kg'
+    details: `1 ${t('su_item') || 'item'} • 5 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P103',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Premium Basmati Rice Bag',
-    details: '3 items • 25 kg'
+    details: `3 ${t('su_items') || 'items'} • 25 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P104',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Organic Jaggery Block',
-    details: '2 items • 2 kg'
+    details: `2 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P105',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Fresh Pure Desi Ghee',
-    details: '1 item • 1 kg'
+    details: `1 ${t('su_item') || 'item'} • 1 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P106',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Whole Wheat Atta Bag',
-    details: '1 item • 10 kg'
+    details: `1 ${t('su_item') || 'item'} • 10 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P107',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Natural Honey Bottle',
-    details: '4 items • 2 kg'
+    details: `4 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
   }];
   const products = AVAILABLE_PRODUCTS.slice(0, productCount);
   const formattedOrderId = getFormattedOrderId(order);
-  const headerTitle = isDeliveryPhase ? "Delivery Details" : "Collection Details";
-  const headerSubtitle = `Batch #${formattedOrderId} • ${source}`;
+  const headerTitle = isDeliveryPhase ? (t('su_delivery_details') || "Delivery Details") : (t('su_collection_details') || "Collection Details");
+  const headerSubtitle = `${t('su_batch_hash') || 'Batch #'} ${formattedOrderId} • ${source}`;
   const handleCall = (phone: string) => {
     Linking.openURL(`tel:${phone}`);
   };
@@ -293,7 +293,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </View>
             </View>
             <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0">
-              <Text className="text-[10px] font-black text-[#6EE7B7] uppercase tracking-wider">{order.status}</Text>
+              <Text className="text-[10px] font-black text-[#6EE7B7] uppercase tracking-wider">
+                {order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status}
+              </Text>
             </View>
           </View>
 
@@ -458,10 +460,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   </View>}
                 <View className="flex-1">
                   <Text className="text-[14px] font-bold text-[#111827]">
-                    {isScanned ? "Products Scanned" : "Scan Products"}
+                    {isScanned ? (t('su_products_scanned') || "Products Scanned") : (t('su_scan_products') || "Scan Products")}
                   </Text>
                   <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    {isScanned ? "All products verified successfully" : "Scan all products for verification"}
+                    {isScanned ? (t('su_all_products_verified') || "All products verified successfully") : (t('su_scan_all_products') || "Scan all products for verification")}
                   </Text>
                 </View>
               </View>
@@ -476,10 +478,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   </View>}
                 <View className="flex-1">
                   <Text className="text-[14px] font-bold text-[#111827]">
-                    {capturedPhotoUri ? "Photos Captured" : "Capture Photos"}
+                    {capturedPhotoUri ? (t('su_photos_captured') || "Photos Captured") : (t('su_capture_photos') || "Capture Photos")}
                   </Text>
                   <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    {capturedPhotoUri ? "Photos successfully saved for verification" : "Take photos of all products for verification"}
+                    {capturedPhotoUri ? (t('su_photos_saved_success') || "Photos successfully saved for verification") : (t('su_take_photos_of_all_pro_467') || "Take photos of all products for verification")}
                   </Text>
                 </View>
               </View>
@@ -589,7 +591,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
             {/* Instruction Text */}
             <Text className="text-[14px] font-bold text-white/70 mt-8 text-center px-6">
-              {scanningStatus === 'scanning' ? "Align the barcode/QR code within the frame to verify products" : "Product verified successfully!"}
+              {scanningStatus === 'scanning' ? (t('su_align_barcode') || "Align the barcode/QR code within the frame to verify products") : (t('su_product_verified_success') || "Product verified successfully!")}
             </Text>
           </View>
 

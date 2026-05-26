@@ -304,7 +304,7 @@ export default function SignupScreen({
   } = context;
   const [step, setStep] = useState<number>(0);
   const getStepDetails = () => {
-    const isShg = selectedRole === 'SHG';
+    const isShg = selectedRole === 'shg';
     const totalSteps = isShg ? 7 : 5;
     let currentStep = 1;
     if (isShg) {
@@ -327,7 +327,7 @@ export default function SignupScreen({
   };
 
   // Step 0: Role Selection
-  const [selectedRole, setSelectedRole] = useState<'SHG' | 'Individual' | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'shg' | 'individual' | null>(null);
 
   // Step 1 & 2: Mobile Auth States
   const [mobile, setMobile] = useState('');
@@ -402,7 +402,7 @@ export default function SignupScreen({
   const [shgRole, setShgRole] = useState('');
   const [shgRoleError, setShgRoleError] = useState('');
   const [showRoleMenu, setShowRoleMenu] = useState(false);
-  const [isShgLeader, setIsShgLeader] = useState<'Yes' | 'No' | null>(null);
+  const [isShgLeader, setIsShgLeader] = useState<'yes' | 'no' | null>(null);
   const [isShgLeaderError, setIsShgLeaderError] = useState('');
 
   // New SHG Details States
@@ -415,7 +415,7 @@ export default function SignupScreen({
   const [shgGroupSizeError, setShgGroupSizeError] = useState('');
 
   // Step 4: Product Details States
-  const [producesProducts, setProducesProducts] = useState<'Yes' | 'No' | null>(null);
+  const [producesProducts, setProducesProducts] = useState<'yes' | 'no' | null>(null);
   const [producesProductsError, setProducesProductsError] = useState('');
   const [productName, setProductName] = useState('');
   const [productNameError, setProductNameError] = useState('');
@@ -514,7 +514,7 @@ export default function SignupScreen({
       }
     }
   }, [storageWidth, storageLength]);
-  const [hasVehicle, setHasVehicle] = useState<'Yes' | 'No' | null>(null);
+  const [hasVehicle, setHasVehicle] = useState<'yes' | 'no' | null>(null);
   const [hasVehicleError, setHasVehicleError] = useState('');
   const [vehicleType, setVehicleType] = useState('');
   const [vehicleTypeError, setVehicleTypeError] = useState('');
@@ -612,7 +612,7 @@ export default function SignupScreen({
       stepKey: STORAGE_KEYS.CURRENT_STEP_SHG
     };
   };
-  const handleRoleSelection = (role: 'SHG' | 'Individual') => {
+  const handleRoleSelection = (role: 'shg' | 'individual') => {
     if (selectedRole !== null && selectedRole !== role) {
       resetSignupState();
       setIsRecentlyVerified(false);
@@ -1153,11 +1153,11 @@ export default function SignupScreen({
         isValid = false;
       }
     }
-    if (selectedRole === 'Individual') {
+    if (selectedRole === 'individual') {
       if (!individualRole) {
         setIndividualRoleError(t("su_please_select_your_r_26"));
         isValid = false;
-      } else if (individualRole === 'Other' && !validateRequired(otherOccupation)) {
+      } else if (individualRole === 'other' && !validateRequired(otherOccupation)) {
         setOtherOccupationError(t("su_please_specify_your__27"));
         isValid = false;
         if (!firstInvalidRef) firstInvalidRef = otherOccupationRef;
@@ -1173,7 +1173,7 @@ export default function SignupScreen({
     try {
       // 1. Submit Profile
       const response = await signupService.submitProfile({
-        userType: selectedRole === 'Individual' ? 'INDIVIDUAL' : 'SHG',
+        userType: selectedRole === 'individual' ? 'INDIVIDUAL' : 'SHG',
         fullName,
         age: parseInt(age, 10),
         photoUrl: profileImage || undefined
@@ -1188,21 +1188,21 @@ export default function SignupScreen({
       }
 
       // 2. Submit Role for Individual users
-      if (selectedRole === 'Individual') {
+      if (selectedRole === 'individual') {
         const roleMap: Record<string, string> = {
-          'Delivery Partner': 'DELIVERY_PARTNER',
-          'Driver': 'DRIVER',
-          'Shopkeeper / Business Owner': 'SHOPKEEPER',
-          'Student / Job Seeker': 'STUDENT',
-          'Farmer': 'FARMER',
-          'Self-employed': 'SELF_EMPLOYED',
-          'Other': 'OTHER'
+          'delivery_partner': 'DELIVERY_PARTNER',
+          'driver': 'DRIVER',
+          'shopkeeper___business_owner': 'SHOPKEEPER',
+          'student___job_seeker': 'STUDENT',
+          'farmer': 'FARMER',
+          'self_employed': 'SELF_EMPLOYED',
+          'other': 'OTHER'
         };
         await signupService.submitNonShgRole({
           nonShgRole: roleMap[individualRole] || 'OTHER'
         });
       }
-      if (selectedRole === 'Individual') {
+      if (selectedRole === 'individual') {
         setStep(6);
       } else {
         setStep(4);
@@ -1250,7 +1250,7 @@ export default function SignupScreen({
       setShgRoleError(t("su_please_select_your_r_26"));
       isValid = false;
     }
-    if (shgRole === 'CRP') {
+    if (shgRole === 'crp') {
       if (isShgLeader === null) {
         setIsShgLeaderError(t("su_please_select_if_you_30"));
         isValid = false;
@@ -1283,7 +1283,7 @@ export default function SignupScreen({
         isValid = false;
         if (!firstInvalidRef) firstInvalidRef = leaderMobileRef;
       }
-    } else if (shgRole && shgRole !== 'CRP') {
+    } else if (shgRole && shgRole !== 'crp') {
       if (!shgName.trim()) {
         setShgNameError(t("su_shg_name_is_required_31"));
         isValid = false;
@@ -1312,7 +1312,7 @@ export default function SignupScreen({
         setShgExperienceError(t("su_please_select_experi_32"));
         isValid = false;
       }
-      if (shgRole === 'Member') {
+      if (shgRole === 'member') {
         if (!leaderName.trim()) {
           setLeaderNameError(t("su_leader_name_is_requi_34"));
           isValid = false;
@@ -1338,19 +1338,19 @@ export default function SignupScreen({
     setIsSubmitting(true);
     try {
       const experienceMap: Record<string, string> = {
-        '1-2 years': 'ONE_TO_TWO_YEARS',
-        '3-5 years': 'THREE_TO_FIVE_YEARS',
-        '5+ years': 'FIVE_PLUS_YEARS'
+        '1_2_years': 'ONE_TO_TWO_YEARS',
+        '3_5_years': 'THREE_TO_FIVE_YEARS',
+        '5__years': 'FIVE_PLUS_YEARS'
       };
       const roleMap: Record<string, string> = {
-        'CRP': 'CRP',
-        'Leader': 'LEADER',
-        'Member': 'MEMBER'
+        'crp': 'CRP',
+        'leader': 'LEADER',
+        'member': 'MEMBER'
       };
       const shgDetails: any = {
         shgRole: roleMap[shgRole] || 'MEMBER'
       };
-      if (shgRole === 'CRP') {
+      if (shgRole === 'crp') {
         shgDetails.shgName = shgName;
         shgDetails.shgExperience = experienceMap[shgExperience] || 'LESS_THAN_1_YEAR';
         shgDetails.shgGroupSize = parseInt(shgGroupSize, 10);
@@ -1363,10 +1363,10 @@ export default function SignupScreen({
         shgDetails.crpEmail = crpEmail;
         shgDetails.shgExperience = experienceMap[shgExperience] || 'LESS_THAN_1_YEAR';
         shgDetails.shgGroupSize = parseInt(shgGroupSize, 10);
-        if (shgRole === 'Member') {
+        if (shgRole === 'member') {
           shgDetails.shgLeaderName = leaderName;
           shgDetails.shgLeaderContact = leaderMobile;
-        } else if (shgRole === 'Leader') {
+        } else if (shgRole === 'leader') {
           shgDetails.shgLeaderName = fullName;
           shgDetails.shgLeaderContact = mobile;
         }
@@ -1399,7 +1399,7 @@ export default function SignupScreen({
       setProducesProductsError(t("su_please_select_if_you_47"));
       isValid = false;
     }
-    if (producesProducts === 'Yes') {
+    if (producesProducts === 'yes') {
       if (!businessTeamSize || isNaN(Number(businessTeamSize))) {
         setBusinessTeamSizeError(t("su_business_team_size_i_48"));
         isValid = false;
@@ -1413,7 +1413,7 @@ export default function SignupScreen({
       if (!productCategory) {
         setProductCategoryError(t("su_please_select_catego_50"));
         isValid = false;
-      } else if (productCategory === 'Other') {
+      } else if (productCategory === 'other') {
         if (!otherCategory.trim()) {
           setOtherCategoryError(t("su_category_name_is_req_51"));
           isValid = false;
@@ -1439,15 +1439,15 @@ export default function SignupScreen({
     setIsSubmitting(true);
     try {
       const categoryMap: Record<string, string> = {
-        'Food': 'FOOD',
-        'Handmade': 'HANDMADE',
-        'Agriculture': 'AGRICULTURE',
-        'Other': 'OTHER'
+        'food': 'FOOD',
+        'handmade': 'HANDMADE',
+        'agriculture': 'AGRICULTURE',
+        'other': 'OTHER'
       };
       await signupService.submitProducts({
-        producesProduct: producesProducts === 'Yes',
+        producesProduct: producesProducts === 'yes',
         businessTeamSize: businessTeamSize ? parseInt(businessTeamSize, 10) : undefined,
-        products: producesProducts === 'Yes' ? [{
+        products: producesProducts === 'yes' ? [{
           productName,
           category: categoryMap[productCategory] || 'OTHER',
           dailyProductionQty: parseFloat(dailyProduction),
@@ -1673,7 +1673,7 @@ export default function SignupScreen({
     if (!hasVehicle) {
       setHasVehicleError(t("su_please_select_vehicl_74"));
       isValid = false;
-    } else if (hasVehicle === 'Yes') {
+    } else if (hasVehicle === 'yes') {
       if (!vehicleType) {
         setVehicleTypeError(t("su_vehicle_type_is_requ_75"));
         isValid = false;
@@ -1748,15 +1748,15 @@ export default function SignupScreen({
     setIsSubmitting(true);
     try {
       const vehicleTypeMap: Record<string, string> = {
-        'Bike / Scooty': 'TWO_WHEELER',
-        'Auto / Cargo': 'THREE_WHEELER',
-        'Car / Pickup': 'FOUR_WHEELER',
-        'Other': 'OTHER'
+        'bike___scooty': 'TWO_WHEELER',
+        'auto___cargo': 'THREE_WHEELER',
+        'car___pickup': 'FOUR_WHEELER',
+        'other': 'OTHER'
       };
       const response = await signupService.submitOtherDetails({
         storageSpace: storageSpace.trim(),
-        hasVehicle: hasVehicle === 'Yes',
-        vehicle: hasVehicle === 'Yes' ? {
+        hasVehicle: hasVehicle === 'yes',
+        vehicle: hasVehicle === 'yes' ? {
           vehicleType: vehicleTypeMap[vehicleType] || undefined,
           vehicleRegistrationNo: cleanRegNo || undefined,
           drivingLicenseNumber: cleanDl || undefined,
@@ -1836,7 +1836,7 @@ export default function SignupScreen({
             <View className="flex-row items-center">
               <TouchableOpacity onPress={() => {
               if (step === 10) navigation.navigate("Login");else if (step > 0) {
-                if (selectedRole === 'Individual' && step === 6) {
+                if (selectedRole === 'individual' && step === 6) {
                   setStep(3);
                 } else {
                   if (step === 2) setOtp(['', '', '', '', '', '']);
@@ -1905,22 +1905,22 @@ export default function SignupScreen({
               <Text className="text-[#6B7280] text-[13px] font-semibold mb-6 text-center">{t("su_select_your_user_typ_90")}</Text>
 
               <View className="space-y-4 mb-4">
-                <TouchableOpacity onPress={() => handleRoleSelection('SHG')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center ${selectedRole === 'SHG' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                  <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'SHG' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
-                    <Ionicons name="people" size={24} color={selectedRole === 'SHG' ? 'white' : '#073318'} />
+                <TouchableOpacity onPress={() => handleRoleSelection('shg')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center ${selectedRole === 'shg' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                  <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'shg' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
+                    <Ionicons name="people" size={24} color={selectedRole === 'shg' ? 'white' : '#073318'} />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'SHG' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_shg_self_help_group_91")}</Text>
+                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'shg' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_shg_self_help_group_91")}</Text>
                     <Text className="text-xs text-[#6B7280] font-medium leading-4">{t("su_for_women_working_in_92")}</Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => handleRoleSelection('Individual')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center mt-4 ${selectedRole === 'Individual' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                  <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'Individual' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
-                    <Ionicons name="person" size={24} color={selectedRole === 'Individual' ? 'white' : '#073318'} />
+                <TouchableOpacity onPress={() => handleRoleSelection('individual')} className={`py-4 px-4 rounded-[20px] border-2 flex-row items-center mt-4 ${selectedRole === 'individual' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                  <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${selectedRole === 'individual' ? 'bg-[#073318]' : 'bg-[#EEF5F0]'}`}>
+                    <Ionicons name="person" size={24} color={selectedRole === 'individual' ? 'white' : '#073318'} />
                   </View>
                   <View className="flex-1">
-                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'Individual' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_individual_93")}</Text>
+                    <Text className={`text-base font-extrabold mb-1 ${selectedRole === 'individual' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("su_individual_93")}</Text>
                     <Text className="text-xs text-[#6B7280] font-medium leading-4">{t("su_for_personal_or_busi_94")}</Text>
                   </View>
                 </TouchableOpacity>
@@ -2185,11 +2185,11 @@ export default function SignupScreen({
               }
             }} onBlur={() => {
               if (!validateRequired(age)) setAgeError(t("val_age_required"));else if (parseInt(age) < 18) setAgeError(t("su_must_be_at_least_18_118"));
-            }} returnKeyType={selectedRole === 'Individual' ? 'next' : 'done'} onSubmitEditing={selectedRole === 'Individual' ? () => setShowIndividualRoleMenu(true) : handleNextStep3} />
+            }} returnKeyType={selectedRole === 'individual' ? 'next' : 'done'} onSubmitEditing={selectedRole === 'individual' ? () => setShowIndividualRoleMenu(true) : handleNextStep3} />
 
-                {selectedRole === 'Individual' && <DropdownField label={t("su_select_your_occupati_121")} placeholder={t("su_select_your_occupati_122")} icon="briefcase-outline" value={individualRole} error={individualRoleError} required={true} onPress={() => setShowIndividualRoleMenu(true)} />}
+                {selectedRole === 'individual' && <DropdownField label={t("su_select_your_occupati_121")} placeholder={t("su_select_your_occupati_122")} icon="briefcase-outline" value={individualRole ? t("opt_" + individualRole) : ""} error={individualRoleError} required={true} onPress={() => setShowIndividualRoleMenu(true)} />}
 
-                {selectedRole === 'Individual' && individualRole === 'Other' && <InputField ref={otherOccupationRef} label={t("su_specify_your_occupat_123")} placeholder={t("su_enter_your_occupatio_124")} icon="briefcase-outline" error={otherOccupationError} required={true} value={otherOccupation} onChangeText={val => {
+                {selectedRole === 'individual' && individualRole === 'other' && <InputField ref={otherOccupationRef} label={t("su_specify_your_occupat_123")} placeholder={t("su_enter_your_occupatio_124")} icon="briefcase-outline" error={otherOccupationError} required={true} value={otherOccupation} onChangeText={val => {
               setOtherOccupation(val);
               if (!validateRequired(val)) setOtherOccupationError(t("su_please_specify_your__27"));else setOtherOccupationError('');
             }} onBlur={() => {
@@ -2208,13 +2208,13 @@ export default function SignupScreen({
 
               <View className="w-full">
                 {/* Your Role Dropdown */}
-                <DropdownField label={t("su_your_role_130")} placeholder={t("su_select_your_role_131")} icon="people-circle-outline" value={shgRole} error={shgRoleError} required={true} onPress={() => setShowRoleMenu(true)} />
+                <DropdownField label={t("su_your_role_130")} placeholder={t("su_select_your_role_131")} icon="people-circle-outline" value={shgRole ? t("opt_" + shgRole) : ""} error={shgRoleError} required={true} onPress={() => setShowRoleMenu(true)} />
 
-                {shgRole === 'CRP' && <View className="w-full">
+                {shgRole === 'crp' && <View className="w-full">
                     <ToggleButtonGroup label={t("su_are_you_leader_of_th_132")} value={isShgLeader} error={isShgLeaderError} required={true} onSelect={val => {
                 setIsShgLeader(val);
                 setIsShgLeaderError('');
-                if (val === 'Yes') {
+                if (val === 'yes') {
                   setLeaderName(fullName);
                   setLeaderMobile(mobile);
                 } else {
@@ -2230,7 +2230,7 @@ export default function SignupScreen({
                   setShgNameError('');
                 }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => shgGroupSizeRef.current?.focus()} />
 
-                        <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
+                        <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience ? t("opt_" + shgExperience) : ""} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
 
                         <InputField ref={shgGroupSizeRef} label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
                   const filtered = v.replace(/[^0-9]/g, '');
@@ -2238,15 +2238,15 @@ export default function SignupScreen({
                     setShgGroupSize(filtered);
                     setShgGroupSizeError('');
                   }
-                }} returnKeyType={isShgLeader === 'No' ? 'next' : 'done'} blurOnSubmit={isShgLeader === 'No' ? false : true} onSubmitEditing={isShgLeader === 'No' ? () => leaderNameRef.current?.focus() : handleNextStep4} />
+                }} returnKeyType={isShgLeader === 'no' ? 'next' : 'done'} blurOnSubmit={isShgLeader === 'no' ? false : true} onSubmitEditing={isShgLeader === 'no' ? () => leaderNameRef.current?.focus() : handleNextStep4} />
 
-                        <InputField ref={leaderNameRef} label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} editable={isShgLeader === 'No'} onChangeText={v => {
+                        <InputField ref={leaderNameRef} label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} editable={isShgLeader === 'no'} onChangeText={v => {
                   const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                   setLeaderName(filtered);
                   setLeaderNameError('');
                 }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => leaderMobileRef.current?.focus()} />
 
-                        <InputField ref={leaderMobileRef} label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} editable={isShgLeader === 'No'} onChangeText={v => {
+                        <InputField ref={leaderMobileRef} label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} editable={isShgLeader === 'no'} onChangeText={v => {
                   const filtered = v.replace(/[^0-9]/g, '');
                   setLeaderMobile(filtered);
                   setLeaderMobileError('');
@@ -2254,7 +2254,7 @@ export default function SignupScreen({
                       </Animated.View>}
                   </View>}
 
-                {shgRole && shgRole !== 'CRP' && <View className="w-full">
+                {shgRole && shgRole !== 'crp' && <View className="w-full">
                     <InputField label={t("su_shg_name_133")} placeholder={t("su_enter_shg_name_134")} icon="business-outline" error={shgNameError} required={true} value={shgName} onChangeText={v => {
                 const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                 setShgName(filtered);
@@ -2275,7 +2275,7 @@ export default function SignupScreen({
 
                     <InputField label={t("su_crp_email_id_optiona_149")} placeholder={t("su_enter_email_address_150")} icon="mail-outline" keyboardType="email-address" autoCapitalize="none" value={crpEmail} onChangeText={v => setCrpEmail(v.replace(/[^a-zA-Z0-9@._-]/g, ''))} />
 
-                    {shgRole === 'Member' && <View className="w-full">
+                    {shgRole === 'member' && <View className="w-full">
                         <InputField label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} onChangeText={v => {
                   const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                   setLeaderName(filtered);
@@ -2289,7 +2289,7 @@ export default function SignupScreen({
                 }} />
                       </View>}
 
-                    <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
+                    <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience ? t("opt_" + shgExperience) : ""} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
 
                     <InputField label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
                 const filtered = v.replace(/[^0-9]/g, '');
@@ -2316,7 +2316,7 @@ export default function SignupScreen({
               setProducesProductsError('');
             }} />
 
-                {producesProducts === 'Yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
+                {producesProducts === 'yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
                     {/* Business Team Size */}
                     <InputField ref={businessTeamSizeRef} label={t("su_business_team_size_163")} placeholder={t("su_enter_total_team_mem_164")} icon="people-outline" error={businessTeamSizeError} required={true} keyboardType="numeric" maxLength={3} value={businessTeamSize} onChangeText={v => {
                 const filtered = v.replace(/[^0-9]/g, '');
@@ -2336,9 +2336,9 @@ export default function SignupScreen({
               }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => setShowCategoryMenu(true)} />
 
                     {/* Category Dropdown */}
-                    <DropdownField label={t("su_category_167")} placeholder={t("su_select_category_168")} icon="grid-outline" value={productCategory} error={productCategoryError} required={true} onPress={() => setShowCategoryMenu(true)} />
+                    <DropdownField label={t("su_category_167")} placeholder={t("su_select_category_168")} icon="grid-outline" value={productCategory ? t("opt_" + productCategory) : ""} error={productCategoryError} required={true} onPress={() => setShowCategoryMenu(true)} />
 
-                    {productCategory === 'Other' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
+                    {productCategory === 'other' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full">
                         <InputField label={t("su_specify_category_nam_169")} placeholder={t("su_enter_category_name_170")} icon="create-outline" error={otherCategoryError} required={true} value={otherCategory} onChangeText={v => {
                   const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                   setOtherCategory(filtered);
@@ -2683,7 +2683,7 @@ export default function SignupScreen({
 
               <View className="w-full">
                 <View className="mb-4">
-                  <Label text="How much storage space do you have available?" required={true} />
+                  <Label text={t("storage_space_question")} required={true} />
 
                   {/* Width and Length fields */}
                   <View className="flex-row w-full mb-3 mt-1">
@@ -2705,8 +2705,8 @@ export default function SignupScreen({
               setHasVehicle(val);
               setHasVehicleError('');
             }} />
-                {hasVehicle === 'Yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full mt-4">
-                    <DropdownField label={t("su_vehicle_type_265")} placeholder={t("su_select_vehicle_type_266")} icon="car-sport-outline" required={true} value={vehicleType} error={vehicleTypeError} onPress={() => setShowVehicleMenu(true)} />
+                {hasVehicle === 'yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full mt-4">
+                    <DropdownField label={t("su_vehicle_type_265")} placeholder={t("su_select_vehicle_type_266")} icon="car-sport-outline" required={true} value={vehicleType ? t("opt_" + vehicleType) : ""} error={vehicleTypeError} onPress={() => setShowVehicleMenu(true)} />
 
                     <InputField ref={vehicleRegNoRef} label={t("su_vehicle_registration_267")} placeholder={t("su_e_g_mh09ab1234_268")} icon="card-outline" required={true} autoCapitalize="characters" maxLength={10} error={vehicleRegNoError} value={vehicleRegNo} onChangeText={val => {
                 let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -2951,14 +2951,14 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_shg_experience_287")}</Text>
-                {['1-2 years', '3-5 years', '5+ years'].map(opt => {
+                {['1_2_years', '3_5_years', '5__years'].map(opt => {
                 const isSelected = shgExperience === opt;
                 return <TouchableOpacity key={opt} onPress={() => {
                   setShgExperience(opt);
                   setShgExperienceError('');
                   setShowExperienceMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -2980,14 +2980,14 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_vehicle_type_289")}</Text>
-                {['Bike / Scooty', 'Auto / Cargo', 'Car / Pickup', 'Other'].map(opt => {
+                {['bike___scooty', 'auto___cargo', 'car___pickup', 'other'].map(opt => {
                 const isSelected = vehicleType === opt;
                 return <TouchableOpacity key={opt} onPress={() => {
                   setVehicleType(opt);
                   setVehicleTypeError('');
                   setShowVehicleMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -3009,14 +3009,14 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_your_role_130")}</Text>
-                {['CRP', 'Leader', 'Member'].map(opt => {
+                {['crp', 'leader', 'member'].map(opt => {
                 const isSelected = shgRole === opt;
                 return <TouchableOpacity key={opt} onPress={() => {
                   setShgRole(opt);
                   setShgRoleError('');
                   setShowRoleMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -3037,14 +3037,14 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_category_167")}</Text>
-                {['Food', 'Handmade', 'Agriculture', 'Other'].map(opt => {
+                {['food', 'handmade', 'agriculture', 'other'].map(opt => {
                 const isSelected = productCategory === opt;
                 return <TouchableOpacity key={opt} onPress={() => {
                   setProductCategory(opt);
                   setProductCategoryError('');
                   setShowCategoryMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -3124,7 +3124,7 @@ export default function SignupScreen({
                   setVillageError('');
                   setShowVillageMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -3150,7 +3150,7 @@ export default function SignupScreen({
                   setStreetAreaError('');
                   setShowAreaMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}
@@ -3171,14 +3171,14 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_your_occupati_121")}</Text>
-                {['Driver', 'Shopkeeper / Business Owner', 'Student / Job Seeker', 'Farmer', 'Self-employed', 'Other'].map(opt => {
+                {['driver', 'shopkeeper___business_owner', 'student___job_seeker', 'farmer', 'self_employed', 'other'].map(opt => {
                 const isSelected = individualRole === opt;
                 return <TouchableOpacity key={opt} onPress={() => {
                   setIndividualRole(opt);
                   setIndividualRoleError('');
                   setShowIndividualRoleMenu(false);
                 }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase())}</Text>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
                       {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
                     </TouchableOpacity>;
               })}

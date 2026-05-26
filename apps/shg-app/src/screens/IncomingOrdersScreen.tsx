@@ -17,7 +17,7 @@ import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
@@ -71,7 +71,15 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
   const [selectedRescheduleReason, setSelectedRescheduleReason] = useState<string | null>(null);
   const [customRescheduleReason, setCustomRescheduleReason] = useState('');
-  const rescheduleReasons = ['Vehicle Issue', 'Driver Not Available', 'Traffic Problem', 'Customer Requested Later', 'Weather Issue', 'Route Problem', 'Other'];
+  const rescheduleReasons = [
+    { key: 'orders_vehicle_issue', default: 'Vehicle Issue' },
+    { key: 'orders_driver_not_available', default: 'Driver Not Available' },
+    { key: 'orders_traffic_problem', default: 'Traffic Problem' },
+    { key: 'orders_customer_requested_later', default: 'Customer Requested Later' },
+    { key: 'orders_weather_issue', default: 'Weather Issue' },
+    { key: 'orders_route_problem', default: 'Route Problem' },
+    { key: 'orders_other', default: 'Other' }
+  ];
   const isAllSelected = incomingOrders.length > 0 && selectedIds.length === incomingOrders.length;
   const handleSelectAllToggle = () => {
     if (isAllSelected) {
@@ -118,10 +126,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     if (ordersToAccept.length === 0) return;
     setModalConfig({
       visible: true,
-      title: "Confirm Action",
-      message: `Are you sure you want to accept all ${ordersToAccept.length} selected order(s)?`,
+      title: t('su_confirm_action') || "Confirm Action",
+      message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
-      confirmText: 'Accept',
+      confirmText: t('su_accept') || 'Accept',
       onConfirm: () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         ordersToAccept.forEach(order => acceptOrder(order));
@@ -173,10 +181,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     }
     setModalConfig({
       visible: true,
-      title: "Confirm Action",
-      message: `Are you sure you want to accept all ${ordersToAccept.length} order(s)?`,
+      title: t('su_confirm_action') || "Confirm Action",
+      message: (t('su_are_you_sure_accept_all') || "Are you sure you want to accept all {count} order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
-      confirmText: 'Accept',
+      confirmText: t('su_accept') || 'Accept',
       onConfirm: () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         if (selectedIds.length > 0) {
@@ -207,7 +215,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   return <SafeAreaView className="flex-1" style={{
     backgroundColor: Colors.background
   }}>
-      <SharedHeader title={t("su_new_orders_398")} subtitle={t('New Orders Sub') || 'Verify & accept incoming requests'} navigation={navigation} />
+      <SharedHeader title={t("su_new_orders_398")} subtitle={t('su_new_orders_sub') || 'Verify & accept incoming requests'} navigation={navigation} />
 
       <ScrollView style={{
       paddingHorizontal: Spacing.lg
@@ -266,7 +274,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               color: 'white',
               marginLeft: Spacing.xs + 1
             }}>
-                {`Accept All (${incomingOrders.length})`}
+                {`${t('su_accept_all') || 'Accept All'} (${incomingOrders.length})`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -291,7 +299,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               color: '#073318',
               marginLeft: Spacing.xs + 1
             }}>
-                {isAllSelected ? 'Deselect All' : 'Select All'}
+                {isAllSelected ? (t('su_deselect_all') || 'Deselect All') : (t('su_select_all') || 'Select All')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -325,8 +333,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
         // Parse Route Text Visual Flow
         const routeParts = routeText.split('>');
-        const source = routeParts[0]?.trim() || 'Transporter';
-        const destination = routeParts[1]?.trim() || 'Buyer';
+        const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+        const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
         const orderReschedule = rescheduledOrders[item.id];
         const isOrderRescheduled = !!orderReschedule;
         return <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
@@ -631,17 +639,38 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             <Text className="text-[20px] font-bold text-textPrimary text-center mb-6">{t("su_select_reschedule_re_417")}</Text>
 
             <ScrollView className="max-h-[300px] mb-4" showsVerticalScrollIndicator={false}>
-              {rescheduleReasons.map(reason => {
-              const isSelected = selectedRescheduleReason === reason;
-              return <TouchableOpacity key={reason} onPress={() => setSelectedRescheduleReason(reason)} activeOpacity={0.7} className={`flex-row items-center p-4 mb-3 border rounded-[16px] ${isSelected ? 'border-[#073318] bg-[#F0FDF4]' : 'border-slate-200 bg-white'}`}>
-                    <View className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${isSelected ? 'border-[#073318]' : 'border-slate-300'}`}>
-                      {isSelected && <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />}
-                    </View>
-                    <Text className={`text-[15px] ${isSelected ? 'font-bold text-[#073318]' : 'font-medium text-textPrimary'}`}>
-                      {reason}
-                    </Text>
-                  </TouchableOpacity>;
-            })}
+              {rescheduleReasons.map(reason => (
+                    <TouchableOpacity
+                      key={reason.key}
+                      onPress={() => setSelectedRescheduleReason(reason.default)}
+                      className={`flex-row items-center p-4 rounded-xl border ${
+                        selectedRescheduleReason === reason.default
+                          ? 'border-[#073318] bg-[#F2FDF5]'
+                          : 'border-slate-200 bg-white'
+                      } mb-3`}
+                    >
+                      <View
+                        className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
+                          selectedRescheduleReason === reason.default
+                            ? 'border-[#073318]'
+                            : 'border-slate-300'
+                        }`}
+                      >
+                        {selectedRescheduleReason === reason.default && (
+                          <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />
+                        )}
+                      </View>
+                      <Text
+                        className={`text-[15px] ${
+                          selectedRescheduleReason === reason.default
+                            ? 'text-[#073318] font-bold'
+                            : 'text-slate-700 font-medium'
+                        }`}
+                      >
+                        {t(reason.key) || reason.default}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
             </ScrollView>
 
             {selectedRescheduleReason === 'Other' && <TextInput value={customRescheduleReason} onChangeText={setCustomRescheduleReason} placeholder={t("su_enter_custom_reason_418")} placeholderTextColor="#94A3B8" className="border border-slate-200 rounded-[16px] p-4 text-[15px] text-textPrimary mb-4 bg-slate-50" multiline />}

@@ -4,7 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SharedHeader } from '../components/SharedHeader';
 
+import { LanguageContext } from '../context/LanguageContext';
+
 const PlaceholderScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, navigation }) => {
+  const context = React.useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
+
   const title = route?.name || 'Screen';
   
   let subtitle = "Manage your information";
@@ -17,7 +22,7 @@ const PlaceholderScreen: React.FC<{ route?: any, navigation?: any }> = ({ route,
       <View style={styles.content}>
         <Ionicons name="construct-outline" size={64} color="#CBD5E1" />
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>This screen is currently under development</Text>
+        <Text style={styles.subtitle}>{t("placeholder_under_dev") || "This screen is currently under development"}</Text>
       </View>
     </SafeAreaView>
   );
