@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SharedHeader } from '../components/SharedHeader';
 import { getRouteForOrder, getFormattedOrderId } from '../utils/orderHelpers';
+import WalkthroughElement from '../components/WalkthroughElement';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -89,46 +90,56 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
           <View className="px-4 mt-6 flex-row flex-wrap justify-between">
             
             {/* New Orders */}
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('IncomingOrders')}
-              className="w-[48%] rounded-[24px] mb-4 shadow-sm overflow-hidden"
-              style={{ elevation: 3 }}
+            <WalkthroughElement
+              stepId="incoming_orders_card"
+              style={{ width: '48%', marginBottom: 16 }}
             >
-              <LinearGradient colors={['#0265AD', '#0097FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">New Orders</Text>
-                  <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                    <Feather name="package" size={14} color="#FFFFFF" />
-                    <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('IncomingOrders')}
+                className="w-full rounded-[24px] shadow-sm overflow-hidden"
+                style={{ elevation: 3 }}
+              >
+                <LinearGradient colors={['#0265AD', '#0097FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
+                  <View className="flex-row justify-between items-start">
+                    <Text className="text-[15px] font-bold text-white mt-1">New Orders</Text>
+                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
+                      <Feather name="package" size={14} color="#FFFFFF" />
+                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+                    </View>
                   </View>
-                </View>
-                <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{incomingOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">Incoming items</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                  <View className="mt-5">
+                    <Text className="text-[40px] font-black text-white leading-[48px]">{incomingOrders.length}</Text>
+                    <Text className="text-[11px] text-white/90 mt-1 font-medium">Incoming items</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </WalkthroughElement>
 
             {/* Accepted */}
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('AcceptedOrders')}
-              className="w-[48%] rounded-[24px] mb-4 shadow-sm overflow-hidden"
-              style={{ elevation: 3 }}
+            <WalkthroughElement
+              stepId="accepted_orders_card"
+              style={{ width: '48%', marginBottom: 16 }}
             >
-              <LinearGradient colors={['#5B4FAD', '#897CE0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">Accepted</Text>
-                  <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                    <Feather name="clock" size={14} color="#FFFFFF" />
-                    <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('AcceptedOrders')}
+                className="w-full rounded-[24px] shadow-sm overflow-hidden"
+                style={{ elevation: 3 }}
+              >
+                <LinearGradient colors={['#5B4FAD', '#897CE0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
+                  <View className="flex-row justify-between items-start">
+                    <Text className="text-[15px] font-bold text-white mt-1">Accepted</Text>
+                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
+                      <Feather name="clock" size={14} color="#FFFFFF" />
+                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+                    </View>
                   </View>
-                </View>
-                <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{acceptedOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">Accepted to process</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                  <View className="mt-5">
+                    <Text className="text-[40px] font-black text-white leading-[48px]">{acceptedOrders.length}</Text>
+                    <Text className="text-[11px] text-white/90 mt-1 font-medium">Accepted to process</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </WalkthroughElement>
 
             {/* Rejected */}
             <TouchableOpacity 
@@ -152,25 +163,30 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* Completed */}
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('OrderHistory')}
-              className="w-[48%] rounded-[24px] mb-4 shadow-sm overflow-hidden"
-              style={{ elevation: 3 }}
+            <WalkthroughElement
+              stepId="completed_orders_card"
+              style={{ width: '48%', marginBottom: 16 }}
             >
-              <LinearGradient colors={['#297C11', '#51B833']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">Completed</Text>
-                  <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                    <Feather name="check" size={14} color="#FFFFFF" />
-                    <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('OrderHistory')}
+                className="w-full rounded-[24px] shadow-sm overflow-hidden"
+                style={{ elevation: 3 }}
+              >
+                <LinearGradient colors={['#297C11', '#51B833']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
+                  <View className="flex-row justify-between items-start">
+                    <Text className="text-[15px] font-bold text-white mt-1">Completed</Text>
+                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
+                      <Feather name="check" size={14} color="#FFFFFF" />
+                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+                    </View>
                   </View>
-                </View>
-                <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{deliveredOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">Completed transports</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                  <View className="mt-5">
+                    <Text className="text-[40px] font-black text-white leading-[48px]">{deliveredOrders.length}</Text>
+                    <Text className="text-[11px] text-white/90 mt-1 font-medium">Completed transports</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </WalkthroughElement>
 
           </View>
 

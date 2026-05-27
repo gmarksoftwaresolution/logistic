@@ -6,6 +6,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { getRouteForOrder, getFormattedOrderId, getInfoForOrder } from '../utils/orderHelpers';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { useOnboarding } from '../context/OnboardingContext';
 type Props = NativeStackScreenProps<OrdersStackParamList, 'CompletedOrderDetails'>;
 const CompletedOrderDetailsScreen: React.FC<Props> = ({
   route,
@@ -19,6 +21,16 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   const {
     t
   } = context;
+  const { isActive, currentStep } = useOnboarding();
+  const scrollViewRef = React.useRef<ScrollView>(null);
+
+  React.useEffect(() => {
+    if (isActive && currentStep?.id === 'completed_details_close') {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
+  }, [isActive, currentStep?.id]);
   const routeStr = getRouteForOrder(order);
   const routeParts = routeStr.split('>');
   const source = routeParts[0]?.trim() || 'Transporter';
@@ -119,7 +131,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollViewRef} className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
         {/* Main Order Info Card - Green Theme */}
         <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{
         shadowColor: '#073318',
@@ -356,9 +368,20 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           <Text className="font-extrabold text-[15px] text-[#073318] ml-2">{t("su_download_invoice_386")}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} className="bg-[#073318] py-4 rounded-[22px] items-center justify-center mb-10 shadow-sm">
-          <Text className="font-extrabold text-[15px] text-white">{t("su_back_to_completed_or_387")}</Text>
-        </TouchableOpacity>
+        <WalkthroughElement stepId="completed_details_close" style={{ width: '100%', marginBottom: 40 }}>
+          <TouchableOpacity onPress={() => {
+            if (isActive && currentStep?.id === 'completed_details_close') {
+              navigation.navigate('OrdersOverview');
+            } else {
+              navigation.goBack();
+            }
+          }} activeOpacity={0.8} className="w-full bg-[#073318] py-4 rounded-[22px] items-center justify-center shadow-sm">
+            <Text className="font-extrabold text-[15px] text-white">{t("su_back_to_completed_or_387")}</Text>
+          </TouchableOpacity>
+        </WalkthroughElement>
+
+        {/* Large bottom spacer to push the button cleanly above the custom floating tab bar */}
+        <View className="h-36" />
       </ScrollView>
     </SafeAreaView>;
 };

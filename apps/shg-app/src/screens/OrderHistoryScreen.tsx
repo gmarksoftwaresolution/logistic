@@ -14,6 +14,7 @@ import { OrderCard } from '../components/OrderCard';
 import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
+import WalkthroughElement from '../components/WalkthroughElement';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OrderHistory'>;
 
@@ -73,7 +74,7 @@ export default function OrderHistoryScreen({ navigation }: Props) {
 
         return (
           <ScrollView className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false}>
-            {filteredOrders.map(item => {
+            {filteredOrders.map((item, index) => {
               const routeStr = getRouteForOrder(item);
               const routeParts = routeStr.split('>');
               const source = routeParts[0]?.trim() || 'Transporter';
@@ -81,9 +82,8 @@ export default function OrderHistoryScreen({ navigation }: Props) {
               const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
               const info = getInfoForOrder(item);
 
-              return (
+              const card = (
                 <OrderCard
-                  key={item.id}
                   orderIdText={orderIdText}
                   source={source}
                   destination={destination}
@@ -94,6 +94,16 @@ export default function OrderHistoryScreen({ navigation }: Props) {
                   onPressCard={() => (navigation as any).navigate('CompletedOrderDetails', { order: item })}
                 />
               );
+
+              if (index === 0) {
+                return (
+                  <WalkthroughElement key={item.id} stepId="select_completed_order_card">
+                    {card}
+                  </WalkthroughElement>
+                );
+              }
+
+              return React.cloneElement(card, { key: item.id });
             })}
             <View className="h-10" />
           </ScrollView>

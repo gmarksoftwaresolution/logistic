@@ -15,8 +15,21 @@ export default function ProfileScreen({
   const { t } = context!;
 
   const {
-    user
+    user,
+    logout
   } = useUser();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Landing' }],
+      });
+    } catch (e) {
+      console.warn('Logout error:', e);
+    }
+  };
   const [isOnline, setIsOnline] = useState(true);
   const ActionRow = ({
     icon,
@@ -143,12 +156,15 @@ export default function ProfileScreen({
         </View>
 
         {/* Logout */}
-        <View className="px-6 mb-12">
-          <TouchableOpacity className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
+        <View className="px-6 mb-6">
+          <TouchableOpacity onPress={handleLogout} className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
             <Ionicons name="log-out-outline" size={20} color="#EF4444" className="mr-2" />
             <Text className="text-[#EF4444] font-bold text-base ml-2">{t("logout")}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Bottom Spacer to push content above floating navigation tab bar */}
+        <View className="h-32" />
 
       </ScrollView>
     </SafeAreaView>;

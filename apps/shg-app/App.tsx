@@ -21,6 +21,8 @@ import { UserProvider } from './src/context/UserContext';
 import { OrderProvider } from './src/context/OrderContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
+import { OnboardingProvider } from './src/context/OnboardingContext';
+import OnboardingOverlay from './src/components/OnboardingOverlay';
 import "./global.css";
 
 const toastConfig = {
@@ -107,9 +109,12 @@ export default function App() {
         <UserProvider>
           <OrderProvider>
             <SafeAreaProvider onLayout={onLayoutRootView}>
-              <NavigationContainer>
-                <AppNavigator />
-              </NavigationContainer>
+              <OnboardingProvider>
+                <NavigationContainer>
+                  <AppNavigator />
+                </NavigationContainer>
+                <OnboardingOverlay />
+              </OnboardingProvider>
               <Toast config={toastConfig} topOffset={110} />
             </SafeAreaProvider>
           </OrderProvider>

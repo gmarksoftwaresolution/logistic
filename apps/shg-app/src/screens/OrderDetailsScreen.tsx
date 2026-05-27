@@ -11,6 +11,9 @@ import { useOrders } from '../context/OrderContext';
 import { getRouteForOrder, getFormattedOrderId } from '../utils/orderHelpers';
 import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { useOnboarding } from '../context/OnboardingContext';
+
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
   route,
@@ -18,6 +21,22 @@ const OrderDetailsScreen: React.FC<Props> = ({
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
+  const { isActive, currentStep, nextStep } = useOnboarding();
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (
+      isActive &&
+      (currentStep?.id === 'capture_photos_button' ||
+        currentStep?.id === 'submit_order_button' ||
+        currentStep?.id === 'scan_products_button' ||
+        currentStep?.id === 'submit_delivery_button')
+    ) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
+  }, [isActive, currentStep?.id]);
 
   const {
     order
@@ -183,6 +202,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
       closeTimer = setTimeout(() => {
         setIsScanned(true);
         setScannerModalVisible(false);
+        if (isActive && currentStep?.id === 'scan_products_button') {
+          nextStep();
+        }
       }, 1200);
     }, 2000);
     return () => {
@@ -224,6 +246,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
         ...order,
         scanned: true
       });
+      if (isActive && currentStep?.id === 'submit_delivery_button') {
+        navigation.navigate('OrdersOverview');
+      } else {
+        navigation.goBack();
+      }
     } else {
       if (!capturedPhotoUri) {
         Alert.alert("Photo Required", "Please capture product photos first.");
@@ -233,8 +260,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
         ...order,
         image: capturedPhotoUri
       });
+      if (isActive && currentStep?.id === 'submit_order_button') {
+        navigation.replace('Delivery');
+      } else {
+        navigation.goBack();
+      }
     }
-    navigation.goBack();
   };
   const handleRejectOrder = () => {
     setRejectModalVisible(true);
@@ -266,7 +297,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         </View>
       </View>
       
-      <ScrollView className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollViewRef} className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
         
         {/* Main Order Info Card - Green Theme */}
         <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{
@@ -449,7 +480,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
           {/* Conditional Verification Section: Scanner for Delivery flow, Capture Photos for Pickup flow */}
           {isDeliveryPhase ? (/* Scanner Section Row */
-        <TouchableOpacity onPress={() => setScannerModalVisible(true)} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
+          <WalkthroughElement stepId="scan_products_button" autoAdvance={false} style={{ marginHorizontal: 8, marginVertical: 8 }}>
+            <TouchableOpacity onPress={() => setScannerModalVisible(true)} className="w-full bg-white border border-[#E2E8F0] rounded-[16px] p-3 flex-row items-center justify-between shadow-sm">
               <View className="flex-row items-center flex-1 pr-2">
                 {isScanned ? <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
                     <Ionicons name="checkmark-circle" size={20} color="#059669" />
@@ -466,8 +498,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 </View>
               </View>
               {isScanned ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
-            </TouchableOpacity>) : (/* Capture Photos Section Row (Pickup) */
-        <TouchableOpacity onPress={openCamera} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
+            </TouchableOpacity>
+          </WalkthroughElement>
+          ) : (/* Capture Photos Section Row (Pickup) */
+          <WalkthroughElement stepId="capture_photos_button" autoAdvance={false} style={{ marginHorizontal: 8, marginVertical: 8 }}>
+            <TouchableOpacity onPress={openCamera} className="w-full bg-white border border-[#E2E8F0] rounded-[16px] p-3 flex-row items-center justify-between shadow-sm">
               <View className="flex-row items-center flex-1 pr-2">
                 {capturedPhotoUri ? <Image source={{
               uri: capturedPhotoUri
@@ -484,7 +519,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 </View>
               </View>
               {capturedPhotoUri ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
-            </TouchableOpacity>)}
+            </TouchableOpacity>
+          </WalkthroughElement>
+          )}
 
           {/* Reject Order full-width button */}
           <TouchableOpacity onPress={handleRejectOrder} className="mx-2 mt-3.5 mb-3 bg-[#FEF2F2] border border-[#FECACA] h-12 rounded-[16px] flex-row items-center justify-center">
@@ -493,13 +530,17 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </TouchableOpacity>
 
           {/* Submit Order full-width button */}
-          <TouchableOpacity onPress={handleSubmitOrder} className="mx-2 mb-2 bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center shadow-sm">
-            <Ionicons name="checkmark-circle-outline" size={16} color="white" />
-            <Text className="text-[14px] font-bold text-white ml-2">{t("su_submit_order_357")}</Text>
-          </TouchableOpacity>
+          <WalkthroughElement stepId={isDeliveryPhase ? "submit_delivery_button" : "submit_order_button"} style={{ marginHorizontal: 8, marginBottom: 8 }}>
+            <TouchableOpacity onPress={handleSubmitOrder} className="w-full bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center shadow-sm">
+              <Ionicons name="checkmark-circle-outline" size={16} color="white" />
+              <Text className="text-[14px] font-bold text-white ml-2">
+                {isDeliveryPhase ? t("confirm_drop") : t("su_submit_order_357")}
+              </Text>
+            </TouchableOpacity>
+          </WalkthroughElement>
         </View>
         
-        <View className="h-10" />
+        <View className="h-32" />
       </ScrollView>
 
       {/* Photo Preview Modal */}
@@ -522,9 +563,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
             {/* Done Button */}
             <TouchableOpacity onPress={() => {
-            setCapturedPhotoUri(tempPhotoUri);
-            setPreviewVisible(false);
-          }} className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center active:bg-[#052210] shadow-md">
+              setCapturedPhotoUri(tempPhotoUri);
+              setPreviewVisible(false);
+              if (isActive && currentStep?.id === 'capture_photos_button') {
+                nextStep();
+              }
+            }} className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center active:bg-[#052210] shadow-md">
               <Ionicons name="checkmark-circle-outline" size={16} color="white" />
               <Text className="text-[14px] font-bold text-white ml-2">{t("su_done_359")}</Text>
             </TouchableOpacity>

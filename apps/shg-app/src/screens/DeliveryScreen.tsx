@@ -19,6 +19,7 @@ import { useOrders, Order } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
 import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import WalkthroughElement from '../components/WalkthroughElement';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'Delivery'>,
@@ -129,7 +130,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
         ) : (
-          deliveryOrders.map(item => {
+          deliveryOrders.map((item, index) => {
             const routeStr = getRouteForOrder(item);
             const routeParts = routeStr.split('>');
             const source = routeParts[0]?.trim() || 'Transporter';
@@ -137,9 +138,8 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
             const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
             const info = getInfoForOrder(item);
 
-            return (
+            const card = (
               <OrderCard
-                key={item.id}
                 orderIdText={orderIdText}
                 source={source}
                 destination={destination}
@@ -150,6 +150,16 @@ const DeliveryScreen: React.FC<Props> = ({ navigation }) => {
                 onPressCard={() => handleEyeDetails(item)}
               />
             );
+
+            if (index === 0) {
+              return (
+                <WalkthroughElement key={item.id} stepId="select_delivery_order_card">
+                  {card}
+                </WalkthroughElement>
+              );
+            }
+
+            return React.cloneElement(card, { key: item.id });
           })
         )}
         <View className="h-10" />

@@ -22,6 +22,8 @@ import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { useOnboarding } from '../context/OnboardingContext';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'AcceptedOrders'>,
@@ -35,6 +37,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
   const { acceptedOrders, receiveOrder } = useOrders();
+  const { isActive, currentStep } = useOnboarding();
 
   if (!context || !user) return null;
   const { t } = context;
@@ -153,7 +156,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
         ) : (
-          pickupOrders.map(item => {
+          pickupOrders.map((item, index) => {
             const routeStr = getRouteForOrder(item);
             const routeParts = routeStr.split('>');
             const source = routeParts[0]?.trim() || 'Transporter';
@@ -161,9 +164,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
             const info = getInfoForOrder(item);
 
-            return (
+            const cardView = (
               <OrderCard
-                key={item.id}
                 orderIdText={orderIdText}
                 source={source}
                 destination={destination}
@@ -175,6 +177,15 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 onPressCard={() => handleEyeDetails(item)}
               />
             );
+
+            if (index === 0) {
+              return (
+                <WalkthroughElement key={item.id} stepId="select_accepted_order_card">
+                  {cardView}
+                </WalkthroughElement>
+              );
+            }
+            return React.cloneElement(cardView, { key: item.id });
           })
         )}
         <View className="h-10" />

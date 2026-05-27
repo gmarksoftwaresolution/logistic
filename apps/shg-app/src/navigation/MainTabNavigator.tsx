@@ -3,6 +3,9 @@ import { View, Text, Pressable, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LanguageContext } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { StepId } from '../context/OnboardingContext';
 
 import { MainTabParamList, OrdersStackParamList } from './types';
 
@@ -25,12 +28,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const context = useContext(LanguageContext);
   if (!context) return null;
   const { t } = context;
 
   return (
-    <View className="bg-white pt-3 pb-6 border-t border-gray-100 flex-row justify-around rounded-t-[36px] shadow-2xl elevation-8">
+    <View 
+      style={{ bottom: Math.max(insets.bottom, 16) }}
+      className="absolute left-5 right-5 bg-white py-3 border border-gray-100 flex-row justify-around rounded-[32px] shadow-2xl elevation-8"
+    >
       {state.routes.map((route: any, index: number) => {
         const { options } = descriptors[route.key];
         const label = options.tabBarLabel !== undefined ? options.tabBarLabel : options.title !== undefined ? options.title : route.name;
@@ -67,22 +74,25 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         }
 
         return (
-          <Pressable
+          <WalkthroughElement
             key={index}
-            onPress={onPress}
-            className="items-center justify-center flex-1 relative"
+            stepId={`${route.name.toLowerCase()}_tab` as StepId}
+            style={{ flex: 1 }}
           >
-            <IconComponent name={iconName} size={22} color={isFocused ? "#5E5CE6" : "#94A3B8"} />
-            <Text 
-              numberOfLines={1}
-              className={`text-[10px] mt-1 text-center font-bold ${isFocused ? "text-[#5E5CE6]" : "text-slate-400"}`}
+            <Pressable
+              onPress={onPress}
+              className="items-center justify-center flex-1 relative"
             >
-              {displayLabel}
-            </Text>
-            {isFocused && (
-              <View className="w-8 h-[3px] bg-[#5E5CE6] rounded-full mt-1" />
-            )}
-          </Pressable>
+              <IconComponent name={iconName} size={22} color={isFocused ? "#5E5CE6" : "#94A3B8"} />
+              <Text 
+                numberOfLines={1}
+                className={`text-[10px] mt-1 text-center font-bold ${isFocused ? "text-[#5E5CE6]" : "text-slate-400"}`}
+              >
+                {displayLabel}
+              </Text>
+              <View className={`w-8 h-[3px] bg-[#5E5CE6] rounded-full mt-1 ${isFocused ? "opacity-100" : "opacity-0"}`} />
+            </Pressable>
+          </WalkthroughElement>
         );
       })}
     </View>
