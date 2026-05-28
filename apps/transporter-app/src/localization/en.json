@@ -392,6 +392,7 @@
   },
   "profile": {
     "my_profile": "My Profile",
+    "subtitle": "View and manage your account details",
     "vehicle_details": "Vehicle Details",
     "route_details": "Route Details",
     "bank_details": "Bank Details",

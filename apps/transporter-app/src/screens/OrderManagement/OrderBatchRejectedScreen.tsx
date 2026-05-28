@@ -37,15 +37,11 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
   // Filter rejected batches
   const rejectedBatches = batches.filter((b) => b.status === 'rejected');
 
-  // Prepare display entries (Rejected batches are usually viewed as a whole)
+  // Prepare display entries (Rejected batches are viewed as a whole)
   const displayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
   rejectedBatches.forEach((b) => {
-    if (b.pickupCount > 0) {
-      displayEntries.push({ batch: b, type: 'pickup' });
-    }
-    if (b.dropCount > 0) {
-      displayEntries.push({ batch: b, type: 'drop' });
-    }
+    const type = b.flowType === 'gmu_to_shg' ? 'drop' : 'pickup';
+    displayEntries.push({ batch: b, type });
   });
 
   // Group by Area

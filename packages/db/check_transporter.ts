@@ -5,35 +5,23 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Querying all users with phone number contains 8494833669...');
+  console.log('Querying transporter user with id 6...');
   
-  const users = await prisma.user.findMany({
-    where: {
-      phoneNumber: {
-        contains: '8494833669'
-      }
-    },
+  const user = await prisma.user.findUnique({
+    where: { id: 6 },
     include: {
-      applications: true,
+      address: true,
+      drivingDetail: true,
+      bankDetails: true,
+      vehicles: true,
+      routeDetail: true,
+      milkVanDetail: true,
       transporterDetail: true,
-      shgDetail: true
+      documents: true,
     }
   });
 
-  console.log(`Found ${users.length} users:`);
-  for (const user of users) {
-    console.log(JSON.stringify({
-      id: user.id,
-      fullName: user.fullName,
-      phoneNumber: user.phoneNumber,
-      role: user.role,
-      applicationStatus: user.applicationStatus,
-      uniqueCode: user.uniqueCode,
-      applications: user.applications.map(a => ({ id: a.id, status: a.status })),
-      transporterDetail: user.transporterDetail,
-      shgDetail: user.shgDetail
-    }, null, 2));
-  }
+  console.log(JSON.stringify(user, null, 2));
 }
 
 main()

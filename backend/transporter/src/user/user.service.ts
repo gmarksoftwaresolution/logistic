@@ -7,7 +7,7 @@ import { VehicleCategory } from '../registration/dto/registration.dto';
 export class UserService {
   constructor(private prisma: PrismaService) {}
 
-  async getProfile(userId: string) {
+  async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -52,7 +52,7 @@ export class UserService {
     };
   }
 
-  async getDashboard(userId: string) {
+  async getDashboard(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {

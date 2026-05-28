@@ -346,6 +346,18 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const evaluateBatchCascade = (currentBatches: BatchOrder[], targetBatchId: string) => {
     return currentBatches.map((batch) => {
       if (batch.id === targetBatchId) {
+        const allProductsRejected = batch.products.every(p => p.status === 'rejected');
+
+        if (allProductsRejected && batch.status !== 'rejected') {
+          showToast(`Order Rejected`, 'error');
+          const firstRejectedReason = batch.products.find(p => p.status === 'rejected')?.rejectReason || '';
+          return {
+            ...batch,
+            status: 'rejected' as BatchStatus,
+            rejectReason: firstRejectedReason,
+          };
+        }
+
         // Condition for final completion (Drop leg finished)
         const allItemsDone = batch.products.every(p => p.status === 'completed' || p.status === 'rejected');
 
@@ -360,10 +372,22 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
         // Condition for mid-point completion (Pickup leg finished, moving to drop)
         if (batch.status === 'ACCEPTED_PICKUP') {
-          const allPicked = batch.products.filter(p => p.legType === 'pickup').every(p => p.status === 'picked' || p.status === 'rejected');
-          if (allPicked && batch.products.some(p => p.legType === 'pickup')) {
-            showToast(`Pickup Done`, 'success');
-            return { ...batch, status: 'PICKUP_COMPLETED' as BatchStatus };
+          const pickupProducts = batch.products.filter(p => p.legType === 'pickup');
+          const hasPickup = pickupProducts.length > 0;
+
+          if (hasPickup) {
+            const allPickupRejected = pickupProducts.every(p => p.status === 'rejected');
+            if (allPickupRejected) {
+              showToast(`Order Rejected`, 'error');
+              const firstRejectedReason = pickupProducts.find(p => p.status === 'rejected')?.rejectReason || '';
+              return { ...batch, status: 'rejected' as BatchStatus, rejectReason: firstRejectedReason };
+            }
+
+            const allPicked = pickupProducts.every(p => p.status === 'picked' || p.status === 'rejected');
+            if (allPicked) {
+              showToast(`Pickup Done`, 'success');
+              return { ...batch, status: 'PICKUP_COMPLETED' as BatchStatus };
+            }
           }
         }
       }

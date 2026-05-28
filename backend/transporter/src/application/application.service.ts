@@ -5,7 +5,7 @@ import { PrismaService } from '../common/prisma.service';
 export class ApplicationService {
   constructor(private prisma: PrismaService) {}
 
-  async getStatus(userId: string) {
+  async getStatus(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });

@@ -516,7 +516,7 @@ export class RegistrationService {
     return user;
   }
 
-  private async completeRegistration(id: string) {
+  private async completeRegistration(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: { drivingDetail: true }

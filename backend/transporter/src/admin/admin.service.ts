@@ -21,7 +21,7 @@ export class AdminService {
     });
   }
 
-  async approveRequest(requestId: string) {
+  async approveRequest(requestId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: requestId },
       include: { drivingDetail: true }
@@ -69,7 +69,7 @@ export class AdminService {
     };
   }
 
-  async rejectRequest(requestId: string, reason: string) {
+  async rejectRequest(requestId: number, reason: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: requestId },
     });
