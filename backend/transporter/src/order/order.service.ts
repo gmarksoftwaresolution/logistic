@@ -7,7 +7,7 @@ export class OrderService {
   constructor(private prisma: PrismaService) {}
 
   async getAssignedOrders(transporterId: number) {
-    return this.prisma.order.findMany({
+    return this.prisma.order_old.findMany({
       where: {
         transporterId,
         status: {
@@ -21,7 +21,7 @@ export class OrderService {
   }
 
   async updateHolderStatus(orderId: number, currentHolder: string) {
-    const order = await this.prisma.order.findUnique({
+    const order = await this.prisma.order_old.findUnique({
       where: { id: orderId },
     });
 
@@ -31,7 +31,7 @@ export class OrderService {
 
     const nextStatus = currentHolder === 'Transporter' ? OrderStatus.RECEIVED : order.status;
 
-    return this.prisma.order.update({
+    return this.prisma.order_old.update({
       where: { id: orderId },
       data: {
         currentHolder,
@@ -41,7 +41,7 @@ export class OrderService {
   }
 
   async completeOrder(orderId: number) {
-    const order = await this.prisma.order.findUnique({
+    const order = await this.prisma.order_old.findUnique({
       where: { id: orderId },
     });
 
@@ -49,7 +49,7 @@ export class OrderService {
       throw new NotFoundException(`Order with ID ${orderId} not found.`);
     }
 
-    return this.prisma.order.update({
+    return this.prisma.order_old.update({
       where: { id: orderId },
       data: {
         status: OrderStatus.COMPLETED,
