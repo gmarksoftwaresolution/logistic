@@ -29,8 +29,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
   } = useOrders();
   const routeStr = getRouteForOrder(order);
   const routeParts = routeStr.split('>');
-  const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
-  const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
+  const rawSource = routeParts[0]?.trim() || 'Transporter';
+  const rawDestination = routeParts[1]?.trim() || 'Buyer';
+  const source = translateRoutePart(rawSource, t);
+  const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
   const isDeliveryPhase = order.status === 'Received';
@@ -48,8 +50,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   };
 
   // 3. Resolve active side details
-  const activeSideName = isDeliveryPhase ? destination : source;
-  const activeType = getEntityType(activeSideName);
+  const activeRawName = isDeliveryPhase ? rawDestination : rawSource;
+  const activeType = getEntityType(activeRawName);
 
   // 4. Set details values dynamically
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
@@ -289,7 +291,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   #{formattedOrderId}
                 </Text>
                 <Text className="text-[12px] font-bold text-white/70 mt-0.5" numberOfLines={1}>
-                  {source}{t("su_transit_347")}</Text>
+                  {source} {t("su_transit_347")}
+                </Text>
               </View>
             </View>
             <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0">

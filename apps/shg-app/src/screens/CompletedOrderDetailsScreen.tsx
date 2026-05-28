@@ -25,7 +25,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   const rawDestination = routeParts[1]?.trim() || 'Buyer';
   const source = translateRoutePart(rawSource, t);
   const destination = translateRoutePart(rawDestination, t);
-  const isDelivery = source.toLowerCase() === 'transporter';
+  const isDelivery = rawSource.toLowerCase() === 'transporter';
   const formattedOrderId = getFormattedOrderId(order);
   const info = getInfoForOrder(order);
 
@@ -143,7 +143,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
                   #{formattedOrderId}
                 </Text>
                 <Text className="text-[12px] font-bold text-white/70 mt-0.5" numberOfLines={1}>
-                  {source}{t("su_transit_347")}</Text>
+                  {source} {t("su_transit_347")}
+                </Text>
               </View>
             </View>
             <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-row items-center flex-shrink-0">

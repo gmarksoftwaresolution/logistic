@@ -16,6 +16,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useOrders } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
+import { OrderDistance } from '../components/OrderDistance';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
@@ -116,9 +117,12 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                         </View>
                       </View>
                       
-                      <Text className="text-[16px] font-extrabold text-[#111827] mb-4 tracking-tight">
-                        {routeText}
-                      </Text>
+                      <View className="flex-row justify-between items-center mb-4">
+                        <Text className="flex-1 text-[16px] font-extrabold text-[#111827] tracking-tight">
+                          {routeText}
+                        </Text>
+                        <OrderDistance distance={item.distance} />
+                      </View>
                       
                       <View className="flex-row justify-between items-center">
                         <Text className="text-[13px] text-[#8792A1] font-medium">

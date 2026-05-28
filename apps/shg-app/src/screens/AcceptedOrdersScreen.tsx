@@ -170,6 +170,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
+                distance={item.distance}
                 showScanner={true}
                 onScan={() => handleQRScan(item)}
                 onPressCard={() => handleEyeDetails(item)}

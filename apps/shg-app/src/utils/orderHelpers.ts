@@ -22,10 +22,6 @@ export const getFormattedOrderId = (item: any) => {
 export const translateRoutePart = (part: string, t: any) => {
   const p = part.trim();
   if (p === 'Transporter') return t('su_transporter_346') || p;
-  if (p === 'hifi shop') return t('su_hifi_shop') || p;
-  if (p === 'home no. 23') return t('su_home_no_23') || p;
-  if (p === 'HDFC Bank, nesari') return t('su_hdfc_bank_nesari') || p;
-  if (p === 'surya bekari, nesari') return t('su_surya_bekari_nesari') || p;
   if (p === 'Buyer') return t('su_buyer') || p;
   if (p === 'Seller') return t('su_seller') || p;
   return p;

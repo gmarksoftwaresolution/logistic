@@ -17,6 +17,7 @@ import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
+import { OrderDistance } from '../components/OrderDistance';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
@@ -409,24 +410,29 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   </View>
                 </View>
 
-                {/* Right Selection Circular Checkbox */}
-                <View style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
-            borderWidth: 2,
-            borderColor: isSelected ? '#073318' : '#CBD5E1',
-            backgroundColor: isSelected ? '#073318' : 'white',
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2
-            },
-            shadowOpacity: isSelected ? 0.2 : 0,
-            shadowRadius: 3,
-            elevation: isSelected ? 3 : 0
-          }} className="items-center justify-center ml-1">
-                  {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
+                {/* Right Icon and Distance */}
+                <View className="flex-row items-center">
+                  <OrderDistance distance={item.distance} />
+                  
+                  {/* Right Selection Circular Checkbox */}
+                  <View style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              borderWidth: 2,
+              borderColor: isSelected ? '#073318' : '#CBD5E1',
+              backgroundColor: isSelected ? '#073318' : 'white',
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 0,
+                height: 2
+              },
+              shadowOpacity: isSelected ? 0.2 : 0,
+              shadowRadius: 3,
+              elevation: isSelected ? 3 : 0
+            }} className="items-center justify-center ml-1">
+                    {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
+                  </View>
                 </View>
               </TouchableOpacity>;
       })}

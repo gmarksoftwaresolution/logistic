@@ -82,17 +82,18 @@ export default function OrderHistoryScreen({ navigation }: Props) {
               const info = getInfoForOrder(item);
 
               return (
-                <OrderCard
-                  key={item.id}
-                  orderIdText={orderIdText}
-                  source={source}
-                  destination={destination}
-                  qty={item.remainingQty || 1}
-                  date={info.date}
-                  time={info.time}
-                  showScanner={false}
-                  onPressCard={() => (navigation as any).navigate('CompletedOrderDetails', { order: item })}
-                />
+                  <OrderCard
+                    key={item.id}
+                    orderIdText={orderIdText}
+                    source={source}
+                    destination={destination}
+                    qty={item.remainingQty || 1}
+                    date={info.date}
+                    time={info.time}
+                    distance={item.distance}
+                    showScanner={false}
+                    onPressCard={() => (navigation as any).navigate('CompletedOrderDetails', { order: item })}
+                  />
               );
             })}
             <View className="h-10" />

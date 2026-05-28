@@ -49,8 +49,8 @@ export default function DashboardScreen({
         shadowOpacity: 0.1,
         shadowRadius: 4
       }}>
-          <View className="justify-center">
-            <Text className="text-[18px] font-extrabold text-[#111827]">{t("su_hello_421")}{user.name || 'ABC'}</Text>
+          <View className="flex-1 justify-center pr-2">
+            <Text className="text-[18px] font-extrabold text-[#111827]" numberOfLines={1} ellipsizeMode="tail">{t("su_hello_421")}{user.name || 'ABC'}</Text>
             <Text className="text-[12px] font-semibold text-[#297C11] mt-0.5">{t("su_activity_for_today_422")}</Text>
           </View>
           

@@ -46,11 +46,11 @@ export default function AuthSelectionScreen({ navigation }: Props) {
         {/* Massive Branding Section */}
         <View className="mb-10 items-center justify-center">
           <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
-          <Text className="font-extrabold text-[36px] tracking-tight text-center">
+          <Text className="font-extrabold text-[36px] tracking-tight text-center px-4" adjustsFontSizeToFit numberOfLines={1}>
             <Text style={{ color: '#073318' }}>{t('gram')}</Text>
             <Text style={{ color: '#84B827' }}>{t('unnati')}</Text>
           </Text>
-          <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t('delivery_partner')}</Text>
+          <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1" adjustsFontSizeToFit numberOfLines={1}>{t('delivery_partner')}</Text>
         </View>
 
         {/* Big Container Card for Actions */}

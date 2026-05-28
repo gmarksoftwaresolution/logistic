@@ -21,6 +21,7 @@ export interface Order {
   remainingQty?: number;
   weight?: string | number;
   time?: string;
+  distance?: string | number;
   categoryBg?: string;
   categoryText?: string;
   scanned?: boolean;
@@ -72,7 +73,8 @@ const MOCK_INCOMING = [
     currentHolder: 'Transporter',
     remainingQty: 4,
     weight: '20',
-    time: '25 mins ago'
+    time: '25 mins ago',
+    distance: 4.2
   },
   {
     id: 'inc-2',
@@ -96,7 +98,8 @@ const MOCK_INCOMING = [
     currentHolder: 'Transporter',
     remainingQty: 1,
     weight: '12',
-    time: '45 mins ago'
+    time: '45 mins ago',
+    distance: 6.8
   },
   {
     id: 'inc-3',
@@ -120,7 +123,8 @@ const MOCK_INCOMING = [
     currentHolder: 'Seller',
     remainingQty: 3,
     weight: '35',
-    time: '1 hr ago'
+    time: '1 hr ago',
+    distance: 3.1
   },
   {
     id: 'inc-4',
@@ -144,7 +148,8 @@ const MOCK_INCOMING = [
     currentHolder: 'Seller',
     remainingQty: 1,
     weight: '20',
-    time: '1 hr ago'
+    time: '1 hr ago',
+    distance: 5.6
   }
 ];
 

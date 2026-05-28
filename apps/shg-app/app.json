@@ -37,10 +37,7 @@
       "expo-web-browser",
       "expo-localization"
     ],
-    "extra": {
-      "eas": {
-        "projectId": "62c8a8e5-7dca-4cbe-840e-785c93ac3a15"
-      }
-    }
+   
+    "owner": "mahadev8484"
   }
 }
