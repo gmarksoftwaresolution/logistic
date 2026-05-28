@@ -237,6 +237,7 @@ const ProfileScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       <ScreenHeader
         title={t('profile.my_profile')}
+        subtitle={t('profile.subtitle')}
         showBackButton={true}
         showProfile={false}
         showHelp={false}
@@ -512,36 +513,95 @@ const ProfileScreen: React.FC = () => {
             <Calendar size={scale(20)} color={Colors.primary} />,
             'route'
           )}
-          {activeSection === 'route' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.route_from')}</Text>
-                <Text style={styles.detailValue}>{routeDetails?.routeFrom || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.route_to')}</Text>
-                <Text style={styles.detailValue}>{routeDetails?.routeTo || '-'}</Text>
-              </View>
+          {activeSection === 'route' && (() => {
+            const isMilkVan = profileData.vehicleCategory === 'MILK_VAN';
+            
+            // Format working days array/string
+            const days = routeDetails?.workingDays;
+            let formattedDays = '-';
+            if (Array.isArray(days)) {
+              formattedDays = days.join(', ');
+            } else if (typeof days === 'string') {
+              try {
+                if (days.startsWith('[')) {
+                  formattedDays = JSON.parse(days).join(', ');
+                } else {
+                  formattedDays = days;
+                }
+              } catch (e) {
+                formattedDays = days;
+              }
+            }
 
-              <View style={styles.gridRow}>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.morning_shift')}</Text>
-                  <Text style={styles.detailValue}>{routeDetails?.morningShift || '-'}</Text>
-                </View>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.evening_shift')}</Text>
-                  <Text style={styles.detailValue}>{routeDetails?.eveningShift || '-'}</Text>
-                </View>
-              </View>
+            if (isMilkVan) {
+              // Format assigned villages
+              const villages = milkVanDetails?.assignedVillages;
+              let formattedVillages = '-';
+              if (Array.isArray(villages)) {
+                formattedVillages = villages.join(', ');
+              } else if (typeof villages === 'string') {
+                try {
+                  if (villages.startsWith('[')) {
+                    formattedVillages = JSON.parse(villages).join(', ');
+                  } else {
+                    formattedVillages = villages;
+                  }
+                } catch (e) {
+                  formattedVillages = villages;
+                }
+              }
 
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.days_available')}</Text>
-                <Text style={styles.detailValue}>
-                  {routeDetails?.daysAvailable ? JSON.parse(routeDetails.daysAvailable).join(', ') : '-'}
-                </Text>
-              </View>
-            </View>
-          )}
+              return (
+                <View style={styles.sectionBody}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.assigned_villages') || 'Assigned Villages'}</Text>
+                    <Text style={styles.detailValue}>{formattedVillages}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.milk_center_name') || 'Milk Center'}</Text>
+                    <Text style={styles.detailValue}>{milkVanDetails?.centerName || '-'}</Text>
+                  </View>
+
+                  <View style={styles.gridRow}>
+                    <View style={styles.gridCol}>
+                      <Text style={styles.detailLabel}>{t('signup.morning_shift') || 'Morning Shift'}</Text>
+                      <Text style={styles.detailValue}>{milkVanDetails?.morningShiftTime || '-'}</Text>
+                    </View>
+                    <View style={styles.gridCol}>
+                      <Text style={styles.detailLabel}>{t('signup.evening_shift') || 'Evening Shift'}</Text>
+                      <Text style={styles.detailValue}>{milkVanDetails?.eveningShiftTime || '-'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
+                    <Text style={styles.detailValue}>{formattedDays}</Text>
+                  </View>
+                </View>
+              );
+            } else {
+              return (
+                <View style={styles.sectionBody}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.route_from') || 'Route From'}</Text>
+                    <Text style={styles.detailValue}>{routeDetails?.pickupLocations || '-'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.route_to') || 'Route To'}</Text>
+                    <Text style={styles.detailValue}>{routeDetails?.dropLocations || '-'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.operating_area') || 'Operating Area'}</Text>
+                    <Text style={styles.detailValue}>{routeDetails?.operatingArea || '-'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
+                    <Text style={styles.detailValue}>{formattedDays}</Text>
+                  </View>
+                </View>
+              );
+            }
+          })()}
         </View>
 
         {/* Settings & App Quick actions */}

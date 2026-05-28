@@ -62,7 +62,18 @@ import {
 import { useTranslation } from 'react-i18next';
 import TimePickerPopup from '../components/TimePickerPopup';
 
-import api, { uploadFile } from '../services/api';
+import api, { uploadFile, BASE_URL } from '../services/api';
+
+const resolveImageUri = (uri: string | null | undefined): string | undefined => {
+  if (!uri) return undefined;
+  if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://') || uri.startsWith('content://')) {
+    return uri;
+  }
+  if (uri.startsWith('/')) {
+    return `${BASE_URL}${uri}`;
+  }
+  return `${BASE_URL}/${uri}`;
+};
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -541,6 +552,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       allowsEditing: type === 'profile',
       aspect: [1, 1],
       quality: 0.3,
+      base64: true,
     });
 
     if (!result.canceled) {
@@ -565,11 +577,22 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       // Preemptively upload to backend in the background immediately
       (async () => {
         try {
-          const uploadRes = await uploadFile(asset.uri);
+          const uploadRes = await uploadFile(asset.uri, asset.base64 || undefined);
           const uploadedUrl = uploadRes.data.url;
           updateFormData(fieldMap[type], uploadedUrl);
-        } catch (err) {
+        } catch (err: any) {
           console.error(`Preemptive background upload failed for ${type}:`, err);
+          if (err.response) {
+            console.error('Upload error response data:', err.response.data);
+            console.error('Upload error response status:', err.response.status);
+          }
+          if (err.message) {
+            console.error('Upload error message:', err.message);
+          }
+          if (err.config) {
+            console.error('Upload error config headers:', err.config.headers);
+            console.error('Upload error config url:', err.config.url);
+          }
         }
       })();
     }
@@ -1614,7 +1637,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             activeOpacity={0.8}
           >
             {formData.profilePhoto ? (
-              <Image source={{ uri: formData.profilePhoto }} style={styles.profilePreview} />
+              <Image source={{ uri: resolveImageUri(formData.profilePhoto) }} style={styles.profilePreview} />
             ) : (
               <View style={styles.profileUploadPlaceholder}>
                 <Camera size={scale(32)} color={Colors.primary} />
@@ -1941,7 +1964,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           >
             <View style={styles.uploadIconWrapper}>
               {formData.licensePhoto ? (
-                <Image source={{ uri: formData.licensePhoto }} style={styles.uploadPreview} />
+                <Image source={{ uri: resolveImageUri(formData.licensePhoto) }} style={styles.uploadPreview} />
               ) : (
                 <Upload size={24} color={Colors.primary} />
               )}
@@ -2555,7 +2578,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           >
             <View style={styles.uploadIconWrapper}>
               {formData.rcPhoto ? (
-                <Image source={{ uri: formData.rcPhoto }} style={styles.uploadPreview} />
+                <Image source={{ uri: resolveImageUri(formData.rcPhoto) }} style={styles.uploadPreview} />
               ) : (
                 <Upload size={24} color={Colors.primary} />
               )}
@@ -2576,7 +2599,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           >
             <View style={styles.uploadIconWrapper}>
               {formData.insurancePhoto ? (
-                <Image source={{ uri: formData.insurancePhoto }} style={styles.uploadPreview} />
+                <Image source={{ uri: resolveImageUri(formData.insurancePhoto) }} style={styles.uploadPreview} />
               ) : (
                 <Upload size={24} color={Colors.primary} />
               )}

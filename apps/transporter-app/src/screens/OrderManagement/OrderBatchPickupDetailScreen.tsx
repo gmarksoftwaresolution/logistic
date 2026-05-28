@@ -35,8 +35,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const batch = batches.find((b) => b.id === batchId);
 
-  // Dynamically resolve screen flow type: if the batch is in PICKUP_COMPLETED or DROP_COMPLETED status, it means pickup is finished and we are now on the drop-off leg!
-  const type = (initialType === 'pickup' && batch && (batch.status === 'PICKUP_COMPLETED' || batch.status === 'DROP_COMPLETED')) ? 'drop' : initialType;
+  // Preserve the original context type so the user stays in the pickup/drop flow they navigated from
+  const type = initialType;
 
   // Unified visual scroll choreography: scrolls to top for Map steps, scrolls to bottom for Capture steps
   useEffect(() => {
@@ -92,7 +92,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const displayProducts = type === 'drop'
     ? batch.products.filter(p => p.legType === 'drop' || p.status === 'picked')
     : type === 'pickup' 
-      ? batch.products.filter(p => p.legType === 'pickup')
+      ? (batch.flowType === 'gmu_to_shg' 
+          ? batch.products.filter(p => p.legType === 'drop') 
+          : batch.products.filter(p => p.legType === 'pickup'))
       : batch.products;
 
   // Contextual Contact Logic matching precisely with user requirements
@@ -339,14 +341,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                               style={styles.capturedButtonReplacementImage}
                             />
                           </View>
-                          {type === 'pickup' && (
-                            <TouchableOpacity
-                              style={[styles.actionIconButton, styles.rejectIconButton]}
-                              onPress={() => setRejectingProductId(product.id)}
-                            >
-                              <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
-                            </TouchableOpacity>
-                          )}
                         </>
                       ) : isRejected ? (
                         <View style={styles.successIconBox}>

@@ -4,6 +4,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Body,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -51,5 +52,23 @@ export class UploadController {
   )
   uploadFile(@UploadedFile() file: Express.Multer.File) {
     return this.uploadService.handleFileUpload(file);
+  }
+
+  @Post('base64')
+  @ApiOperation({ summary: 'Upload a Base64 encoded image file' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        base64: { type: 'string' },
+        filename: { type: 'string' },
+        mimeType: { type: 'string' },
+      },
+      required: ['base64', 'filename'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'File uploaded successfully' })
+  uploadBase64(@Body() body: { base64: string; filename: string; mimeType?: string }) {
+    return this.uploadService.handleBase64Upload(body.base64, body.filename, body.mimeType);
   }
 }

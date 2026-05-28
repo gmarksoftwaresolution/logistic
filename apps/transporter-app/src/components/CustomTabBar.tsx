@@ -72,7 +72,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
     <Animated.View style={[
       styles.outerContainer, 
       { 
-        paddingBottom: Math.max(insets.bottom, verticalScale(16)),
+        paddingBottom: Math.max(insets.bottom, verticalScale(16)) + verticalScale(14),
         transform: [{ translateY: tabTabBarTranslateY }]
       }
     ]}>
@@ -214,7 +214,9 @@ const styles = StyleSheet.create({
     width: BAR_WIDTH,
     backgroundColor: '#FFFFFF',
     height: TAB_BAR_HEIGHT,
-    borderRadius: scale(32),
+    borderRadius: scale(100),
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
     flexDirection: 'column',
     ...Platform.select({
       ios: {

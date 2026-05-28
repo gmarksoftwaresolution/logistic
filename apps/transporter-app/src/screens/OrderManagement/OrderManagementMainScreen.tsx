@@ -218,7 +218,16 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
               const badge = getActivityBadgeStyle(act.status);
 
               return (
-                <View key={act.id} style={styles.activityCard}>
+                <TouchableOpacity
+                  key={act.id}
+                  style={styles.activityCard}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const isDropLeg = act.status === 'Dropped' || act.status === 'Completed' || act.status === 'DROP_COMPLETED';
+                    const legType = isDropLeg ? 'drop' : 'pickup';
+                    navigation.navigate('ActivityOrderDetail', { batchId: act.orderId, type: legType });
+                  }}
+                >
                   {/* Top Row */}
                   <View style={styles.activityTopRow}>
                     <Text style={styles.orderIdText}>{act.orderId}</Text>
@@ -243,7 +252,7 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
                     <Text style={styles.activityStatText}>{act.weight}</Text>
                     <Text style={styles.timestampText}>{act.timestamp}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}

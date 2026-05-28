@@ -1,11 +1,13 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Modal, TouchableWithoutFeedback, FlatList, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Modal, TouchableWithoutFeedback, FlatList, Dimensions, Image } from 'react-native';
 import { Colors, Fonts } from '../constants/Colors';
 import { User, Settings, LogOut, ArrowLeft, ChevronLeft, HelpCircle, X, Bell, Package, MapPin, CheckCircle, Wallet, Truck, ChevronRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api, { BASE_URL } from '../services/api';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -40,6 +42,31 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { startOnboarding } = useOnboarding();
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showProfile) return;
+    const loadProfilePhoto = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('cached-profile-data');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.personalDetails?.profilePhoto) {
+            setProfilePhoto(parsed.personalDetails.profilePhoto);
+          }
+        }
+        
+        const response = await api.get('/registration/me');
+        if (response.data?.personalDetails?.profilePhoto) {
+          setProfilePhoto(response.data.personalDetails.profilePhoto);
+          await AsyncStorage.setItem('cached-profile-data', JSON.stringify(response.data));
+        }
+      } catch (err) {
+        console.log('Failed to load profile photo in ScreenHeader:', err);
+      }
+    };
+    loadProfilePhoto();
+  }, [showProfile]);
 
   const screenWidth = Dimensions.get('window').width;
 
@@ -134,8 +161,16 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
                   onPress={() => navigation.navigate('Profile')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.avatarWrapper}>
-                    <User size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <View style={[styles.avatarWrapper, { overflow: 'hidden' }]}>
+                    {profilePhoto ? (
+                      <Image
+                        source={{ uri: profilePhoto.startsWith('http') ? profilePhoto : `${BASE_URL}${profilePhoto}` }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <User size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                    )}
                   </View>
                   <View style={[styles.onlineBadge, isCompact && { width: scale(10), height: scale(10) }]} />
                 </TouchableOpacity>
@@ -370,6 +405,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   avatarWrapper: {
+    width: '100%',
+    height: '100%',
+    borderRadius: scale(20),
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
