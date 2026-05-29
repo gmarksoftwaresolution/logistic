@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 //////////////////////////////////////////////////////
@@ -18,6 +17,8 @@ enum UserRole {
   TRANSPORTER
   ADMIN
   SUPER_ADMIN
+  BUYER
+  SELLER
 }
 
 enum ApplicationStatus {
@@ -113,8 +114,18 @@ model User {
   applications        Application[]
   stepTracking        StepTracking[]
   auditLogs           AuditLog[]
-  shgOrders           Order[]             @relation("ShgOrders")
-  transporterOrders   Order[]             @relation("TransporterOrders")
+
+  // New clean architecture relations
+  buyerOrders         MasterOrder[]       @relation("BuyerOrders")
+  sellerOrderItems    MasterOrderItem[]   @relation("SellerOrderItems")
+  
+  sellerPickupOrders  PickupOrder[]       @relation("SellerPickupOrders")
+  shgPickupOrders     PickupOrder[]       @relation("ShgPickupOrders")
+  transporterPickups  PickupOrder[]       @relation("TransporterPickupOrders")
+  
+  buyerDropOrders     DropOrder[]         @relation("BuyerDropOrders")
+  shgDropOrders       DropOrder[]         @relation("ShgDropOrders")
+  transporterDrops    DropOrder[]         @relation("TransporterDropOrders")
 
   @@index([phoneNumber])
   @@index([role])
@@ -296,32 +307,6 @@ model BusinessDetail {
   updatedAt           DateTime @updatedAt
 }
 
-model Product {
-  id                    Int               @id @default(autoincrement())
-
-  userId                Int
-  user                  User              @relation(fields: [userId], references: [id])
-
-  productName           String
-  category              ProductCategory
-
-  dailyProductionQty    Float
-
-  weeklyProduction      Float?
-  monthlyProduction     Float?
-
-  unit                  String
-
-  price                 Float?
-
-  imageUrl              String?
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@index([userId])
-}
-
 //////////////////////////////////////////////////////
 // TRANSPORTER MODULE
 //////////////////////////////////////////////////////
@@ -440,65 +425,194 @@ model OTPVerification {
 }
 
 //////////////////////////////////////////////////////
-// ORDER MODULE
+// NEW CLEAN ARCHITECTURE MODELS
 //////////////////////////////////////////////////////
 
-enum OrderStatus {
-  ASSIGNED
-  ACCEPTED
-  REJECTED
-  RECEIVED
-  COMPLETED
+model Product {
+  id          Int      @id @default(autoincrement())
+  sellerId    Int      @map("seller_id")
+  seller      User     @relation(fields: [sellerId], references: [id])
+  name        String
+  category    String?
+  price       Float
+  stock       Int      @default(0)
+  weight      Float?
+  image       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  masterOrderItems   MasterOrderItem[]
+  pickupOrderItems   PickupOrderItem[]
+  warehouseInventory WarehouseInventory[]
+  dropOrderItems     DropOrderItem[]
+
+  @@index([sellerId])
+  @@index([category])
+  @@map("products")
 }
 
-model Order {
-  id                Int         @id @default(autoincrement())
-  orderId           String      @unique
-  parcelName        String
-  category          String
-  mobile            String
-  amount            Float
-  payment           String
-  address           String
-  deliveryDay       String?
-  status            OrderStatus @default(ASSIGNED)
-  image             String?
+model MasterOrder {
+  id            Int               @id @default(autoincrement())
+  orderNumber   String            @unique @map("order_number")
+  buyerId       Int               @map("buyer_id")
+  buyer         User              @relation("BuyerOrders", fields: [buyerId], references: [id])
+  totalAmount   Float             @map("total_amount")
+  paymentMethod String?           @map("payment_method")
+  paymentStatus String            @default("PENDING") @map("payment_status")
+  status        String            @default("CREATED")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at")
 
-  // Transporter Info
-  transporterId     Int?
-  transporter       User?       @relation("TransporterOrders", fields: [transporterId], references: [id], onDelete: Cascade)
-  transporterName   String?
-  transporterMobile String?
-  pickupTime        String?
-  vehicleNumber     String?
+  items         MasterOrderItem[]
+  pickupOrders  PickupOrder[]
+  dropOrders    DropOrder[]
 
-  // SHG Info
-  shgId             Int?
-  shg               User?       @relation("ShgOrders", fields: [shgId], references: [id], onDelete: Cascade)
+  @@index([buyerId])
+  @@index([status])
+  @@map("master_orders")
+}
 
-  currentHolder     String?     @default("Seller")
-  remainingQty      Int         @default(1)
-  weight            Float?
-  time              String?
+model MasterOrderItem {
+  id            Int         @id @default(autoincrement())
+  masterOrderId Int         @map("master_order_id")
+  masterOrder   MasterOrder @relation(fields: [masterOrderId], references: [id])
+  productId     Int         @map("product_id")
+  product       Product     @relation(fields: [productId], references: [id])
+  sellerId      Int         @map("seller_id")
+  seller        User        @relation("SellerOrderItems", fields: [sellerId], references: [id])
+  quantity      Int
+  price         Float
 
-  // Rejection details
-  rejectReason      String?
-  rejectedAt        DateTime?
-  rejectedBy        String?
+  @@index([masterOrderId])
+  @@index([productId])
+  @@index([sellerId])
+  @@map("master_order_items")
+}
 
-  // Reschedule details
-  isRescheduled     Boolean     @default(false)
-  rescheduleDate    String?
-  rescheduleTime    String?
-  rescheduleReason  String?
+model PickupOrder {
+  id                 Int               @id @default(autoincrement())
+  pickupOrderNumber  String?           @unique @map("pickup_order_number")
+  masterOrderId      Int               @map("master_order_id")
+  masterOrder        MasterOrder       @relation(fields: [masterOrderId], references: [id])
+  sellerId           Int               @map("seller_id")
+  seller             User              @relation("SellerPickupOrders", fields: [sellerId], references: [id])
+  shgId              Int?              @map("shg_id")
+  shg                User?             @relation("ShgPickupOrders", fields: [shgId], references: [id])
+  transporterId      Int?              @map("transporter_id")
+  transporter        User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
+  status             String            @default("PENDING")
+  pickupTime         DateTime?         @map("pickup_time")
+  createdAt          DateTime          @default(now()) @map("created_at")
 
-  // Timestamps
-  acceptedAt        DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  items              PickupOrderItem[]
+  tracking           PickupTracking[]
 
+  @@index([masterOrderId])
+  @@index([sellerId])
   @@index([shgId])
   @@index([transporterId])
   @@index([status])
+  @@map("pickup_orders")
 }
+
+model PickupOrderItem {
+  id            Int         @id @default(autoincrement())
+  pickupOrderId Int         @map("pickup_order_id")
+  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
+  productId     Int         @map("product_id")
+  product       Product     @relation(fields: [productId], references: [id])
+  quantity      Int
+
+  @@index([pickupOrderId])
+  @@index([productId])
+  @@map("pickup_order_items")
+}
+
+model Warehouse {
+  id        Int                  @id @default(autoincrement())
+  name      String?
+  address   String?
+  inventory WarehouseInventory[]
+
+  @@map("warehouses")
+}
+
+model WarehouseInventory {
+  id          Int       @id @default(autoincrement())
+  warehouseId Int       @map("warehouse_id")
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  productId   Int       @map("product_id")
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int?
+  qcStatus    String?   @map("qc_status")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([warehouseId, productId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@map("warehouse_inventory")
+}
+
+model DropOrder {
+  id              Int             @id @default(autoincrement())
+  dropOrderNumber String?         @unique @map("drop_order_number")
+  masterOrderId   Int             @map("master_order_id")
+  masterOrder     MasterOrder     @relation(fields: [masterOrderId], references: [id])
+  buyerId         Int             @map("buyer_id")
+  buyer           User            @relation("BuyerDropOrders", fields: [buyerId], references: [id])
+  shgId           Int?            @map("shg_id")
+  shg             User?           @relation("ShgDropOrders", fields: [shgId], references: [id])
+  transporterId   Int?            @map("transporter_id")
+  transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
+  status          String          @default("PENDING")
+  deliveryAddress String?         @map("delivery_address")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  items           DropOrderItem[]
+  tracking        DropTracking[]
+
+  @@index([masterOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("drop_orders")
+}
+
+model DropOrderItem {
+  id          Int       @id @default(autoincrement())
+  dropOrderId Int       @map("drop_order_id")
+  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
+  productId   Int       @map("product_id")
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int?
+
+  @@index([dropOrderId])
+  @@index([productId])
+  @@map("drop_order_items")
+}
+
+model PickupTracking {
+  id            Int         @id @default(autoincrement())
+  pickupOrderId Int         @map("pickup_order_id")
+  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
+  status        String?
+  remarks       String?
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  @@index([pickupOrderId])
+  @@map("pickup_tracking")
+}
+
+model DropTracking {
+  id          Int       @id @default(autoincrement())
+  dropOrderId Int       @map("drop_order_id")
+  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
+  status      String?
+  remarks     String?
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([dropOrderId])
+  @@map("drop_tracking")
+}
+
+

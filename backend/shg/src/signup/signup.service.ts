@@ -231,18 +231,15 @@ export class SignupService {
     this.validateStep(user.currentStep, 2);
 
     // Delete existing products for this user first
-    await this.prisma.product.deleteMany({ where: { userId } });
+    await this.prisma.product.deleteMany({ where: { sellerId: userId } });
 
     if (dto.producesProduct && dto.products && dto.products.length > 0) {
       await this.prisma.product.createMany({
         data: dto.products.map((p) => ({
-          userId,
-          productName: p.productName,
+          sellerId: userId,
+          name: p.productName,
           category: p.category,
-          dailyProductionQty: p.dailyProductionQty,
-          unit: p.unit,
-          weeklyProduction: p.weeklyProduction || null,
-          price: p.price || null,
+          price: p.price || 0,
         })),
       });
     }

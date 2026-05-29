@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
 
@@ -10,26 +10,39 @@ import { OrderService } from './order.service';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  @Get('assigned')
-  @ApiOperation({ summary: 'Get all active orders assigned to the logged-in transporter' })
-  async getAssignedOrders(@Request() req: any) {
-    return this.orderService.getAssignedOrders(req.user.id);
+  @Get('pickup/assigned')
+  @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in transporter' })
+  async getAssignedPickups(@Request() req: any) {
+    return this.orderService.getAssignedPickups(req.user.id);
   }
 
-  @Post(':orderId/update-holder')
-  @ApiOperation({ summary: 'Update the physical custody / current holder of an order' })
-  @ApiResponse({ status: 200, description: 'Custody status updated successfully.' })
-  async updateHolderStatus(
-    @Param('orderId', ParseIntPipe) orderId: number,
-    @Body('currentHolder') currentHolder: string,
-  ) {
-    return this.orderService.updateHolderStatus(orderId, currentHolder);
+  @Post('pickup/:id/accept')
+  @ApiOperation({ summary: 'Accept a pickup order' })
+  async acceptPickup(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.orderService.acceptPickup(id, req.user.id);
   }
 
-  @Post(':orderId/complete')
-  @ApiOperation({ summary: 'Mark an order as fully completed and delivered to the buyer' })
-  @ApiResponse({ status: 200, description: 'Order completed successfully.' })
-  async completeOrder(@Param('orderId', ParseIntPipe) orderId: number) {
-    return this.orderService.completeOrder(orderId);
+  @Post('pickup/:id/complete')
+  @ApiOperation({ summary: 'Mark a pickup order as complete' })
+  async completePickup(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.orderService.completePickup(id, req.user.id);
+  }
+
+  @Get('drop/assigned')
+  @ApiOperation({ summary: 'Get all active drop-off delivery assignments for the transporter' })
+  async getAssignedDrops(@Request() req: any) {
+    return this.orderService.getAssignedDrops(req.user.id);
+  }
+
+  @Post('drop/:id/accept')
+  @ApiOperation({ summary: 'Accept a delivery order' })
+  async acceptDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.orderService.acceptDrop(id, req.user.id);
+  }
+
+  @Post('drop/:id/complete')
+  @ApiOperation({ summary: 'Mark a delivery order as complete' })
+  async completeDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.orderService.completeDrop(id, req.user.id);
   }
 }

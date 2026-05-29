@@ -12,7 +12,9 @@
     "shg-app:start": "npm start --workspace=@logistic/shg-app",
     "transporter-app:start": "npm start --workspace=@logistic/transporter-app",
     "shg-backend:dev": "npm run start:dev --workspace=@logistic/shg-backend",
-    "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend"
+    "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend",
+    "db:generate": "npm run prisma:generate --workspace=@logistic/db",
+    "db:push": "npm run prisma:migrate --workspace=@logistic/db"
   },
   "dependencies": {
     "class-transformer": "^0.5.1",
