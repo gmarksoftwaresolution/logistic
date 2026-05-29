@@ -1,0 +1,225 @@
+# Set your JWT access tokens here
+@transporterToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+@shgToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+### ==========================================
+### 1. Transporter Order Module (Port 3001)
+### ==========================================
+@transporterHost = http://localhost:3001
+
+# @name getTransporterActivePickups
+# Get all active pickup assignments for the logged-in transporter
+# Expected Response: 200 OK
+# Body: Array of assigned Pickup Orders
+GET {{transporterHost}}/api/orders/pickup/assigned
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# [
+#   {
+#     "id": 60,
+#     "pickupOrderNumber": "PKP-ORD-248948-854",
+#     "masterOrderId": 119,
+#     "sellerId": 21,
+#     "shgId": 9,
+#     "transporterId": 50,
+#     "status": "PENDING",
+#     "pickupTime": null,
+#     "createdAt": "2026-05-29T06:30:49.940Z",
+#     "seller": {
+#       "fullName": "Bhhh",
+#       "phoneNumber": "8888888888",
+#       "address": null
+#     },
+#     "items": [
+#       {
+#         "id": 60,
+#         "pickupOrderId": 60,
+#         "productId": 7,
+#         "quantity": 2,
+#         "product": {
+#           "id": 7,
+#           "name": "Tasty Homemade Papad",
+#           "price": 120,
+#           "weight": 1.5
+#         }
+#       }
+#     ]
+#   }
+# ]
+
+###
+
+# @name acceptTransporterPickup
+# Accept a pickup order
+# Expected Response: 201 Created
+# Body: Updated Pickup Order Object
+POST {{transporterHost}}/api/orders/pickup/60/accept
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# {
+#   "id": 60,
+#   "pickupOrderNumber": "PKP-ORD-248948-854",
+#   "masterOrderId": 119,
+#   "sellerId": 21,
+#   "shgId": 9,
+#   "transporterId": 50,
+#   "status": "ACCEPTED",
+#   "pickupTime": null,
+#   "createdAt": "2026-05-29T06:30:49.940Z"
+# }
+
+###
+
+# @name completeTransporterPickup
+# Mark a pickup order as complete
+# Expected Response: 201 Created
+# Body: Updated Pickup Order Object
+POST {{transporterHost}}/api/orders/pickup/60/complete
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# {
+#   "id": 60,
+#   "pickupOrderNumber": "PKP-ORD-248948-854",
+#   "masterOrderId": 119,
+#   "sellerId": 21,
+#   "shgId": 9,
+#   "transporterId": 50,
+#   "status": "COMPLETED",
+#   "pickupTime": "2026-05-29T12:06:00.000Z",
+#   "createdAt": "2026-05-29T06:30:49.940Z"
+# }
+
+###
+
+# @name getTransporterActiveDrops
+# Get all active drop-off delivery assignments for the transporter
+# Expected Response: 200 OK
+# Body: Array of assigned Drop Orders
+GET {{transporterHost}}/api/orders/drop/assigned
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# [
+#   {
+#     "id": 60,
+#     "dropOrderNumber": "DRP-ORD-250859-645",
+#     "masterOrderId": 120,
+#     "buyerId": 53,
+#     "shgId": 9,
+#     "transporterId": 50,
+#     "status": "PENDING",
+#     "deliveryAddress": "Nesari Stand, Gadhinglaj",
+#     "createdAt": "2026-05-29T06:30:50.012Z",
+#     "buyer": {
+#       "fullName": "Raju Patil (Buyer)",
+#       "phoneNumber": "9999999991",
+#       "address": null
+#     },
+#     "items": [
+#       {
+#         "id": 60,
+#         "productId": 7,
+#         "quantity": 3
+#       }
+#     ]
+#   }
+# ]
+
+###
+
+# @name acceptTransporterDrop
+# Accept a delivery/drop order
+# Expected Response: 201 Created
+# Body: Updated Drop Order Object
+POST {{transporterHost}}/api/orders/drop/60/accept
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# {
+#   "id": 60,
+#   "dropOrderNumber": "DRP-ORD-250859-645",
+#   "masterOrderId": 120,
+#   "buyerId": 53,
+#   "shgId": 9,
+#   "transporterId": 50,
+#   "status": "ACCEPTED",
+#   "deliveryAddress": "Nesari Stand, Gadhinglaj",
+#   "createdAt": "2026-05-29T06:30:50.012Z"
+# }
+
+###
+
+# @name completeTransporterDrop
+# Mark a delivery/drop order as complete
+# Expected Response: 201 Created
+# Body: Updated Drop Order Object
+POST {{transporterHost}}/api/orders/drop/60/complete
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body Example:
+# {
+#   "id": 60,
+#   "dropOrderNumber": "DRP-ORD-250859-645",
+#   "masterOrderId": 120,
+#   "buyerId": 53,
+#   "shgId": 9,
+#   "transporterId": 50,
+#   "status": "COMPLETED",
+#   "deliveryAddress": "Nesari Stand, Gadhinglaj",
+#   "createdAt": "2026-05-29T06:30:50.012Z"
+# }
+
+
+### ==========================================
+### 2. SHG Order Module (Port 3000)
+### ==========================================
+@shgHost = http://localhost:3000
+
+# @name getShgActivePickups
+# Get all active pickup assignments for the logged-in SHG
+# Expected Response: 200 OK
+GET {{shgHost}}/orders/pickup/assigned
+Authorization: Bearer {{shgToken}}
+
+###
+
+# @name acceptShgPickup
+# Accept a pickup order
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/pickup/60/accept
+Authorization: Bearer {{shgToken}}
+
+###
+
+# @name completeShgPickup
+# Mark a pickup order as complete
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/pickup/60/complete
+Authorization: Bearer {{shgToken}}
+
+###
+
+# @name getShgActiveDrops
+# Get all active drop-off delivery assignments for the SHG
+# Expected Response: 200 OK
+GET {{shgHost}}/orders/drop/assigned
+Authorization: Bearer {{shgToken}}
+
+###
+
+# @name acceptShgDrop
+# Accept a delivery/drop order
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/drop/60/accept
+Authorization: Bearer {{shgToken}}
+
+###
+
+# @name completeShgDrop
+# Mark a delivery/drop order as complete
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/drop/60/complete
+Authorization: Bearer {{shgToken}}
