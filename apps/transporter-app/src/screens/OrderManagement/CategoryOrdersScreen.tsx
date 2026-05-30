@@ -29,7 +29,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
   const handleAcceptSingle = (batchId: string) => {
     acceptBatch(batchId);
-    setShowSuccessModal(true);
+    navigation.navigate('OrderBatchPickupDetail', { batchId: batchId, type: 'pickup' });
   };
 
   const handleAcceptBulk = (ids: string[]) => {
@@ -37,18 +37,13 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setShowSuccessModal(true);
   };
 
-  // Track accordion expansion states per area. Defaulting all to true for immediate dispatch visibility.
-  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({
-    nesari: true,
-    wagrale: true,
-    Mahagaon: true,
-    'Gadhinglaj Hub': true,
-  });
+  // Track accordion expansion states per area. Collapsed by default.
+  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({});
 
   const toggleAreaExpand = (areaName: string) => {
     setExpandedAreas((prev) => ({
       ...prev,
-      [areaName]: prev[areaName] === undefined ? false : !prev[areaName],
+      [areaName]: !prev[areaName],
     }));
   };
 
@@ -139,7 +134,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         ) : (
           areas.map((areaName) => {
             const areaEntries = groupedEntries[areaName];
-            const isExpanded = expandedAreas[areaName] !== false;
+            const isExpanded = expandedAreas[areaName] === true;
 
             const pickupEntries = areaEntries.filter(e => e.type === 'pickup');
             const dropEntries = areaEntries.filter(e => e.type === 'drop');
@@ -209,7 +204,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                         style={styles.modernAcceptBtn} 
                                         onPress={() => {
                                           acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type });
+                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
@@ -259,7 +254,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                         style={styles.modernAcceptBtn} 
                                         onPress={() => {
                                           acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type });
+                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>

@@ -12,6 +12,7 @@ export interface Product {
   status: 'Pending' | 'Completed';
   type: 'Pickup' | 'Drop';
   proofImage?: string;
+  proofImageTime?: number;
 }
 
 export interface Stop {

@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -30,6 +31,14 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   const scrollRef = useRef<ScrollView>(null);
 
@@ -77,6 +86,20 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     }
   };
 
+  const handleNavigate = () => {
+    const queryAddress = [
+      displayContact.address,
+      (displayContact as any).village,
+      (displayContact as any).pincode,
+      'Maharashtra',
+      'India'
+    ].filter(Boolean).join(', ');
+
+    Linking.openURL(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryAddress)}`
+    );
+  };
+
   const reasonChips = type === 'pickup' 
     ? [
         t('orders.reason_item_broken', { defaultValue: 'Package item broken' }),
@@ -90,7 +113,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       ];
 
   const displayProducts = type === 'drop'
-    ? batch.products.filter(p => p.legType === 'drop' || p.status === 'picked')
+    ? batch.products.filter(p => p.legType === 'drop' || p.status === 'picked' || p.status === 'completed')
     : type === 'pickup' 
       ? (batch.flowType === 'gmu_to_shg' 
           ? batch.products.filter(p => p.legType === 'drop') 
@@ -193,18 +216,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           
           <View style={styles.boxContentPadding}>
             <View style={styles.contactGrid}>
-              {isSHG && (
-                <View style={styles.contactGridItem}>
-                  <View style={styles.contactIconCircle}>
-                    <User size={scale(14)} color={Colors.primary} />
-                  </View>
-                  <View style={styles.contactDetailCol}>
-                    <Text style={styles.contactItemLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                    <Text style={styles.contactItemValue} numberOfLines={1}>{batch.shgName}</Text>
-                  </View>
-                </View>
-              )}
-
               <View style={styles.contactGridItem}>
                 <View style={styles.contactIconCircle}>
                   <User size={scale(14)} color={Colors.primary} />
@@ -225,14 +236,39 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 </View>
               </View>
 
-              <View style={[styles.contactGridItem, { width: '100%' }]}>
+              <View style={styles.contactGridItem}>
                 <View style={styles.contactIconCircle}>
                   <MapPin size={scale(14)} color={Colors.primary} />
                 </View>
                 <View style={styles.contactDetailCol}>
-                  <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                  <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                  <Text style={styles.contactItemLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
+                  <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).village || ''}</Text>
                 </View>
+              </View>
+
+              <View style={styles.contactGridItem}>
+                <View style={styles.contactIconCircle}>
+                  <MapPin size={scale(14)} color={Colors.primary} />
+                </View>
+                <View style={styles.contactDetailCol}>
+                  <Text style={styles.contactItemLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
+                  <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).pincode || ''}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.contactGridItem, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: scale(10) }}>
+                  <View style={styles.contactIconCircle}>
+                    <MapPin size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactDetailCol}>
+                    <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
+                    <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
+                  <Text style={styles.addressNavigateBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -341,6 +377,25 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                               style={styles.capturedButtonReplacementImage}
                             />
                           </View>
+                          {(() => {
+                            const capturedTime = type === 'pickup' ? product.pickupPhotoTime : product.dropPhotoTime;
+                            const showRetake = capturedTime ? (currentTime - capturedTime < 30000) : false;
+                            return showRetake ? (
+                              <TouchableOpacity
+                                style={styles.retakeIconButton}
+                                onPress={() =>
+                                  navigation.navigate('CameraCapture', {
+                                    batchId: batch.id,
+                                    productId: product.id,
+                                    context: type === 'pickup' ? 'pickup' : 'drop',
+                                    productName: product.name,
+                                  })
+                                }
+                              >
+                                <Text style={styles.btnTextRetake}>{t('orders.retake', { defaultValue: 'Retake' })}</Text>
+                              </TouchableOpacity>
+                            ) : null;
+                          })()}
                         </>
                       ) : isRejected ? (
                         <View style={styles.successIconBox}>
@@ -613,6 +668,38 @@ const styles = StyleSheet.create({
   confirmRejectBtn: { backgroundColor: '#EF4444', height: verticalScale(54), borderRadius: scale(16), alignItems: 'center', justifyContent: 'center' },
   btnDisabled: { backgroundColor: '#CBD5E1' },
   confirmRejectText: { fontFamily: Fonts.bold, fontSize: moderateScale(15), color: '#FFFFFF' },
+  addressNavigateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(6),
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(10),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  addressNavigateBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(12),
+    color: Colors.primary,
+  },
+  retakeIconButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.2,
+    borderColor: '#BFDBFE',
+    paddingVertical: verticalScale(3),
+    paddingHorizontal: scale(6),
+    borderRadius: scale(6),
+    minWidth: scale(56),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnTextRetake: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(9),
+    color: '#2563EB',
+  },
 });
 
 export default OrderBatchPickupDetailScreen;

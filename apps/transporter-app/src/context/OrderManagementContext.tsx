@@ -31,6 +31,8 @@ export interface ProductItem {
   status: ProductStatus;
   pickupPhoto?: string;
   dropPhoto?: string;
+  pickupPhotoTime?: number;
+  dropPhotoTime?: number;
   rejectReason?: string;
 }
 
@@ -50,6 +52,10 @@ export interface BatchOrder {
     name: string;
     phone: string;
     address: string;
+    village: string;
+    pincode: string;
+    latitude?: number;
+    longitude?: number;
   };
   products: ProductItem[];
   rejectReason?: string;
@@ -103,6 +109,10 @@ export const HUB_CONTACT = {
   name: 'Prasad Patil (Hub Manager)',
   phone: '+91 9123456789',
   address: 'Gadhinglaj Central GMU Hub, Near MIDC Area',
+  village: 'Gadhinglaj',
+  pincode: '416502',
+  latitude: 16.2238,
+  longitude: 74.3498,
 };
 
 const INITIAL_BATCHES: BatchOrder[] = [
@@ -119,7 +129,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '5 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Radha Patil', phone: '+91 9422011223', address: 'Main Bazar Link, Nesari' },
+    shgContact: { name: 'Radha Patil', phone: '+91 9422011223', address: 'Main Bazar Link, Nesari', village: 'Nesari', pincode: '416504', latitude: 16.0398, longitude: 74.4231 },
     products: [{ id: 'pn01', name: 'Turmeric Powder', qty: 1, weight: '5 kg', legType: 'pickup', status: 'pending' }],
     timestamp: '08:30 AM',
   },
@@ -135,7 +145,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '2 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Sarika Patil', phone: '+91 9890123456', address: 'Nesari Main Road' },
+    shgContact: { name: 'Sarika Patil', phone: '+91 9890123456', address: 'Nesari Main Road', village: 'Nesari', pincode: '416504', latitude: 16.0402, longitude: 74.4215 },
     products: [{ id: 'pn02', name: 'Packaging Bags', qty: 1, weight: '2 kg', legType: 'drop', status: 'pending' }],
     timestamp: '08:45 AM',
   },
@@ -152,7 +162,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '8 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Sarika Patil', phone: '+91 9657123488', address: 'Zilla Parishad School Edge' },
+    shgContact: { name: 'Sarika Patil', phone: '+91 9657123488', address: 'Zilla Parishad School Edge', village: 'Wagharale', pincode: '416502', latitude: 16.1956, longitude: 74.3120 },
     products: [{ id: 'pw01', name: 'Cashew Boxes', qty: 1, weight: '8 kg', legType: 'pickup', status: 'pending' }],
     timestamp: '09:15 AM',
   },
@@ -168,7 +178,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '3 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Radha Patil', phone: '+91 9011223344', address: 'Wagharale Hill Side' },
+    shgContact: { name: 'Radha Patil', phone: '+91 9011223344', address: 'Wagharale Hill Side', village: 'Wagharale', pincode: '416502', latitude: 16.1962, longitude: 74.3105 },
     products: [{ id: 'pw02', name: 'Labels & Tape', qty: 1, weight: '3 kg', legType: 'drop', status: 'pending' }],
     timestamp: '09:30 AM',
   },
@@ -185,7 +195,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '10 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Sunita Jadhav', phone: '+91 9890123456', address: 'Gram Panchayat Road' },
+    shgContact: { name: 'Sunita Jadhav', phone: '+91 9890123456', address: 'Gram Panchayat Road', village: 'Mahagaon', pincode: '416503', latitude: 16.1412, longitude: 74.4568 },
     products: [{ id: 'pm01', name: 'Jaggery Blocks', qty: 1, weight: '10 kg', legType: 'pickup', status: 'pending' }],
     timestamp: '10:00 AM',
   },
@@ -201,7 +211,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '4 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Sunita Jadhav', phone: '+91 9552123456', address: 'Highway Link' },
+    shgContact: { name: 'Sunita Jadhav', phone: '+91 9552123456', address: 'Highway Link', village: 'Mahagaon', pincode: '416503', latitude: 16.1420, longitude: 74.4550 },
     products: [{ id: 'pm02', name: 'Empty Bottles', qty: 1, weight: '4 kg', legType: 'drop', status: 'pending' }],
     timestamp: '10:15 AM',
   },
@@ -218,7 +228,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '12 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Laxmi Patil', phone: '+91 9923112233', address: 'Halkarni MIDC Area' },
+    shgContact: { name: 'Laxmi Patil', phone: '+91 9923112233', address: 'Halkarni MIDC Area', village: 'Halkarni', pincode: '416506', latitude: 16.1154, longitude: 74.4123 },
     products: [{ id: 'ph01', name: 'Papad Packs', qty: 1, weight: '12 kg', legType: 'pickup', status: 'pending' }],
     timestamp: '11:00 AM',
   },
@@ -234,7 +244,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '5 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Laxmi Patil', phone: '+91 9923112233', address: 'Halkarni MIDC Area' },
+    shgContact: { name: 'Laxmi Patil', phone: '+91 9923112233', address: 'Halkarni MIDC Area', village: 'Halkarni', pincode: '416506', latitude: 16.1154, longitude: 74.4123 },
     products: [{ id: 'ph02', name: 'Spices Mix', qty: 1, weight: '5 kg', legType: 'drop', status: 'pending' }],
     timestamp: '11:15 AM',
   },
@@ -251,7 +261,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '15 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Laxmi Patil', phone: '+91 9923123456', address: 'APMC Godown Yard' },
+    shgContact: { name: 'Laxmi Patil', phone: '+91 9923123456', address: 'APMC Godown Yard', village: 'Gadhinglaj', pincode: '416502', latitude: 16.2215, longitude: 74.3512 },
     products: [{ id: 'pg01', name: 'Heavy Crates', qty: 1, weight: '15 kg', legType: 'pickup', status: 'pending' }],
     timestamp: '11:45 AM',
   },
@@ -267,7 +277,7 @@ const INITIAL_BATCHES: BatchOrder[] = [
     totalQty: 1,
     totalWeight: '10 kg',
     status: 'NEW_ORDER',
-    shgContact: { name: 'Sunita Jadhav', phone: '+91 9011998877', address: 'Market Line Circle' },
+    shgContact: { name: 'Sunita Jadhav', phone: '+91 9011998877', address: 'Market Line Circle', village: 'Gadhinglaj', pincode: '416502', latitude: 16.2201, longitude: 74.3485 },
     products: [{ id: 'pg02', name: 'Raw Materials', qty: 1, weight: '10 kg', legType: 'drop', status: 'pending' }],
     timestamp: '12:00 PM',
   },
@@ -372,7 +382,9 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
         // Condition for mid-point completion (Pickup leg finished, moving to drop)
         if (batch.status === 'ACCEPTED_PICKUP') {
-          const pickupProducts = batch.products.filter(p => p.legType === 'pickup');
+          const pickupProducts = batch.flowType === 'gmu_to_shg'
+            ? batch.products.filter(p => p.legType === 'drop')
+            : batch.products.filter(p => p.legType === 'pickup');
           const hasPickup = pickupProducts.length > 0;
 
           if (hasPickup) {
@@ -440,7 +452,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               return { 
                 ...p, 
                 status: (context === 'pickup' ? 'picked' : 'completed') as any, 
-                [context === 'pickup' ? 'pickupPhoto' : 'dropPhoto']: photoUri 
+                [context === 'pickup' ? 'pickupPhoto' : 'dropPhoto']: photoUri,
+                [context === 'pickup' ? 'pickupPhotoTime' : 'dropPhotoTime']: Date.now()
               };
             }
             return p;

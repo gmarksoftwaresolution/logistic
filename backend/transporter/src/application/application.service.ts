@@ -17,7 +17,7 @@ export class ApplicationService {
     return {
       applicationStatus: user.applicationStatus,
       transporterId: user.uniqueCode || 'PENDING',
-      requestId: user.id, // Replaced integer requestId with UUID
+      requestId: user.id,
       rejectionReason: user.rejectionReason,
       currentStep: `STEP_${user.currentStep}`,
     };

@@ -21,8 +21,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
 
   // Filter based on new lifecycle statuses
   const pickupCompleted = batches.filter((b) => 
-    (b.status === 'PICKUP_COMPLETED' || b.status === 'DROP_COMPLETED') && 
-    (b.flowType === 'shg_to_gmu' || b.products.some(p => p.legType === 'pickup'))
+    b.status === 'PICKUP_COMPLETED' || b.status === 'DROP_COMPLETED'
   );
   const dropCompleted = batches.filter((b) => b.status === 'DROP_COMPLETED');
 
@@ -86,7 +85,9 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               
               <View style={styles.routeRow}>
                 <Text style={styles.routeText} numberOfLines={1}>
-                  {`${batch.pickupPointName} > Gadhinglaj Hub`}
+                  {batch.flowType === 'gmu_to_shg' 
+                    ? `Gadhinglaj Hub > ${batch.dropPointName}`
+                    : `${batch.pickupPointName} > Gadhinglaj Hub`}
                 </Text>
               </View>
 
@@ -140,7 +141,9 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               
               <View style={styles.routeRow}>
                 <Text style={styles.routeText} numberOfLines={1}>
-                  {`Gadhinglaj Hub > ${batch.dropPointName}`}
+                  {batch.flowType === 'shg_to_gmu'
+                    ? `${batch.pickupPointName} > Gadhinglaj Hub`
+                    : `Gadhinglaj Hub > ${batch.dropPointName}`}
                 </Text>
               </View>
 

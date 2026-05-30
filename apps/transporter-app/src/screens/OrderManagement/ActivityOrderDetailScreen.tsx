@@ -259,9 +259,8 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
         {/* Sticky Action Redirection Button */}
         {(() => {
-          const hasPickupProducts = batch.products.some(p => p.legType === 'pickup');
-          const isPickupLeg = hasPickupProducts && (batch.status === 'NEW_ORDER' || batch.status === 'ACCEPTED_PICKUP');
-          const isDropLeg = !hasPickupProducts || batch.status === 'PICKUP_COMPLETED';
+          const isPickupLeg = batch.status === 'NEW_ORDER' || batch.status === 'ACCEPTED_PICKUP';
+          const isDropLeg = batch.status === 'PICKUP_COMPLETED';
           const isActionable = batch.status !== 'DROP_COMPLETED' && batch.status !== 'rejected';
 
           if (!isActionable) return null;

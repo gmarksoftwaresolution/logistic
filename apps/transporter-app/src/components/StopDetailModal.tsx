@@ -17,11 +17,13 @@ interface StopDetailModalProps {
 const ProductItem = React.memo(({ 
   product, 
   onAction, 
-  isProcessing 
+  isProcessing,
+  currentTime
 }: { 
   product: Product; 
   onAction: (p: Product) => void; 
-  isProcessing: boolean 
+  isProcessing: boolean;
+  currentTime: number;
 }) => {
   const isDone = product.status === 'Completed';
 
@@ -39,16 +41,30 @@ const ProductItem = React.memo(({
           {product.expectedQty} / <Text style={{ color: isDone ? '#10B981' : Colors.textPrimary }}>{product.completedQty}</Text>
         </Text>
       </View>
-
+ 
       <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
         {isDone ? (
           <View style={styles.doneContainer}>
-            {product.proofImage && (
-              <Image 
-                source={{ uri: product.proofImage }} 
-                style={styles.proofThumbnail} 
-              />
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+              {product.proofImage && (
+                <Image 
+                  source={{ uri: product.proofImage }} 
+                  style={styles.proofThumbnail} 
+                />
+              )}
+              {(() => {
+                const showRetake = product.proofImageTime ? (currentTime - product.proofImageTime < 30000) : false;
+                return showRetake ? (
+                  <TouchableOpacity
+                    style={styles.retakeIconButton}
+                    onPress={() => onAction(product)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.btnTextRetake}>Retake</Text>
+                  </TouchableOpacity>
+                ) : null;
+              })()}
+            </View>
             <View style={styles.doneBadge}>
               <CheckCircle2 size={scale(16)} color="#10B981" />
               <Text style={styles.doneText}>Done</Text>
@@ -82,6 +98,15 @@ const ProductItem = React.memo(({
 
 const StopDetailModal: React.FC<StopDetailModalProps> = ({ visible, onClose, stop, onProductComplete }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [visible]);
 
   // Pre-request permissions when modal becomes visible
   useEffect(() => {
@@ -185,6 +210,7 @@ const StopDetailModal: React.FC<StopDetailModalProps> = ({ visible, onClose, sto
                 product={product}
                 onAction={handleCaptureProof}
                 isProcessing={processingId === product.id}
+                currentTime={currentTime}
               />
             ))}
 
@@ -372,6 +398,22 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(13),
     color: '#10B981',
+  },
+  retakeIconButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.2,
+    borderColor: '#BFDBFE',
+    paddingVertical: verticalScale(2),
+    paddingHorizontal: scale(5),
+    borderRadius: scale(6),
+    minWidth: scale(45),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnTextRetake: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(8.5),
+    color: '#2563EB',
   },
   completionBanner: {
     flexDirection: 'row',
