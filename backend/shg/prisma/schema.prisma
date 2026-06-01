@@ -60,7 +60,7 @@ enum ShgRole {
 //////////////////////////////////////////////////////
 
 model User {
-  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int       @id @default(autoincrement())
 
   // Supabase Auth ID
   authId              String    @unique @db.Uuid
@@ -112,6 +112,8 @@ model User {
   applications        Application[]
   stepTracking        StepTracking[]
   auditLogs           AuditLog[]
+  shgOrders           Order[]             @relation("ShgOrders")
+  transporterOrders   Order[]             @relation("TransporterOrders")
 
   @@index([phoneNumber])
   @@index([role])
@@ -122,9 +124,9 @@ model User {
 //////////////////////////////////////////////////////
 
 model Address {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id            Int      @id @default(autoincrement())
 
-  userId        String   @unique @db.Uuid
+  userId        Int      @unique
   user          User     @relation(fields: [userId], references: [id])
 
   addressLine1  String
@@ -146,9 +148,9 @@ model Address {
 }
 
 model BankDetail {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int      @id @default(autoincrement())
 
-  userId              String   @db.Uuid
+  userId              Int
   user                User     @relation(fields: [userId], references: [id])
 
   accountHolderName   String
@@ -169,9 +171,9 @@ model BankDetail {
 }
 
 model Document {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int      @id @default(autoincrement())
 
-  userId              String   @db.Uuid
+  userId              Int
   user                User     @relation(fields: [userId], references: [id])
 
   aadhaarNumber       String?
@@ -190,9 +192,9 @@ model Document {
 }
 
 model Vehicle {
-  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int         @id @default(autoincrement())
 
-  userId                String      @db.Uuid
+  userId                Int
   user                  User        @relation(fields: [userId], references: [id])
 
   vehicleType           VehicleType
@@ -213,9 +215,9 @@ model Vehicle {
 }
 
 model Application {
-  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int                 @id @default(autoincrement())
 
-  userId              String              @db.Uuid
+  userId              Int
   user                User                @relation(fields: [userId], references: [id])
 
   status              ApplicationStatus   @default(PENDING)
@@ -233,9 +235,9 @@ model Application {
 }
 
 model StepTracking {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id            Int         @id @default(autoincrement())
 
-  userId        String      @db.Uuid
+  userId        Int
   user          User        @relation(fields: [userId], references: [id])
 
   step          Int
@@ -257,9 +259,9 @@ model StepTracking {
 //////////////////////////////////////////////////////
 
 model ShgDetail {
-  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int         @id @default(autoincrement())
 
-  userId              String      @unique @db.Uuid
+  userId              Int         @unique
   user                User        @relation(fields: [userId], references: [id])
 
   shgName             String?
@@ -279,9 +281,9 @@ model ShgDetail {
 }
 
 model BusinessDetail {
-  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  Int         @id @default(autoincrement())
 
-  userId              String      @unique @db.Uuid
+  userId              Int         @unique
   user                User        @relation(fields: [userId], references: [id])
 
   producesProduct     Boolean     @default(false)
@@ -294,9 +296,9 @@ model BusinessDetail {
 }
 
 model Product {
-  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int               @id @default(autoincrement())
 
-  userId                String            @db.Uuid
+  userId                Int
   user                  User              @relation(fields: [userId], references: [id])
 
   productName           String
@@ -324,9 +326,9 @@ model Product {
 //////////////////////////////////////////////////////
 
 model TransporterDetail {
-  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int         @id @default(autoincrement())
 
-  userId                String      @unique @db.Uuid
+  userId                Int         @unique
   user                  User        @relation(fields: [userId], references: [id])
 
   transporterCode       String?     @unique
@@ -342,9 +344,9 @@ model TransporterDetail {
 }
 
 model DrivingDetail {
-  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int         @id @default(autoincrement())
 
-  userId                String      @unique @db.Uuid
+  userId                Int         @unique
   user                  User        @relation(fields: [userId], references: [id])
 
   licenseNumber         String
@@ -357,9 +359,9 @@ model DrivingDetail {
 }
 
 model RouteDetail {
-  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int         @id @default(autoincrement())
 
-  userId                String      @unique @db.Uuid
+  userId                Int         @unique
   user                  User        @relation(fields: [userId], references: [id])
 
   operatingArea         String
@@ -375,9 +377,9 @@ model RouteDetail {
 }
 
 model MilkVanDetail {
-  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    Int         @id @default(autoincrement())
 
-  userId                String      @unique @db.Uuid
+  userId                Int         @unique
   user                  User        @relation(fields: [userId], references: [id])
 
   sangathanName         String
@@ -397,9 +399,9 @@ model MilkVanDetail {
 //////////////////////////////////////////////////////
 
 model AuditLog {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id              Int      @id @default(autoincrement())
 
-  userId          String?  @db.Uuid
+  userId          Int?
   user            User?    @relation(fields: [userId], references: [id])
 
   module          String
@@ -420,7 +422,7 @@ model AuditLog {
 //////////////////////////////////////////////////////
 
 model OTPVerification {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id              Int      @id @default(autoincrement())
 
   phoneNumber     String
 
@@ -434,4 +436,68 @@ model OTPVerification {
   createdAt       DateTime @default(now())
 
   @@index([phoneNumber])
+}
+
+//////////////////////////////////////////////////////
+// ORDER MODULE
+//////////////////////////////////////////////////////
+
+enum OrderStatus {
+  ASSIGNED
+  ACCEPTED
+  REJECTED
+  RECEIVED
+  COMPLETED
+}
+
+model Order {
+  id                Int         @id @default(autoincrement())
+  orderId           String      @unique
+  parcelName        String
+  category          String
+  mobile            String
+  amount            Float
+  payment           String
+  address           String
+  deliveryDay       String?
+  status            OrderStatus @default(ASSIGNED)
+  image             String?
+
+  // Transporter Info
+  transporterId     Int?
+  transporter       User?       @relation("TransporterOrders", fields: [transporterId], references: [id], onDelete: Cascade)
+  transporterName   String?
+  transporterMobile String?
+  pickupTime        String?
+  vehicleNumber     String?
+
+  // SHG Info
+  shgId             Int?
+  shg               User?       @relation("ShgOrders", fields: [shgId], references: [id], onDelete: Cascade)
+
+  currentHolder     String?     @default("Seller")
+  remainingQty      Int         @default(1)
+  weight            Float?
+  time              String?
+
+  // Rejection details
+  rejectReason      String?
+  rejectedAt        DateTime?
+  rejectedBy        String?
+
+  // Reschedule details
+  isRescheduled     Boolean     @default(false)
+  rescheduleDate    String?
+  rescheduleTime    String?
+  rescheduleReason  String?
+
+  // Timestamps
+  acceptedAt        DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
 }

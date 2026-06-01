@@ -2,8 +2,8 @@
   "name": "@logistic/db",
   "version": "1.0.0",
   "description": "Shared database client and Prisma schema for Logistic Platform",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "private": true,
   "scripts": {
     "build": "tsc",

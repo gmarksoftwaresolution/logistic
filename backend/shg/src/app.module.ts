@@ -14,6 +14,7 @@ import { SignupModule } from './signup/signup.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
 import { LocationModule } from './location/location.module';
+import { OrderModule } from './order/order.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { LocationModule } from './location/location.module';
     UploadsModule,
     AdminModule,
     LocationModule,
+    OrderModule,
   ],
   controllers: [AppController],
   providers: [AppService],

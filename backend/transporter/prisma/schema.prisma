@@ -112,6 +112,11 @@ model User {
   applications        Application[]
   stepTracking        StepTracking[]
   auditLogs           AuditLog[]
+<<<<<<< HEAD
+=======
+  shgOrders           Order[]             @relation("ShgOrders")
+  transporterOrders   Order[]             @relation("TransporterOrders")
+>>>>>>> a9db01bd9f9e047263151d15b5b788cd196e1b1c
 
   @@index([phoneNumber])
   @@index([role])
@@ -435,3 +440,70 @@ model OTPVerification {
 
   @@index([phoneNumber])
 }
+<<<<<<< HEAD
+=======
+
+//////////////////////////////////////////////////////
+// ORDER MODULE
+//////////////////////////////////////////////////////
+
+enum OrderStatus {
+  ASSIGNED
+  ACCEPTED
+  REJECTED
+  RECEIVED
+  COMPLETED
+}
+
+model Order {
+  id                Int         @id @default(autoincrement())
+  orderId           String      @unique
+  parcelName        String
+  category          String
+  mobile            String
+  amount            Float
+  payment           String
+  address           String
+  deliveryDay       String?
+  status            OrderStatus @default(ASSIGNED)
+  image             String?
+
+  // Transporter Info
+  transporterId     Int?
+  transporter       User?       @relation("TransporterOrders", fields: [transporterId], references: [id], onDelete: Cascade)
+  transporterName   String?
+  transporterMobile String?
+  pickupTime        String?
+  vehicleNumber     String?
+
+  // SHG Info
+  shgId             Int?
+  shg               User?       @relation("ShgOrders", fields: [shgId], references: [id], onDelete: Cascade)
+
+  currentHolder     String?     @default("Seller")
+  remainingQty      Int         @default(1)
+  weight            Float?
+  time              String?
+
+  // Rejection details
+  rejectReason      String?
+  rejectedAt        DateTime?
+  rejectedBy        String?
+
+  // Reschedule details
+  isRescheduled     Boolean     @default(false)
+  rescheduleDate    String?
+  rescheduleTime    String?
+  rescheduleReason  String?
+
+  // Timestamps
+  acceptedAt        DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+}
+>>>>>>> a9db01bd9f9e047263151d15b5b788cd196e1b1c

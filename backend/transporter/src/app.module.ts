@@ -10,6 +10,7 @@ import { AdminModule } from './admin/admin.module';
 import { UserModule } from './user/user.module';
 import { ApplicationModule } from './application/application.module';
 import { LoggerMiddleware } from './common/logger.middleware';
+import { OrderModule } from './order/order.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { LoggerMiddleware } from './common/logger.middleware';
     AdminModule,
     UserModule,
     ApplicationModule,
+    OrderModule,
   ],
   controllers: [AppController],
   providers: [AppService],
