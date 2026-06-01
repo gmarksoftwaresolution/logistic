@@ -1,4 +1,4 @@
-process.env.DATABASE_URL = "postgresql://postgres.xbzmwdluefqbhicynhnp:Shridhar@21@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+process.env.DATABASE_URL = "postgresql://postgres.xbzmwdluefqbhicynhnp:Shridhar%4021@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
 import { PrismaClient, UserRole } from '@prisma/client';
 import { randomUUID } from 'crypto';
