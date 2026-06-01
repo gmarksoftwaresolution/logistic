@@ -13,7 +13,7 @@ export class UserController {
   @Get('profile')
   @ApiOperation({ summary: 'Get full user profile including all registration data' })
   @ApiResponse({ status: 200, description: 'Profile data retrieved successfully' })
-  getProfile(@Request() req: any) {
+  getProfile(@Request() req: any): Promise<any> {
     return this.userService.getProfile(req.user.sub);
   }
 

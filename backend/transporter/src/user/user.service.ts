@@ -7,7 +7,7 @@ import { VehicleCategory } from '../registration/dto/registration.dto';
 export class UserService {
   constructor(private prisma: PrismaService) {}
 
-  async getProfile(userId: number) {
+  async getProfile(userId: number): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
