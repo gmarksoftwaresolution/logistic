@@ -43,7 +43,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const toggleAreaExpand = (areaName: string) => {
     setExpandedAreas((prev) => ({
       ...prev,
-      [areaName]: !prev[areaName],
+      [areaName]: prev[areaName] === false ? true : false,
     }));
   };
 
@@ -78,8 +78,9 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     groupedEntries[displayArea].push(entry);
   });
 
-  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub'];
-  const areas = ORDERED_AREAS.filter(a => groupedEntries[a]);
+  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
+  const allFoundAreas = Object.keys(groupedEntries);
+  const areas = Array.from(new Set([...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas]));
 
   const handleConfirmReject = () => {
     if (rejectingBatchId && rejectReasonText.trim()) {
@@ -134,7 +135,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         ) : (
           areas.map((areaName) => {
             const areaEntries = groupedEntries[areaName];
-            const isExpanded = expandedAreas[areaName] === true;
+            const isExpanded = expandedAreas[areaName] !== false;
 
             const pickupEntries = areaEntries.filter(e => e.type === 'pickup');
             const dropEntries = areaEntries.filter(e => e.type === 'drop');
