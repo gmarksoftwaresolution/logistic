@@ -105,9 +105,12 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       dropGroupedEntries[displayArea].push(entry);
     });
 
-    const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub'];
-    const pickupAreas = ORDERED_AREAS.filter(a => pickupGroupedEntries[a]);
-    const dropAreas = ORDERED_AREAS.filter(a => dropGroupedEntries[a]);
+    const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
+    const allFoundPickupAreas = Object.keys(pickupGroupedEntries);
+    const pickupAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => pickupGroupedEntries[a]), ...allFoundPickupAreas]));
+
+    const allFoundDropAreas = Object.keys(dropGroupedEntries);
+    const dropAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => dropGroupedEntries[a]), ...allFoundDropAreas]));
 
     const totalPickups = pickupBatches.filter(b => b.products.some(p => p.status === 'pending')).length;
     const totalDrops = dropBatches.length;
