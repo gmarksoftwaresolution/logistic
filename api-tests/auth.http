@@ -1,0 +1,122 @@
+### 1. Transporter Backend Auth Module (Port 3001)
+@transporterHost = http://localhost:3001
+
+# @name sendTransporterOtp
+# Send OTP for login
+# Expected Response: 200 OK
+POST {{transporterHost}}/auth/send-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "9999999999",
+  "language": "English"
+}
+
+# Expected Response Body Example:
+# {
+#   "success": true,
+#   "message": "OTP sent successfully (Simulated: 123456)"
+# }
+
+###
+
+# @name verifyTransporterOtp
+# Verify OTP and get JWT
+# Expected Response: 200 OK
+POST {{transporterHost}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "9999999999",
+  "otp": "123456"
+}
+
+# Expected Response Body Example:
+# {
+#   "success": true,
+#   "message": "OTP verified successfully",
+#   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "user": {
+#     "id": 50,
+#     "phoneNumber": "9999999999",
+#     "role": "TRANSPORTER",
+#     "status": "COMPLETED",
+#     "currentStep": 6,
+#     "language": "English",
+#     "requestId": 50,
+#     "transporterUniqueId": "GMU-TP-90371"
+#   }
+# }
+
+
+### 2. SHG Backend Auth Module (Port 3000)
+@shgHost = http://localhost:3000
+
+# @name sendShgOtp
+# Send OTP for login
+# Expected Response: 200 OK
+POST {{shgHost}}/auth/login/send-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "7777777777",
+  "language": "English"
+}
+
+# Expected Response Body Example:
+# {
+#   "success": true,
+#   "message": "Login OTP sent successfully"
+# }
+
+###
+
+# @name verifyShgOtp
+# Verify OTP for login
+# Expected Response: 200 OK
+POST {{shgHost}}/auth/login/verify-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "7777777777",
+  "otp": "123456"
+}
+
+# Expected Response Body Example:
+# {
+#   "success": true,
+#   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "transporterUniqueId": "GMU-SHG-12345",
+#   "userDetails": {
+#     "id": 9,
+#     "fullName": "Sakhi Mahila Bachat Gat",
+#     "userType": "SHG",
+#     "signupStep": "COMPLETED",
+#     "mobileNumber": "7777777777",
+#     "applicationStatus": "APPROVED",
+#     "rejectionReason": null,
+#     "role": "SHG",
+#     "shgUniqueId": "GMU-SHG-12345"
+#   }
+# }
+
+###
+
+# @name refreshShgTokens
+# Refresh authentication tokens
+# Expected Response: 200 OK
+POST {{shgHost}}/auth/refresh
+Content-Type: application/json
+
+{
+  "userId": 9,
+  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
+}
+
+# Expected Response Body Example:
+# {
+#   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+# }

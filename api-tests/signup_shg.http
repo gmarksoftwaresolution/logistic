@@ -1,0 +1,274 @@
+# Set your JWT access token here after verifying OTP
+@shgToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+@shgHost = http://localhost:3000
+
+### ==========================================
+### STEP 1: Send OTP for Signup
+### ==========================================
+# Expected Response: 200 OK
+POST {{shgHost}}/signup/send-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "7777777777",
+  "language": "English"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Signup OTP sent successfully"
+# }
+
+### ==========================================
+### STEP 2: Verify OTP for Signup and get JWT
+### ==========================================
+# Expected Response: 200 OK
+POST {{shgHost}}/signup/verify-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "7777777777",
+  "otp": "123456"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "transporterUniqueId": null,
+#   "userDetails": {
+#     "userId": 9,
+#     "signupStep": "PROFILE",
+#     "isNewUser": true,
+#     "shgUniqueId": null
+#   }
+# }
+
+### ==========================================
+### STEP 3 (Auth): Save Profile Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/profile
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "userType": "SHG",
+  "fullName": "Sakhi Mahila Gat",
+  "age": 35,
+  "photoUrl": "http://localhost:3000/uploads/1/profile/selfie.jpg"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Profile saved successfully",
+#   "nextStep": "SHG_DETAILS",
+#   "signupStep": "PROFILE"
+# }
+
+### ==========================================
+### STEP 4 (Auth - SHG): Save SHG Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/shg-details
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "shgName": "Sakhi Mahila Bachat Gat",
+  "shgLeaderName": "Sita Devi",
+  "shgLeaderContact": "7777777777",
+  "shgExperience": "THREE_TO_FIVE_YEARS",
+  "shgRole": "PRESIDENT",
+  "shgGroupSize": 12
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "SHG details saved successfully",
+#   "nextStep": "PRODUCT"
+# }
+
+### ==========================================
+### STEP 4 (Auth - Non-SHG alternative): Save Non-SHG Role
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/non-shg-role
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "nonShgRole": "SHOPKEEPER"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Role saved successfully",
+#   "nextStep": "ADDRESS"
+# }
+
+### ==========================================
+### STEP 5 (Auth - SHG): Save Products
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/products
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "producesProduct": true,
+  "businessTeamSize": 5,
+  "products": [
+    {
+      "productName": "Tasty Homemade Papad",
+      "category": "FOOD",
+      "dailyProductionQty": 50,
+      "unit": "KGS",
+      "weeklyProduction": 300,
+      "price": 120
+    }
+  ]
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "1 product(s) saved successfully",
+#   "nextStep": "ADDRESS"
+# }
+
+### ==========================================
+### STEP 6 (Auth): Save Address
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/address
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "houseNo": "Plot No 24",
+  "village": "Nesari",
+  "taluka": "Gadhinglaj",
+  "district": "Kolhapur",
+  "state": "Maharashtra",
+  "pincode": "416504",
+  "landmark": "Near Primary School"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Address saved successfully",
+#   "nextStep": "DOCUMENTS"
+# }
+
+### ==========================================
+### STEP 7 (Auth): Save Documents (Aadhaar & PAN)
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/documents
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "aadhaarNumber": "123456789012",
+  "panNumber": "ABCDE1234F",
+  "aadhaarFrontUrl": "http://localhost:3000/uploads/1/aadhaar_front/aadhaar.jpg",
+  "aadhaarBackUrl": "http://localhost:3000/uploads/1/aadhaar_back/aadhaar.jpg",
+  "panCardUrl": "http://localhost:3000/uploads/1/pan_card/pan.jpg"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Documents saved successfully",
+#   "nextStep": "BANK"
+# }
+
+### ==========================================
+### STEP 8 (Auth): Save Bank Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/bank-details
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "accountHolderName": "Sita Devi",
+  "bankName": "State Bank of India",
+  "accountNumber": "1234567890123",
+  "ifscCode": "SBIN0001234",
+  "upiId": "sitadevi@upi"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Bank details saved successfully",
+#   "nextStep": "OTHER_DETAILS"
+# }
+
+### ==========================================
+### STEP 9 (Auth): Save Other Details (Vehicle details & Finish)
+### ==========================================
+# Expected Response: 201 Created
+POST {{shgHost}}/signup/other-details
+Authorization: Bearer {{shgToken}}
+Content-Type: application/json
+
+{
+  "storageSpace": "10x10 sqft",
+  "hasVehicle": true,
+  "vehicle": {
+    "vehicleType": "TWO_WHEELER",
+    "vehicleRegistrationNo": "MH09AB1234",
+    "drivingLicenseNumber": "MH0920150123456",
+    "drivingLicenseImageUrl": "http://localhost:3000/uploads/1/driving_license/dl.jpg",
+    "vehicleImageUrl": "http://localhost:3000/uploads/1/vehicle/vehicle.jpg"
+  }
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Signup completed successfully! Your application is under review.",
+#   "requestId": "GMU-SHG-12345",
+#   "shgUniqueId": "GMU-SHG-12345",
+#   "status": "PENDING"
+# }
+
+### ==========================================
+### GET SIGNUP PROGRESS
+### ==========================================
+# Expected Response: 200 OK
+GET {{shgHost}}/signup/progress
+Authorization: Bearer {{shgToken}}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "userId": 9,
+#   "userType": "SHG",
+#   "currentStep": "COMPLETED",
+#   "isCompleted": true,
+#   "frontendStep": 10,
+#   "signupData": {
+#     "mobile": "7777777777",
+#     "selectedRole": "SHG",
+#     "fullName": "Sakhi Mahila Gat"
+#   },
+#   "steps": {
+#     "profile": true,
+#     "shgDetails": true,
+#     "product": true,
+#     "address": true,
+#     "documents": true,
+#     "bank": true,
+#     "otherDetails": true
+#   }
+# }

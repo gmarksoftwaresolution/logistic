@@ -1,0 +1,259 @@
+# Set your JWT access token here after verifying OTP
+@transporterToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+@transporterHost = http://localhost:3001
+
+### ==========================================
+### STEP 0: Select Language
+### ==========================================
+# Expected Response: 200 OK
+POST {{transporterHost}}/registration/select-language
+Content-Type: application/json
+
+{
+  "language": "English"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "Language selected successfully",
+#   "language": "English"
+# }
+
+### ==========================================
+### STEP 1: Send OTP
+### ==========================================
+# Expected Response: 200 OK
+POST {{transporterHost}}/registration/send-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "9999999999",
+  "language": "English"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "OTP sent successfully (Simulated: 123456)"
+# }
+
+### ==========================================
+### STEP 2: Verify OTP and get JWT
+### ==========================================
+# Expected Response: 200 OK
+POST {{transporterHost}}/registration/verify-otp
+Content-Type: application/json
+
+{
+  "mobileNumber": "9999999999",
+  "otp": "123456"
+}
+
+# Expected Response Body:
+# {
+#   "success": true,
+#   "message": "OTP verified successfully",
+#   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "user": {
+#     "id": 50,
+#     "phoneNumber": "9999999999",
+#     "role": "TRANSPORTER",
+#     "status": "PENDING",
+#     "currentStep": 1,
+#     "language": "English",
+#     "requestId": 50
+#   }
+# }
+
+### ==========================================
+### GET ME: Current Registration Progress
+### ==========================================
+# Expected Response: 200 OK
+GET {{transporterHost}}/registration/me
+Authorization: Bearer {{transporterToken}}
+
+# Expected Response Body:
+# {
+#   "id": 50,
+#   "phoneNumber": "9999999999",
+#   "role": "TRANSPORTER",
+#   "applicationStatus": "PENDING",
+#   "currentStep": 1,
+#   "language": "English",
+#   "requestId": 50,
+#   "transporterUniqueId": null,
+#   "vehicleCategory": null,
+#   "personalDetails": null,
+#   "drivingDetails": null,
+#   "bankDetails": null,
+#   "vehicleDetails": null,
+#   "routeDetails": null
+# }
+
+### ==========================================
+### STEP 1 (Auth): Save Personal Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step1
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "firstName": "Mahendra",
+  "lastName": "Powar",
+  "email": "mahendra@example.com",
+  "state": "Maharashtra",
+  "district": "Kolhapur",
+  "taluka": "Gadhinglaj",
+  "residentialAddress": "Nesari Main Road, Plot 14",
+  "pinCode": "416504",
+  "profilePhoto": "/uploads/profile_mahendra.jpg"
+}
+
+# Expected Response Body:
+# {
+#   "message": "Step 1 completed",
+#   "nextStep": 2
+# }
+
+### ==========================================
+### STEP 2 (Auth): Save Driving Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step2
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "licenseNumber": "MH1220230000123",
+  "licensePhoto": "/uploads/license_mahendra.png",
+  "expiryDate": "2030-12-31",
+  "experienceYears": 5
+}
+
+# Expected Response Body:
+# {
+#   "message": "Step 2 completed",
+#   "nextStep": 3
+# }
+
+### ==========================================
+### STEP 3 (Auth): Save Bank Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step3
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "accountHolderName": "Mahendra Powar",
+  "bankName": "HDFC Bank",
+  "accountNumber": "50100012345678",
+  "ifscCode": "HDFC0001234",
+  "branchName": "Gadhinglaj Branch",
+  "upiId": "mahendra@upi"
+}
+
+# Expected Response Body:
+# {
+#   "message": "Step 3 completed",
+#   "nextStep": 4
+# }
+
+### ==========================================
+### STEP 4 (Auth): Save Vehicle Category Selection
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step4
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "vehicleCategory": "PERSONAL"
+}
+
+# Expected Response Body:
+# {
+#   "message": "Step 4 completed",
+#   "nextStep": 5
+# }
+
+### ==========================================
+### STEP 5 (Auth - Personal): Save Vehicle Details
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step5-personal
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "wheeler": "4 Wheeler",
+  "type": "Pickup",
+  "make": "Tata Ace",
+  "number": "MH09AB5678",
+  "rcUpload": "/uploads/rc_bolero.pdf",
+  "insuranceUpload": "/uploads/insurance_bolero.pdf"
+}
+
+# Expected Response Body:
+# {
+#   "message": "Step 5 (Personal) completed",
+#   "nextStep": 6
+# }
+
+### ==========================================
+### STEP 6 (Auth - Personal): Save Route Details & Finish
+### ==========================================
+# Expected Response: 201 Created
+POST {{transporterHost}}/registration/step6-personal
+Authorization: Bearer {{transporterToken}}
+Content-Type: application/json
+
+{
+  "operatingArea": "Gadhinglaj",
+  "pickupLocations": "Nesari, Halkarni",
+  "dropLocations": "Gadhinglaj Hub",
+  "workingTime": "9 AM - 6 PM",
+  "workingDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  "workingSchedule": [
+    {
+      "day": "Mon",
+      "startTime": "09:00 AM",
+      "endTime": "06:00 PM"
+    }
+  ]
+}
+
+# Expected Response Body (Finishes Registration!):
+# {
+#   "message": "Registration steps completed. Your application is under review.",
+#   "requestId": 50,
+#   "transporterUniqueId": "GMU-TP-90371",
+#   "status": "COMPLETED"
+# }
+
+### ==========================================
+### GET MILK SANGATHANS OPTIONS
+### ==========================================
+# Expected Response: 200 OK
+GET {{transporterHost}}/registration/milk-sangathans
+
+# Expected Response Body:
+# [
+#   "Gokul Kolhapur",
+#   "Warna Kolhapur"
+# ]
+
+### ==========================================
+### GET RELATED MILK CENTERS OPTIONS
+### ==========================================
+# Expected Response: 200 OK
+GET {{transporterHost}}/registration/milk-centers/Gokul%20Kolhapur
+
+# Expected Response Body:
+# [
+#   "Gokul Kolhapur Main Center",
+#   "Gokul Kolhapur Branch"
+# ]
