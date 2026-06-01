@@ -138,24 +138,192 @@ async function main() {
     console.log('Product already exists:', product.name);
   }
 
-  // 5. Query specific SHG user (7777777777) & specific Transporter user (9999999999)
-  console.log('Querying target SHG (7777777777) & Transporter (9999999999)...');
-  const targetShg = await prisma.user.findFirst({
+  // 5. Ensure target SHG (7777777777) exists
+  console.log('Ensuring target SHG (7777777777) exists...');
+  let targetShg = await prisma.user.findFirst({
     where: { phoneNumber: '7777777777', role: UserRole.SHG }
   });
 
-  const targetTransporter = await prisma.user.findFirst({
-    where: { phoneNumber: '9999999999', role: UserRole.TRANSPORTER }
+  if (!targetShg) {
+    targetShg = await prisma.user.create({
+      data: {
+        authId: randomUUID(),
+        phoneNumber: '7777777777',
+        role: UserRole.SHG,
+        fullName: 'Mahadev (SHG Leader)',
+        isVerified: true,
+        address: {
+          create: {
+            addressLine1: 'Gram Panchayat Marg',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+          }
+        },
+        shgDetail: {
+          create: {
+            shgName: 'Nesari Bachat Gat',
+            shgLeaderName: 'Mahadev',
+            shgLeaderContact: '7777777777',
+            groupSize: 12,
+          }
+        }
+      }
+    });
+    console.log('Created new target SHG user:', targetShg.fullName);
+  } else {
+    console.log('Found existing target SHG User:', targetShg.fullName);
+  }
+
+  // 6. Ensure Transporter User 9999999999 is fully seeded with all fields
+  console.log('Ensuring Transporter User 9999999999 is fully seeded with all fields...');
+  
+  const existingTransporter = await prisma.user.findUnique({
+    where: { phoneNumber: '9999999999' }
   });
 
-  if (!targetShg) {
-    console.error('ERROR: Could not find SHG user with phone "7777777777" in DB.');
-    return;
+  if (existingTransporter) {
+    console.log('Deleting existing Transporter User and relations to perform clean seed...');
+    await prisma.address.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.bankDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.document.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.vehicle.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.transporterDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.drivingDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.routeDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.milkVanDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.application.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.stepTracking.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.user.delete({ where: { id: existingTransporter.id } });
   }
-  if (!targetTransporter) {
-    console.error('ERROR: Could not find Transporter user with phone "9999999999" in DB.');
-    return;
-  }
+
+  const targetTransporter = await prisma.user.create({
+    data: {
+      authId: randomUUID(),
+      phoneNumber: '9999999999',
+      role: UserRole.TRANSPORTER,
+      fullName: 'Mahendra Powar',
+      profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+      language: 'English',
+      isVerified: true,
+      currentStep: 6,
+      profileCompletion: 100,
+      applicationStatus: 'APPROVED',
+      uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000),
+      approvedAt: new Date(),
+      
+      address: {
+        create: {
+          addressLine1: 'Shivaji Chowk, Main Road',
+          addressLine2: 'Near Gram Panchayat',
+          village: 'Nesari',
+          taluka: 'Gadhinglaj',
+          district: 'Kolhapur',
+          state: 'Maharashtra',
+          pincode: '416504',
+          landmark: 'Water Tank',
+          latitude: 16.0333,
+          longitude: 74.3333,
+        }
+      },
+      
+      bankDetails: {
+        create: {
+          accountHolderName: 'Mahendra Powar',
+          bankName: 'State Bank of India',
+          accountNumber: '32109876543',
+          ifscCode: 'SBIN0001234',
+          branchName: 'Nesari Branch',
+          upiId: 'mahendra@sbi',
+          isVerified: true,
+        }
+      },
+      
+      documents: {
+        create: {
+          aadhaarNumber: '123456789012',
+          panNumber: 'ABCDE1234F',
+          drivingLicenseNo: 'MH-09-2023-1234567',
+          aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
+          aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
+          panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
+          drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
+        }
+      },
+      
+      vehicles: {
+        create: {
+          vehicleType: 'FOUR_WHEELER',
+          vehicleName: 'Mahindra Bolero Pickup',
+          registrationNumber: 'MH-09-EQ-4321',
+          licenseNumber: 'MH-09-2023-1234567',
+          rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
+          insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
+          vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
+        }
+      },
+      
+      transporterDetail: {
+        create: {
+          transporterCode: 'TRP-M-50',
+          vehicleCategory: 'FOUR_WHEELER',
+          experienceYears: 5,
+          availableFullTime: true,
+        }
+      },
+      
+      drivingDetail: {
+        create: {
+          licenseNumber: 'MH-09-2023-1234567',
+          expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
+          drivingExperience: 5,
+        }
+      },
+      
+      routeDetail: {
+        create: {
+          operatingArea: 'Gadhinglaj and surrounding talukas',
+          pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
+          dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
+          workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
+          workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
+        }
+      },
+      
+      milkVanDetail: {
+        create: {
+          sangathanName: 'Warna Dairy Sangathan',
+          centerName: 'Nesari Center',
+          assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
+          morningShiftTime: '06:00 - 09:00',
+          eveningShiftTime: '17:00 - 20:00',
+        }
+      },
+      
+      applications: {
+        create: {
+          status: 'APPROVED',
+          reviewedBy: 'Admin',
+          approvedAt: new Date(),
+        }
+      },
+      
+      stepTracking: {
+        createMany: {
+          data: [
+            { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
+            { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
+            { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
+            { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
+            { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
+            { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
+          ]
+        }
+      }
+    }
+  });
 
   console.log(`Found SHG User: ${targetShg.fullName} (ID: ${targetShg.id})`);
   console.log(`Found Transporter User: ${targetTransporter.fullName} (ID: ${targetTransporter.id})`);
