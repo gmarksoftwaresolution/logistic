@@ -331,84 +331,105 @@ async function main() {
   // 6. Generate test orders for this specific pair
   console.log('Generating customized mock orders...');
 
-  // --- Order 1: Assigned Pickup ---
-  const orderNo1 = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-  const masterOrder1 = await prisma.masterOrder.create({
-    data: {
-      orderNumber: orderNo1,
-      buyerId: buyer.id,
-      totalAmount: 240.0,
-      paymentStatus: 'PENDING',
-      status: 'CREATED',
-      items: {
-        create: {
-          productId: product.id,
-          sellerId: seller.id,
-          quantity: 2,
-          price: 120.0,
+  // Generate 5 Pickup Orders
+  for (let i = 1; i <= 5; i++) {
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-P${i}-${Math.floor(Math.random() * 100)}`;
+    const quantity = i + 1;
+    const price = 120.0;
+    const totalAmount = quantity * price;
+
+    const masterOrder = await prisma.masterOrder.create({
+      data: {
+        orderNumber: orderNo,
+        buyerId: buyer.id,
+        totalAmount,
+        paymentStatus: 'PENDING',
+        status: 'CREATED',
+        items: {
+          create: {
+            productId: product.id,
+            sellerId: seller.id,
+            quantity,
+            price,
+          }
         }
       }
-    }
-  });
+    });
 
-  const pickupOrder = await prisma.pickupOrder.create({
-    data: {
-      pickupOrderNumber: `PKP-${orderNo1}`,
-      masterOrderId: masterOrder1.id,
-      sellerId: seller.id,
-      shgId: targetShg.id,
-      transporterId: targetTransporter.id,
-      status: 'PENDING',
-      items: {
-        create: {
-          productId: product.id,
-          quantity: 2,
+    const pickupOrder = await prisma.pickupOrder.create({
+      data: {
+        pickupOrderNumber: `PKP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        sellerId: seller.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
         }
       }
-    }
-  });
+    });
 
-  console.log(`  -> Created assigned Pickup Order: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
+    console.log(`  -> Created assigned Pickup Order ${i}: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
+  }
 
-  // --- Order 2: Assigned Drop ---
-  const orderNo2 = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-  const masterOrder2 = await prisma.masterOrder.create({
-    data: {
-      orderNumber: orderNo2,
-      buyerId: buyer.id,
-      totalAmount: 360.0,
-      paymentStatus: 'PENDING',
-      status: 'CREATED',
-      items: {
-        create: {
-          productId: product.id,
-          sellerId: seller.id,
-          quantity: 3,
-          price: 120.0,
+  // Generate 5 Drop Orders
+  for (let i = 1; i <= 5; i++) {
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-D${i}-${Math.floor(Math.random() * 100)}`;
+    const quantity = i + 2;
+    const price = 120.0;
+    const totalAmount = quantity * price;
+
+    const masterOrder = await prisma.masterOrder.create({
+      data: {
+        orderNumber: orderNo,
+        buyerId: buyer.id,
+        totalAmount,
+        paymentStatus: 'PENDING',
+        status: 'CREATED',
+        items: {
+          create: {
+            productId: product.id,
+            sellerId: seller.id,
+            quantity,
+            price,
+          }
         }
       }
-    }
-  });
+    });
 
-  const dropOrder = await prisma.dropOrder.create({
-    data: {
-      dropOrderNumber: `DRP-${orderNo2}`,
-      masterOrderId: masterOrder2.id,
-      buyerId: buyer.id,
-      shgId: targetShg.id,
-      transporterId: targetTransporter.id,
-      status: 'PENDING',
-      deliveryAddress: buyer.address ? `${buyer.address.addressLine1}, ${buyer.address.village}` : 'Nesari Stand, Gadhinglaj',
-      items: {
-        create: {
-          productId: product.id,
-          quantity: 3,
+    const dropPointNames = [
+      'Nesari Stand, Gadhinglaj',
+      'Koulage Crossing, Gadhinglaj',
+      'Hingalaj Road Primary School',
+      'Wagharale Naka Market',
+      'Mahagaon Gram Panchayat'
+    ];
+    const deliveryAddress = dropPointNames[i - 1] || 'Nesari Stand, Gadhinglaj';
+
+    const dropOrder = await prisma.dropOrder.create({
+      data: {
+        dropOrderNumber: `DRP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        buyerId: buyer.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        deliveryAddress,
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
         }
       }
-    }
-  });
+    });
 
-  console.log(`  -> Created assigned Drop Order: ${dropOrder.dropOrderNumber} (ID: ${dropOrder.id})`);
+    console.log(`  -> Created assigned Drop Order ${i}: ${dropOrder.dropOrderNumber} (ID: ${dropOrder.id})`);
+  }
 
   console.log('--- SEEDING COMPLETED SUCCESSFULLY ---');
 }
