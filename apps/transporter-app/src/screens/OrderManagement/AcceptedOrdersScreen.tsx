@@ -20,13 +20,30 @@ import { useTranslation } from 'react-i18next';
 
 type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
 
-const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { batches } = useOrderManagement();
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
   const pagerRef = React.useRef<ScrollView>(null);
   const { width: screenWidth } = Dimensions.get('window');
   const scrollX = React.useRef(new Animated.Value(0)).current;
+
+  // Automatically scroll and switch tabs if navigated with activeTab param
+  React.useEffect(() => {
+    if (route.params?.activeTab) {
+      const tab = route.params.activeTab;
+      setActiveTab(tab);
+      if (tab === 'drop') {
+        setTimeout(() => {
+          pagerRef.current?.scrollTo({ x: screenWidth, animated: true });
+        }, 100);
+      } else {
+        setTimeout(() => {
+          pagerRef.current?.scrollTo({ x: 0, animated: true });
+        }, 100);
+      }
+    }
+  }, [route.params?.activeTab, screenWidth]);
 
   // Track accordion expansion states per area.
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({

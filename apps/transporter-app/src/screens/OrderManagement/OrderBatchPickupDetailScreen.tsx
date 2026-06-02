@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
-import { useOrderManagement, FlowType, HUB_CONTACT } from '../../context/OrderManagementContext';
+import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Camera, CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,12 +26,31 @@ import { useTranslation } from 'react-i18next';
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
-  const { batches, rejectProductItem } = useOrderManagement();
+  const { batches, rejectProductItem, finalizePickup, finalizeDrop } = useOrderManagement();
   const { currentStep, isActive } = useOnboarding();
 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [isFinalizing, setIsFinalizing] = useState(false);
+
+  const handleFinalize = async () => {
+    if (!batch) return;
+    setIsFinalizing(true);
+    try {
+      if (type === 'pickup') {
+        await finalizePickup(batch.id);
+        navigation.navigate('AcceptedOrders', { activeTab: 'drop' });
+      } else {
+        await finalizeDrop(batch.id);
+        navigation.replace('OrderBatchCompleted');
+      }
+    } catch (err) {
+      console.error('Error finalizing batch:', err);
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -42,7 +61,20 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   
   const scrollRef = useRef<ScrollView>(null);
 
-  const batch = batches.find((b) => b.id === batchId);
+  const foundBatch = batches.find((b) => b.id === batchId) || 
+                     (batchId.startsWith('pickup-') 
+                       ? batches.find((b) => b.id === `drop-${batchId.replace('pickup-', '')}`)
+                       : batches.find((b) => b.id === `pickup-${batchId.replace('drop-', '')}`));
+                       
+  const [localBatch, setLocalBatch] = useState<BatchOrder | undefined>(foundBatch);
+
+  useEffect(() => {
+    if (foundBatch) {
+      setLocalBatch(foundBatch);
+    }
+  }, [foundBatch]);
+
+  const batch = localBatch;
 
   // Preserve the original context type so the user stays in the pickup/drop flow they navigated from
   const type = initialType;
@@ -83,6 +115,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       rejectProductItem(batch.id, rejectingProductId, type || 'pickup', rejectReasonText.trim());
       setRejectingProductId(null);
       setRejectReasonText('');
+      navigation.goBack();
     }
   };
 
@@ -119,6 +152,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           ? batch.products.filter(p => p.legType === 'drop') 
           : batch.products.filter(p => p.legType === 'pickup'))
       : batch.products;
+
+  const canConfirm = displayProducts.length > 0 && displayProducts.every(p => p.status === 'rejected' || (type === 'pickup' ? !!p.pickupPhoto : !!p.dropPhoto));
+
+  const isPickupLegCompleted = batch.status === 'PICKUP_COMPLETED' || batch.status === 'DROP_COMPLETED';
+  const isDropLegCompleted = batch.status === 'DROP_COMPLETED';
+  const isCurrentLegCompleted = type === 'pickup' ? isPickupLegCompleted : isDropLegCompleted;
+  const isBatchRejected = batch.status === 'rejected';
 
   // Contextual Contact Logic matching precisely with user requirements
   const isPickup = type === 'pickup';
@@ -215,46 +255,51 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           </View>
           
           <View style={styles.boxContentPadding}>
-            <View style={styles.contactGrid}>
-              <View style={styles.contactGridItem}>
-                <View style={styles.contactIconCircle}>
-                  <User size={scale(14)} color={Colors.primary} />
-                </View>
-                <View style={styles.contactDetailCol}>
-                  <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
-                  <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.name}</Text>
-                </View>
-              </View>
+            {(() => {
+              const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
+              const resolvedVillage = (displayContact as any).village || batch.areaName || 'Nesari';
+              const resolvedPincode = (displayContact as any).pincode || addressPincode || '416504';
+              return (
+                <View style={styles.contactGrid}>
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <User size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.name}</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.contactGridItem}>
-                <View style={styles.contactIconCircle}>
-                  <Phone size={scale(14)} color={Colors.primary} />
-                </View>
-                <View style={styles.contactDetailCol}>
-                  <Text style={styles.contactItemLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
-                  <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.phone}</Text>
-                </View>
-              </View>
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <Phone size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.phone}</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.contactGridItem}>
-                <View style={styles.contactIconCircle}>
-                  <MapPin size={scale(14)} color={Colors.primary} />
-                </View>
-                <View style={styles.contactDetailCol}>
-                  <Text style={styles.contactItemLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
-                  <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).village || ''}</Text>
-                </View>
-              </View>
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <MapPin size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{resolvedVillage}</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.contactGridItem}>
-                <View style={styles.contactIconCircle}>
-                  <MapPin size={scale(14)} color={Colors.primary} />
-                </View>
-                <View style={styles.contactDetailCol}>
-                  <Text style={styles.contactItemLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
-                  <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).pincode || ''}</Text>
-                </View>
-              </View>
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <MapPin size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{resolvedPincode}</Text>
+                    </View>
+                  </View>
 
               <View style={[styles.contactGridItem, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: scale(10) }}>
@@ -269,8 +314,10 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
                   <Text style={styles.addressNavigateBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
                 </TouchableOpacity>
+                </View>
               </View>
-            </View>
+              );
+            })()}
           </View>
         </View>
 
@@ -298,13 +345,18 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 const isCompleted = product.status === 'completed';
                 const isRejected = product.status === 'rejected';
                 const isActionDone = type === 'pickup' ? (isPicked || isCompleted) : isCompleted;
+                const localPhoto = type === 'pickup' ? product.pickupPhoto : product.dropPhoto;
+                const isPhotoCaptured = !!localPhoto;
+                // Retake window: visible for 30 seconds after capture, then auto-hides
+                const photoTime = type === 'pickup' ? product.pickupPhotoTime : product.dropPhotoTime;
+                const canRetake = !isActionDone && isPhotoCaptured && !!photoTime && (currentTime - photoTime) < 30000;
 
                 return (
                   <View
                     key={product.id}
                     style={[
                       styles.premiumProductCard,
-                      isRejected && { borderColor: '#EF4444' },
+                      (isRejected || isBatchRejected) && { borderColor: '#EF4444' },
                     ]}
                   >
                     <View style={styles.productSideAccent} />
@@ -312,7 +364,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                        <View style={styles.productHeaderRow}>
                         <View style={styles.productTitleBox}>
                           <Text style={styles.productOrderId}>#{product.id.split('-').pop()}</Text>
-                          {isRejected ? (
+                          {isRejected || isBatchRejected ? (
                             <View style={[styles.legBadge, { backgroundColor: '#FEF2F2' }]}>
                               <Text style={[styles.legBadgeText, { color: '#DC2626' }]}>
                                 {t('orders.rejected', { defaultValue: 'Rejected' })}
@@ -332,6 +384,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                                 ]}
                               >
                                 {type === 'pickup' ? t('orders.picked', { defaultValue: 'Picked' }) : t('orders.delivered', { defaultValue: 'Delivered' })}
+                              </Text>
+                            </View>
+                          ) : isPhotoCaptured ? (
+                            <View style={[styles.legBadge, { backgroundColor: '#ECFDF5' }]}>
+                              <Text style={[styles.legBadgeText, { color: '#16A34A' }]}>
+                                {t('orders.captured', { defaultValue: 'Captured' })}
                               </Text>
                             </View>
                           ) : (
@@ -369,33 +427,46 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
 
                     <View style={styles.sideActionStrip}>
-                      {isActionDone ? (
-                        <>
+                      {isBatchRejected ? (
+                        <View style={styles.successIconBox}>
+                          <XCircle size={scale(24)} color="#EF4444" strokeWidth={2.5} />
+                        </View>
+                      ) : isCurrentLegCompleted ? (
+                        localPhoto ? (
                           <View style={styles.successIconBox}>
                             <Image
-                              source={{ uri: type === 'pickup' ? product.pickupPhoto : product.dropPhoto }}
+                              source={{ uri: localPhoto }}
                               style={styles.capturedButtonReplacementImage}
                             />
                           </View>
-                          {(() => {
-                            const capturedTime = type === 'pickup' ? product.pickupPhotoTime : product.dropPhotoTime;
-                            const showRetake = capturedTime ? (currentTime - capturedTime < 30000) : false;
-                            return showRetake ? (
-                              <TouchableOpacity
-                                style={styles.retakeIconButton}
-                                onPress={() =>
-                                  navigation.navigate('CameraCapture', {
-                                    batchId: batch.id,
-                                    productId: product.id,
-                                    context: type === 'pickup' ? 'pickup' : 'drop',
-                                    productName: product.name,
-                                  })
-                                }
-                              >
-                                <Text style={styles.btnTextRetake}>{t('orders.retake', { defaultValue: 'Retake' })}</Text>
-                              </TouchableOpacity>
-                            ) : null;
-                          })()}
+                        ) : (
+                          <View style={styles.successIconBox}>
+                            <CheckCircle size={scale(24)} color="#10B981" strokeWidth={2.5} />
+                          </View>
+                        )
+                      ) : isActionDone || isPhotoCaptured ? (
+                        <>
+                          <View style={styles.successIconBox}>
+                            <Image
+                              source={{ uri: localPhoto }}
+                              style={styles.capturedButtonReplacementImage}
+                            />
+                          </View>
+                          {canRetake && (
+                            <TouchableOpacity
+                              style={styles.retakeIconButton}
+                              onPress={() =>
+                                navigation.navigate('CameraCapture', {
+                                  batchId: batch.id,
+                                  productId: product.id,
+                                  context: type === 'pickup' ? 'pickup' : 'drop',
+                                  productName: product.name,
+                                })
+                              }
+                            >
+                              <Text style={styles.btnTextRetake}>{t('orders.retake', { defaultValue: 'Retake' })}</Text>
+                            </TouchableOpacity>
+                          )}
                         </>
                       ) : isRejected ? (
                         <View style={styles.successIconBox}>
@@ -452,6 +523,37 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           </View>
         </View>
+
+        {isBatchRejected && (
+          <View style={styles.rejectedFooterContainer}>
+            <View style={styles.rejectedBottomBanner}>
+              <View style={styles.rejectedBannerHeader}>
+                <XCircle size={scale(18)} color="#DC2626" strokeWidth={2.5} />
+                <Text style={styles.rejectedBannerTitle}>
+                  {t('orders.rejected_reason', { defaultValue: 'Rejection Reason' })}
+                </Text>
+              </View>
+              <Text style={styles.rejectedBannerText}>
+                {batch.rejectReason || t('orders.standard_non_compliance', { defaultValue: 'Standard non-compliance' })}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {canConfirm && !isCurrentLegCompleted && !isBatchRejected && (
+          <View style={styles.inlineFooterContainer}>
+            <TouchableOpacity
+              style={[styles.primaryConfirmBtn, type === 'pickup' ? styles.bgPickup : styles.bgDrop]}
+              onPress={handleFinalize}
+              activeOpacity={0.85}
+            >
+              <CheckCircle size={scale(20)} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.primaryConfirmBtnText}>
+                {type === 'pickup' ? t('orders.confirm_pickup', { defaultValue: 'Confirm Pickup' }) : t('orders.confirm_delivery', { defaultValue: 'Confirm Delivery' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       <Modal
@@ -699,6 +801,108 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(9),
     color: '#2563EB',
+  },
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(16),
+    borderTopWidth: 1.5,
+    borderTopColor: '#F1F5F9',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  inlineFooterContainer: {
+    marginTop: verticalScale(12),
+    marginBottom: verticalScale(16),
+    paddingHorizontal: scale(4),
+  },
+  primaryConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scale(10),
+    height: verticalScale(54),
+    borderRadius: scale(16),
+    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#073318',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  primaryConfirmBtnText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(16),
+    color: '#FFFFFF',
+  },
+  bgPickup: {
+    backgroundColor: '#073318', // Brand Deep Green
+  },
+  bgDrop: {
+    backgroundColor: '#073318', // Brand Deep Green
+  },
+  rejectedBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  rejectedBannerTitle: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(14),
+    color: '#DC2626',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rejectedBannerText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: '#991B1B',
+    lineHeight: 18,
+  },
+  rejectedBottomBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderLeftWidth: scale(4),
+    borderLeftColor: '#DC2626',
+    borderRadius: scale(12),
+    padding: moderateScale(16),
+    gap: verticalScale(8),
+    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#DC2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  rejectedFooterContainer: {
+    marginTop: verticalScale(12),
+    marginBottom: verticalScale(32), // Extra bottom spacing to cleanly prevent any overlay clipping!
   },
 });
 

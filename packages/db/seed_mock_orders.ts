@@ -184,8 +184,10 @@ async function main() {
     where: { phoneNumber: '9999999999' }
   });
 
+  let targetTransporter;
+
   if (existingTransporter) {
-    console.log('Deleting existing Transporter User and relations to perform clean seed...');
+    console.log('Resetting relations for existing Transporter User to perform clean seed...');
     await prisma.address.deleteMany({ where: { userId: existingTransporter.id } });
     await prisma.bankDetail.deleteMany({ where: { userId: existingTransporter.id } });
     await prisma.document.deleteMany({ where: { userId: existingTransporter.id } });
@@ -196,134 +198,258 @@ async function main() {
     await prisma.milkVanDetail.deleteMany({ where: { userId: existingTransporter.id } });
     await prisma.application.deleteMany({ where: { userId: existingTransporter.id } });
     await prisma.stepTracking.deleteMany({ where: { userId: existingTransporter.id } });
-    await prisma.user.delete({ where: { id: existingTransporter.id } });
-  }
 
-  const targetTransporter = await prisma.user.create({
-    data: {
-      authId: randomUUID(),
-      phoneNumber: '9999999999',
-      role: UserRole.TRANSPORTER,
-      fullName: 'Mahendra Powar',
-      profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
-      language: 'English',
-      isVerified: true,
-      currentStep: 6,
-      profileCompletion: 100,
-      applicationStatus: 'APPROVED',
-      uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000),
-      approvedAt: new Date(),
-      
-      address: {
-        create: {
-          addressLine1: 'Shivaji Chowk, Main Road',
-          addressLine2: 'Near Gram Panchayat',
-          village: 'Nesari',
-          taluka: 'Gadhinglaj',
-          district: 'Kolhapur',
-          state: 'Maharashtra',
-          pincode: '416504',
-          landmark: 'Water Tank',
-          latitude: 16.0333,
-          longitude: 74.3333,
-        }
-      },
-      
-      bankDetails: {
-        create: {
-          accountHolderName: 'Mahendra Powar',
-          bankName: 'State Bank of India',
-          accountNumber: '32109876543',
-          ifscCode: 'SBIN0001234',
-          branchName: 'Nesari Branch',
-          upiId: 'mahendra@sbi',
-          isVerified: true,
-        }
-      },
-      
-      documents: {
-        create: {
-          aadhaarNumber: '123456789012',
-          panNumber: 'ABCDE1234F',
-          drivingLicenseNo: 'MH-09-2023-1234567',
-          aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
-          aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
-          panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
-          drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
-        }
-      },
-      
-      vehicles: {
-        create: {
-          vehicleType: 'FOUR_WHEELER',
-          vehicleName: 'Mahindra Bolero Pickup',
-          registrationNumber: 'MH-09-EQ-4321',
-          licenseNumber: 'MH-09-2023-1234567',
-          rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
-          insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
-          vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
-        }
-      },
-      
-      transporterDetail: {
-        create: {
-          transporterCode: 'TRP-M-50',
-          vehicleCategory: 'FOUR_WHEELER',
-          experienceYears: 5,
-          availableFullTime: true,
-        }
-      },
-      
-      drivingDetail: {
-        create: {
-          licenseNumber: 'MH-09-2023-1234567',
-          expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
-          drivingExperience: 5,
-        }
-      },
-      
-      routeDetail: {
-        create: {
-          operatingArea: 'Gadhinglaj and surrounding talukas',
-          pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
-          dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
-          workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
-          workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
-        }
-      },
-      
-      milkVanDetail: {
-        create: {
-          sangathanName: 'Warna Dairy Sangathan',
-          centerName: 'Nesari Center',
-          assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
-          morningShiftTime: '06:00 - 09:00',
-          eveningShiftTime: '17:00 - 20:00',
-        }
-      },
-      
-      applications: {
-        create: {
-          status: 'APPROVED',
-          reviewedBy: 'Admin',
-          approvedAt: new Date(),
-        }
-      },
-      
-      stepTracking: {
-        createMany: {
-          data: [
-            { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
-            { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
-            { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
-            { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
-            { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
-            { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
-          ]
+    targetTransporter = await prisma.user.update({
+      where: { id: existingTransporter.id },
+      data: {
+        role: UserRole.TRANSPORTER,
+        fullName: 'Mahendra Powar',
+        profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        language: 'English',
+        isVerified: true,
+        currentStep: 6,
+        profileCompletion: 100,
+        applicationStatus: 'APPROVED',
+        ...(!existingTransporter.uniqueCode ? { uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000) } : {}),
+        approvedAt: new Date(),
+        
+        address: {
+          create: {
+            addressLine1: 'Shivaji Chowk, Main Road',
+            addressLine2: 'Near Gram Panchayat',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+            landmark: 'Water Tank',
+            latitude: 16.0333,
+            longitude: 74.3333,
+          }
+        },
+        
+        bankDetails: {
+          create: {
+            accountHolderName: 'Mahendra Powar',
+            bankName: 'State Bank of India',
+            accountNumber: '32109876543',
+            ifscCode: 'SBIN0001234',
+            branchName: 'Nesari Branch',
+            upiId: 'mahendra@sbi',
+            isVerified: true,
+          }
+        },
+        
+        documents: {
+          create: {
+            aadhaarNumber: '123456789012',
+            panNumber: 'ABCDE1234F',
+            drivingLicenseNo: 'MH-09-2023-1234567',
+            aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
+            aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
+            panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
+            drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
+          }
+        },
+        
+        vehicles: {
+          create: {
+            vehicleType: 'FOUR_WHEELER',
+            vehicleName: 'Mahindra Bolero Pickup',
+            registrationNumber: 'MH-09-EQ-4321',
+            licenseNumber: 'MH-09-2023-1234567',
+            rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
+            insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
+            vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
+          }
+        },
+        
+        transporterDetail: {
+          create: {
+            transporterCode: 'TRP-M-50',
+            vehicleCategory: 'FOUR_WHEELER',
+            experienceYears: 5,
+            availableFullTime: true,
+          }
+        },
+        
+        drivingDetail: {
+          create: {
+            licenseNumber: 'MH-09-2023-1234567',
+            expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
+            drivingExperience: 5,
+          }
+        },
+        
+        routeDetail: {
+          create: {
+            operatingArea: 'Gadhinglaj and surrounding talukas',
+            pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
+            dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
+            workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
+            workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
+          }
+        },
+        
+        milkVanDetail: {
+          create: {
+            sangathanName: 'Warna Dairy Sangathan',
+            centerName: 'Nesari Center',
+            assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
+            morningShiftTime: '06:00 - 09:00',
+            eveningShiftTime: '17:00 - 20:00',
+          }
+        },
+        
+        applications: {
+          create: {
+            status: 'APPROVED',
+            reviewedBy: 'Admin',
+            approvedAt: new Date(),
+          }
+        },
+        
+        stepTracking: {
+          createMany: {
+            data: [
+              { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
+              { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
+              { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
+              { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
+              { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
+              { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
+            ]
+          }
         }
       }
-    }
-  });
+    });
+  } else {
+    targetTransporter = await prisma.user.create({
+      data: {
+        authId: randomUUID(),
+        phoneNumber: '9999999999',
+        role: UserRole.TRANSPORTER,
+        fullName: 'Mahendra Powar',
+        profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        language: 'English',
+        isVerified: true,
+        currentStep: 6,
+        profileCompletion: 100,
+        applicationStatus: 'APPROVED',
+        uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000),
+        approvedAt: new Date(),
+        
+        address: {
+          create: {
+            addressLine1: 'Shivaji Chowk, Main Road',
+            addressLine2: 'Near Gram Panchayat',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+            landmark: 'Water Tank',
+            latitude: 16.0333,
+            longitude: 74.3333,
+          }
+        },
+        
+        bankDetails: {
+          create: {
+            accountHolderName: 'Mahendra Powar',
+            bankName: 'State Bank of India',
+            accountNumber: '32109876543',
+            ifscCode: 'SBIN0001234',
+            branchName: 'Nesari Branch',
+            upiId: 'mahendra@sbi',
+            isVerified: true,
+          }
+        },
+        
+        documents: {
+          create: {
+            aadhaarNumber: '123456789012',
+            panNumber: 'ABCDE1234F',
+            drivingLicenseNo: 'MH-09-2023-1234567',
+            aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
+            aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
+            panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
+            drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
+          }
+        },
+        
+        vehicles: {
+          create: {
+            vehicleType: 'FOUR_WHEELER',
+            vehicleName: 'Mahindra Bolero Pickup',
+            registrationNumber: 'MH-09-EQ-4321',
+            licenseNumber: 'MH-09-2023-1234567',
+            rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
+            insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
+            vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
+          }
+        },
+        
+        transporterDetail: {
+          create: {
+            transporterCode: 'TRP-M-50',
+            vehicleCategory: 'FOUR_WHEELER',
+            experienceYears: 5,
+            availableFullTime: true,
+          }
+        },
+        
+        drivingDetail: {
+          create: {
+            licenseNumber: 'MH-09-2023-1234567',
+            expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
+            drivingExperience: 5,
+          }
+        },
+        
+        routeDetail: {
+          create: {
+            operatingArea: 'Gadhinglaj and surrounding talukas',
+            pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
+            dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
+            workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
+            workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
+          }
+        },
+        
+        milkVanDetail: {
+          create: {
+            sangathanName: 'Warna Dairy Sangathan',
+            centerName: 'Nesari Center',
+            assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
+            morningShiftTime: '06:00 - 09:00',
+            eveningShiftTime: '17:00 - 20:00',
+          }
+        },
+        
+        applications: {
+          create: {
+            status: 'APPROVED',
+            reviewedBy: 'Admin',
+            approvedAt: new Date(),
+          }
+        },
+        
+        stepTracking: {
+          createMany: {
+            data: [
+              { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
+              { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
+              { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
+              { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
+              { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
+              { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
+            ]
+          }
+        }
+      }
+    });
+  }
 
   console.log(`Found SHG User: ${targetShg.fullName} (ID: ${targetShg.id})`);
   console.log(`Found Transporter User: ${targetTransporter.fullName} (ID: ${targetTransporter.id})`);
@@ -374,6 +500,34 @@ async function main() {
     });
 
     console.log(`  -> Created assigned Pickup Order ${i}: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
+
+    const dropPointNamesForPickup = [
+      'Nesari Stand, Gadhinglaj',
+      'Koulage Crossing, Gadhinglaj',
+      'Hingalaj Road Primary School',
+      'Wagharale Naka Market',
+      'Mahagaon Gram Panchayat'
+    ];
+    const deliveryAddressForPickup = dropPointNamesForPickup[i - 1] || 'Nesari Stand, Gadhinglaj';
+
+    const correlatedDropOrder = await prisma.dropOrder.create({
+      data: {
+        dropOrderNumber: `DRP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        buyerId: buyer.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        deliveryAddress: deliveryAddressForPickup,
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
+        }
+      }
+    });
+    console.log(`  -> Created correlated Drop Order for Pickup ${i}: ${correlatedDropOrder.dropOrderNumber} (ID: ${correlatedDropOrder.id})`);
   }
 
   // Generate 5 Drop Orders

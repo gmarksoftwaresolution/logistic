@@ -167,6 +167,11 @@ const ProfileScreen: React.FC = () => {
       async () => {
         await AsyncStorage.removeItem('access_token');
         await AsyncStorage.removeItem('cached-profile-data');
+        await AsyncStorage.removeItem('completed_drop_pickups');
+        await AsyncStorage.removeItem('transporter_activities');
+        await AsyncStorage.removeItem('rejected_batches');
+        await AsyncStorage.removeItem('completed_batches');
+        await AsyncStorage.removeItem('captured_photos');
         navigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],

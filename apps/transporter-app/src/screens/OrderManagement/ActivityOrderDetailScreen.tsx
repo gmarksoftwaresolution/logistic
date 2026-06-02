@@ -592,23 +592,30 @@ const styles = StyleSheet.create({
   },
   bottomStickyBar: {
     paddingHorizontal: scale(20),
-    paddingTop: verticalScale(12),
-    paddingBottom: verticalScale(26),
+    paddingTop: verticalScale(14),
+    paddingBottom: Platform.OS === 'ios' ? verticalScale(38) : verticalScale(32), // Dynamic safe-device bottom spacing
     backgroundColor: '#FAFAFA',
     borderTopWidth: 1.5,
     borderTopColor: '#F1F5F9',
   },
   stickyActionBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: scale(12),
-    paddingVertical: verticalScale(14),
+    backgroundColor: '#073318', // Deep Brand Green
+    borderRadius: scale(16), // Premium rounded pill shape
+    paddingVertical: verticalScale(15),
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#073318',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   stickyActionBtnText: {
     fontFamily: Fonts.extraBold,

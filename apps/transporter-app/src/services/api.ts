@@ -2,7 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-let rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001').trim();
+
+let rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://slow-turtles-run.loca.lt').trim();
 if (rawUrl.startsWith('"') && rawUrl.endsWith('"')) {
   rawUrl = rawUrl.slice(1, -1);
 }
@@ -13,9 +14,10 @@ export const BASE_URL = rawUrl.trim();
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json',
+    'bypass-tunnel-reminder': 'true',
   },
 });
 
@@ -40,6 +42,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Handle unauthorized (e.g., clear token and redirect to login)
       await AsyncStorage.removeItem('access_token');
+      const { navigationRef } = require('../navigation/AppNavigator');
+      if (navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      }
     }
     return Promise.reject(error);
   }

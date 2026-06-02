@@ -27,14 +27,15 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const handleAcceptSingle = (batchId: string) => {
-    acceptBatch(batchId);
-    navigation.navigate('OrderBatchPickupDetail', { batchId: batchId, type: 'pickup' });
+  const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
+    await acceptBatch(batchId);
+    navigation.navigate('AcceptedOrders', { activeTab: type });
   };
 
-  const handleAcceptBulk = (ids: string[]) => {
-    acceptBatchIds(ids);
-    setShowSuccessModal(true);
+  const handleAcceptBulk = async (ids: string[]) => {
+    await acceptBatchIds(ids);
+    setShowSuccessModal(false);
+    navigation.navigate('AcceptedOrders');
   };
 
   // Track accordion expansion states per area. Collapsed by default.
@@ -212,7 +213,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id)}>
+                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
@@ -262,7 +263,7 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id)}>
+                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}

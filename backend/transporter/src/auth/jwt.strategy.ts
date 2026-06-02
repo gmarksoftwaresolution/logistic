@@ -37,6 +37,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
+    console.log('--- JWT AUTH VALIDATION ---');
+    console.log(`User ID: ${user.id} | Phone: ${user.phoneNumber} | Role: ${user.role}`);
+    console.log('---------------------------');
+
     return user;
   }
 }

@@ -18,7 +18,7 @@ import ShgDetailScreen from '../screens/OrderManagement/ShgDetailScreen';
 export type OrderManagementStackParamList = {
   OrderManagementMain: undefined;
   CategoryOrders: { category: 'new' | 'accepted' | 'rejected' | 'completed' };
-  AcceptedOrders: undefined;
+  AcceptedOrders: { activeTab?: 'pickup' | 'drop' } | undefined;
   OrderBatchRejected: undefined;
   OrderBatchCompleted: undefined;
   OrderBatchPickupDetail: { batchId: string };

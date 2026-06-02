@@ -52,21 +52,18 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
   const getActivityBadgeStyle = (status: ActivityEntry['status']) => {
     switch (status) {
       case 'Picked':
-        return { bg: '#EFF6FF', text: '#2563EB' };
-      case 'Dropped':
-        return { bg: '#ECFDF5', text: '#059669' };
-      case 'Accepted':
-        return { bg: '#DCFCE7', text: '#15803D' };
-      case 'Rejected':
-        return { bg: '#FEE2E2', text: '#B91C1C' };
-      case 'Completed':
-        return { bg: '#ECFDF5', text: '#047857' };
       case 'PICKUP_COMPLETED':
-        return { bg: '#EFF6FF', text: '#1D4ED8' };
+        return { bg: '#EFF6FF', text: '#2563EB', label: 'Pickup Confirmed' };
+      case 'Dropped':
       case 'DROP_COMPLETED':
-        return { bg: '#DCFCE7', text: '#15803D' };
+      case 'Completed':
+        return { bg: '#ECFDF5', text: '#059669', label: 'Delivered' };
+      case 'Rejected':
+        return { bg: '#FEE2E2', text: '#B91C1C', label: 'Rejected' };
+      case 'Accepted':
+        return { bg: '#DCFCE7', text: '#15803D', label: 'Accepted' };
       default:
-        return { bg: '#F1F5F9', text: '#64748B' };
+        return { bg: '#F1F5F9', text: '#64748B', label: status };
     }
   };
 
@@ -230,10 +227,10 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
                 >
                   {/* Top Row */}
                   <View style={styles.activityTopRow}>
-                    <Text style={styles.orderIdText}>{act.orderId}</Text>
+                    <Text style={styles.orderIdText} numberOfLines={1}>{act.orderId}</Text>
                     <View style={[styles.statusBadgePill, { backgroundColor: badge.bg }]}>
                       <Text style={[styles.statusBadgeText, { color: badge.text }]}>
-                        {t(`orders.${act.status.toLowerCase()}`, { defaultValue: act.status })}
+                        {(badge as any).label || act.status}
                       </Text>
                     </View>
                   </View>
