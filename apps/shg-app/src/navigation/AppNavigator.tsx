@@ -50,7 +50,7 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Help" component={HelpScreen} />
-      <Stack.Screen name="Main" component={MainTabNavigator} />
+      <Stack.Screen name="Main" component={MainTabNavigator} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="Terms" component={TermsScreen} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} />

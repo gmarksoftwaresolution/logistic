@@ -149,7 +149,56 @@ const MOCK_INCOMING = [
     remainingQty: 1,
     weight: '20',
     time: '1 hr ago',
-    distance: 5.6
+  },
+  {
+    id: 'inc-5',
+    orderId: 'ORD005',
+    parcelName: 'Sony WH-1000XM4 Headphones',
+    category: 'Audio - Electronics',
+    categoryBg: 'bg-[#FEE2E2]',
+    categoryText: 'text-[#EF4444]',
+    mobile: '9765432109',
+    amount: '19,990',
+    payment: 'COD',
+    address: 'Gandhi Road, Belagavi',
+    deliveryDay: '1 DAY DELIVERY',
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Vijay Kadam',
+    transporterMobile: '9765432109',
+    transporterId: 'V7362OP',
+    pickupTime: '09:45 AM',
+    vehicleNumber: 'V7362OP',
+    currentHolder: 'Transporter',
+    remainingQty: 2,
+    weight: '3',
+    time: '2 hrs ago',
+    distance: 2.5
+  },
+  {
+    id: 'inc-6',
+    orderId: 'ORD006',
+    parcelName: 'Apple iPad Air M1',
+    category: 'Tablets - Electronics',
+    categoryBg: 'bg-[#F5F3FF]',
+    categoryText: 'text-[#7C3AED]',
+    mobile: '9123456789',
+    amount: '54,900',
+    payment: 'Prepaid',
+    address: 'Station Road, Nipani',
+    deliveryDay: '2 DAY DELIVERY',
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Mahesh Shinde',
+    transporterMobile: '9123456789',
+    transporterId: 'A8293KL',
+    pickupTime: '11:15 AM',
+    vehicleNumber: 'A8293KL',
+    currentHolder: 'Seller',
+    remainingQty: 1,
+    weight: '5',
+    time: '3 hrs ago',
+    distance: 7.1
   }
 ];
 
@@ -169,9 +218,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const acceptOrder = (order: Order) => {
     setIncomingOrders(prev => prev.filter(o => o.id !== order.id));
+    const isDelivery = order.currentHolder === 'Transporter';
     setAcceptedOrders(prev => [...prev, {
       ...order,
-      status: 'Accepted',
+      status: isDelivery ? 'Received' : 'Accepted',
       currentHolder: 'SHG',
       acceptedAt: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     }]);
@@ -179,7 +229,12 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const acceptAllOrders = () => {
     const now = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    setAcceptedOrders(prev => [...prev, ...incomingOrders.map(o => ({ ...o, status: 'Accepted', currentHolder: 'SHG', acceptedAt: now }))]);
+    setAcceptedOrders(prev => [...prev, ...incomingOrders.map(o => ({ 
+      ...o, 
+      status: o.currentHolder === 'Transporter' ? 'Received' : 'Accepted', 
+      currentHolder: 'SHG', 
+      acceptedAt: now 
+    }))]);
     setIncomingOrders([]);
   };
 

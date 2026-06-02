@@ -1,7 +1,7 @@
 export type OrdersStackParamList = {
   OrdersOverview: { filter?: string } | undefined;
   IncomingOrders: undefined;
-  AcceptedOrders: undefined;
+  AcceptedOrders: { initialTab?: 'pickup' | 'delivery' } | undefined;
   RejectedOrders: undefined;
   Delivery: undefined;
   OrderHistory: undefined;

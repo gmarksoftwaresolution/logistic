@@ -60,13 +60,21 @@ export default function OrderHistoryScreen({ navigation }: Props) {
 
         if (filteredOrders.length === 0) {
           return (
-            <View className="flex-1 items-center justify-center px-6 mt-16">
-              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4 border border-slate-100">
-                <Ionicons name="file-tray-outline" size={32} color="#94A3B8" />
+            <View className="px-6 pt-6">
+              <View 
+                className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
+                style={{ borderStyle: 'dashed' }}
+              >
+                <View
+                  className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
+                  style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
+                >
+                  <Ionicons name="file-tray-outline" size={28} color="#94A3B8" />
+                </View>
+                <Text className="text-[15px] font-black text-slate-700 text-center">
+                  {t("no_orders_found")}
+                </Text>
               </View>
-              <Text className="text-textSecondary font-bold text-center">
-                {t("no_orders_found")}
-              </Text>
             </View>
           );
         }

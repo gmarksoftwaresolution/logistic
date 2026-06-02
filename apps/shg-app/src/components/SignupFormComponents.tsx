@@ -258,7 +258,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
-      className={`py-4 rounded-full items-center justify-center flex-row w-full mt-6 mb-2 ${
+      className={`py-4 rounded-2xl items-center justify-center flex-row w-full mt-6 mb-2 ${
         disabled ? 'bg-[#073318]/60' : 'bg-[#073318]'
       }`}
       style={{

@@ -80,12 +80,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient 
-      colors={['#EAF5F8', '#F5F7FA', '#E8F5E9']} 
-      start={{ x: 0, y: 0 }} 
-      end={{ x: 1, y: 1 }} 
-      className="flex-1"
-    >
+    <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1">
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
           
@@ -107,15 +102,15 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             >
               <LinearGradient colors={['#0265AD', '#0097FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
                 <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">{t("overview_new_orders")}</Text>
+                  <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_new_orders")}</Text>
                   <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
                     <Feather name="package" size={14} color="#FFFFFF" />
                     <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
                   </View>
                 </View>
                 <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{incomingOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">{t("overview_incoming_items")}</Text>
+                  <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
+                  <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_incoming_items")}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>
@@ -128,15 +123,15 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             >
               <LinearGradient colors={['#5B4FAD', '#897CE0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
                 <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">{t("overview_accepted")}</Text>
+                  <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_accepted")}</Text>
                   <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
                     <Feather name="clock" size={14} color="#FFFFFF" />
                     <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
                   </View>
                 </View>
                 <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{acceptedOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">{t("overview_accepted_desc")}</Text>
+                  <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{acceptedOrders.length}</Text>
+                  <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_accepted_desc")}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>
@@ -149,15 +144,15 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             >
               <LinearGradient colors={['#BA2931', '#F05A61']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
                 <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">{t("overview_rejected")}</Text>
+                  <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_rejected")}</Text>
                   <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
                     <Feather name="x" size={14} color="#FFFFFF" />
                     <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
                   </View>
                 </View>
                 <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{rejectedOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">{t("overview_rejected_desc")}</Text>
+                  <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{rejectedOrders.length}</Text>
+                  <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_rejected_desc")}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>
@@ -170,15 +165,15 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             >
               <LinearGradient colors={['#297C11', '#51B833']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
                 <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1">{t("overview_completed")}</Text>
+                  <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_completed")}</Text>
                   <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
                     <Feather name="check" size={14} color="#FFFFFF" />
                     <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
                   </View>
                 </View>
                 <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]">{deliveredOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium">{t("overview_completed_desc")}</Text>
+                  <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{deliveredOrders.length}</Text>
+                  <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_completed_desc")}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>
@@ -196,15 +191,18 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
           {/* Glassy Recent Activity List */}
           <View className="px-4">
             {recentActivities.length === 0 ? (
-              <View className="items-center justify-center py-16">
+              <View 
+                className="items-center justify-center py-12 px-6 rounded-[24px] bg-[#F8FAFC]/40 border-2 border-[#CBD5E1]"
+                style={{ borderStyle: 'dashed' }}
+              >
                 <View
-                  className="w-16 h-16 rounded-full items-center justify-center mb-4"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.7)', borderWidth: 1, borderColor: '#E2E8F0' }}
+                  className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
+                  style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
                 >
-                  <Ionicons name="time-outline" size={30} color="#94A3B8" />
+                  <Ionicons name="time-outline" size={28} color="#94A3B8" />
                 </View>
-                <Text className="text-[15px] font-bold text-slate-500 text-center">{t("no_recent_activity")}</Text>
-                <Text className="text-[12px] text-slate-400 text-center mt-1 px-8">
+                <Text className="text-[16px] font-black text-slate-700 text-center">{t("no_recent_activity")}</Text>
+                <Text className="text-[12px] font-semibold text-slate-400 text-center mt-1.5 px-6 leading-5">
                   {t("no_recent_activity_desc")}
                 </Text>
               </View>
@@ -251,7 +249,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
 
         </ScrollView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 

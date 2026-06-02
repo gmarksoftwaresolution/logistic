@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform, Modal, TouchableWithoutFeedback, Image, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform, Modal, TouchableWithoutFeedback, Image, ActivityIndicator, Keyboard } from "react-native";
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
@@ -303,6 +303,23 @@ export default function SignupScreen({
     t
   } = context;
   const [step, setStep] = useState<number>(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
   const getStepDetails = () => {
     const isShg = selectedRole === 'shg';
     const totalSteps = isShg ? 7 : 5;
@@ -333,6 +350,8 @@ export default function SignupScreen({
   const [mobile, setMobile] = useState('');
   const [mobileError, setMobileError] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [isMobileFocused, setIsMobileFocused] = useState(false);
   const [timer, setTimer] = useState(60);
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -697,6 +716,8 @@ export default function SignupScreen({
       setStep(0);
       setSelectedRole(null);
       setMobile('');
+      setMobileError('');
+      setOtpError('');
       setOtp(['', '', '', '', '', '']);
     } catch (error) {
       console.error('Failed to clear signup progress on mount:', error);
@@ -741,6 +762,59 @@ export default function SignupScreen({
     };
     fetchBankDetails();
   }, [ifscCode]);
+
+  // Focus helper effect on step transitions
+  useEffect(() => {
+    const focusTimer = setTimeout(() => {
+      switch (step) {
+        case 1:
+          mobileRef.current?.focus();
+          break;
+        case 2:
+          inputRefs.current[0]?.focus();
+          break;
+        case 3:
+          fullNameRef.current?.focus();
+          break;
+        case 4:
+          if (selectedRole === 'shg') {
+            if (shgRole === 'crp') {
+              shgNameRef.current?.focus();
+            } else {
+              shgNameRef.current?.focus();
+            }
+          } else if (selectedRole === 'individual') {
+            otherOccupationRef.current?.focus();
+          }
+          break;
+        case 5:
+          if (producesProducts === 'yes') {
+            businessTeamSizeRef.current?.focus();
+          }
+          break;
+        case 6:
+          pincodeRef.current?.focus();
+          break;
+        case 7:
+          aadhaarNumberRef.current?.focus();
+          break;
+        case 8:
+          accountNameRef.current?.focus();
+          break;
+        case 9:
+          if (selectedRole === 'shg') {
+            storageWidthRef.current?.focus();
+          } else {
+            vehicleRegNoRef.current?.focus();
+          }
+          break;
+        default:
+          break;
+      }
+    }, 150);
+
+    return () => clearTimeout(focusTimer);
+  }, [step, selectedRole, shgRole, producesProducts]);
 
   // Timer Effect
   useEffect(() => {
@@ -805,8 +879,12 @@ export default function SignupScreen({
 
   // Auth Functions
   const handleSendOtp = async () => {
+    if (!mobile) {
+      setMobileError(t('val_mobile_number_required') || 'Mobile number is required');
+      return;
+    }
     if (mobile.length !== 10) {
-      setMobileError(t('enter_10_digit'));
+      setMobileError(t('su_enter_valid_10_digit_100') || 'Enter a valid 10 digit mobile number');
       return;
     }
     if (!/^[6-9]/.test(mobile)) {
@@ -829,11 +907,7 @@ export default function SignupScreen({
       if (displayMessage && displayMessage.toLowerCase().includes('already registered')) {
         setMobileError(t("su_this_mobile_number_i_4"));
       } else {
-        Toast.show({
-          type: 'error',
-          text1: t("su_failed_to_send_otp_5"),
-          text2: displayMessage || 'Please check your mobile number and try again.'
-        });
+        setMobileError(displayMessage || 'Please check your mobile number and try again.');
       }
     } finally {
       setIsSubmitting(false);
@@ -841,6 +915,7 @@ export default function SignupScreen({
   };
   const handleResendOtp = async () => {
     setIsSubmitting(true);
+    setOtpError('');
     try {
       await authService.sendSignupOtp(mobile);
       setTimer(60);
@@ -850,11 +925,9 @@ export default function SignupScreen({
         text1: t("su_otp_resent_successfu_6")
       });
     } catch (error: any) {
-      Toast.show({
-        type: 'error',
-        text1: t("su_failed_to_resend_otp_7"),
-        text2: t("su_please_try_again_aft_8")
-      });
+      const serverMessage = error.response?.data?.message;
+      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
+      setOtpError(displayMessage || t("su_please_try_again_aft_8"));
     } finally {
       setIsSubmitting(false);
     }
@@ -1021,16 +1094,15 @@ export default function SignupScreen({
         text2: t("su_starting_new_signup_14")
       });
     } catch (error: any) {
-      Toast.show({
-        type: 'error',
-        text1: t("su_verification_failed_17"),
-        text2: t("su_the_otp_you_entered__18")
-      });
+      const serverMessage = error.response?.data?.message;
+      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
+      setOtpError(displayMessage || t("su_the_otp_you_entered__18") || 'Verification Failed');
     } finally {
       setIsSubmitting(false);
     }
   };
   const handleOtpChange = (val: string, index: number) => {
+    setOtpError('');
     let newOtp = [...otp];
     newOtp[index] = val;
     setOtp(newOtp);
@@ -1828,7 +1900,7 @@ export default function SignupScreen({
       <KeyboardAwareScrollView className="flex-1" contentContainerStyle={{
       flexGrow: 1,
       paddingBottom: 40
-    }} bounces={false} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={160} extraHeight={160} enableAutomaticScroll={true}>
+    }} bounces={false} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} enableOnAndroid={true} extraScrollHeight={80} extraHeight={80} enableAutomaticScroll={true}>
 
         {/* Header */}
         <View className="px-6 pt-4 pb-4 bg-transparent mt-4">
@@ -1938,7 +2010,7 @@ export default function SignupScreen({
                 setStep(1);
               }
             }
-          }} className="bg-[#073318] py-4 rounded-full items-center justify-center flex-row w-full mt-4" style={{
+          }} className="bg-[#073318] py-4 rounded-2xl items-center justify-center flex-row w-full mt-4" style={{
             shadowColor: "#000",
             shadowOffset: {
               width: 0,
@@ -1956,21 +2028,18 @@ export default function SignupScreen({
 
         {/* Step 1: Mobile Input */}
         {step === 1 && <View className="flex-1 px-6 pt-6 pb-10">
-            {/* Massive Branding Section matching Login */}
-            <View className="items-center justify-center mb-8 mt-2">
-              <Image source={require('../../assets/images/GMU Logo.png')} style={{
-            width: 80,
-            height: 80
-          }} resizeMode="contain" className="mb-2" />
-              <Text className="font-extrabold text-[36px] tracking-tight text-center">
-                <Text style={{
-              color: '#073318'
-            }}>{t("gram")}</Text>
-                <Text style={{
-              color: '#84B827'
-            }}>{t("unnati")}</Text>
+            <View className={`${isKeyboardVisible ? 'mb-4 mt-2' : 'mb-8 mt-2'} items-center justify-center text-center`}>
+              <Image
+                source={require('../../assets/images/GMU Logo.png')}
+                style={isKeyboardVisible ? { width: 50, height: 50 } : { width: 80, height: 80 }}
+                resizeMode="contain"
+                className={isKeyboardVisible ? 'mb-1' : 'mb-2'}
+              />
+              <Text className={`font-extrabold tracking-tight text-center px-4 ${isKeyboardVisible ? 'text-[24px]' : 'text-[36px]'}`} adjustsFontSizeToFit numberOfLines={1}>
+                <Text style={{ color: '#073318' }}>{t("gram")}</Text>
+                <Text style={{ color: '#84B827' }}>{t("unnati")}</Text>
               </Text>
-              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t("delivery_partner")}</Text>
+              <Text className={`font-black text-[#073318] tracking-widest uppercase text-center mt-1 ${isKeyboardVisible ? 'text-[12px]' : 'text-[18px]'}`} adjustsFontSizeToFit numberOfLines={1}>{t("delivery_partner")}</Text>
             </View>
 
             {/* Big Container Card for Actions */}
@@ -1989,11 +2058,11 @@ export default function SignupScreen({
                 {t('enter_mobile')}
               </Text>
 
-              <Text numberOfLines={1} className="text-[12px] font-bold text-[#6B7280] uppercase tracking-wider mb-2 ml-1">{t('mobile_number')}</Text>
-              <View className={`flex-row items-center bg-[#F9FAFB] py-4 px-4 rounded-[20px] shadow-sm border ${mobileError ? 'border-[#DC2626]' : mobile.length === 10 ? 'border-[#22C55E]' : 'border-gray-200'} mb-2`}>
-                <Text className="text-[#073318] font-bold mr-3">+91</Text>
-                <View className="w-[1px] h-6 bg-gray-300 mr-3" />
-                <TextInput ref={mobileRef} className="flex-1 text-[#111827] text-[16px] font-bold" placeholder={t('enter_10_digit')} placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={10} value={mobile} onChangeText={val => {
+              <Text numberOfLines={1} className="text-[10px] font-bold text-[#414651] uppercase tracking-wider mb-2 ml-1">{t('mobile_number')}</Text>
+              <View className={`bg-[#F9FAFB] h-[50px] px-4 rounded-[16px] border flex-row items-center ${mobileError ? 'border-[#EF4444]' : isMobileFocused ? 'border-[#073318]' : mobile.length === 10 ? 'border-[#22C55E]' : 'border-gray-200'} mb-2`}>
+                <Text className="text-[#073318] text-[15px] font-bold mr-3">+91</Text>
+                <View className="w-[1px] h-5 bg-gray-200 mr-3" />
+                <TextInput ref={mobileRef} className="flex-1 text-[#111827] text-[15px] font-medium p-0" style={{ padding: 0, height: '100%', textAlignVertical: 'center' }} placeholder="Enter your mobile number" placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={10} value={mobile} onChangeText={val => {
               const cleaned = val.replace(/[^0-9]/g, '');
               setMobile(cleaned);
               setOtp(['', '', '', '', '', '']);
@@ -2004,7 +2073,8 @@ export default function SignupScreen({
               } else {
                 setMobileError("");
               }
-            }} onBlur={() => {
+            }} onFocus={() => setIsMobileFocused(true)} onBlur={() => {
+              setIsMobileFocused(false);
               if (!mobile) setMobileError(t("val_mobile_number_required"));else if (mobile.length < 10) setMobileError(t("su_enter_valid_10_digit_100"));
             }} returnKeyType="done" onSubmitEditing={handleSendOtp} />
               </View>
@@ -2016,15 +2086,15 @@ export default function SignupScreen({
             marginBottom: 16
           }}>{mobileError}</Text> : <View className="mb-6" />}
 
-              <TouchableOpacity onPress={handleSendOtp} disabled={mobile.length !== 10 || isSubmitting} className={`${mobile.length !== 10 ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`} style={{
+              <TouchableOpacity onPress={handleSendOtp} disabled={isSubmitting} className={`${isSubmitting ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-2xl items-center justify-center flex-row mb-5`} style={{
             shadowColor: "#000",
             shadowOffset: {
               width: 0,
               height: 4
             },
-            shadowOpacity: 0.3,
+            shadowOpacity: isSubmitting ? 0 : 0.3,
             shadowRadius: 5,
-            elevation: 8
+            elevation: isSubmitting ? 0 : 8
           }}>
                 {isSubmitting ? <ActivityIndicator color="white" /> : <>
                     <Text numberOfLines={1} className="text-white text-[18px] font-bold tracking-wide mr-2">{t('send_otp')}</Text>
@@ -2043,21 +2113,18 @@ export default function SignupScreen({
 
         {/* Step 2: OTP Verification */}
         {step === 2 && <View className="flex-1 px-6 pt-6 pb-10">
-            {/* Massive Branding Section matching Login */}
-            <View className="items-center justify-center mb-8 mt-2">
-              <Image source={require('../../assets/images/GMU Logo.png')} style={{
-            width: 80,
-            height: 80
-          }} resizeMode="contain" className="mb-2" />
-              <Text className="font-extrabold text-[36px] tracking-tight text-center">
-                <Text style={{
-              color: '#073318'
-            }}>{t("gram")}</Text>
-                <Text style={{
-              color: '#84B827'
-            }}>{t("unnati")}</Text>
+            <View className={`${isKeyboardVisible ? 'mb-4 mt-2' : 'mb-8 mt-2'} items-center justify-center text-center`}>
+              <Image
+                source={require('../../assets/images/GMU Logo.png')}
+                style={isKeyboardVisible ? { width: 50, height: 50 } : { width: 80, height: 80 }}
+                resizeMode="contain"
+                className={isKeyboardVisible ? 'mb-1' : 'mb-2'}
+              />
+              <Text className={`font-extrabold tracking-tight text-center px-4 ${isKeyboardVisible ? 'text-[24px]' : 'text-[36px]'}`} adjustsFontSizeToFit numberOfLines={1}>
+                <Text style={{ color: '#073318' }}>{t("gram")}</Text>
+                <Text style={{ color: '#84B827' }}>{t("unnati")}</Text>
               </Text>
-              <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t("delivery_partner")}</Text>
+              <Text className={`font-black text-[#073318] tracking-widest uppercase text-center mt-1 ${isKeyboardVisible ? 'text-[12px]' : 'text-[18px]'}`} adjustsFontSizeToFit numberOfLines={1}>{t("delivery_partner")}</Text>
             </View>
 
             {/* Big Container Card for Actions */}
@@ -2076,8 +2143,8 @@ export default function SignupScreen({
                 {t('enter_otp_sent')} <Text className="text-[#073318] font-bold">+91 {mobile || "XXXXXXXXXX"}</Text>
               </Text>
 
-              <View className="flex-row justify-between w-full mb-6">
-                {[0, 1, 2, 3, 4, 5].map(i => <View key={i} className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'}`}>
+              <View className="flex-row justify-between w-full mb-4">
+                {[0, 1, 2, 3, 4, 5].map(i => <View key={i} className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${otpError ? 'border-red-500' : focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'}`}>
                     <Text style={{
                 textAlign: 'center',
                 textAlignVertical: 'center',
@@ -2098,6 +2165,9 @@ export default function SignupScreen({
               }} keyboardType="numeric" textContentType="oneTimeCode" autoComplete="sms-otp" maxLength={1} value={otp[i]} onChangeText={val => handleOtpChange(val, i)} onKeyPress={e => handleOtpKeyPress(e, i)} onFocus={() => setFocusedIndex(i)} onBlur={() => setFocusedIndex(null)} />
                   </View>)}
               </View>
+              {otpError ? (
+                <Text className="text-red-500 text-xs mt-1.5 mb-3 text-center font-medium">{otpError}</Text>
+              ) : null}
 
               <View className="flex-row items-center justify-center mb-8">
                 <Feather name="clock" size={14} color="#6B7280" className="mr-1.5" />
@@ -2108,15 +2178,15 @@ export default function SignupScreen({
                 </Text>
               </View>
 
-              <TouchableOpacity onPress={handleVerifyOtp} disabled={!isOtpComplete || isSubmitting} className={`${!isOtpComplete ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`} style={{
+               <TouchableOpacity onPress={handleVerifyOtp} disabled={!isOtpComplete || isSubmitting} className={`${!isOtpComplete ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-2xl items-center justify-center flex-row mb-5`} style={{
             shadowColor: "#000",
             shadowOffset: {
               width: 0,
               height: 4
             },
-            shadowOpacity: 0.3,
+            shadowOpacity: (!isOtpComplete || isSubmitting) ? 0 : 0.3,
             shadowRadius: 5,
-            elevation: 8
+            elevation: (!isOtpComplete || isSubmitting) ? 0 : 8
           }}>
                 {isSubmitting ? <ActivityIndicator color="white" /> : <>
                     <Text numberOfLines={1} className="text-white text-[18px] font-bold tracking-wide mr-2">{t('verify_otp')}</Text>
@@ -2255,34 +2325,34 @@ export default function SignupScreen({
                   </View>}
 
                 {shgRole && shgRole !== 'crp' && <View className="w-full">
-                    <InputField label={t("su_shg_name_133")} placeholder={t("su_enter_shg_name_134")} icon="business-outline" error={shgNameError} required={true} value={shgName} onChangeText={v => {
+                    <InputField ref={shgNameRef} label={t("su_shg_name_133")} placeholder={t("su_enter_shg_name_134")} icon="business-outline" error={shgNameError} required={true} value={shgName} onChangeText={v => {
                 const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                 setShgName(filtered);
-                setShgNameError('');
+                 setShgNameError('');
               }} />
 
-                    <InputField label={t("su_crp_name_145")} placeholder={t("su_enter_crp_name_146")} icon="person-outline" error={crpNameError} required={true} value={crpName} onChangeText={v => {
+                    <InputField ref={crpNameRef} label={t("su_crp_name_145")} placeholder={t("su_enter_crp_name_146")} icon="person-outline" error={crpNameError} required={true} value={crpName} onChangeText={v => {
                 const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                 setCrpName(filtered);
                 setCrpNameError('');
               }} />
 
-                    <InputField label={t("su_crp_contact_number_147")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={crpMobileError} required={true} keyboardType="numeric" maxLength={10} value={crpMobile} onChangeText={v => {
+                    <InputField ref={crpMobileRef} label={t("su_crp_contact_number_147")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={crpMobileError} required={true} keyboardType="numeric" maxLength={10} value={crpMobile} onChangeText={v => {
                 const filtered = v.replace(/[^0-9]/g, '');
                 setCrpMobile(filtered);
                 setCrpMobileError('');
               }} />
 
-                    <InputField label={t("su_crp_email_id_optiona_149")} placeholder={t("su_enter_email_address_150")} icon="mail-outline" keyboardType="email-address" autoCapitalize="none" value={crpEmail} onChangeText={v => setCrpEmail(v.replace(/[^a-zA-Z0-9@._-]/g, ''))} />
+                    <InputField ref={crpEmailRef} label={t("su_crp_email_id_optiona_149")} placeholder={t("su_enter_email_address_150")} icon="mail-outline" keyboardType="email-address" autoCapitalize="none" value={crpEmail} onChangeText={v => setCrpEmail(v.replace(/[^a-zA-Z0-9@._-]/g, ''))} />
 
                     {shgRole === 'member' && <View className="w-full">
-                        <InputField label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} onChangeText={v => {
+                        <InputField ref={leaderNameRef} label={t("su_group_leader_name_139")} placeholder={t("su_enter_leader_s_name_140")} icon="person-outline" error={leaderNameError} required={true} value={leaderName} onChangeText={v => {
                   const filtered = v.replace(/[^a-zA-Z\s]/g, '');
                   setLeaderName(filtered);
                   setLeaderNameError('');
                 }} />
 
-                        <InputField label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} onChangeText={v => {
+                        <InputField ref={leaderMobileRef} label={t("su_leader_mobile_number_141")} placeholder={t("su_enter_10_digit_mobil_35")} icon="phone-portrait-outline" error={leaderMobileError} required={true} keyboardType="numeric" maxLength={10} value={leaderMobile} onChangeText={v => {
                   const filtered = v.replace(/[^0-9]/g, '');
                   setLeaderMobile(filtered);
                   setLeaderMobileError('');
@@ -2291,7 +2361,7 @@ export default function SignupScreen({
 
                     <DropdownField label={t("su_how_long_has_your_sh_135")} placeholder={t("su_select_experience_136")} icon="time-outline" value={shgExperience ? t("opt_" + shgExperience) : ""} error={shgExperienceError} required={true} onPress={() => setShowExperienceMenu(true)} />
 
-                    <InputField label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
+                    <InputField ref={shgGroupSizeRef} label={t("su_shg_group_size_137")} placeholder={t("su_enter_number_of_memb_138")} icon="people-outline" error={shgGroupSizeError} required={true} keyboardType="numeric" maxLength={3} value={shgGroupSize} onChangeText={v => {
                 const filtered = v.replace(/[^0-9]/g, '');
                 if (Number(filtered) <= 100) {
                   setShgGroupSize(filtered);

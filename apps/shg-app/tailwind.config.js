@@ -7,11 +7,12 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        regular: ["Mukta-Regular"],
-        medium: ["Mukta-Medium"],
-        semibold: ["Mukta-SemiBold"],
-        bold: ["Mukta-Bold"],
-        extrabold: ["Mukta-ExtraBold"],
+        regular: ["Poppins-Regular"],
+        medium: ["Poppins-Medium"],
+        semibold: ["Poppins-SemiBold"],
+        bold: ["Poppins-Bold"],
+        extrabold: ["Poppins-ExtraBold"],
+        black: ["Poppins-Black"],
       },
       colors: {
         primary: "#073318",

@@ -6,21 +6,6 @@ export class OtpService {
   constructor(private prisma: PrismaService) {}
 
   async generateOtp(mobileNumber: string, type: string): Promise<string> {
-    // Check for resend cooldown (1 minute)
-    const lastOtp = await this.prisma.oTPVerification.findFirst({
-      where: {
-        phoneNumber: mobileNumber,
-        type,
-        expiresAt: {
-          gt: new Date(Date.now() + 4 * 60 * 1000), // Sent within last minute
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (lastOtp) {
-      throw new BadRequestException('Please wait 1 minute before resending OTP');
-    }
 
     // Invalidate any previous OTPs for this mobile and type
     await this.prisma.oTPVerification.deleteMany({

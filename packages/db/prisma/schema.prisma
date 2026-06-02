@@ -17,6 +17,8 @@ enum UserRole {
   TRANSPORTER
   ADMIN
   SUPER_ADMIN
+  BUYER
+  SELLER
 }
 
 enum ApplicationStatus {
