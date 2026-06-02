@@ -268,7 +268,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         </View>
       </View>
       
-      <ScrollView className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
         
         {/* Main Order Info Card - Green Theme */}
         <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{

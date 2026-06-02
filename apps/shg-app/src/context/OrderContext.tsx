@@ -52,56 +52,6 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
 const MOCK_INCOMING = [
   {
-    id: 'inc-1',
-    orderId: 'ORD001',
-    parcelName: 'Smart LED TV 32 Inch',
-    category: 'TV - Electronics',
-    categoryBg: 'bg-[#EEF2FF]',
-    categoryText: 'text-[#4F46E5]',
-    mobile: '8484830180',
-    amount: '18,500',
-    payment: 'Prepaid',
-    address: 'Ch.Shivaji Maharaj Chauk, Chandgad',
-    deliveryDay: '1 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Shreedhar Patil',
-    transporterMobile: '9875898598',
-    transporterId: 'X6377GH',
-    pickupTime: '10:20 AM',
-    vehicleNumber: 'X6377GH',
-    currentHolder: 'Transporter',
-    remainingQty: 4,
-    weight: '20',
-    time: '25 mins ago',
-    distance: 4.2
-  },
-  {
-    id: 'inc-2',
-    orderId: 'ORD002',
-    parcelName: 'Samsung Double Door Fridge',
-    category: 'Fridge - Electric',
-    categoryBg: 'bg-[#ECFDF5]',
-    categoryText: 'text-[#059669]',
-    mobile: '9875898598',
-    amount: '32,000',
-    payment: 'Online',
-    address: 'Main Bazar Road, Gadhinglaj',
-    deliveryDay: '1 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Anil Patil',
-    transporterMobile: '8484830180',
-    transporterId: 'Y9882HJ',
-    pickupTime: '11:00 AM',
-    vehicleNumber: 'Y9882HJ',
-    currentHolder: 'Transporter',
-    remainingQty: 1,
-    weight: '12',
-    time: '45 mins ago',
-    distance: 6.8
-  },
-  {
     id: 'inc-3',
     orderId: 'ORD003',
     parcelName: 'Whirlpool Washing Machine 7kg',
@@ -218,10 +168,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const acceptOrder = (order: Order) => {
     setIncomingOrders(prev => prev.filter(o => o.id !== order.id));
-    const isDelivery = order.currentHolder === 'Transporter';
     setAcceptedOrders(prev => [...prev, {
       ...order,
-      status: isDelivery ? 'Received' : 'Accepted',
+      status: 'Accepted',
       currentHolder: 'SHG',
       acceptedAt: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     }]);
@@ -231,7 +180,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const now = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     setAcceptedOrders(prev => [...prev, ...incomingOrders.map(o => ({ 
       ...o, 
-      status: o.currentHolder === 'Transporter' ? 'Received' : 'Accepted', 
+      status: 'Accepted', 
       currentHolder: 'SHG', 
       acceptedAt: now 
     }))]);

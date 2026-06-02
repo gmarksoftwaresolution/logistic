@@ -141,13 +141,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           text2: t("su_orders_have_been_suc_389")
         });
         
-        // Conditionally redirect based on whether accepted orders contain delivery items
-        const hasDeliveryOrder = ordersToAccept.some(order => order.currentHolder === 'Transporter');
-        if (hasDeliveryOrder) {
-          navigation.navigate('Delivery');
-        } else {
-          navigation.navigate('AcceptedOrders');
-        }
+        // Redirect directly to AcceptedOrders (pickup tab)
+        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
       }
     });
   };
@@ -208,13 +203,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           text2: t("su_orders_have_been_suc_389")
         });
         
-        // Conditionally redirect based on whether accepted orders contain delivery items
-        const hasDeliveryOrder = ordersToAccept.some(order => order.currentHolder === 'Transporter');
-        if (hasDeliveryOrder) {
-          navigation.navigate('Delivery');
-        } else {
-          navigation.navigate('AcceptedOrders');
-        }
+        // Redirect directly to AcceptedOrders (pickup tab)
+        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
       }
     });
   };
