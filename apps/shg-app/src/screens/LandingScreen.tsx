@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Dimensions, ImageBackground, ActivityIndicator } from "react-native";
+import { View, Text, Image, TouchableOpacity, useWindowDimensions, ImageBackground, ActivityIndicator, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
@@ -10,13 +10,12 @@ import { signupService } from '../services/signupService';
 import deliveryPartnerImage from '../../assets/images/GMUDeliveryPartner.png';
 import * as SplashScreen from 'expo-splash-screen';
 
-const { width, height } = Dimensions.get('window');
-
 type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
 
 export default function LandingScreen({ navigation }: Props) {
   const context = React.useContext(LanguageContext);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const { width } = useWindowDimensions();
 
   useEffect(() => {
     const checkUserSession = async () => {
@@ -79,31 +78,40 @@ export default function LandingScreen({ navigation }: Props) {
     return null;
   }
 
+  // The original image is 853x1844
+  const imageAspectRatio = 853 / 1844;
+  const imageHeight = width / imageAspectRatio;
+
   return (
-    <View className="flex-1">
-      <ImageBackground
-        source={deliveryPartnerImage}
-        className="flex-1"
-        resizeMode="cover"
-      >
-        <View className="flex-1 justify-end px-8 pb-16">
-          <TouchableOpacity
-            onPress={() => navigation.navigate("Language")}
-            className="bg-primary py-4 rounded-2xl border-2 border-white shadow-xl active:opacity-90"
-            style={{
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 4.65,
-              elevation: 8,
-            }}
-          >
-            <Text className="text-white text-xl font-bold text-center">
-              {t('get_started')}
-            </Text>
-          </TouchableOpacity>
+    <View className="flex-1 bg-[#0A2E14]">
+      <ScrollView bounces={false} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+        {/* We keep the image scaled exactly to fit the width perfectly */}
+        <View style={{ width: width, height: imageHeight, position: 'relative' }}>
+          <Image 
+            source={deliveryPartnerImage}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="contain"
+          />
+          {/* Position button between the feature text and the bottom edge of the image */}
+          <View className="absolute bottom-[2%] w-full px-8 z-10">
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Language")}
+              className="bg-primary py-4 rounded-2xl border-2 border-white shadow-xl active:opacity-90"
+              style={{
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4.65,
+                elevation: 8,
+              }}
+            >
+              <Text className="text-white text-xl font-bold text-center">
+                {t('get_started')}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ImageBackground>
+      </ScrollView>
     </View>
   );
 }

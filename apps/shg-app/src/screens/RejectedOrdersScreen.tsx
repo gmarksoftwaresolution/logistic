@@ -16,7 +16,8 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useOrders } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { OrderDistance } from '../components/OrderDistance';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
 
@@ -33,16 +34,17 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { rejectedOrders } = useOrders();
   
-  const [filterState, setFilterState] = useState<FilterState>({ type: 'Today' });
+  const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   if (!context || !user) return null;
+  const { t } = context;
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       <SharedHeader 
-        title="Rejected Orders" 
-        subtitle="Orders rejected from processing" 
+        title={t("title_rejected_orders")} 
+        subtitle={t("subtitle_rejected_orders")} 
         navigation={navigation}
       />
 
@@ -56,7 +58,7 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         >
           <Ionicons name="filter" size={14} color={isFilterModalVisible ? '#073318' : '#4B5563'} style={{ marginRight: 6 }} />
           <Text className={`text-[13px] font-bold ${isFilterModalVisible ? 'text-[#073318]' : 'text-textPrimary'}`}>
-            Filter
+            {t("filter_label")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -71,13 +73,21 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
 
         if (filteredOrders.length === 0) {
           return (
-            <View className="flex-1 items-center justify-center py-32 px-6">
-              <View className="w-20 h-20 bg-slate-50 border border-slate-100 rounded-full items-center justify-center mb-6">
-                <Ionicons name="file-tray-outline" size={36} color="#94A3B8" />
+            <View className="px-6 pt-6">
+              <View 
+                className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
+                style={{ borderStyle: 'dashed' }}
+              >
+                <View
+                  className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
+                  style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
+                >
+                  <Ionicons name="file-tray-outline" size={28} color="#94A3B8" />
+                </View>
+                <Text className="text-[15px] font-black text-slate-700 text-center">
+                  {t("no_orders_found")}
+                </Text>
               </View>
-              <Text className="text-textSecondary font-bold text-center text-[16px]">
-                No orders found
-              </Text>
             </View>
           );
         }
@@ -90,7 +100,7 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           >
             {filteredOrders.map((item, index) => {
               const orderIdText = `#ORD-1769749895005-${item.id.replace('inc-', '')}`;
-              const routeText = getRouteForOrder(item);
+              const routeText = getRouteForOrder(item).split('>').map(part => translateRoutePart(part, t)).join(' > ');
               const info = getInfoForOrder(item);
 
               return (
@@ -111,17 +121,20 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                       <View className="flex-row justify-between items-center mb-3">
                         <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
                         <View className="px-3.5 py-1.5 rounded-full bg-[#FEECEE]">
-                          <Text className="text-[11px] font-bold text-[#D0303F]">Rejected</Text>
+                          <Text className="text-[11px] font-bold text-[#D0303F]">{t("status_rejected") || "Rejected"}</Text>
                         </View>
                       </View>
                       
-                      <Text className="text-[16px] font-extrabold text-[#111827] mb-4 tracking-tight">
-                        {routeText}
-                      </Text>
+                      <View className="flex-row justify-between items-center mb-4">
+                        <Text className="flex-1 text-[16px] font-extrabold text-[#111827] tracking-tight">
+                          {routeText}
+                        </Text>
+                        <OrderDistance distance={item.distance} />
+                      </View>
                       
                       <View className="flex-row justify-between items-center">
                         <Text className="text-[13px] text-[#8792A1] font-medium">
-                          {item.remainingQty || 1} products • {item.weight || 2} kg
+                          {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
                         </Text>
                         <Text className="text-[12px] text-[#8792A1] font-medium">
                           {item.rejectedAt || `${info.date}, ${info.time}`}
@@ -130,8 +143,8 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
 
                       {item.rejectReason ? (
                         <View className="mt-3 pt-3 border-t border-red-100/50">
-                          <Text className="text-[11px] font-bold text-[#D0303F] tracking-wide mb-1">REJECTION REASON</Text>
-                          <Text className="text-[13px] text-slate-700 font-medium leading-[18px]">{item.rejectReason}</Text>
+                          <Text className="text-[11px] font-bold text-[#D0303F] tracking-wide mb-1">{t("rejection_reason_label")}</Text>
+                          <Text className="text-[13px] text-slate-700 font-medium leading-[18px]">{t("reason_" + item.rejectReason) || item.rejectReason}</Text>
                         </View>
                       ) : null}
                     </View>

@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { LanguageContext } from '../context/LanguageContext';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { OrderDistance } from './OrderDistance';
 interface OrderCardProps {
   orderIdText: string;
   source: string;
@@ -12,6 +13,7 @@ interface OrderCardProps {
   onPressCard?: () => void;
   showScanner?: boolean;
   onScan?: () => void;
+  distance?: string | number;
 }
 export const OrderCard: React.FC<OrderCardProps> = ({
   orderIdText,
@@ -22,7 +24,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   time,
   onPressCard,
   showScanner = false,
-  onScan
+  onScan,
+  distance
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -52,12 +55,12 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       </View>
 
       {/* Route Visual Section (Horizontal) */}
-      <View className="flex-row items-center mt-2.5 mb-1 flex-wrap">
-        <Text className="text-[13px] font-bold text-[#073318]">{source}</Text>
+      <View className="flex-row items-center mt-2.5 mb-1 pr-2">
+        <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
         <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
         marginHorizontal: 6
       }} />
-        <Text className="text-[12.5px] font-bold text-[#073318]" numberOfLines={1}>{destination}</Text>
+        <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
       </View>
 
       {/* Bottom Info Badges Row (All in one line) */}
@@ -91,16 +94,21 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       </View>
     </View>
 
-    {/* Right Icon - Circular Outline Style */}
-    <View style={{
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    backgroundColor: 'white'
-  }} className="items-center justify-center ml-2">
-      <Ionicons name="eye" size={24} color="#073318" />
+    {/* Right Icon and Distance */}
+    <View className="flex-row items-center">
+      <OrderDistance distance={distance} />
+      
+      {/* Right Icon - Circular Outline Style */}
+      <View style={{
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        borderWidth: 2,
+        borderColor: '#CBD5E1',
+        backgroundColor: 'white'
+      }} className="items-center justify-center ml-2">
+        <Ionicons name="eye" size={24} color="#073318" />
+      </View>
     </View>
   </TouchableOpacity>;
 };

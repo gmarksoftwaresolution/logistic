@@ -28,7 +28,7 @@ export const FilterModal: React.FC<Props> = ({
       setTempFilter(currentFilter);
     }
   }, [visible, currentFilter]);
-  const filterOptions: FilterType[] = ['Today', '1 Week', '15 Days', '1 Month', 'Custom Date Range'];
+  const filterOptions: FilterType[] = ['today', '1_week', '15_days', '1_month', 'custom_date_range'];
   const handleApply = () => {
     onApply(tempFilter);
     onClose();
@@ -75,12 +75,12 @@ export const FilterModal: React.FC<Props> = ({
                     {isSelected && <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />}
                   </View>
                   <Text className={`text-[15px] ${isSelected ? 'font-bold text-[#073318]' : 'font-medium text-textPrimary'}`}>
-                    {option}
+                    {t("filter_" + option)}
                   </Text>
                 </TouchableOpacity>;
           })}
 
-            {tempFilter.type === 'Custom Date Range' && <View className="mt-4 p-4 border border-slate-200 rounded-[16px] bg-slate-50">
+            {tempFilter.type === 'custom_date_range' && <View className="mt-4 p-4 border border-slate-200 rounded-[16px] bg-slate-50">
                 <Text className="text-[13px] font-bold text-textPrimary mb-3">{t("su_select_date_range_473")}</Text>
                 
                 <View className="flex-row justify-between items-center">
@@ -108,7 +108,7 @@ export const FilterModal: React.FC<Props> = ({
               <Text className="text-[#4B5563] font-bold text-[14px]">{t("cancel")}</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={handleApply} disabled={tempFilter.type === 'Custom Date Range' && (!tempFilter.startDate || !tempFilter.endDate)} activeOpacity={0.75} className={`flex-1 h-[50px] rounded-[25px] items-center justify-center ml-2 shadow-md ${tempFilter.type === 'Custom Date Range' && (!tempFilter.startDate || !tempFilter.endDate) ? 'bg-slate-300' : 'bg-[#073318]'}`}>
+            <TouchableOpacity onPress={handleApply} disabled={tempFilter.type === 'custom_date_range' && (!tempFilter.startDate || !tempFilter.endDate)} activeOpacity={0.75} className={`flex-1 h-[50px] rounded-[25px] items-center justify-center ml-2 shadow-md ${tempFilter.type === 'custom_date_range' && (!tempFilter.startDate || !tempFilter.endDate) ? 'bg-slate-300' : 'bg-[#073318]'}`}>
               <Text className="text-white font-black text-[14px]">{t("apply")}</Text>
             </TouchableOpacity>
           </View>

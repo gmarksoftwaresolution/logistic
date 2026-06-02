@@ -42,3 +42,5 @@ import { OrderModule } from './order/order.module';
   providers: [AppService],
 })
 export class AppModule {}
+// Trigger hot-reload to load updated database module dist files
+

@@ -3,7 +3,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Animated, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Order } from '../context/OrderContext';
-export const REJECTION_REASONS = ['Customer not available', 'Wrong address', 'Product damaged', 'Transport issue', 'Payment issue', 'Duplicate order', 'Other'];
+export const REJECTION_REASONS = ['customer_not_available', 'wrong_address', 'product_damaged', 'transport_issue', 'payment_issue', 'duplicate_order', 'other'];
 interface RejectReasonModalProps {
   visible: boolean;
   order: Order | null;
@@ -53,22 +53,22 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
   }, [visible]);
   const handleSubmit = () => {
     if (!selectedReason) {
-      setValidationError('Please select a rejection reason');
+      setValidationError(t('su_please_select_a_reas_468') || 'Please select a rejection reason');
       return;
     }
-    if (selectedReason === 'Other' && otherText.trim().length === 0) {
-      setValidationError('Please enter rejection reason');
+    if (selectedReason === 'other' && otherText.trim().length === 0) {
+      setValidationError(t('su_enter_rejection_reas_469') || 'Please enter rejection reason');
       return;
     }
     if (!order) return;
-    const finalReason = selectedReason === 'Other' ? otherText.trim() : selectedReason;
+    const finalReason = selectedReason === 'other' ? otherText.trim() : selectedReason;
     setValidationError('');
     onSubmit(order, finalReason);
   };
   const handleSelectReason = (reason: string) => {
     setSelectedReason(reason);
     setValidationError('');
-    if (reason !== 'Other') setOtherText('');
+    if (reason !== 'other') setOtherText('');
   };
   if (!visible && !order) return null;
   return <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
@@ -185,7 +185,7 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
               {/* Reason Options */}
               {REJECTION_REASONS.map(reason => {
               const isSelected = selectedReason === reason;
-              const isOtherSelected = reason === 'Other' && isSelected;
+              const isOtherSelected = reason === 'other' && isSelected;
               return <View key={reason}>
                     <TouchableOpacity onPress={() => handleSelectReason(reason)} activeOpacity={0.7} style={{
                   flexDirection: 'row',
@@ -223,9 +223,9 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                     color: isSelected ? '#DC2626' : '#334155',
                     flex: 1
                   }}>
-                        {reason}
+                        {t("reason_" + reason)}
                       </Text>
-                      {isSelected && reason !== 'Other' && <Ionicons name="checkmark-circle" size={18} color="#DC2626" />}
+                      {isSelected && reason !== 'other' && <Ionicons name="checkmark-circle" size={18} color="#DC2626" />}
                     </TouchableOpacity>
 
                     {/* "Other" expanded text input */}

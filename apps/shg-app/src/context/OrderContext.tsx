@@ -24,6 +24,7 @@ export interface Order {
   remainingQty?: number;
   weight?: string | number;
   time?: string;
+  distance?: string | number;
   categoryBg?: string;
   categoryText?: string;
   scanned?: boolean;
@@ -54,32 +55,107 @@ interface OrderContextType {
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
-const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
-  const items = dbOrder.items || [];
-  const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || 'General Package';
-  const category = items[0]?.product?.category || 'Other';
-  
-  return {
-    id: `${type}-${dbOrder.id}`,
-    orderId: dbOrder.pickupOrderNumber || dbOrder.dropOrderNumber || `ORD-${dbOrder.id}`,
-    parcelName,
-    category,
-    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || '') : (dbOrder.buyer?.phoneNumber || ''),
-    amount: String(items.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
+const MOCK_INCOMING = [
+  {
+    id: 'inc-3',
+    orderId: 'ORD003',
+    parcelName: 'Whirlpool Washing Machine 7kg',
+    category: 'Washing Machine - Electric',
+    categoryBg: 'bg-[#EFF6FF]',
+    categoryText: 'text-[#2563EB]',
+    mobile: '9654782390',
+    amount: '22,400',
+    payment: 'Prepaid',
+    address: 'Near Gram Panchayat, Kowad',
+    deliveryDay: '2 DAY DELIVERY',
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1610557892470-76d740220a3f?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Sanjay Desai',
+    transporterMobile: '9654782390',
+    transporterId: 'Z1029KL',
+    pickupTime: '02:30 PM',
+    vehicleNumber: 'Z1029KL',
+    currentHolder: 'Seller',
+    remainingQty: 3,
+    weight: '35',
+    time: '1 hr ago',
+    distance: 3.1
+  },
+  {
+    id: 'inc-4',
+    orderId: 'ORD004',
+    parcelName: 'IFB Microwave Oven 20L',
+    category: 'Microwave - Electronics',
+    categoryBg: 'bg-[#FFF7ED]',
+    categoryText: 'text-[#EA580C]',
+    mobile: '8877665544',
+    amount: '9,800',
     payment: 'Online',
-    address: type === 'pickup' 
-      ? `${dbOrder.seller?.fullName || 'Seller'}, ${dbOrder.seller?.address?.addressLine1 || ''}` 
-      : `${dbOrder.buyer?.fullName || 'Buyer'}, ${dbOrder.deliveryAddress || ''}`,
+    address: 'Market Yard, Ajara',
     deliveryDay: '1 DAY DELIVERY',
-    status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : 'COMPLETED',
-    image: items[0]?.product?.image || 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
-    currentHolder: dbOrder.status === 'PENDING' ? 'Seller' : 'SHG',
-    remainingQty: items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0) || 1,
-    weight: items.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || 5,
-    time: 'Just now',
-    legType: type,
-  };
-};
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Rajesh Shinde',
+    transporterMobile: '8877665544',
+    transporterId: 'W8823NM',
+    pickupTime: '04:15 PM',
+    vehicleNumber: 'W8823NM',
+    currentHolder: 'Seller',
+    remainingQty: 1,
+    weight: '20',
+    time: '1 hr ago',
+  },
+  {
+    id: 'inc-5',
+    orderId: 'ORD005',
+    parcelName: 'Sony WH-1000XM4 Headphones',
+    category: 'Audio - Electronics',
+    categoryBg: 'bg-[#FEE2E2]',
+    categoryText: 'text-[#EF4444]',
+    mobile: '9765432109',
+    amount: '19,990',
+    payment: 'COD',
+    address: 'Gandhi Road, Belagavi',
+    deliveryDay: '1 DAY DELIVERY',
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Vijay Kadam',
+    transporterMobile: '9765432109',
+    transporterId: 'V7362OP',
+    pickupTime: '09:45 AM',
+    vehicleNumber: 'V7362OP',
+    currentHolder: 'Transporter',
+    remainingQty: 2,
+    weight: '3',
+    time: '2 hrs ago',
+    distance: 2.5
+  },
+  {
+    id: 'inc-6',
+    orderId: 'ORD006',
+    parcelName: 'Apple iPad Air M1',
+    category: 'Tablets - Electronics',
+    categoryBg: 'bg-[#F5F3FF]',
+    categoryText: 'text-[#7C3AED]',
+    mobile: '9123456789',
+    amount: '54,900',
+    payment: 'Prepaid',
+    address: 'Station Road, Nipani',
+    deliveryDay: '2 DAY DELIVERY',
+    status: 'assigned',
+    image: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?q=80&w=400&auto=format&fit=crop',
+    transporterName: 'Mahesh Shinde',
+    transporterMobile: '9123456789',
+    transporterId: 'A8293KL',
+    pickupTime: '11:15 AM',
+    vehicleNumber: 'A8293KL',
+    currentHolder: 'Seller',
+    remainingQty: 1,
+    weight: '5',
+    time: '3 hrs ago',
+    distance: 7.1
+  }
+];
 
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
@@ -144,13 +220,15 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const acceptAllOrders = async () => {
-    try {
-      await Promise.all(incomingOrders.map(o => acceptOrder(o)));
-      await refreshOrdersList();
-    } catch (error) {
-      console.error('Error accepting all orders:', error);
-    }
+  const acceptAllOrders = () => {
+    const now = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    setAcceptedOrders(prev => [...prev, ...incomingOrders.map(o => ({ 
+      ...o, 
+      status: 'Accepted', 
+      currentHolder: 'SHG', 
+      acceptedAt: now 
+    }))]);
+    setIncomingOrders([]);
   };
 
   const rejectOrder = async (order: Order) => {

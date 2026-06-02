@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
-import { getRouteForOrder, getFormattedOrderId, getInfoForOrder } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 type Props = NativeStackScreenProps<OrdersStackParamList, 'CompletedOrderDetails'>;
 const CompletedOrderDetailsScreen: React.FC<Props> = ({
   route,
@@ -21,38 +21,40 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   } = context;
   const routeStr = getRouteForOrder(order);
   const routeParts = routeStr.split('>');
-  const source = routeParts[0]?.trim() || 'Transporter';
-  const destination = routeParts[1]?.trim() || 'Buyer';
-  const isDelivery = source.toLowerCase() === 'transporter';
+  const rawSource = routeParts[0]?.trim() || 'Transporter';
+  const rawDestination = routeParts[1]?.trim() || 'Buyer';
+  const source = translateRoutePart(rawSource, t);
+  const destination = translateRoutePart(rawDestination, t);
+  const isDelivery = rawSource.toLowerCase() === 'transporter';
   const formattedOrderId = getFormattedOrderId(order);
   const info = getInfoForOrder(order);
 
   // Dynamic Contact Details Card (Seller vs Buyer)
-  let detailsTitle = "Seller Details";
+  let detailsTitle = t('su_seller_details') || "Seller Details";
   let headerIcon: any = "storefront-outline";
-  let nameLabel = "Seller Name";
+  let nameLabel = t('su_seller_name') || "Seller Name";
   let nameValue = order.transporterName || "Sanjay Desai";
-  let mobileLabel = "Seller Mobile Number";
+  let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
   let mobileValue = order.transporterMobile || "9654782390";
-  let addressOrVehicleLabel = "Shop Name / Seller Address";
+  let addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
   let addressOrVehicleIcon: any = "location-outline";
   let addressOrVehicleValue = "";
   if (isDelivery) {
-    detailsTitle = "Buyer Details";
+    detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
-    nameLabel = "Buyer Name";
+    nameLabel = t('su_buyer_name') || "Buyer Name";
     nameValue = destination;
-    mobileLabel = "Buyer Mobile Number";
+    mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
     mobileValue = order.mobile || "+91 8484830180";
-    addressOrVehicleLabel = "Buyer Address";
+    addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
     addressOrVehicleIcon = "location-outline";
     addressOrVehicleValue = `${destination}, Chandgad, kolhapur, Maharastra`;
   } else {
     // Seller details
     let resolvedAddress = source;
-    if (source.toLowerCase().includes('hifi')) {
+    if (rawSource.toLowerCase().includes('hifi')) {
       resolvedAddress = "Hifi Shop, Bramhan galli, Chandgad, kolhapur, Maharastra";
-    } else if (source.toLowerCase().includes('home no')) {
+    } else if (rawSource.toLowerCase().includes('home no')) {
       resolvedAddress = "Home No. 23, Market Road, Kowad, kolhapur, Maharastra";
     } else {
       resolvedAddress = `${source}, Chandgad, kolhapur, Maharastra`;
@@ -67,39 +69,39 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   const productCount = order.remainingQty || 1;
   const AVAILABLE_PRODUCTS = [{
     code: '#P101',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Raw Organic Turmeric Packs',
-    details: '2 items • 10 kg'
+    details: `2 ${t('su_items') || 'items'} • 10 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P102',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Cold Pressed Groundnut Oil',
-    details: '1 item • 5 kg'
+    details: `1 ${t('su_item') || 'item'} • 5 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P103',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Premium Basmati Rice Bag',
-    details: '3 items • 25 kg'
+    details: `3 ${t('su_items') || 'items'} • 25 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P104',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Organic Jaggery Block',
-    details: '2 items • 2 kg'
+    details: `2 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P105',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Fresh Pure Desi Ghee',
-    details: '1 item • 1 kg'
+    details: `1 ${t('su_item') || 'item'} • 1 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P106',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Whole Wheat Atta Bag',
-    details: '1 item • 10 kg'
+    details: `1 ${t('su_item') || 'item'} • 10 ${t('su_kg') || 'kg'}`
   }, {
     code: '#P107',
-    tag: 'Pickup Order',
+    tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Natural Honey Bottle',
-    details: '4 items • 2 kg'
+    details: `4 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
   }];
   const products = AVAILABLE_PRODUCTS.slice(0, productCount);
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
@@ -119,7 +121,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-2 pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
         {/* Main Order Info Card - Green Theme */}
         <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{
         shadowColor: '#073318',
@@ -141,7 +143,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
                   #{formattedOrderId}
                 </Text>
                 <Text className="text-[12px] font-bold text-white/70 mt-0.5" numberOfLines={1}>
-                  {source}{t("su_transit_347")}</Text>
+                  {source} {t("su_transit_347")}
+                </Text>
               </View>
             </View>
             <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-row items-center flex-shrink-0">
@@ -210,7 +213,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
 
           <View className="flex-row justify-between items-center mb-3">
             <Text className="text-[13px] text-slate-500 font-bold">{t("su_order_type_375")}</Text>
-            <Text className="text-[13px] font-black text-[#1B7034]">{isDelivery ? 'Delivery Order' : 'Pickup Order'}</Text>
+            <Text className="text-[13px] font-black text-[#1B7034]">{isDelivery ? (t('su_delivery_order') || 'Delivery Order') : (t('su_pickup_order') || 'Pickup Order')}</Text>
           </View>
 
           <View className="flex-row justify-between items-center mb-3">

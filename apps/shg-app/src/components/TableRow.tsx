@@ -122,12 +122,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cellText: {
-    fontFamily: 'PlusJakartaSans-Medium',
+    fontFamily: 'Poppins-Medium',
     fontSize: 13,
     color: '#181D27',
   },
   orderIdText: {
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
     fontSize: 13,
     color: '#073318',
   },
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mobileText: {
-    fontFamily: 'PlusJakartaSans-Medium',
+    fontFamily: 'Poppins-Medium',
     fontSize: 13,
     color: '#414651',
   },
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   amountText: {
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
     fontSize: 13,
     color: '#181D27',
   },
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   categoryText: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontFamily: 'Poppins-SemiBold',
     fontSize: 11,
     color: '#6C737F',
   },
@@ -198,11 +198,11 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   statusBadgeText: {
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
     fontSize: 11,
   },
   addressText: {
-    fontFamily: 'PlusJakartaSans-Medium',
+    fontFamily: 'Poppins-Medium',
     fontSize: 12,
     color: '#6C737F',
     lineHeight: 18,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   dayText: {
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
     fontSize: 11,
     color: '#414651',
     marginLeft: 6,

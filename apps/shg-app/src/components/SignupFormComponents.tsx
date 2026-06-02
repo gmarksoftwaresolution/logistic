@@ -160,6 +160,10 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
 }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
+  
+  // Safely extract only the primary language text by stripping out appended english in parentheses
+  const displayValue = value ? value.split('(')[0].trim() : '';
+  
   return (
     <View className="mb-4 w-full">
       <Label text={label} required={required} />
@@ -172,7 +176,7 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
         <View className="flex-row items-center">
           {icon && <Ionicons name={icon} size={20} color="#073318" className="mr-3" />}
           <Text className={`font-medium ml-1 text-[16px] ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}>
-            {value || placeholder}
+            {displayValue || placeholder}
           </Text>
         </View>
         <Ionicons name="chevron-down" size={20} color="#073318" />
@@ -187,10 +191,10 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
 // ==========================================
 interface ToggleButtonGroupProps {
   label: string;
-  value: 'Yes' | 'No' | null;
+  value: 'yes' | 'no' | null;
   error?: string;
   required?: boolean;
-  onSelect: (val: 'Yes' | 'No') => void;
+  onSelect: (val: 'yes' | 'no') => void;
 }
 
 export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
@@ -207,21 +211,21 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
       <Label text={label} required={required} />
       <View className={`flex-row w-full justify-between rounded-[20px] ${error ? 'border border-[#EF4444]' : ''}`}>
         <TouchableOpacity
-          onPress={() => onSelect('Yes')}
+          onPress={() => onSelect('yes')}
           className={`flex-1 h-[58px] rounded-[20px] border-2 flex-row items-center justify-center mr-2 ${
-            value === 'Yes' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
+            value === 'yes' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
           }`}
         >
-          <Text className={`text-[16px] font-bold ${value === 'Yes' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("Yes") || 'Yes'}</Text>
+          <Text className={`text-[16px] font-bold ${value === 'yes' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("Yes") || 'Yes'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => onSelect('No')}
+          onPress={() => onSelect('no')}
           className={`flex-1 h-[58px] rounded-[20px] border-2 flex-row items-center justify-center ml-2 ${
-            value === 'No' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
+            value === 'no' ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'
           }`}
         >
-          <Text className={`text-[16px] font-bold ${value === 'No' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("No") || 'No'}</Text>
+          <Text className={`text-[16px] font-bold ${value === 'no' ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("No") || 'No'}</Text>
         </TouchableOpacity>
       </View>
       {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
@@ -254,7 +258,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
-      className={`py-4 rounded-full items-center justify-center flex-row w-full mt-6 mb-2 ${
+      className={`py-4 rounded-2xl items-center justify-center flex-row w-full mt-6 mb-2 ${
         disabled ? 'bg-[#073318]/60' : 'bg-[#073318]'
       }`}
       style={{

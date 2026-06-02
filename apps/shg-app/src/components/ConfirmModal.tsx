@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { View, Text, TouchableOpacity, Modal } from 'react-native';
+import { LanguageContext } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ConfirmModalProps {
@@ -17,12 +18,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   visible,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   onConfirm,
   onCancel,
   isDestructive = false,
 }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
+  
+  const finalConfirmText = confirmText || t('su_confirm_358') || 'Confirm';
+  const finalCancelText = cancelText || t('su_cancel_357') || 'Cancel';
+
   if (!visible) return null;
 
   return (
@@ -67,7 +74,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               activeOpacity={0.7}
               className="py-3 px-6 rounded-[16px] bg-[#F1F5F9]"
             >
-              <Text className="text-[14px] font-bold text-[#475569]">{cancelText}</Text>
+              <Text className="text-[14px] font-bold text-[#475569]">{finalCancelText}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -75,7 +82,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               activeOpacity={0.7}
               className={`py-3 px-6 rounded-[16px] shadow-sm ${isDestructive ? 'bg-[#DC2626]' : 'bg-[#073318]'}`}
             >
-              <Text className="text-[14px] font-bold text-white">{confirmText}</Text>
+              <Text className="text-[14px] font-bold text-white">{finalConfirmText}</Text>
             </TouchableOpacity>
           </View>
         </View>
