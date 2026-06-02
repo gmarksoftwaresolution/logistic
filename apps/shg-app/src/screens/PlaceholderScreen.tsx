@@ -10,11 +10,12 @@ const PlaceholderScreen: React.FC<{ route?: any, navigation?: any }> = ({ route,
   const context = React.useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
 
-  const title = route?.name || 'Screen';
+  const routeName = route?.name || 'Screen';
+  const title = routeName === 'Earning' ? (t('earning') || 'Earnings') : (routeName === 'Profile' ? (t('profile') || 'Profile') : routeName);
   
   let subtitle = "Manage your information";
-  if (title === 'Earning') subtitle = "Track your earnings and income";
-  else if (title === 'Profile') subtitle = "Manage your account details";
+  if (routeName === 'Earning') subtitle = "Track your earnings and income";
+  else if (routeName === 'Profile') subtitle = "Manage your account details";
 
   return (
     <SafeAreaView style={styles.container}>

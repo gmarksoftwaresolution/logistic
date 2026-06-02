@@ -113,9 +113,9 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
           iconName = isFocused ? 'truck' : 'truck-outline';
           displayLabel = t('title_order_management') || 'Order Management';
         } else if (route.name === 'Earning') {
-          IconComponent = MaterialCommunityIcons;
-          iconName = 'history';
-          displayLabel = t('order_history') || 'Order History';
+          IconComponent = Ionicons;
+          iconName = isFocused ? 'wallet' : 'wallet-outline';
+          displayLabel = t('earning') || 'Earnings';
         } else {
           iconName = isFocused ? 'person' : 'person-outline';
           displayLabel = t('profile') || 'Profile';
