@@ -30,7 +30,7 @@ const DashboardScreen: React.FC<any> = () => {
             setTransporterName(name);
           }
         }
-        
+
         const response = await api.get('/registration/me');
         if (response.data?.personalDetails) {
           const name = `${response.data.personalDetails.firstName || ''} ${response.data.personalDetails.lastName || ''}`.trim();
@@ -51,7 +51,7 @@ const DashboardScreen: React.FC<any> = () => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const direction = currentOffset > lastOffsetY.current ? 'down' : 'up';
     const diff = Math.abs(currentOffset - lastOffsetY.current);
-    
+
     if (currentOffset <= 0) {
       DeviceEventEmitter.emit('show-tabbar');
     } else if (diff > 10) {
@@ -95,7 +95,7 @@ const DashboardScreen: React.FC<any> = () => {
   };
 
   const getFilterLabel = (filter: string) => {
-    switch(filter) {
+    switch (filter) {
       case 'Today': return t('orders.today');
       case 'Yesterday': return t('orders.yesterday');
       case 'This Week': return t('common.this_week', { defaultValue: 'This Week' });
@@ -105,32 +105,32 @@ const DashboardScreen: React.FC<any> = () => {
   };
 
   const earningsData: Record<string, any> = useMemo(() => ({
-    'Today': { 
-      amount: '₹ 850', 
+    'Today': {
+      amount: '₹ 850',
       trend: `+5% ${t('home.vs_yesterday', { defaultValue: 'vs yesterday' })}`,
       pickupsDrops: `8 ${t('orders.pickup_orders')} • 5 ${t('orders.drop_orders')}`,
       routeDone: `70% ${t('home.route_done', { percent: '' })}`,
       shiftStatus: t('home.ongoing_shift'),
       shiftTime: `${t('home.shift', { defaultValue: 'Shift' })}: 08:00 AM - 04:00 PM`
     },
-    'Yesterday': { 
-      amount: '₹ 1,200', 
+    'Yesterday': {
+      amount: '₹ 1,200',
       trend: `-2% ${t('home.vs_day_before', { defaultValue: 'vs day before' })}`,
       pickupsDrops: `12 ${t('orders.pickup_orders')} • 12 ${t('orders.drop_orders')}`,
       routeDone: `100% ${t('home.route_done', { percent: '' })}`,
       shiftStatus: t('home.completed_shift'),
       shiftTime: `${t('home.shift', { defaultValue: 'Shift' })}: 08:00 AM - 04:00 PM`
     },
-    'This Week': { 
-      amount: '₹ 4,250', 
+    'This Week': {
+      amount: '₹ 4,250',
       trend: `+12% ${t('home.vs_last_week', { defaultValue: 'vs last week' })}`,
       pickupsDrops: `54 ${t('orders.pickup_orders')} • 54 ${t('orders.drop_orders')}`,
       routeDone: `100% ${t('home.route_done', { percent: '' })}`,
       shiftStatus: t('home.all_shifts_completed'),
       shiftTime: `${t('home.shift', { defaultValue: 'Shift' })}: 08:00 AM - 04:00 PM`
     },
-    'Custom': { 
-      amount: '₹ 5,800', 
+    'Custom': {
+      amount: '₹ 5,800',
       trend: `${t('orders.filter_by_date')}: ${customDate.toLocaleDateString()}`,
       pickupsDrops: `72 ${t('orders.pickup_orders')} • 72 ${t('orders.drop_orders')}`,
       routeDone: `100% ${t('home.route_done', { percent: '' })}`,
@@ -141,15 +141,15 @@ const DashboardScreen: React.FC<any> = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader 
-          title={t('home.greeting', { name: transporterName })} 
-          subtitle={t('home.daily_overview')} 
-          showProfile={true}
-          showHelp={true}
-        />
+      <ScreenHeader
+        title={t('home.greeting', { name: transporterName })}
+        subtitle={t('home.daily_overview')}
+        showProfile={true}
+        showHelp={true}
+      />
 
-      <ScrollView 
-        contentContainerStyle={styles.container} 
+      <ScrollView
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -204,8 +204,8 @@ const DashboardScreen: React.FC<any> = () => {
 
         {alerts.length > 0 ? (
           <View style={styles.alertsContainer}>
-            <ScrollView 
-              style={styles.alertsScrollView} 
+            <ScrollView
+              style={styles.alertsScrollView}
               contentContainerStyle={{ paddingRight: scale(12) }}
               showsVerticalScrollIndicator={true}
               persistentScrollbar={true}
@@ -215,10 +215,10 @@ const DashboardScreen: React.FC<any> = () => {
                 <View key={alert.id}>
                   <View style={styles.alertItem}>
                     <View style={styles.alertLeft}>
-                      <AlertTriangle 
-                        size={scale(16)} 
-                        color={alert.type === 'error' ? '#EF4444' : '#F59E0B'} 
-                        style={styles.alertIcon} 
+                      <AlertTriangle
+                        size={scale(16)}
+                        color={alert.type === 'error' ? '#EF4444' : '#F59E0B'}
+                        style={styles.alertIcon}
                       />
                       <View style={styles.alertContent}>
                         <Text style={styles.alertText}>{alert.key ? t(alert.key, alert.params) : alert.text}</Text>
@@ -243,15 +243,15 @@ const DashboardScreen: React.FC<any> = () => {
         ) : (
           <View style={styles.alertsEmptyContainer}>
             <Text style={styles.alertsEmptyText}>🎉 {t('home.all_caught_up')}</Text>
-            <TouchableOpacity 
-              style={styles.alertsResetBtn} 
+            <TouchableOpacity
+              style={styles.alertsResetBtn}
               onPress={() => setAlerts([
                 { id: '1', key: 'home.pickup_delayed', params: { shg: 'SHG Kagal' }, time: '10 mins ago', type: 'error' },
                 { id: '2', key: 'home.shg_not_ready', params: { shg: 'SHG Shirgaon' }, time: '1 hour ago', type: 'warning' },
                 { id: '3', key: 'home.route_deviation', params: { route: 'Highway 4' }, time: '2 hours ago', type: 'error' },
                 { id: '4', key: 'home.traffic_delay', params: { location: 'Toll Plaza' }, time: '3 hours ago', type: 'warning' },
                 { id: '5', key: 'home.verification_pending', time: '4 hours ago', type: 'error' },
-              ])} 
+              ])}
               activeOpacity={0.7}
             >
               <Text style={styles.alertsResetText}>{t('home.reload_alerts')}</Text>
@@ -306,7 +306,7 @@ const DashboardScreen: React.FC<any> = () => {
         <View style={styles.sectionHeaderLine}>
           <Text style={styles.sectionTitle}>{t('home.performance_analytics')}</Text>
         </View>
-        
+
         <View style={styles.analyticsGrid}>
           {/* On-Time Card */}
           <View style={styles.analyticsGridCard}>
@@ -314,21 +314,21 @@ const DashboardScreen: React.FC<any> = () => {
             <Text style={styles.analyticsGridValue}>98.5%</Text>
             <Text style={styles.analyticsGridLabel}>{t('home.on_time')}</Text>
           </View>
-          
+
           {/* Accuracy Card */}
           <View style={styles.analyticsGridCard}>
             <CheckCircle2 size={scale(24)} color="#10B981" style={styles.analyticsGridIcon} />
             <Text style={styles.analyticsGridValue}>100%</Text>
             <Text style={styles.analyticsGridLabel}>{t('home.accuracy')}</Text>
           </View>
-          
+
           {/* Distance Card */}
           <View style={styles.analyticsGridCard}>
             <Navigation size={scale(24)} color="#3B82F6" style={styles.analyticsGridIcon} />
             <Text style={styles.analyticsGridValue}>42.8 km</Text>
             <Text style={styles.analyticsGridLabel} numberOfLines={1} adjustsFontSizeToFit>{t('home.total_distance')}</Text>
           </View>
-          
+
           {/* Rating Card (replacing Rejections) */}
           <View style={styles.analyticsGridCard}>
             <Star size={scale(24)} color="#F59E0B" style={styles.analyticsGridIcon} />
@@ -348,8 +348,8 @@ const DashboardScreen: React.FC<any> = () => {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowDropdown(false)}>
           <View style={styles.dropdownContainer}>
             {['Today', 'Yesterday', 'This Week', 'Custom'].map((option) => (
-              <TouchableOpacity 
-                key={option} 
+              <TouchableOpacity
+                key={option}
                 style={styles.dropdownOption}
                 onPress={() => {
                   if (option === 'Custom') {

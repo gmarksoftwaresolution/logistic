@@ -33,7 +33,7 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
     const currentOffset = event.nativeEvent.contentOffset.y;
     const direction = currentOffset > lastOffsetY.current ? 'down' : 'up';
     const diff = Math.abs(currentOffset - lastOffsetY.current);
-    
+
     if (currentOffset <= 0) {
       DeviceEventEmitter.emit('show-tabbar');
     } else if (diff > 10) {
@@ -69,16 +69,16 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScreenHeader 
-        title={t('tabs.orderMgmt')} 
-        subtitle={t('orders.order_mgmt_subtitle')} 
-        showBackButton={true} 
-        showProfile={false} 
-        showHelp={true} 
+      <ScreenHeader
+        title={t('tabs.orderMgmt')}
+        subtitle={t('orders.order_mgmt_subtitle')}
+        showBackButton={true}
+        showProfile={false}
+        showHelp={true}
         helpContent="This dashboard allows you to manage all active batches. View incoming orders, check accepted routes, and monitor live deliveries."
       />
-      <ScrollView 
-        contentContainerStyle={styles.container} 
+      <ScrollView
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
