@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "a156f67f-f189-4401-a055-6ff1f9889f7a"
+      }
+    },
+    "android": {
+      "package": "com.mahadev8484.logisticmonorepo"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 18.8.1",
+    "version": ">= 18.13.1",
     "appVersionSource": "remote"
   },
   "build": {
@@ -9,13 +9,7 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://f1384dac68a73b.lhr.life/api"
-      }
+      "distribution": "internal"
     },
     "production": {
       "autoIncrement": true

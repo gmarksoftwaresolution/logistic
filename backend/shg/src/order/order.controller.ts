@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -31,6 +31,16 @@ export class OrderController {
     return this.orderService.acceptPickup(id, user.id);
   }
 
+  @Post('pickup/:id/reject')
+  @ApiOperation({ summary: 'Reject a pickup order' })
+  async rejectPickup(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('reason') reason?: string
+  ) {
+    return this.orderService.rejectPickup(id, user.id, reason);
+  }
+
   @Post('pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a pickup order as complete' })
   async completePickup(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
@@ -43,15 +53,21 @@ export class OrderController {
     return this.orderService.getAssignedDrops(user.id);
   }
 
-  @Post('drop/:id/accept')
-  @ApiOperation({ summary: 'Accept a delivery order' })
-  async acceptDrop(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
-    return this.orderService.acceptDrop(id, user.id);
-  }
+
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
   async completeDrop(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
     return this.orderService.completeDrop(id, user.id);
+  }
+
+  @Post('drop/:id/reject')
+  @ApiOperation({ summary: 'Reject a delivery order' })
+  async rejectDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('reason') reason?: string
+  ) {
+    return this.orderService.rejectDrop(id, user.id, reason);
   }
 }

@@ -45,9 +45,10 @@ interface OrderContextType {
   orders: Order[];
   getStockItems: () => Order[];
   acceptOrder: (order: Order) => Promise<void>;
+  acceptOrders: (orders: Order[]) => Promise<void>;
   acceptAllOrders: () => Promise<void>;
   rejectOrder: (order: Order) => Promise<void>;
-  receiveOrder: (order: Order) => void;
+  receiveOrder: (order: Order) => Promise<void>;
   notReceiveOrder: (order: Order) => void;
   deliverOrder: (order: Order) => Promise<void>;
   refreshOrdersList: () => Promise<void>;
@@ -157,6 +158,55 @@ const MOCK_INCOMING = [
   }
 ];
 
+const MOCK_SELLERS = ["Home No. 23, Chandgad", "Sakhi Center, Near Primary School", "Patil Galli, Nesari", "Market Road, Gadhinglaj", "Shivaji Chowk, Chandgad", "Gram Panchayat Road, Halkarni"];
+const MOCK_BUYERS = ["HDFC Bank, Nesari", "ICICI Bank, Chandgad", "SBI Bank, Gadhinglaj", "Post Office, Chandgad", "Main Market, Nesari", "Bus Stand, Gadhinglaj"];
+const MOCK_DISTANCES = ["2.1", "3.4", "4.9", "5.7", "6.1", "7.3"];
+const MOCK_QTYS = [1, 2, 3, 4, 5, 6];
+
+const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
+  const items = dbOrder.items || [];
+  const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || 'General Package';
+  const category = items[0]?.product?.category || 'Other';
+  
+  const idIndex = dbOrder.id % 6;
+  const dbQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
+  const qty = (dbQty > 0 && dbQty !== 1) ? dbQty : MOCK_QTYS[idIndex];
+
+  return {
+    id: `${type}-${dbOrder.id}`,
+    orderId: `ORD-1769749895005-${dbOrder.id}`,
+    parcelName,
+    category,
+    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || '') : (dbOrder.buyer?.phoneNumber || ''),
+    amount: String(items.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
+    payment: 'Online',
+    address: type === 'pickup' 
+      ? (dbOrder.seller?.address?.addressLine1?.includes('Primary School') ? MOCK_SELLERS[idIndex] : `${dbOrder.seller?.address?.addressLine1 || dbOrder.seller?.address?.village || MOCK_SELLERS[idIndex]}`) 
+      : `${dbOrder.deliveryAddress || MOCK_BUYERS[idIndex]}`,
+    deliveryDay: '1 DAY DELIVERY',
+    status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
+    image: items[0]?.product?.image || 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
+    currentHolder: dbOrder.status === 'PENDING' ? 'Seller' : 'SHG',
+    remainingQty: qty,
+    weight: items.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || 5,
+    distance: dbOrder.distance || MOCK_DISTANCES[idIndex],
+    time: 'Just now',
+    legType: type,
+    rejectReason: type === 'pickup' 
+      ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '') 
+      : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Delivery leg rejected by SHG. Reason: ', ''),
+    rejectedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt,
+    acceptedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
+    completedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+  };
+};
+
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
   const [acceptedOrders, setAcceptedOrders] = useState<Order[]>([]);
@@ -178,7 +228,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const pickupResponse = await axiosInstance.get('/orders/pickup/assigned');
       const rawPickups = pickupResponse.data || [];
       
-      // 2. Fetch live assigned drops
+      // 2. Fetch live assigned & completed drops
       const dropResponse = await axiosInstance.get('/orders/drop/assigned');
       const rawDrops = dropResponse.data || [];
 
@@ -189,8 +239,28 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const allMapped = [...mappedPickups, ...mappedDrops];
 
       // Segment mapped orders by status
-      setIncomingOrders(allMapped.filter(o => o.status === 'assigned'));
-      setAcceptedOrders(allMapped.filter(o => o.status === 'Accepted'));
+      const sortedIncoming = allMapped.filter(o => o.status === 'assigned').sort((a, b) => {
+        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
+        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
+        return aNum - bNum;
+      });
+      setIncomingOrders(sortedIncoming);
+      
+      const sortedAccepted = allMapped.filter(o => o.status === 'Accepted').sort((a, b) => {
+        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
+        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
+        return aNum - bNum;
+      });
+      setAcceptedOrders(sortedAccepted);
+      
+      const sortedRejected = allMapped.filter(o => o.status === 'REJECTED').sort((a, b) => {
+        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
+        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
+        return aNum - bNum;
+      });
+      setRejectedOrders(sortedRejected);
+
+      // Completed = Everything Completed
       setDeliveredOrders(allMapped.filter(o => o.status === 'COMPLETED'));
       
     } catch (error) {
@@ -217,25 +287,42 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       await refreshOrdersList();
     } catch (error) {
       console.error(`Error accepting order ${order.id}:`, error);
+      throw error;
     }
   };
 
-  const acceptAllOrders = () => {
-    const now = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    setAcceptedOrders(prev => [...prev, ...incomingOrders.map(o => ({ 
-      ...o, 
-      status: 'Accepted', 
-      currentHolder: 'SHG', 
-      acceptedAt: now 
-    }))]);
-    setIncomingOrders([]);
+  const acceptOrders = async (ordersToAccept: Order[]) => {
+    try {
+      await Promise.all(ordersToAccept.map(order => {
+        const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+        const endpoint = order.legType === 'pickup' 
+          ? `/orders/pickup/${rawId}/accept` 
+          : `/orders/drop/${rawId}/accept`;
+        return axiosInstance.post(endpoint);
+      }));
+      await refreshOrdersList();
+    } catch (error) {
+      console.error('Error accepting orders:', error);
+      throw error;
+    }
+  };
+
+  const acceptAllOrders = async () => {
+    await acceptOrders(incomingOrders);
   };
 
   const rejectOrder = async (order: Order) => {
     try {
-      // For now, move locally to rejectedOrders to preserve UI experience
-      setIncomingOrders(prev => prev.filter(o => o.id !== order.id));
-      setAcceptedOrders(prev => prev.filter(o => o.id !== order.id));
+      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+      const endpoint = order.legType === 'pickup' 
+        ? `/orders/pickup/${rawId}/reject` 
+        : `/orders/drop/${rawId}/reject`;
+      
+      await axiosInstance.post(endpoint, { reason: order.rejectReason || '' });
+      await refreshOrdersList();
+      
+      // Keep local state update for immediate UI feedback if needed, 
+      // but refreshOrdersList will handle the permanent removal from assigned.
       setRejectedOrders(prev => {
         if (prev.some(o => o.id === order.id)) return prev;
         return [...prev, {
@@ -247,11 +334,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
     } catch (error) {
       console.error('Error rejecting order:', error);
+      throw error;
     }
   };
 
-  const receiveOrder = (order: Order) => {
-    setAcceptedOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'Received', currentHolder: 'SHG' } : o));
+  const receiveOrder = async (order: Order) => {
+    try {
+      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+      const endpoint = `/orders/pickup/${rawId}/complete`;
+      await axiosInstance.post(endpoint);
+      await refreshOrdersList();
+    } catch (error) {
+      console.error(`Error completing pickup for order ${order.id}:`, error);
+      throw error;
+    }
   };
 
   const notReceiveOrder = (order: Order) => {
@@ -262,9 +358,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deliverOrder = async (order: Order) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      const endpoint = order.legType === 'pickup' 
-        ? `/orders/pickup/${rawId}/complete` 
-        : `/orders/drop/${rawId}/complete`;
+      const endpoint = `/orders/drop/${rawId}/complete`;
       
       await axiosInstance.post(endpoint);
       await refreshOrdersList();
@@ -283,6 +377,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       orders,
       getStockItems,
       acceptOrder,
+      acceptOrders,
       acceptAllOrders,
       rejectOrder,
       receiveOrder,

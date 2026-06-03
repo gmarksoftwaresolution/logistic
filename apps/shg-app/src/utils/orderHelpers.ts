@@ -1,7 +1,13 @@
 export const getRouteForOrder = (item: any) => {
-  if (item.id === 'inc-3') return 'hifi shop > Transporter';
-  if (item.id === 'inc-4') return 'home no. 23 > Transporter';
-  return item.currentHolder === 'Transporter' ? 'Transporter > Buyer' : 'Seller > Transporter';
+  // item.address contains the formatted address from the backend
+  // legType tells us if it's a pickup or drop
+  if (item.legType === 'pickup') {
+    // Seller -> Transporter
+    return `${item.address} > Transporter`;
+  } else {
+    // Transporter -> Buyer
+    return `Transporter > ${item.address}`;
+  }
 };
 
 export const getInfoForOrder = (item: any) => {
@@ -14,7 +20,8 @@ export const getInfoForOrder = (item: any) => {
 };
 
 export const getFormattedOrderId = (item: any) => {
-  return `ORD-1769749895005-${item.id.replace('inc-', '')}`;
+  // Use the actual backend orderId instead of generating a custom one
+  return item.orderId || item.id;
 };
 
 export const translateRoutePart = (part: string, t: any) => {

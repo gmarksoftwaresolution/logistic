@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Ani
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import TextTicker from 'react-native-text-ticker';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -18,7 +19,7 @@ import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
 import { OrderDistance } from '../components/OrderDistance';
-import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
@@ -31,6 +32,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const {
     incomingOrders,
     acceptOrder,
+    acceptOrders,
     acceptAllOrders,
     rejectOrder
   } = useOrders();
@@ -131,18 +133,27 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
       confirmText: t('su_accept') || 'Accept',
-      onConfirm: () => {
+      onConfirm: async () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        ordersToAccept.forEach(order => acceptOrder(order));
-        setSelectedIds([]);
-        Toast.show({
-          type: 'success',
-          text1: t("su_success_388"),
-          text2: t("su_orders_have_been_suc_389")
-        });
         
-        // Redirect directly to AcceptedOrders (pickup tab)
-        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        try {
+          await acceptOrders(ordersToAccept);
+          setSelectedIds([]);
+          Toast.show({
+            type: 'success',
+            text1: t("su_success_388"),
+            text2: t("su_orders_have_been_suc_389")
+          });
+          
+          // Redirect directly to AcceptedOrders (pickup tab)
+          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to accept orders.'
+          });
+        }
       }
     });
   };
@@ -189,22 +200,31 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       message: (t('su_are_you_sure_accept_all') || "Are you sure you want to accept all {count} order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
       confirmText: t('su_accept') || 'Accept',
-      onConfirm: () => {
+      onConfirm: async () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        if (selectedIds.length > 0) {
-          ordersToAccept.forEach(order => acceptOrder(order));
-          setSelectedIds([]);
-        } else {
-          acceptAllOrders();
-        }
-        Toast.show({
-          type: 'success',
-          text1: t("su_success_388"),
-          text2: t("su_orders_have_been_suc_389")
-        });
         
-        // Redirect directly to AcceptedOrders (pickup tab)
-        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        try {
+          if (selectedIds.length > 0) {
+            await acceptOrders(ordersToAccept);
+            setSelectedIds([]);
+          } else {
+            await acceptAllOrders();
+          }
+          Toast.show({
+            type: 'success',
+            text1: t("su_success_388"),
+            text2: t("su_orders_have_been_suc_389")
+          });
+          
+          // Redirect directly to AcceptedOrders (pickup tab)
+          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to accept orders.'
+          });
+        }
       }
     });
   };
@@ -339,7 +359,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         const isSelected = selectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
-        const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
+        const orderIdText = getFormattedOrderId(item);
 
         // Parse Route Text Visual Flow
         const routeParts = routeText.split('>');
@@ -393,13 +413,19 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                     </Text>
                   </View>
 
-                  {/* Route Visual Section (Horizontal) */}
-                  <View className="flex-row items-center mt-2.5 mb-1 flex-wrap">
-                    <Text className="text-[13px] font-bold text-[#073318]">{source}</Text>
-                    <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
-                      marginHorizontal: 6
-                    }} />
-                    <Text className="text-[12.5px] font-bold text-[#073318]" numberOfLines={1}>{destination}</Text>
+                  {/* Route Visual Section (Horizontal Marquee) */}
+                  <View className="mt-2.5 mb-1" style={{ overflow: 'hidden' }}>
+                    <TextTicker
+                      style={{ fontSize: 13, fontWeight: 'bold', color: '#073318' }}
+                      duration={7000}
+                      loop
+                      bounce={false}
+                      repeatSpacer={50}
+                      marqueeDelay={2000}
+                      animationType="scroll"
+                    >
+                      {source}   ➔   {destination}
+                    </TextTicker>
                   </View>
 
                   {/* Bottom Info Badges Row */}

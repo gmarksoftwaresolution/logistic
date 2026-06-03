@@ -35,7 +35,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
-  const isDeliveryPhase = order.status === 'Received';
+  const isDeliveryPhase = order.legType === 'drop';
 
   // 2. Helper to get entity type
   const getEntityType = (name: string): 'transporter' | 'seller' | 'buyer' => {
@@ -216,27 +216,32 @@ const OrderDetailsScreen: React.FC<Props> = ({
       Alert.alert("Camera Error", "Failed to launch camera. Please try again.");
     }
   };
-  const handleSubmitOrder = () => {
-    if (isDeliveryPhase) {
-      if (!isScanned) {
-        Alert.alert("Scan Required", "Please scan all products for verification first.");
-        return;
-      }
-      deliverOrder({
-        ...order,
-        scanned: true
-      });
-    } else {
+  const handleSubmitOrder = async () => {
+    try {
       if (!capturedPhotoUri) {
         Alert.alert("Photo Required", "Please capture product photos first.");
         return;
       }
-      receiveOrder({
-        ...order,
-        image: capturedPhotoUri
-      });
+
+      if (isDeliveryPhase) {
+        await deliverOrder({
+          ...order,
+          image: capturedPhotoUri
+        });
+      } else {
+        await receiveOrder({
+          ...order,
+          image: capturedPhotoUri
+        });
+      }
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to submit order. Please try again.");
     }
-    navigation.goBack();
   };
   const handleRejectOrder = () => {
     setRejectModalVisible(true);
@@ -247,12 +252,22 @@ const OrderDetailsScreen: React.FC<Props> = ({
       ...ord,
       rejectReason: reason
     });
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+    }
   };
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       {/* Custom Header mimicking the SharedHeader but matching exactly the mockup layout */}
       <View className="px-6 py-4 flex-row items-center">
-        <TouchableOpacity onPress={() => navigation.goBack()} className="w-11 h-11 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" style={{
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          }
+        }} className="w-11 h-11 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" style={{
         elevation: 2
       }}>
           <Ionicons name="arrow-back" size={20} color="#111827" />
@@ -452,44 +467,25 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </View>;
         })}
 
-          {/* Conditional Verification Section: Scanner for Delivery flow, Capture Photos for Pickup flow */}
-          {isDeliveryPhase ? (/* Scanner Section Row */
-        <TouchableOpacity onPress={() => setScannerModalVisible(true)} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
-              <View className="flex-row items-center flex-1 pr-2">
-                {isScanned ? <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
-                    <Ionicons name="checkmark-circle" size={20} color="#059669" />
-                  </View> : <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
-                    <Ionicons name="scan-outline" size={18} color="#073318" />
-                  </View>}
-                <View className="flex-1">
-                  <Text className="text-[14px] font-bold text-[#111827]">
-                    {isScanned ? (t('su_products_scanned') || "Products Scanned") : (t('su_scan_products') || "Scan Products")}
-                  </Text>
-                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    {isScanned ? (t('su_all_products_verified') || "All products verified successfully") : (t('su_scan_all_products') || "Scan all products for verification")}
-                  </Text>
-                </View>
+          {/* Verification Section: Capture Photos for both Pickup and Delivery flow */}
+          <TouchableOpacity onPress={openCamera} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
+            <View className="flex-row items-center flex-1 pr-2">
+              {capturedPhotoUri ? <Image source={{
+            uri: capturedPhotoUri
+          }} className="w-10 h-10 rounded-[8px] mr-3 border border-slate-200" /> : <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
+                  <Ionicons name="camera-outline" size={18} color="#073318" />
+                </View>}
+              <View className="flex-1">
+                <Text className="text-[14px] font-bold text-[#111827]">
+                  {capturedPhotoUri ? (t('su_photos_captured') || "Photos Captured") : (t('su_capture_photos') || "Capture Photos")}
+                </Text>
+                <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                  {capturedPhotoUri ? (t('su_photos_saved_success') || "Photos successfully saved for verification") : (t('su_take_photos_of_all_pro_467') || "Take photos of all products for verification")}
+                </Text>
               </View>
-              {isScanned ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
-            </TouchableOpacity>) : (/* Capture Photos Section Row (Pickup) */
-        <TouchableOpacity onPress={openCamera} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
-              <View className="flex-row items-center flex-1 pr-2">
-                {capturedPhotoUri ? <Image source={{
-              uri: capturedPhotoUri
-            }} className="w-10 h-10 rounded-[8px] mr-3 border border-slate-200" /> : <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
-                    <Ionicons name="camera-outline" size={18} color="#073318" />
-                  </View>}
-                <View className="flex-1">
-                  <Text className="text-[14px] font-bold text-[#111827]">
-                    {capturedPhotoUri ? (t('su_photos_captured') || "Photos Captured") : (t('su_capture_photos') || "Capture Photos")}
-                  </Text>
-                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    {capturedPhotoUri ? (t('su_photos_saved_success') || "Photos successfully saved for verification") : (t('su_take_photos_of_all_pro_467') || "Take photos of all products for verification")}
-                  </Text>
-                </View>
-              </View>
-              {capturedPhotoUri ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
-            </TouchableOpacity>)}
+            </View>
+            {capturedPhotoUri ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
+          </TouchableOpacity>
 
           {/* Reject Order full-width button */}
           <TouchableOpacity onPress={handleRejectOrder} className="mx-2 mt-3.5 mb-3 bg-[#FEF2F2] border border-[#FECACA] h-12 rounded-[16px] flex-row items-center justify-center">

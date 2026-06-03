@@ -42,9 +42,9 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders by status
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
-  const deliveryOrders = acceptedOrders.filter(o => o.status === 'Received');
+  // Filter orders by legType since both backend pickup AND drop orders will have 'Accepted' status here
+  const pickupOrders = acceptedOrders.filter(o => o.legType === 'pickup');
+  const deliveryOrders = acceptedOrders.filter(o => o.legType === 'drop');
 
   // Swipe & Pager Tab Switcher State
   const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>(
@@ -98,9 +98,13 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
       title: t('confirm_pickup') || "Confirm Pickup",
       message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
       confirmText: t('su_confirm_358') || 'Confirm',
-      onConfirm: () => {
-        receiveOrder(order);
-        Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
+      onConfirm: async () => {
+        try {
+          await receiveOrder(order);
+          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
+        } catch (error) {
+          Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to confirm pickup' });
+        }
       }
     });
   };

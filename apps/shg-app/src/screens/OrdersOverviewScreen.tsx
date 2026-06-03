@@ -12,6 +12,7 @@ import { BlurView } from 'expo-blur';
 import { SharedHeader } from '../components/SharedHeader';
 import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
 import { LanguageContext } from '../context/LanguageContext';
+import TextTicker from 'react-native-text-ticker';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -231,9 +232,19 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                           </View>
                         </View>
 
-                        <Text className="text-[16px] font-extrabold text-[#111827] mb-4 tracking-tight">
-                          {activity.route}
-                        </Text>
+                        <View className="mb-4 overflow-hidden">
+                          <TextTicker
+                            style={{ fontSize: 16, fontWeight: '900', color: '#111827', letterSpacing: -0.5 }}
+                            duration={7000}
+                            loop
+                            bounce={false}
+                            repeatSpacer={50}
+                            marqueeDelay={2000}
+                            animationType="scroll"
+                          >
+                            {activity.route}
+                          </TextTicker>
+                        </View>
 
                         <View className="flex-row justify-between items-center">
                           <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
