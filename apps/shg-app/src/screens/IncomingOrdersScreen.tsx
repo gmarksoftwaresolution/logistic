@@ -1,10 +1,10 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import TextTicker from 'react-native-text-ticker';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -40,11 +40,19 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const {
     t
   } = context;
+  const { refreshOrdersList } = useOrders();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrdersList();
+    }, [refreshOrdersList])
+  );
 
   // Selection and Animation states
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -71,6 +79,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     reason?: string;
   }>>({});
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [rescheduledCount, setRescheduledCount] = useState(0);
   const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
   const [selectedRescheduleReason, setSelectedRescheduleReason] = useState<string | null>(null);
   const [customRescheduleReason, setCustomRescheduleReason] = useState('');
@@ -134,6 +143,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       isDestructive: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         try {
@@ -145,6 +155,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text2: t("su_orders_have_been_suc_389")
           });
           
+          setModalConfig({ ...modalConfig, visible: false });
           // Redirect directly to AcceptedOrders (pickup tab)
           navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
         } catch (error) {
@@ -153,6 +164,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text1: 'Error',
             text2: 'Failed to accept orders.'
           });
+        } finally {
+          setIsProcessing(false);
         }
       }
     });
@@ -164,24 +177,32 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     setCurrentRejectIndex(0);
     setRejectModalVisible(true);
   };
-  const handleRejectModalSubmit = (order: Order, reason: string) => {
-    rejectOrder({
-      ...order,
-      rejectReason: reason
-    });
-    const nextIndex = currentRejectIndex + 1;
-    if (nextIndex < ordersToRejectBatch.length) {
-      setCurrentRejectIndex(nextIndex);
-    } else {
-      setRejectModalVisible(false);
-      setSelectedIds([]);
-      import('react-native-toast-message').then(({
-        default: Toast
-      }) => Toast.show({
-        type: 'success',
-        text1: t("su_done_359"),
-        text2: t("su_selected_orders_have_391")
-      }));
+  const handleRejectModalSubmit = async (order: Order, reason: string) => {
+    try {
+      await rejectOrder({
+        ...order,
+        rejectReason: reason
+      });
+      const nextIndex = currentRejectIndex + 1;
+      if (nextIndex < ordersToRejectBatch.length) {
+        setCurrentRejectIndex(nextIndex);
+      } else {
+        setRejectModalVisible(false);
+        setSelectedIds([]);
+        import('react-native-toast-message').then(({
+          default: Toast
+        }) => Toast.show({
+          type: 'success',
+          text1: t("su_done_359"),
+          text2: t("su_selected_orders_have_391")
+        }));
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to reject order.'
+      });
     }
   };
   const handleAcceptAll = () => {
@@ -201,6 +222,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       isDestructive: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         try {
@@ -216,6 +238,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text2: t("su_orders_have_been_suc_389")
           });
           
+          setModalConfig({ ...modalConfig, visible: false });
           // Redirect directly to AcceptedOrders (pickup tab)
           navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
         } catch (error) {
@@ -224,6 +247,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text1: 'Error',
             text2: 'Failed to accept orders.'
           });
+        } finally {
+          setIsProcessing(false);
         }
       }
     });
@@ -340,8 +365,20 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             <View className="flex-row items-center flex-1 pr-4">
               <Ionicons name="checkmark-circle" size={24} color="#10B981" />
               <View className="ml-3">
-                <Text className="text-[#065F46] font-bold text-[14px]">{t("su_all_orders_reschedul_402")}</Text>
-                <Text className="text-[#047857] text-[11px] mt-0.5">{t("su_all_orders_have_been_403")}</Text>
+                <Text className="text-[#065F46] font-bold text-[14px]">
+                  {rescheduledCount === 1 
+                    ? t("su_order_rescheduled_success") || "1 order rescheduled successfully"
+                    : rescheduledCount === incomingOrders.length 
+                      ? t("su_all_orders_reschedul_402") || "All orders rescheduled successfully"
+                      : (t("su_orders_rescheduled_success") || "{count} orders rescheduled successfully").replace('{count}', rescheduledCount.toString())}
+                </Text>
+                <Text className="text-[#047857] text-[11px] mt-0.5">
+                  {rescheduledCount === 1 
+                    ? t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+                    : rescheduledCount === incomingOrders.length 
+                      ? t("su_all_orders_have_been_403") || "All orders have been updated with the new date and time."
+                      : (t("su_orders_have_been_updated") || "Selected orders have been updated with the new date and time.")}
+                </Text>
               </View>
             </View>
             <TouchableOpacity onPress={() => setShowSuccessBanner(false)}>
@@ -646,6 +683,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   reason: finalReason || undefined
                 };
               });
+              setRescheduledCount(selectedIds.length);
               setRescheduledOrders(newRescheduled);
               setShowSuccessBanner(true);
               setShowBottomSheet(false);
@@ -730,15 +768,11 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         </View>
       </Modal>
 
-      <ConfirmModal visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} onCancel={() => setModalConfig({
+      <ConfirmModal isLoading={isProcessing} loadingText={t("su_processing") || "Processing..."} visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} onCancel={() => setModalConfig({
       ...modalConfig,
       visible: false
     })} onConfirm={() => {
       modalConfig.onConfirm();
-      setModalConfig({
-        ...modalConfig,
-        visible: false
-      });
     }} />
 
       {/* Reject Reason Modal */}

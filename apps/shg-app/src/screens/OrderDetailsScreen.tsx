@@ -143,6 +143,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [tempPhotoUri, setTempPhotoUri] = useState<string | null>(null);
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Delivery Scanner states
   const [isScanned, setIsScanned] = useState<boolean>(false);
@@ -217,9 +218,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
     }
   };
   const handleSubmitOrder = async () => {
+    if (isSubmitting) return;
     try {
+      setIsSubmitting(true);
       if (!capturedPhotoUri) {
         Alert.alert("Photo Required", "Please capture product photos first.");
+        setIsSubmitting(false);
         return;
       }
 
@@ -241,21 +245,27 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }
     } catch (error) {
       Alert.alert("Error", "Failed to submit order. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
   const handleRejectOrder = () => {
     setRejectModalVisible(true);
   };
-  const handleRejectModalSubmit = (ord: Order, reason: string) => {
+  const handleRejectModalSubmit = async (ord: Order, reason: string) => {
     setRejectModalVisible(false);
-    rejectOrder({
-      ...ord,
-      rejectReason: reason
-    });
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+    try {
+      await rejectOrder({
+        ...ord,
+        rejectReason: reason
+      });
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to reject order. Please try again.");
     }
   };
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
@@ -447,12 +457,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   
                   {/* CENTER */}
                   <View className="flex-1">
-                    <View className="flex-row items-center mb-1">
-                      <View className="bg-[#EFF6FF] px-2 py-0.5 rounded-[4px] mr-2">
-                        <Text className="text-[9px] font-bold text-[#2563EB]">{item.tag}</Text>
-                      </View>
-                      <Text className="text-[10px] font-bold text-[#94A3B8]">{t("su_pending_355")}</Text>
-                    </View>
                     <Text className="text-[14px] font-bold text-[#111827] mb-1 leading-tight">
                       {item.name}
                     </Text>
@@ -488,15 +492,15 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </TouchableOpacity>
 
           {/* Reject Order full-width button */}
-          <TouchableOpacity onPress={handleRejectOrder} className="mx-2 mt-3.5 mb-3 bg-[#FEF2F2] border border-[#FECACA] h-12 rounded-[16px] flex-row items-center justify-center">
-            <Ionicons name="close" size={16} color="#DC2626" />
-            <Text className="text-[14px] font-bold text-[#DC2626] ml-2">{t("su_reject_order_356")}</Text>
+          <TouchableOpacity onPress={handleRejectOrder} disabled={isSubmitting} className={`mx-2 mt-3.5 mb-3 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}>
+            <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
+            <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356")}</Text>
           </TouchableOpacity>
 
           {/* Submit Order full-width button */}
-          <TouchableOpacity onPress={handleSubmitOrder} className="mx-2 mb-2 bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center shadow-sm">
-            <Ionicons name="checkmark-circle-outline" size={16} color="white" />
-            <Text className="text-[14px] font-bold text-white ml-2">{t("su_submit_order_357")}</Text>
+          <TouchableOpacity onPress={handleSubmitOrder} disabled={isSubmitting} className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitting ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
+            {isSubmitting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="checkmark-circle-outline" size={16} color="white" />}
+            <Text className="text-[14px] font-bold text-white ml-2">{isSubmitting ? (t("su_submitting_order") || "Submitting Order...") : t("su_submit_order_357")}</Text>
           </TouchableOpacity>
         </View>
         

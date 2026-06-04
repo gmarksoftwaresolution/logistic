@@ -5,8 +5,9 @@ export const getRouteForOrder = (item: any) => {
     // Seller -> Transporter
     return `${item.address} > Transporter`;
   } else {
-    // Transporter -> Buyer
-    return `Transporter > ${item.address}`;
+    // Seller -> Transporter
+    const source = item.sourceAddress || item.address;
+    return `${source} > Transporter`;
   }
 };
 

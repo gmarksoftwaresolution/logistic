@@ -1,8 +1,8 @@
-import React, { useContext } from 'react';
+import React, { useContext, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -13,6 +13,7 @@ import { SharedHeader } from '../components/SharedHeader';
 import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
 import { LanguageContext } from '../context/LanguageContext';
 import TextTicker from 'react-native-text-ticker';
+import { DashboardLoader } from '../components/DashboardLoader';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -25,7 +26,13 @@ type Props = CompositeScreenProps<
 const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
-  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders } = useOrders();
+  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders, refreshOrdersList, isOrdersLoading } = useOrders();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrdersList();
+    }, [refreshOrdersList])
+  );
 
   // Helper to translate route parts on the UI level without breaking core logic
   const translateRoute = (route: string) => {
@@ -79,6 +86,8 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
         return { bg: 'bg-gray-100', text: 'text-gray-600' };
     }
   };
+
+  const isInitialLoad = isOrdersLoading && incomingOrders.length === 0 && acceptedOrders.length === 0 && rejectedOrders.length === 0 && deliveredOrders.length === 0;
 
   return (
     <View className="flex-1 bg-white">
@@ -260,6 +269,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
 
         </ScrollView>
       </SafeAreaView>
+      {isInitialLoad && <DashboardLoader t={t} />}
     </View>
   );
 };

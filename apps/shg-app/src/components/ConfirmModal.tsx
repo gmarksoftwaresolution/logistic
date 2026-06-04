@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { LanguageContext } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,9 +9,11 @@ interface ConfirmModalProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   isDestructive?: boolean;
+  isLoading?: boolean;
+  loadingText?: string;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -23,6 +25,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
   onCancel,
   isDestructive = false,
+  isLoading = false,
+  loadingText,
 }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
@@ -72,17 +76,20 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             <TouchableOpacity 
               onPress={onCancel}
               activeOpacity={0.7}
-              className="py-3 px-6 rounded-[16px] bg-[#F1F5F9]"
+              disabled={isLoading}
+              className={`py-3 px-6 rounded-[16px] ${isLoading ? 'bg-[#F8FAFC]' : 'bg-[#F1F5F9]'}`}
             >
-              <Text className="text-[14px] font-bold text-[#475569]">{finalCancelText}</Text>
+              <Text className={`text-[14px] font-bold ${isLoading ? 'text-[#94A3B8]' : 'text-[#475569]'}`}>{finalCancelText}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               onPress={onConfirm}
               activeOpacity={0.7}
-              className={`py-3 px-6 rounded-[16px] shadow-sm ${isDestructive ? 'bg-[#DC2626]' : 'bg-[#073318]'}`}
+              disabled={isLoading}
+              className={`py-3 px-6 rounded-[16px] shadow-sm flex-row items-center justify-center ${isDestructive ? (isLoading ? 'bg-[#FCA5A5]' : 'bg-[#DC2626]') : (isLoading ? 'bg-[#86A691]' : 'bg-[#073318]')}`}
             >
-              <Text className="text-[14px] font-bold text-white">{finalConfirmText}</Text>
+              {isLoading && <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />}
+              <Text className="text-[14px] font-bold text-white">{isLoading ? (loadingText || 'Processing...') : finalConfirmText}</Text>
             </TouchableOpacity>
           </View>
         </View>

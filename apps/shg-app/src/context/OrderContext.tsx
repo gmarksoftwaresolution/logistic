@@ -12,6 +12,7 @@ export interface Order {
   amount: string;
   payment: string;
   address: string;
+  sourceAddress?: string;
   deliveryDay: string;
   status: string;
   image?: string;
@@ -52,6 +53,7 @@ interface OrderContextType {
   notReceiveOrder: (order: Order) => void;
   deliverOrder: (order: Order) => Promise<void>;
   refreshOrdersList: () => Promise<void>;
+  isOrdersLoading: boolean;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
@@ -183,6 +185,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
     address: type === 'pickup' 
       ? (dbOrder.seller?.address?.addressLine1?.includes('Primary School') ? MOCK_SELLERS[idIndex] : `${dbOrder.seller?.address?.addressLine1 || dbOrder.seller?.address?.village || MOCK_SELLERS[idIndex]}`) 
       : `${dbOrder.deliveryAddress || MOCK_BUYERS[idIndex]}`,
+    sourceAddress: dbOrder.seller?.address?.addressLine1?.includes('Primary School') ? MOCK_SELLERS[idIndex] : `${dbOrder.seller?.address?.addressLine1 || dbOrder.seller?.address?.village || MOCK_SELLERS[idIndex]}`,
     deliveryDay: '1 DAY DELIVERY',
     status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
     image: items[0]?.product?.image || 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
@@ -213,14 +216,17 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
   const [rejectedOrders, setRejectedOrders] = useState<Order[]>([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
 
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders];
 
   const refreshOrdersList = async () => {
     try {
+      setIsOrdersLoading(true);
       // Check if user is logged in
       const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
       if (!token) {
+        setIsOrdersLoading(false);
         return;
       }
 
@@ -265,6 +271,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       
     } catch (error) {
       console.error('Error fetching live order lists from backend:', error);
+    } finally {
+      setIsOrdersLoading(false);
     }
   };
 
@@ -384,6 +392,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       notReceiveOrder,
       deliverOrder,
       refreshOrdersList,
+      isOrdersLoading,
     }}>
       {children}
     </OrderContext.Provider>
