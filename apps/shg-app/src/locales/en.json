@@ -620,6 +620,7 @@
   "title_accepted_orders": "Accepted Orders",
   "subtitle_accepted_orders": "Orders accepted for pickup & delivery",
   "title_completed_orders": "Completed Orders",
+  "subtitle_completed_orders": "Orders successfully completed for pickup & delivery",
   "title_rejected_orders": "Rejected Orders",
   "subtitle_rejected_orders": "Orders rejected from processing",
   "title_order_management": "Order Management",
@@ -756,5 +757,6 @@
   "reject_duplicate_order": "Duplicate Order",
   "reject_other": "Other",
   "filter_apply": "Apply",
-  "filter_reset": "Reset"
+  "filter_reset": "Reset",
+  "filter_all": "All"
 }

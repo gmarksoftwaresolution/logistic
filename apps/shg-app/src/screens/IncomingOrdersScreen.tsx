@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -14,12 +14,15 @@ import { useOrders } from '../context/OrderContext';
 import { Colors, Fonts } from '../constants/theme';
 import { Typography } from '../constants/typography';
 import { Spacing, Grid } from '../constants/spacing';
+import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
+import { ViewMoreButton } from '../components/ViewMoreButton';
 import { OrderDistance } from '../components/OrderDistance';
-import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
@@ -53,6 +56,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -133,6 +139,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
+  
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
+
   const handleAcceptSelected = () => {
     const ordersToAccept = incomingOrders.filter(o => selectedIds.includes(o.id));
     if (ordersToAccept.length === 0) return;
@@ -269,9 +278,13 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   }}>
       <SharedHeader title={t("su_new_orders_398")} subtitle={t('su_new_orders_sub') || 'Verify & accept incoming requests'} navigation={navigation} />
 
-      <ScrollView style={{
-      paddingHorizontal: Spacing.lg
-    }} className="flex-1 pt-2" showsVerticalScrollIndicator={false}>
+      <FlatList 
+        style={{ paddingHorizontal: Spacing.lg }} 
+        className="flex-1 pt-2" 
+        showsVerticalScrollIndicator={false}
+        data={incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={<>
         {/* Top Action Buttons Row */}
         {incomingOrders.length > 0 && <>
           <View className="flex-row justify-between px-1" style={{
@@ -385,14 +398,18 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               <Ionicons name="close" size={20} color="#10B981" />
             </TouchableOpacity>
           </View>}
-
-        {/* Vertical Order Card List */}
-        {incomingOrders.length === 0 ? <View className="flex-1 items-center justify-center py-20">
-            <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
-              <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+        </>}
+        ListEmptyComponent={
+          incomingOrders.length === 0 ? (
+            <View className="flex-1 items-center justify-center py-20">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
+                <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
             </View>
-            <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
-          </View> : incomingOrders.map(item => {
+          ) : null
+        }
+        renderItem={({ item }) => {
         const isSelected = selectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
@@ -450,20 +467,24 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                     </Text>
                   </View>
 
-                  {/* Route Visual Section (Horizontal Marquee) */}
-                  <View className="mt-2.5 mb-1" style={{ overflow: 'hidden' }}>
-                    <TextTicker
-                      style={{ fontSize: 13, fontWeight: 'bold', color: '#073318' }}
-                      duration={7000}
-                      loop
-                      bounce={false}
-                      repeatSpacer={50}
-                      marqueeDelay={2000}
-                      animationType="scroll"
-                    >
-                      {source}   ➔   {destination}
-                    </TextTicker>
+                  {/* Route Visual Section (Horizontal) */}
+                  <View className="flex-row items-center mt-2.5 pr-2">
+                    <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                    <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
                   </View>
+
+                  {/* View Address Button */}
+                  <TouchableOpacity 
+                    onPress={() => setSelectedAddressOrder(item)} 
+                    activeOpacity={0.7}
+                    className="mt-2 mb-1 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                  >
+                    <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                    <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                      {t("view_address") || "View Address"}
+                    </Text>
+                  </TouchableOpacity>
 
                   {/* Bottom Info Badges Row */}
                   <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
@@ -505,9 +526,15 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                 {/* Right Side: Distance Badge */}
                 <OrderDistance distance={item.distance} />
               </TouchableOpacity>;
-      })}
-
-
+        }}
+        ListFooterComponent={<>
+        {incomingOrders.length > 0 && (
+          <ViewMoreButton 
+            totalCount={incomingOrders.length}
+            visibleCount={visibleCount}
+            onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+          />
+        )}
         {/* Refresh Orders Button */}
         {incomingOrders.length > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
             {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
@@ -516,7 +543,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </>}
           </TouchableOpacity>}
         <View className="h-28" />
-      </ScrollView>
+        </>}
+      />
 
       {/* Floating Animated Selection Action Bar */}
       {shouldRender && <Animated.View style={{
@@ -780,6 +808,19 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       setRejectModalVisible(false);
       setSelectedIds([]);
     }} onSubmit={handleRejectModalSubmit} />
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
     </SafeAreaView>;
 };
 export default IncomingOrdersScreen;

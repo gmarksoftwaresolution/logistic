@@ -1,4 +1,4 @@
-import React, { useContext, useCallback } from 'react';
+import React, { useContext, useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -6,14 +6,14 @@ import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
-import { useOrders } from '../context/OrderContext';
+import { useOrders, Order } from '../context/OrderContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SharedHeader } from '../components/SharedHeader';
-import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, translateRoutePart, getModalAddresses } from '../utils/orderHelpers';
 import { LanguageContext } from '../context/LanguageContext';
-import TextTicker from 'react-native-text-ticker';
 import { DashboardLoader } from '../components/DashboardLoader';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -38,6 +38,10 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   const translateRoute = (route: string) => {
     return route.split('>').map(part => translateRoutePart(part, t)).join(' > ');
   };
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   // Build real activity list from live order state — NO hardcoded demo data
   const recentActivities = [
@@ -48,6 +52,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.acceptedAt || '',
       status: t('overview_accepted') || 'Accepted',
       _sortKey: order.acceptedAt || '',
+      originalOrder: order,
     })),
     ...rejectedOrders.map(order => ({
       id: `#${getFormattedOrderId(order)}`,
@@ -56,6 +61,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.rejectedAt || '',
       status: t('overview_rejected') || 'Rejected',
       _sortKey: order.rejectedAt || '',
+      originalOrder: order,
     })),
     ...deliveredOrders.map(order => ({
       id: `#${getFormattedOrderId(order)}`,
@@ -64,6 +70,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.completedAt || '',
       status: t('overview_completed') || 'Completed',
       _sortKey: order.completedAt || '',
+      originalOrder: order,
     })),
   ].sort((a, b) => b._sortKey.localeCompare(a._sortKey));
 
@@ -241,19 +248,25 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                           </View>
                         </View>
 
-                        <View className="mb-4 overflow-hidden">
-                          <TextTicker
-                            style={{ fontSize: 16, fontWeight: '900', color: '#111827', letterSpacing: -0.5 }}
-                            duration={7000}
-                            loop
-                            bounce={false}
-                            repeatSpacer={50}
-                            marqueeDelay={2000}
-                            animationType="scroll"
-                          >
-                            {activity.route}
-                          </TextTicker>
+                        <View className="mb-2 mt-1">
+                          <View className="flex-row items-center pr-2">
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[0]}</Text>
+                            <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[1]}</Text>
+                          </View>
                         </View>
+                        
+                        {/* View Address Button */}
+                        <TouchableOpacity 
+                          onPress={() => setSelectedAddressOrder(activity.originalOrder)} 
+                          activeOpacity={0.7}
+                          className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                        >
+                          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                            {t("view_address") || "View Address"}
+                          </Text>
+                        </TouchableOpacity>
 
                         <View className="flex-row justify-between items-center">
                           <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
@@ -269,6 +282,19 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
 
         </ScrollView>
       </SafeAreaView>
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
       {isInitialLoad && <DashboardLoader t={t} />}
     </View>
   );

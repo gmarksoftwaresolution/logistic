@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { STORAGE_KEYS } from '../utils/storage';
@@ -220,7 +220,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders];
 
-  const refreshOrdersList = async () => {
+  const refreshOrdersList = useCallback(async () => {
     try {
       setIsOrdersLoading(true);
       // Check if user is logged in
@@ -270,11 +270,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setDeliveredOrders(allMapped.filter(o => o.status === 'COMPLETED'));
       
     } catch (error) {
-      console.error('Error fetching live order lists from backend:', error);
+      console.warn('Error fetching live order lists from backend:', error);
     } finally {
       setIsOrdersLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshOrdersList();

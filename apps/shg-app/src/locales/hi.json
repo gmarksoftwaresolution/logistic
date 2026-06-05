@@ -601,6 +601,7 @@
   "title_accepted_orders": "स्वीकृत ऑर्डर",
   "subtitle_accepted_orders": "पिकअप और डिलीवरी के लिए स्वीकृत ऑर्डर",
   "title_completed_orders": "पूर्ण ऑर्डर",
+  "subtitle_completed_orders": "ऑर्डर पिकअप और डिलीवरी के लिए सफलतापूर्वक पूरी हो गईं",
   "title_rejected_orders": "अस्वीकृत ऑर्डर",
   "subtitle_rejected_orders": "प्रसंस्करण से अस्वीकृत ऑर्डर",
   "title_order_management": "ऑर्डर प्रबंधन",
@@ -737,5 +738,6 @@
   "reject_duplicate_order": "डुप्लिकेट ऑर्डर",
   "reject_other": "अन्य",
   "filter_apply": "लागू करें",
-  "filter_reset": "रीसेट करें"
+  "filter_reset": "रीसेट करें",
+  "filter_all": "सभी"
 }

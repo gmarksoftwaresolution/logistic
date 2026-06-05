@@ -14,6 +14,7 @@ interface OrderCardProps {
   showScanner?: boolean;
   onScan?: () => void;
   distance?: string | number;
+  onViewAddress?: () => void;
 }
 export const OrderCard: React.FC<OrderCardProps> = ({
   orderIdText,
@@ -25,7 +26,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   onPressCard,
   showScanner = false,
   onScan,
-  distance
+  distance,
+  onViewAddress
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -55,13 +57,27 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       </View>
 
       {/* Route Visual Section (Horizontal) */}
-      <View className="flex-row items-center mt-2.5 mb-1 pr-2">
+      <View className="flex-row items-center mt-2.5 pr-2">
         <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
         <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
         marginHorizontal: 6
       }} />
         <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
       </View>
+
+      {/* View Address Button */}
+      {onViewAddress && (
+        <TouchableOpacity 
+          onPress={onViewAddress} 
+          activeOpacity={0.7}
+          className="mt-2 mb-1 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+        >
+          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+            {t("view_address") || "View Address"}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Bottom Info Badges Row (All in one line) */}
       <View className="flex-row items-center mt-2 flex-wrap">

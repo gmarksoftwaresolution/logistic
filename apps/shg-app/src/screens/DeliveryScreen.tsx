@@ -7,7 +7,8 @@ import {
   Alert,
   Platform,
   Linking,
-  Dimensions
+  Dimensions,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,9 @@ import { useOrders, Order } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
+import { ViewMoreButton } from '../components/ViewMoreButton';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'Delivery'>,
@@ -49,6 +52,10 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
   // Swipe & Pager Tab Switcher State
   const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>('delivery');
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const PAGE_SIZE = 5;
+  const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
+  const [deliveryVisibleCount, setDeliveryVisibleCount] = useState(PAGE_SIZE);
 
   // Sync tab index when navigating between routes
   useEffect(() => {
@@ -81,6 +88,8 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
     confirmText: 'Confirm',
     onConfirm: () => { },
   });
+
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleQRScan = (order: Order) => {
     setModalConfig({
@@ -204,91 +213,117 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
         contentContainerStyle={{ width: SCREEN_WIDTH * 2 }}
       >
         {/* Page 1: Pickup Screen */}
-        <ScrollView
+        <FlatList
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}
-        >
-          {pickupOrders.length === 0 ? (
-            <View className="items-center justify-center py-20">
-              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
-                <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+          data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            pickupOrders.length === 0 ? (
+              <View className="items-center justify-center py-20">
+                <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
+                  <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+                </View>
+                <Text className="text-textSecondary font-bold text-center">
+                  {t("no_orders_pickup")}
+                </Text>
               </View>
-              <Text className="text-textSecondary font-bold text-center">
-                {t("no_orders_pickup")}
-              </Text>
-            </View>
-          ) : (
-            pickupOrders.map(item => {
-              const routeStr = getRouteForOrder(item);
-              const routeParts = routeStr.split('>');
-              const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
-              const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
-              const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
-              const info = getInfoForOrder(item);
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const routeStr = getRouteForOrder(item);
+            const routeParts = routeStr.split('>');
+            const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+            const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
+            const orderIdText = `#${getFormattedOrderId(item)}`;
+            const info = getInfoForOrder(item);
 
-              return (
-                <OrderCard
-                  key={item.id}
-                  orderIdText={orderIdText}
-                  source={source}
-                  destination={destination}
-                  qty={item.remainingQty || 1}
-                  date={info.date}
-                  time={info.time}
-                  distance={item.distance}
-                  showScanner={true}
-                  onScan={() => handleQRScan(item)}
-                  onPressCard={() => handleEyeDetails(item)}
+            return (
+              <OrderCard
+                orderIdText={orderIdText}
+                source={source}
+                destination={destination}
+                qty={item.remainingQty || 1}
+                date={info.date}
+                time={info.time}
+                distance={item.distance}
+                showScanner={true}
+                onScan={() => handleQRScan(item)}
+                onPressCard={() => handleEyeDetails(item)}
+                onViewAddress={() => setSelectedAddressOrder(item)}
+              />
+            );
+          }}
+          ListFooterComponent={
+            <>
+              {pickupOrders.length > 0 && (
+                <ViewMoreButton 
+                  totalCount={pickupOrders.length}
+                  visibleCount={pickupVisibleCount}
+                  onPress={() => setPickupVisibleCount(prev => prev + PAGE_SIZE)}
                 />
-              );
-            })
-          )}
-          <View className="h-10" />
-        </ScrollView>
+              )}
+              <View className="h-10" />
+            </>
+          }
+        />
 
         {/* Page 2: Delivery Screen */}
-        <ScrollView
+        <FlatList
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}
-        >
-          {deliveryOrders.length === 0 ? (
-            <View className="items-center justify-center py-20">
-              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
-                <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+          data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            deliveryOrders.length === 0 ? (
+              <View className="items-center justify-center py-20">
+                <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
+                  <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+                </View>
+                <Text className="text-textSecondary font-bold text-center">
+                  {t("no_orders_delivery")}
+                </Text>
               </View>
-              <Text className="text-textSecondary font-bold text-center">
-                {t("no_orders_delivery")}
-              </Text>
-            </View>
-          ) : (
-            deliveryOrders.map(item => {
-              const routeStr = getRouteForOrder(item);
-              const routeParts = routeStr.split('>');
-              const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
-              const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
-              const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
-              const info = getInfoForOrder(item);
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const routeStr = getRouteForOrder(item);
+            const routeParts = routeStr.split('>');
+            const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+            const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
+            const orderIdText = `#${getFormattedOrderId(item)}`;
+            const info = getInfoForOrder(item);
 
-              return (
-                <OrderCard
-                  key={item.id}
-                  orderIdText={orderIdText}
-                  source={source}
-                  destination={destination}
-                  qty={item.remainingQty || 1}
-                  date={info.date}
-                  time={info.time}
-                  distance={item.distance}
-                  showScanner={false}
-                  onPressCard={() => handleEyeDetails(item)}
+            return (
+              <OrderCard
+                orderIdText={orderIdText}
+                source={source}
+                destination={destination}
+                qty={item.remainingQty || 1}
+                date={info.date}
+                time={info.time}
+                distance={item.distance}
+                showScanner={false}
+                onPressCard={() => handleEyeDetails(item)}
+                onViewAddress={() => setSelectedAddressOrder(item)}
+              />
+            );
+          }}
+          ListFooterComponent={
+            <>
+              {deliveryOrders.length > 0 && (
+                <ViewMoreButton 
+                  totalCount={deliveryOrders.length}
+                  visibleCount={deliveryVisibleCount}
+                  onPress={() => setDeliveryVisibleCount(prev => prev + PAGE_SIZE)}
                 />
-              );
-            })
-          )}
-          <View className="h-10" />
-        </ScrollView>
+              )}
+              <View className="h-10" />
+            </>
+          }
+        />
       </ScrollView>
 
       <ConfirmModal
@@ -302,6 +337,20 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
           setModalConfig({ ...modalConfig, visible: false });
         }}
       />
+
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
     </SafeAreaView>
   );
 };
