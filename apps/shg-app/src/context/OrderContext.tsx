@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { STORAGE_KEYS } from '../utils/storage';
@@ -44,6 +44,7 @@ interface OrderContextType {
   pendingOrders: Order[];
   rejectedOrders: Order[];
   orders: Order[];
+  highlightedOrders: Record<string, 'new' | 'updated'>;
   getStockItems: () => Order[];
   acceptOrder: (order: Order) => Promise<void>;
   acceptOrders: (orders: Order[]) => Promise<void>;
@@ -170,29 +171,56 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
   const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || 'General Package';
   const category = items[0]?.product?.category || 'Other';
   
-  const idIndex = dbOrder.id % 6;
-  const dbQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
-  const qty = (dbQty > 0 && dbQty !== 1) ? dbQty : MOCK_QTYS[idIndex];
+  const masterId = dbOrder.masterOrderId || dbOrder.id;
+  
+  // Use master order items if available for correct quantity/weight representing the full order
+  const orderItems = dbOrder.masterOrder?.items?.length > 0 ? dbOrder.masterOrder.items : items;
+  
+  const dbQty = orderItems.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
+  const qty = dbQty > 0 ? dbQty : 1;
+
+  const sellerAddressArr = [
+    dbOrder.seller?.address?.addressLine1,
+    dbOrder.seller?.address?.addressLine2,
+    dbOrder.seller?.address?.village,
+    dbOrder.seller?.address?.district,
+    dbOrder.masterOrder?.items?.[0]?.seller?.address?.addressLine1,
+    dbOrder.masterOrder?.items?.[0]?.seller?.address?.village
+  ].filter(Boolean);
+  const actualPickupAddress = sellerAddressArr.length > 0 ? sellerAddressArr[0] : 'Pickup Address';
+  
+  const buyerAddressArr = [
+    dbOrder.buyer?.address?.addressLine1,
+    dbOrder.buyer?.address?.addressLine2,
+    dbOrder.buyer?.address?.village,
+    dbOrder.buyer?.address?.district,
+    dbOrder.masterOrder?.buyer?.address?.addressLine1,
+    dbOrder.masterOrder?.buyer?.address?.village
+  ].filter(Boolean);
+  
+  // Explicitly ignore any address named "Test Drop Address" or "Test Avenue" if there's a real alternative
+  let actualDropAddress = dbOrder.deliveryAddress;
+  if (!actualDropAddress || actualDropAddress.includes('Test')) {
+    actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || 'Delivery Address');
+  }
 
   return {
     id: `${type}-${dbOrder.id}`,
-    orderId: `ORD-1769749895005-${dbOrder.id}`,
+    orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
     parcelName,
     category,
-    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || '') : (dbOrder.buyer?.phoneNumber || ''),
-    amount: String(items.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
-    payment: 'Online',
-    address: type === 'pickup' 
-      ? (dbOrder.seller?.address?.addressLine1?.includes('Primary School') ? MOCK_SELLERS[idIndex] : `${dbOrder.seller?.address?.addressLine1 || dbOrder.seller?.address?.village || MOCK_SELLERS[idIndex]}`) 
-      : `${dbOrder.deliveryAddress || MOCK_BUYERS[idIndex]}`,
-    sourceAddress: dbOrder.seller?.address?.addressLine1?.includes('Primary School') ? MOCK_SELLERS[idIndex] : `${dbOrder.seller?.address?.addressLine1 || dbOrder.seller?.address?.village || MOCK_SELLERS[idIndex]}`,
+    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.phoneNumber || ''),
+    amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
+    payment: dbOrder.masterOrder?.paymentMethod || 'Online',
+    address: type === 'pickup' ? actualPickupAddress : actualDropAddress,
+    sourceAddress: actualPickupAddress,
     deliveryDay: '1 DAY DELIVERY',
-    status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
+    status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : dbOrder.status === 'PICKED_UP' ? 'PickedUp' : dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
     image: items[0]?.product?.image || 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
     currentHolder: dbOrder.status === 'PENDING' ? 'Seller' : 'SHG',
     remainingQty: qty,
-    weight: items.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || 5,
-    distance: dbOrder.distance || MOCK_DISTANCES[idIndex],
+    weight: orderItems.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || 5,
+    distance: dbOrder.distance || dbOrder.masterOrder?.distance || (dbOrder.id ? parseFloat(((dbOrder.id * 7.3) % 8 + 2).toFixed(1)) : 3.5),
     time: 'Just now',
     legType: type,
     rejectReason: type === 'pickup' 
@@ -217,6 +245,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
   const [rejectedOrders, setRejectedOrders] = useState<Order[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
+  const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
+
+  const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders];
 
@@ -244,30 +275,79 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const allMapped = [...mappedPickups, ...mappedDrops];
 
+      // Filter out completed/accepted pickup orders if there is an active/completed drop order for the same master order assigned to us
+      const finalMapped = allMapped.filter(order => {
+        if (order.legType === 'pickup') {
+          const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
+          if (hasDropOrder) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // Compare with previous orders to identify new/updated orders
+      const previousOrders = previousOrdersRef.current;
+      const newHighlights: Record<string, 'new' | 'updated'> = {};
+      const currentOrdersRecord: Record<string, { status: string; legType: string }> = {};
+
+      finalMapped.forEach(order => {
+        const prev = previousOrders[order.orderId];
+        
+        currentOrdersRecord[order.orderId] = {
+          status: order.status,
+          legType: order.legType || '',
+        };
+
+        if (Object.keys(previousOrders).length > 0) {
+          if (!prev) {
+            newHighlights[order.id] = 'new';
+          } else if (prev.status !== order.status || prev.legType !== order.legType) {
+            newHighlights[order.id] = 'updated';
+          }
+        }
+      });
+
+      previousOrdersRef.current = currentOrdersRecord;
+
+      if (Object.keys(newHighlights).length > 0) {
+        setHighlightedOrders(prev => ({ ...prev, ...newHighlights }));
+        
+        Object.keys(newHighlights).forEach(id => {
+          setTimeout(() => {
+            setHighlightedOrders(prev => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+          }, 20000);
+        });
+      }
+
       // Segment mapped orders by status
-      const sortedIncoming = allMapped.filter(o => o.status === 'assigned').sort((a, b) => {
+      const sortedIncoming = finalMapped.filter(o => o.status === 'assigned').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
-        return aNum - bNum;
+        return bNum - aNum;
       });
       setIncomingOrders(sortedIncoming);
       
-      const sortedAccepted = allMapped.filter(o => o.status === 'Accepted').sort((a, b) => {
+      const sortedAccepted = finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
-        return aNum - bNum;
+        return bNum - aNum;
       });
       setAcceptedOrders(sortedAccepted);
       
-      const sortedRejected = allMapped.filter(o => o.status === 'REJECTED').sort((a, b) => {
+      const sortedRejected = finalMapped.filter(o => o.status === 'REJECTED').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
-        return aNum - bNum;
+        return bNum - aNum;
       });
       setRejectedOrders(sortedRejected);
 
       // Completed = Everything Completed
-      setDeliveredOrders(allMapped.filter(o => o.status === 'COMPLETED'));
+      setDeliveredOrders(finalMapped.filter(o => o.status === 'COMPLETED'));
       
     } catch (error) {
       console.warn('Error fetching live order lists from backend:', error);
@@ -349,7 +429,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const receiveOrder = async (order: Order) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      const endpoint = `/orders/pickup/${rawId}/complete`;
+      const endpoint = order.legType === 'drop'
+        ? `/orders/drop/${rawId}/pickup`
+        : `/orders/pickup/${rawId}/complete`;
       await axiosInstance.post(endpoint);
       await refreshOrdersList();
     } catch (error) {
@@ -383,6 +465,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       pendingOrders,
       rejectedOrders,
       orders,
+      highlightedOrders,
       getStockItems,
       acceptOrder,
       acceptOrders,

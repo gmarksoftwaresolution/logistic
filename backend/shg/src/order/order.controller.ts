@@ -53,7 +53,17 @@ export class OrderController {
     return this.orderService.getAssignedDrops(user.id);
   }
 
+  @Post('drop/:id/accept')
+  @ApiOperation({ summary: 'Accept a delivery order' })
+  async acceptDrop(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
+    return this.orderService.acceptDrop(id, user.id);
+  }
 
+  @Post('drop/:id/pickup')
+  @ApiOperation({ summary: 'Mark a delivery order as picked up from transporter' })
+  async pickupDrop(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
+    return this.orderService.pickupDrop(id, user.id);
+  }
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })

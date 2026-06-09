@@ -1,14 +1,22 @@
 export const getRouteForOrder = (item: any) => {
-  // item.address contains the formatted address from the backend
-  // legType tells us if it's a pickup or drop
   if (item.legType === 'pickup') {
-    // Seller -> Transporter
+    // Seller Address -> Transporter
     return `${item.address} > Transporter`;
   } else if (item.legType === 'drop') {
-    // Transporter -> Buyer
-    return `Transporter > ${item.address}`;
+    const isToTransporter = item.address?.toLowerCase().includes('transporter');
+    if (isToTransporter) {
+      // Seller order delivery leg (Seller Address -> Transporter)
+      const source = item.sourceAddress || 'Seller';
+      return `${source} > Transporter`;
+    } else {
+      // Transporter order delivery leg (Transporter -> Buyer Address)
+      return `Transporter > ${item.address}`;
+    }
   } else {
     // Fallback if no legType
+    if (item.status === 'assigned') {
+      return `Transporter > ${item.address}`;
+    }
     const source = item.sourceAddress || item.address;
     return `${source} > Transporter`;
   }
@@ -40,10 +48,6 @@ export const formatOrderNumber = (orderNumber: string | any) => {
     : (orderNumber.orderId || orderNumber.id || '');
   
   rawId = rawId.replace('inc-', '');
-
-  if (!rawId.startsWith('ORD-') && !rawId.startsWith('#')) {
-    rawId = `ORD-1769749895005-${rawId}`;
-  }
 
   let formatted = rawId
     .replace(/-pickup-/gi, '-')

@@ -22,6 +22,7 @@ import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import MainTabNavigator from './MainTabNavigator';
 import StockManagementScreen from '../screens/StockManagementScreen';
 import ApplicationStatusScreen from '../screens/ApplicationStatusScreen';
+import OrderHistoryDetailsScreen from '../screens/OrderHistoryDetailsScreen';
 
 
 import { RootStackParamList } from './types';
@@ -61,6 +62,7 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Address" component={AddressScreen} />
       <Stack.Screen name="ApplicationStatus" component={ApplicationStatusScreen} />
       <Stack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
+      <Stack.Screen name="OrderHistoryDetails" component={OrderHistoryDetailsScreen} />
     </Stack.Navigator>
   );
 }

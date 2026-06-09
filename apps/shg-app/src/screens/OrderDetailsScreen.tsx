@@ -35,7 +35,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
-  const isDeliveryPhase = order.legType === 'drop';
+  const isDeliveryPhase = order.legType === 'drop' && order.status === 'PickedUp';
 
   // 2. Helper to get entity type
   const getEntityType = (name: string): 'transporter' | 'seller' | 'buyer' => {

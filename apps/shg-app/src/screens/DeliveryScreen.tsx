@@ -215,7 +215,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Page 1: Pickup Screen */}
         <FlatList
           style={{ width: SCREEN_WIDTH }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
           keyExtractor={(item) => item.id}
@@ -272,7 +272,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Page 2: Delivery Screen */}
         <FlatList
           style={{ width: SCREEN_WIDTH }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
           keyExtractor={(item) => item.id}

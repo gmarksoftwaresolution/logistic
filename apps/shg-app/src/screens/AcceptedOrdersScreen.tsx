@@ -40,14 +40,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder } = useOrders();
+  const { acceptedOrders, receiveOrder, highlightedOrders } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders by legType since both backend pickup AND drop orders will have 'Accepted' status here
-  const pickupOrders = acceptedOrders.filter(o => o.legType === 'pickup');
-  const deliveryOrders = acceptedOrders.filter(o => o.legType === 'drop');
+  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Delivery tab
+  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
+  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
   const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>(
@@ -230,7 +230,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Page 1: Pickup Screen */}
         <FlatList
           style={{ width: SCREEN_WIDTH }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
           keyExtractor={(item) => item.id}
@@ -273,6 +273,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 onScan={() => handleQRScan(item)}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
+                isHighlighted={highlightedOrders[item.id]}
               />
             );
           }}
@@ -293,7 +294,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Page 2: Delivery Screen */}
         <FlatList
           style={{ width: SCREEN_WIDTH }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
           keyExtractor={(item) => item.id}
@@ -335,6 +336,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 showScanner={false}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
+                isHighlighted={highlightedOrders[item.id]}
               />
             );
           }}

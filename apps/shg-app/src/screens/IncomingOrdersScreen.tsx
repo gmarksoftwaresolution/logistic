@@ -24,6 +24,7 @@ import { ViewMoreButton } from '../components/ViewMoreButton';
 import { OrderDistance } from '../components/OrderDistance';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
   navigation
@@ -37,7 +38,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     acceptOrder,
     acceptOrders,
     acceptAllOrders,
-    rejectOrder
+    rejectOrder,
+    highlightedOrders
   } = useOrders();
   if (!context || !user) return null;
   const {
@@ -66,6 +68,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     title: '',
     message: '',
     isDestructive: false,
+    isInfoOnly: false,
     confirmText: 'Confirm',
     onConfirm: () => {}
   });
@@ -150,6 +153,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       title: t('su_confirm_action') || "Confirm Action",
       message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
+      isInfoOnly: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
         setIsProcessing(true);
@@ -229,6 +233,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       title: t('su_confirm_action') || "Confirm Action",
       message: (t('su_are_you_sure_accept_all') || "Are you sure you want to accept all {count} order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
+      isInfoOnly: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
         setIsProcessing(true);
@@ -279,6 +284,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       <SharedHeader title={t("su_new_orders_398")} subtitle={t('su_new_orders_sub') || 'Verify & accept incoming requests'} navigation={navigation} />
 
       <FlatList 
+        contentContainerStyle={{ paddingBottom: 120 }}
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
         showsVerticalScrollIndicator={false}
@@ -294,10 +300,14 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             {/* Left Button: Reschedule */}
             <TouchableOpacity onPress={() => {
             if (selectedIds.length === 0) {
-              Toast.show({
-                type: 'error',
-                text1: t("su_validation_error_83"),
-                text2: t("su_please_select_at_lea_400")
+              setModalConfig({
+                visible: true,
+                title: t('su_select_order') || 'Select Order',
+                message: t('su_please_select_at_lea_400') || 'Please select at least one order to reschedule.',
+                isDestructive: false,
+                isInfoOnly: true,
+                confirmText: 'OK',
+                onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false }))
               });
             } else {
               setRescheduleReasonModalVisible(true);
@@ -421,22 +431,24 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
         const orderReschedule = rescheduledOrders[item.id];
         const isOrderRescheduled = !!orderReschedule;
-        return <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: 4
-          },
-          shadowOpacity: 0.03,
-          shadowRadius: 8,
-          elevation: 2,
-          padding: 14,
-          marginBottom: 12,
-          borderRadius: 20,
-          borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
-          borderWidth: 1.5,
-          backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
-        }} className="flex-row items-center">
+        return (
+          <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
+            <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 0,
+                height: 4
+              },
+              shadowOpacity: 0.03,
+              shadowRadius: 8,
+              elevation: 2,
+              padding: 14,
+              marginBottom: 12,
+              borderRadius: 20,
+              borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
+              borderWidth: 1.5,
+              backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
+            }} className="flex-row items-center">
                 {/* Left Selection Circular Checkbox */}
                 <View style={{
                   width: 24,
@@ -525,7 +537,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
                 {/* Right Side: Distance Badge */}
                 <OrderDistance distance={item.distance} />
-              </TouchableOpacity>;
+              </TouchableOpacity>
+            </HighlightCardWrapper>
+          );
         }}
         ListFooterComponent={<>
         {incomingOrders.length > 0 && (
@@ -796,7 +810,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         </View>
       </Modal>
 
-      <ConfirmModal isLoading={isProcessing} loadingText={t("su_processing") || "Processing..."} visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} onCancel={() => setModalConfig({
+      <ConfirmModal isLoading={isProcessing} loadingText={t("su_processing") || "Processing..."} visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} isInfoOnly={modalConfig.isInfoOnly} onCancel={() => setModalConfig({
       ...modalConfig,
       visible: false
     })} onConfirm={() => {

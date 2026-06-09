@@ -14,6 +14,7 @@ interface ConfirmModalProps {
   isDestructive?: boolean;
   isLoading?: boolean;
   loadingText?: string;
+  isInfoOnly?: boolean;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -27,6 +28,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isDestructive = false,
   isLoading = false,
   loadingText,
+  isInfoOnly = false,
 }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
@@ -73,14 +75,16 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
           {/* Actions */}
           <View className="flex-row items-center justify-end gap-3">
-            <TouchableOpacity 
-              onPress={onCancel}
-              activeOpacity={0.7}
-              disabled={isLoading}
-              className={`py-3 px-6 rounded-[16px] ${isLoading ? 'bg-[#F8FAFC]' : 'bg-[#F1F5F9]'}`}
-            >
-              <Text className={`text-[14px] font-bold ${isLoading ? 'text-[#94A3B8]' : 'text-[#475569]'}`}>{finalCancelText}</Text>
-            </TouchableOpacity>
+            {!isInfoOnly && (
+              <TouchableOpacity 
+                onPress={onCancel}
+                activeOpacity={0.7}
+                disabled={isLoading}
+                className={`py-3 px-6 rounded-[16px] ${isLoading ? 'bg-[#F8FAFC]' : 'bg-[#F1F5F9]'}`}
+              >
+                <Text className={`text-[14px] font-bold ${isLoading ? 'text-[#94A3B8]' : 'text-[#475569]'}`}>{finalCancelText}</Text>
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity 
               onPress={onConfirm}

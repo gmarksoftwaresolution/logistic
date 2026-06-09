@@ -17,6 +17,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useOrders } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 import { OrderDistance } from '../components/OrderDistance';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
@@ -26,17 +27,17 @@ import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { Order } from '../context/OrderContext';
 
 type Props = CompositeScreenProps<
-  NativeStackScreenProps<OrdersStackParamList, 'OrderHistory'>,
+  NativeStackScreenProps<OrdersStackParamList, 'CompletedOrders'>,
   CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList>,
     NativeStackScreenProps<RootStackParamList>
   >
 >;
 
-const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
+const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { deliveredOrders } = useOrders();
+  const { deliveredOrders, highlightedOrders } = useOrders();
   
   const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
@@ -85,7 +86,7 @@ const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
           <FlatList
             className="flex-1 pt-2"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 24 }}
+            contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 24 }}
             data={filteredOrders.length === 0 ? [] : filteredOrders.slice(0, visibleCount)}
             keyExtractor={(item, index) => item.id?.toString() || index.toString()}
             ListEmptyComponent={
@@ -117,61 +118,63 @@ const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
               const info = getInfoForOrder(item);
 
               return (
-                <View 
-                  className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-                  style={{ 
-                    elevation: 3,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 10,
-                    backgroundColor: 'rgba(255, 255, 255, 0.85)'
-                  }}
-                >
-                  <BlurView intensity={50} tint="light">
-                    <TouchableOpacity 
-                      onPress={() => navigation.navigate('CompletedOrderDetails', { order: item })}
-                      className="p-5 bg-white/70"
-                    >
-                      <View className="flex-row justify-between items-center mb-3">
-                        <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
-                        <View className="px-3.5 py-1.5 rounded-full bg-[#E2F0E7]">
-                          <Text className="text-[11px] font-bold text-[#073318]">{t("status_completed") || "Completed"}</Text>
-                        </View>
-                      </View>
-                      
-                      <View className="flex-row items-center justify-between mb-2 mt-1">
-                        <View className="flex-1 flex-row items-center pr-2">
-                          <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
-                          <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
-                          <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
-                        </View>
-                        <OrderDistance distance={item.distance} />
-                      </View>
-
-                      {/* View Address Button */}
+                <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
+                  <View 
+                    className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
+                    style={{ 
+                      elevation: 3,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 10,
+                      backgroundColor: 'rgba(255, 255, 255, 0.85)'
+                    }}
+                  >
+                    <BlurView intensity={50} tint="light">
                       <TouchableOpacity 
-                        onPress={() => setSelectedAddressOrder(item)} 
-                        activeOpacity={0.7}
-                        className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                        onPress={() => navigation.navigate('CompletedOrderDetails', { order: item })}
+                        className="p-5 bg-white/70"
                       >
-                        <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
-                        <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
-                          {t("view_address") || "View Address"}
-                        </Text>
+                        <View className="flex-row justify-between items-center mb-3">
+                          <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
+                          <View className="px-3.5 py-1.5 rounded-full bg-[#E2F0E7]">
+                            <Text className="text-[11px] font-bold text-[#073318]">{t("status_completed") || "Completed"}</Text>
+                          </View>
+                        </View>
+                        
+                        <View className="flex-row items-center justify-between mb-2 mt-1">
+                          <View className="flex-1 flex-row items-center pr-2">
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+                            <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
+                          </View>
+                          <OrderDistance distance={item.distance} />
+                        </View>
+
+                        {/* View Address Button */}
+                        <TouchableOpacity 
+                          onPress={() => setSelectedAddressOrder(item)} 
+                          activeOpacity={0.7}
+                          className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                        >
+                          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                            {t("view_address") || "View Address"}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <View className="flex-row justify-between items-center">
+                          <Text className="text-[13px] text-[#8792A1] font-medium">
+                            {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
+                          </Text>
+                          <Text className="text-[12px] text-[#8792A1] font-medium">
+                            {item.time || `${info.date}, ${info.time}`}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
-                      
-                      <View className="flex-row justify-between items-center">
-                        <Text className="text-[13px] text-[#8792A1] font-medium">
-                          {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
-                        </Text>
-                        <Text className="text-[12px] text-[#8792A1] font-medium">
-                          {item.time || `${info.date}, ${info.time}`}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  </BlurView>
-                </View>
+                    </BlurView>
+                  </View>
+                </HighlightCardWrapper>
               );
             }}
             ListFooterComponent={
@@ -211,4 +214,4 @@ const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-export default OrderHistoryScreen;
+export default CompletedOrdersScreen;

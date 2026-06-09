@@ -14,6 +14,7 @@ import { getRouteForOrder, getFormattedOrderId, translateRoutePart, getModalAddr
 import { LanguageContext } from '../context/LanguageContext';
 import { DashboardLoader } from '../components/DashboardLoader';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -26,7 +27,7 @@ type Props = CompositeScreenProps<
 const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
-  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders, refreshOrdersList, isOrdersLoading } = useOrders();
+  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
 
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +100,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1">
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
           
           {/* Custom Navbar */}
           <SharedHeader 
@@ -174,9 +175,8 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Completed */}
             <TouchableOpacity 
-              onPress={() => navigation.navigate('OrderHistory')}
+              onPress={() => navigation.navigate('CompletedOrders')}
               className="w-[48%] rounded-[24px] mb-4 shadow-sm overflow-hidden"
               style={{ elevation: 3 }}
             >
@@ -227,54 +227,55 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
               recentActivities.map((activity, index) => {
                 const statusStyle = getStatusStyle(activity.status);
                 return (
-                  <View
-                    key={index}
-                    className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-                    style={{
-                      elevation: 3,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.05,
-                      shadowRadius: 10,
-                      backgroundColor: 'rgba(255, 255, 255, 0.85)'
-                    }}
-                  >
-                    <BlurView intensity={50} tint="light">
-                      <View className="p-5 bg-white/70">
-                        <View className="flex-row justify-between items-center mb-3">
-                          <Text className="text-[14px] font-black text-[#073318] tracking-wide">{activity.id}</Text>
-                          <View className={`px-3.5 py-1.5 rounded-full ${statusStyle.bg}`}>
-                            <Text className={`text-[11px] font-bold ${statusStyle.text}`}>{activity.status}</Text>
+                  <HighlightCardWrapper key={index} isHighlighted={highlightedOrders[activity.originalOrder.id]}>
+                    <View
+                      className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
+                      style={{
+                        elevation: 3,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 10,
+                        backgroundColor: 'rgba(255, 255, 255, 0.85)'
+                      }}
+                    >
+                      <BlurView intensity={50} tint="light">
+                        <View className="p-5 bg-white/70">
+                          <View className="flex-row justify-between items-center mb-3">
+                            <Text className="text-[14px] font-black text-[#073318] tracking-wide">{activity.id}</Text>
+                            <View className={`px-3.5 py-1.5 rounded-full ${statusStyle.bg}`}>
+                              <Text className={`text-[11px] font-bold ${statusStyle.text}`}>{activity.status}</Text>
+                            </View>
+                          </View>
+
+                          <View className="mb-2 mt-1">
+                            <View className="flex-row items-center pr-2">
+                              <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[0]}</Text>
+                              <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                              <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[1]}</Text>
+                            </View>
+                          </View>
+                          
+                          {/* View Address Button */}
+                          <TouchableOpacity 
+                            onPress={() => setSelectedAddressOrder(activity.originalOrder)} 
+                            activeOpacity={0.7}
+                            className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                          >
+                            <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                            <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                              {t("view_address") || "View Address"}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <View className="flex-row justify-between items-center">
+                            <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
+                            <Text className="text-[12px] text-[#8792A1] font-medium">{activity.time}</Text>
                           </View>
                         </View>
-
-                        <View className="mb-2 mt-1">
-                          <View className="flex-row items-center pr-2">
-                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[0]}</Text>
-                            <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
-                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[1]}</Text>
-                          </View>
-                        </View>
-                        
-                        {/* View Address Button */}
-                        <TouchableOpacity 
-                          onPress={() => setSelectedAddressOrder(activity.originalOrder)} 
-                          activeOpacity={0.7}
-                          className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
-                        >
-                          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
-                          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
-                            {t("view_address") || "View Address"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <View className="flex-row justify-between items-center">
-                          <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
-                          <Text className="text-[12px] text-[#8792A1] font-medium">{activity.time}</Text>
-                        </View>
-                      </View>
-                    </BlurView>
-                  </View>
+                      </BlurView>
+                    </View>
+                  </HighlightCardWrapper>
                 );
               })
             )}
