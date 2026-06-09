@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,24 @@ import {
   Image,
   Platform,
   DeviceEventEmitter,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { Colors, Fonts } from '../../constants/Colors';
-import { useOrderManagement } from '../../context/OrderManagementContext';
+import { useOrderManagement, HUB_CONTACT } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { X, Package, ClipboardList, AlertCircle } from 'lucide-react-native';
+import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { batchId, type = 'pickup' } = route.params;
-  const { batches } = useOrderManagement();
+  const { batches, acceptBatch } = useOrderManagement();
+  const insets = useSafeAreaInsets();
 
   React.useEffect(() => {
     // Hide the bottom tabs when details details modal opens
@@ -31,6 +37,8 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
   }, []);
 
   const batch = batches.find((b) => b.id === batchId);
+
+
 
   if (!batch) {
     return (
@@ -51,6 +59,14 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
       </View>
     );
   }
+
+  // Resolve Pickup Contact details
+  const isPickupHub = batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU';
+  const pickupContact = isPickupHub ? HUB_CONTACT : batch.shgContact;
+
+  // Resolve Drop-off Contact details
+  const isDropHub = batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU';
+  const dropContact = isDropHub ? HUB_CONTACT : batch.shgContact;
 
   // Determine dynamic badge colors based on batch status
   const getStatusBadgeStyle = (status: string) => {
@@ -150,6 +166,185 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
             <View style={styles.metricItem}>
               <Text style={styles.metricValue}>{batch.timestamp || t('orders.just_now')}</Text>
               <Text style={styles.metricLabel}>{t('orders.timestamp', { defaultValue: 'Time' })}</Text>
+            </View>
+          </View>
+          {/* Section: Pickup Location & Contact Details */}
+          <View style={styles.contactCardContainer}>
+            <View style={styles.contactCardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                <MapPin size={scale(18)} color="#3B82F6" strokeWidth={2.5} />
+                <Text style={styles.contactCardTitle}>
+                  {t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
+                </Text>
+              </View>
+              {pickupContact?.phone && (
+                <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${pickupContact.phone}`)} activeOpacity={0.7}>
+                  <Phone size={scale(13)} color={Colors.primary} />
+                  <Text style={styles.contactCallBtnText}>{t('orders.call', { defaultValue: 'Call' })}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.contactCardBody}>
+              <View style={styles.contactInfoGrid}>
+                {/* Person Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <User size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
+                    <Text style={styles.contactTextValue}>{pickupContact?.name || 'Seller'}</Text>
+                  </View>
+                </View>
+
+                {/* Phone Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <Phone size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
+                    <Text style={styles.contactTextValue}>{pickupContact?.phone || ''}</Text>
+                  </View>
+                </View>
+
+                {/* Village Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <MapPin size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
+                    <Text style={styles.contactTextValue}>{pickupContact?.village || batch.pickupPointName || 'Nesari'}</Text>
+                  </View>
+                </View>
+
+                {/* Pincode Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <MapPin size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
+                    <Text style={styles.contactTextValue}>{pickupContact?.pincode || '416504'}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Full Address Block */}
+              <View style={styles.addressBlock}>
+                <View style={styles.contactIconBg}>
+                  <MapPin size={scale(14)} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1, marginRight: scale(4) }}>
+                  <Text style={styles.contactTextLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
+                  <Text style={styles.addressTextValue}>{pickupContact?.address || ''}</Text>
+                </View>
+                {pickupContact?.address && (
+                  <TouchableOpacity 
+                    style={styles.navBtn} 
+                    onPress={() => {
+                      const query = [pickupContact.address, pickupContact.village, pickupContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
+                      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
+                    }} 
+                    activeOpacity={0.7}
+                  >
+                    <ExternalLink size={scale(12)} color={Colors.primary} />
+                    <Text style={styles.navBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* Section: Drop-off Location & Contact Details */}
+          <View style={styles.contactCardContainer}>
+            <View style={styles.contactCardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                <MapPin size={scale(18)} color="#10B981" strokeWidth={2.5} />
+                <Text style={styles.contactCardTitle}>
+                  {t('orders.drop_details_title', { defaultValue: 'Drop-off Location & Contact' })}
+                </Text>
+              </View>
+              {dropContact?.phone && (
+                <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${dropContact.phone}`)} activeOpacity={0.7}>
+                  <Phone size={scale(13)} color={Colors.primary} />
+                  <Text style={styles.contactCallBtnText}>{t('orders.call', { defaultValue: 'Call' })}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.contactCardBody}>
+              <View style={styles.contactInfoGrid}>
+                {/* Person Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <User size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
+                    <Text style={styles.contactTextValue}>{dropContact?.name || 'Buyer'}</Text>
+                  </View>
+                </View>
+
+                {/* Phone Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <Phone size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
+                    <Text style={styles.contactTextValue}>{dropContact?.phone || ''}</Text>
+                  </View>
+                </View>
+
+                {/* Village Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <MapPin size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
+                    <Text style={styles.contactTextValue}>{dropContact?.village || batch.dropPointName || 'Nesari'}</Text>
+                  </View>
+                </View>
+
+                {/* Pincode Item */}
+                <View style={styles.contactInfoRow}>
+                  <View style={styles.contactIconBg}>
+                    <MapPin size={scale(14)} color={Colors.primary} />
+                  </View>
+                  <View style={styles.contactTextCol}>
+                    <Text style={styles.contactTextLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
+                    <Text style={styles.contactTextValue}>{dropContact?.pincode || '416504'}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Full Address Block */}
+              <View style={styles.addressBlock}>
+                <View style={styles.contactIconBg}>
+                  <MapPin size={scale(14)} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1, marginRight: scale(4) }}>
+                  <Text style={styles.contactTextLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
+                  <Text style={styles.addressTextValue}>{dropContact?.address || ''}</Text>
+                </View>
+                {dropContact?.address && (
+                  <TouchableOpacity 
+                    style={styles.navBtn} 
+                    onPress={() => {
+                      const query = [dropContact.address, dropContact.village, dropContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
+                      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
+                    }} 
+                    activeOpacity={0.7}
+                  >
+                    <ExternalLink size={scale(12)} color={Colors.primary} />
+                    <Text style={styles.navBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
@@ -265,8 +460,51 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
           if (!isActionable) return null;
 
+          if (batch.status === 'NEW_ORDER') {
+            return (
+              <View style={[
+                styles.bottomStickyBar,
+                { paddingBottom: insets.bottom > 0 ? insets.bottom + verticalScale(16) : verticalScale(28) }
+              ]}>
+                <View style={styles.rowActions}>
+                  <TouchableOpacity
+                    style={[styles.actionBtnHalf, styles.acceptBtnNew]}
+                    activeOpacity={0.8}
+                    onPress={async () => {
+                      try {
+                        await acceptBatch(batch.id);
+                        navigation.goBack();
+                        navigation.navigate('AcceptedOrders', { activeTab: type });
+                      } catch (err) {
+                        console.error('Failed to accept batch in detail view:', err);
+                      }
+                    }}
+                  >
+                    <Text style={styles.acceptBtnText}>{t('orders.accept', { defaultValue: 'Accept' }).toUpperCase()}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtnHalf, styles.rejectBtnNew]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      navigation.navigate('CategoryOrders', { 
+                        category: 'new', 
+                        triggerRejectBatchId: batch.id 
+                      });
+                    }}
+                  >
+                    <Text style={styles.rejectBtnText}>{t('orders.reject', { defaultValue: 'Reject' }).toUpperCase()}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }
+
           return (
-            <View style={styles.bottomStickyBar}>
+            <View style={[
+              styles.bottomStickyBar,
+              { paddingBottom: insets.bottom > 0 ? insets.bottom + verticalScale(16) : verticalScale(28) }
+            ]}>
               <TouchableOpacity
                 style={styles.stickyActionBtn}
                 activeOpacity={0.85}
@@ -278,15 +516,20 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   });
                 }}
               >
-                <Text style={styles.stickyActionBtnText}>
-                  {isDropLeg 
-                    ? t('orders.proceed_to_drop', { defaultValue: 'PROCEED TO DROP-OFF' }) 
-                    : t('orders.proceed_to_pickup', { defaultValue: 'PROCEED TO PICKUP' })}
-                </Text>
+                <View style={styles.btnContent}>
+                  <Text style={styles.stickyActionBtnText}>
+                    {isDropLeg 
+                      ? t('orders.proceed_to_drop', { defaultValue: 'PROCEED TO DROP-OFF' }) 
+                      : t('orders.proceed_to_pickup', { defaultValue: 'PROCEED TO PICKUP' })}
+                  </Text>
+                  <ArrowRight size={scale(18)} color="#FFFFFF" strokeWidth={3} style={styles.btnIcon} />
+                </View>
               </TouchableOpacity>
             </View>
           );
         })()}
+
+
       </View>
     </View>
   );
@@ -593,35 +836,292 @@ const styles = StyleSheet.create({
   bottomStickyBar: {
     paddingHorizontal: scale(20),
     paddingTop: verticalScale(14),
-    paddingBottom: Platform.OS === 'ios' ? verticalScale(38) : verticalScale(32), // Dynamic safe-device bottom spacing
     backgroundColor: '#FAFAFA',
     borderTopWidth: 1.5,
     borderTopColor: '#F1F5F9',
   },
   stickyActionBtn: {
-    backgroundColor: '#073318', // Deep Brand Green
-    borderRadius: scale(16), // Premium rounded pill shape
-    paddingVertical: verticalScale(15),
+    backgroundColor: Colors.primary,
+    borderRadius: scale(16),
+    height: verticalScale(54),
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
+    elevation: 4,
     ...Platform.select({
       ios: {
-        shadowColor: '#073318',
+        shadowColor: Colors.primary,
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
+        shadowOpacity: 0.2,
         shadowRadius: 6,
       },
       android: {
-        elevation: 6,
+        elevation: 4,
       },
     }),
   },
+  btnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scale(10),
+  },
   stickyActionBtnText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(14.5),
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
+  },
+  btnIcon: {
+    marginLeft: scale(2),
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(12),
+  },
+  actionBtnHalf: {
+    flex: 1,
+    height: verticalScale(54),
+    borderRadius: scale(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  acceptBtnNew: {
+    backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    ...Platform.select({
+      ios: {
+        shadowOpacity: 0.2,
+      },
+    }),
+  },
+  rejectBtnNew: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FEE2E2',
+    shadowColor: '#EF4444',
+  },
+  acceptBtnText: {
     fontFamily: Fonts.extraBold,
     fontSize: moderateScale(13.5),
     color: '#FFFFFF',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
+  },
+  rejectBtnText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(13.5),
+    color: Colors.error,
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: scale(24),
+  },
+  modalCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: moderateScale(20),
+    padding: moderateScale(24),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: verticalScale(8) },
+    shadowOpacity: 0.12,
+    shadowRadius: moderateScale(24),
+    elevation: 5,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(8),
+  },
+  modalTitle: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(20),
+    color: Colors.textPrimary,
+  },
+  closeBtn: {
+    padding: scale(4),
+  },
+  modalSubtitle: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13),
+    color: Colors.textSecondary,
+    marginBottom: verticalScale(20),
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: scale(8),
+    marginBottom: verticalScale(16),
+  },
+  reasonChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(10),
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reasonChipSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+  },
+  reasonChipText: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(12),
+    color: Colors.textSecondary,
+  },
+  reasonChipTextSelected: {
+    fontFamily: Fonts.bold,
+    color: '#DC2626',
+  },
+  reasonInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: moderateScale(14),
+    padding: scale(12),
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13),
+    color: Colors.textPrimary,
+    textAlignVertical: 'top',
+    marginBottom: verticalScale(24),
+  },
+  confirmRejectBtn: {
+    backgroundColor: '#EF4444',
+    height: verticalScale(50),
+    borderRadius: moderateScale(14),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnDisabled: {
+    backgroundColor: Colors.buttonDisabled,
+  },
+  confirmRejectText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: '#FFFFFF',
+  },
+  contactCardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: moderateScale(16),
+    borderWidth: 1.5,
+    borderColor: '#F1F5F9',
+    padding: scale(14),
+    marginVertical: verticalScale(6),
+    gap: verticalScale(12),
+  },
+  contactCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    paddingBottom: verticalScale(8),
+  },
+  contactCardTitle: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(13.5),
+    color: Colors.textPrimary,
+  },
+  contactCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  contactCallBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11.5),
+    color: Colors.primary,
+  },
+  contactCardBody: {
+    gap: verticalScale(10),
+  },
+  contactInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: verticalScale(10),
+    columnGap: scale(8),
+  },
+  contactInfoRow: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contactIconBg: {
+    width: scale(28),
+    height: scale(28),
+    borderRadius: scale(14),
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  contactTextCol: {
+    marginLeft: scale(8),
+    flex: 1,
+  },
+  contactTextLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(9),
+    color: Colors.textSecondary,
+    marginBottom: verticalScale(1),
+  },
+  contactTextValue: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(11.5),
+    color: Colors.textPrimary,
+  },
+  addressBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: scale(10),
+    padding: scale(10),
+    gap: scale(8),
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  addressTextValue: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: Colors.textPrimary,
+    lineHeight: 14,
+  },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  navBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: Colors.primary,
   },
 });
 

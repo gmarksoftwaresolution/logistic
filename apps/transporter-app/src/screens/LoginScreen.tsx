@@ -390,7 +390,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.topNavigation}>
             <TouchableOpacity 
               style={styles.backArrowButton} 
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'GetStarted' }],
+                  });
+                }
+              }}
               activeOpacity={0.7}
             >
               <ChevronLeft size={scale(24)} color={Colors.textPrimary} />

@@ -144,8 +144,8 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                             </View>
 
                             <View style={styles.reasonStrip}>
-                              <XCircle size={scale(14)} color="#DC2626" />
-                              <Text style={styles.reasonText} numberOfLines={1}>
+                              <XCircle size={scale(14)} color="#DC2626" style={{ marginTop: scale(2) }} />
+                              <Text style={styles.reasonText}>
                                 {batch.rejectReason || t('orders.standard_non_compliance')}
                               </Text>
                             </View>
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   },
   reasonStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#FEF2F2',
     padding: scale(8),
     borderRadius: scale(8),

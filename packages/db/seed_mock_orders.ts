@@ -245,10 +245,10 @@ async function main() {
             aadhaarNumber: '123456789012',
             panNumber: 'ABCDE1234F',
             drivingLicenseNo: 'MH-09-2023-1234567',
-            aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
-            aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
-            panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
-            drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
+            aadhaarFrontUrl: '/uploads/license_placeholder.png',
+            aadhaarBackUrl: '/uploads/license_placeholder.png',
+            panCardUrl: '/uploads/license_placeholder.png',
+            drivingLicenseUrl: '/uploads/license_placeholder.png',
           }
         },
         
@@ -258,9 +258,9 @@ async function main() {
             vehicleName: 'Mahindra Bolero Pickup',
             registrationNumber: 'MH-09-EQ-4321',
             licenseNumber: 'MH-09-2023-1234567',
-            rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
-            insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
-            vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
+            rcUrl: '/uploads/rc_book_placeholder.png',
+            insuranceUrl: '/uploads/insurance_placeholder.png',
+            vehicleImageUrl: '/uploads/rc_book_placeholder.png',
           }
         },
         
@@ -371,10 +371,10 @@ async function main() {
             aadhaarNumber: '123456789012',
             panNumber: 'ABCDE1234F',
             drivingLicenseNo: 'MH-09-2023-1234567',
-            aadhaarFrontUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Front',
-            aadhaarBackUrl: 'https://placehold.co/600x400/png?text=Aadhaar+Back',
-            panCardUrl: 'https://placehold.co/600x400/png?text=PAN+Card',
-            drivingLicenseUrl: 'https://placehold.co/600x400/png?text=Driving+License',
+            aadhaarFrontUrl: '/uploads/license_placeholder.png',
+            aadhaarBackUrl: '/uploads/license_placeholder.png',
+            panCardUrl: '/uploads/license_placeholder.png',
+            drivingLicenseUrl: '/uploads/license_placeholder.png',
           }
         },
         
@@ -384,9 +384,9 @@ async function main() {
             vehicleName: 'Mahindra Bolero Pickup',
             registrationNumber: 'MH-09-EQ-4321',
             licenseNumber: 'MH-09-2023-1234567',
-            rcUrl: 'https://placehold.co/600x400/png?text=RC+Book',
-            insuranceUrl: 'https://placehold.co/600x400/png?text=Insurance',
-            vehicleImageUrl: 'https://placehold.co/600x400/png?text=Vehicle+Image',
+            rcUrl: '/uploads/rc_book_placeholder.png',
+            insuranceUrl: '/uploads/insurance_placeholder.png',
+            vehicleImageUrl: '/uploads/rc_book_placeholder.png',
           }
         },
         

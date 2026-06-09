@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,33 +9,95 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
+import { Package, ChevronDown, ChevronRight, ChevronLeft, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useTranslation } from 'react-i18next';
 
-const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches, acceptBatch, rejectBatch, acceptBatchIds } = useOrderManagement();
+  const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList } = useOrderManagement();
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
-  const [rejectReasonText, setRejectReasonText] = useState('');
+  const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
+  const [customReasonText, setCustomReasonText] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
+  const [rescheduleParty, setRescheduleParty] = useState<'transporter' | 'shg' | null>(null);
+  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
+  const [customRescheduleText, setCustomRescheduleText] = useState('');
+  const modalScrollRef = useRef<ScrollView>(null);
+  const rescheduleInputRef = useRef<TextInput>(null);
+  const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const getDaysInMonth = (monthDate: Date) => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    let startDayOfWeek = firstDay.getDay() - 1;
+    if (startDayOfWeek < 0) startDayOfWeek = 6;
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    const days: { dateStr: string | null; dayNum: number | null; isPast: boolean; isToday: boolean }[] = [];
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push({ dateStr: null, dayNum: null, isPast: false, isToday: false });
+    }
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    for (let day = 1; day <= totalDays; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const cellDate = new Date(year, month, day);
+      const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const isPast = cellDate < todayZero;
+      const isToday = dateStr === todayStr;
+      days.push({ dateStr, dayNum: day, isPast, isToday });
+    }
+    return days;
+  };
+
+  useEffect(() => {
+    if (route.params?.triggerRejectBatchId) {
+      setRejectingBatchId(route.params.triggerRejectBatchId);
+      navigation.setParams({ triggerRejectBatchId: undefined });
+    }
+  }, [route.params?.triggerRejectBatchId]);
 
   const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
-    await acceptBatch(batchId);
-    navigation.navigate('AcceptedOrders', { activeTab: type });
+    try {
+      await acceptBatch(batchId);
+      navigation.navigate('AcceptedOrders', { activeTab: type });
+    } catch (err) {
+      console.error('Failed to accept single batch:', err);
+    }
   };
 
   const handleAcceptBulk = async (ids: string[]) => {
-    await acceptBatchIds(ids);
-    setShowSuccessModal(false);
-    navigation.navigate('AcceptedOrders');
+    try {
+      await acceptBatchIds(ids);
+      setShowSuccessModal(false);
+      navigation.navigate('AcceptedOrders');
+    } catch (err) {
+      console.error('Failed to accept bulk batches:', err);
+    }
   };
 
   // Track accordion expansion states per area. Collapsed by default.
@@ -83,11 +145,63 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const allFoundAreas = Object.keys(groupedEntries);
   const areas = Array.from(new Set([...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas]));
 
-  const handleConfirmReject = () => {
-    if (rejectingBatchId && rejectReasonText.trim()) {
-      rejectBatch(rejectingBatchId, rejectReasonText.trim());
-      setRejectingBatchId(null);
-      setRejectReasonText('');
+  const handleCloseModal = () => {
+    setRejectingBatchId(null);
+    setSelectedReasonChip(null);
+    setCustomReasonText('');
+    setSelectedDateStr(null);
+    setRescheduleParty(null);
+    setRescheduleReason(null);
+    setCustomRescheduleText('');
+    setIsEditingCustomReason(false);
+    setCalendarMonth(new Date());
+  };
+
+  const handleConfirmReject = async () => {
+    if (rejectingBatchId) {
+      let finalReason = '';
+      const isRescheduleSelected = selectedReasonChip === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
+      
+      if (isRescheduleSelected) {
+        const rejectingBatch = batches.find(b => b.id === rejectingBatchId);
+        const isHubPoint = rejectingBatch
+          ? (rejectingBatch.pickupPointName === 'Gadhinglaj Hub' ||
+             rejectingBatch.pickupPointName === 'Central Hub GMU' ||
+             rejectingBatch.dropPointName === 'Gadhinglaj Hub' ||
+             rejectingBatch.dropPointName === 'Central Hub GMU')
+          : false;
+
+        const rescheduleText = t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
+        const partyText = rescheduleParty === 'transporter' 
+          ? t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })
+          : (isHubPoint 
+              ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
+              : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' }));
+        
+        let subReasonText = '';
+        const isCustomOrOther =
+          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
+          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
+          rescheduleReason === 'Custom' ||
+          rescheduleReason === 'Other';
+
+        if (isCustomOrOther) {
+          subReasonText = customRescheduleText.trim();
+        } else {
+          subReasonText = rescheduleReason || '';
+        }
+
+        finalReason = `${rescheduleText} - ${partyText} - ${subReasonText} - ${selectedDateStr}`;
+      } else {
+        finalReason = customReasonText.trim()
+          ? (selectedReasonChip ? `${selectedReasonChip} - ${customReasonText.trim()}` : customReasonText.trim())
+          : (selectedReasonChip || '');
+      }
+
+      if (finalReason.trim()) {
+        await rejectBatch(rejectingBatchId, finalReason.trim());
+        handleCloseModal();
+      }
     }
   };
 
@@ -110,9 +224,10 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   };
 
   const reasonChips = [
-    t('orders.reason_damaged', { defaultValue: 'Damaged stock items' }),
-    t('orders.reason_discrepancy', { defaultValue: 'Weight/Qty discrepancy' }),
-    t('orders.reason_clash', { defaultValue: 'Logistics schedule clash' })
+    t('orders.reason_damaged', { defaultValue: 'Damaged Stock Items' }),
+    t('orders.reason_discrepancy', { defaultValue: 'Weight/Qty Discrepancy' }),
+    t('orders.reason_capacity_unavailable', { defaultValue: 'Vehicle Capacity Unavailable' }),
+    t('orders.reason_reschedule', { defaultValue: 'Reschedule' })
   ];
 
   return (
@@ -127,7 +242,18 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       <View style={{ height: verticalScale(14) }} />
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
+      >
         {areas.length === 0 ? (
           <View style={styles.emptyCard}>
             <Package size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
@@ -187,7 +313,13 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                             const routeText = getRouteDisplayText(batch, type, areaName);
                             return (
                               <View key={`${batch.id}-pickup-${index}`} style={styles.notificationWidgetCard}>
-                                <View style={styles.widgetLeftData}>
+                                <TouchableOpacity
+                                   style={styles.widgetLeftData}
+                                   activeOpacity={0.7}
+                                   onPress={() => {
+                                     navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'pickup' });
+                                   }}
+                                 >
                                   <View style={styles.widgetTopRow}>
                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
                                   </View>
@@ -198,15 +330,19 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                       <Text style={[styles.legTagText, { color: '#2563EB' }]}>{t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}</Text>
                                     </View>
                                   </View>
-                                </View>
+                                </TouchableOpacity>
                                 <View style={styles.actionStrip}>
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
                                         style={styles.modernAcceptBtn} 
-                                        onPress={() => {
-                                          acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                        onPress={async () => {
+                                          try {
+                                            await acceptBatch(batch.id);
+                                            navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                          } catch (err) {
+                                            console.error('Failed to accept batch during walkthrough:', err);
+                                          }
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
@@ -237,26 +373,36 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                             const routeText = getRouteDisplayText(batch, type, areaName);
                             return (
                               <View key={`${batch.id}-drop-${index}`} style={styles.notificationWidgetCard}>
-                                <View style={styles.widgetLeftData}>
-                                  <View style={styles.widgetTopRow}>
-                                    <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
-                                  </View>
-                                  <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                                    <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
-                                    <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
-                                      <Text style={[styles.legTagText, { color: '#059669' }]}>{t('orders.drop_orders', { defaultValue: 'Drop Order' })}</Text>
-                                    </View>
-                                  </View>
-                                </View>
+                                <TouchableOpacity
+                                   style={styles.widgetLeftData}
+                                   activeOpacity={0.7}
+                                   onPress={() => {
+                                     navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'drop' });
+                                   }}
+                                 >
+                                   <View style={styles.widgetTopRow}>
+                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
+                                   </View>
+                                   <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
+                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                                     <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
+                                     <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
+                                       <Text style={[styles.legTagText, { color: '#059669' }]}>{t('orders.drop_orders', { defaultValue: 'Drop Order' })}</Text>
+                                     </View>
+                                   </View>
+                                 </TouchableOpacity>
                                 <View style={styles.actionStrip}>
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
                                         style={styles.modernAcceptBtn} 
-                                        onPress={() => {
-                                          acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                        onPress={async () => {
+                                          try {
+                                            await acceptBatch(batch.id);
+                                            navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                          } catch (err) {
+                                            console.error('Failed to accept batch during walkthrough:', err);
+                                          }
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
@@ -302,61 +448,420 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         visible={!!rejectingBatchId}
         transparent
         animationType="fade"
-        onRequestClose={() => setRejectingBatchId(null)}
+        onRequestClose={handleCloseModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>{t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}</Text>
-              <TouchableOpacity onPress={() => setRejectingBatchId(null)} style={styles.closeBtn}>
-                <X size={scale(20)} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
-
-            <View style={styles.chipsContainer}>
-              {reasonChips.map((chip) => (
-                <TouchableOpacity
-                  key={chip}
-                  style={[
-                    styles.reasonChip,
-                    rejectReasonText === chip && styles.reasonChipSelected,
-                  ]}
-                  onPress={() => setRejectReasonText(chip)}
-                >
-                  <Text
-                    style={[
-                      styles.reasonChipText,
-                      rejectReasonText === chip && styles.reasonChipTextSelected,
-                    ]}
-                  >
-                    {chip}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput
-              style={styles.reasonInput}
-              placeholder={t('orders.or_write_custom_statement', { defaultValue: 'Or write custom statement...' })}
-              placeholderTextColor={Colors.textPlaceholder}
-              multiline
-              numberOfLines={3}
-              value={rejectReasonText}
-              onChangeText={setRejectReasonText}
-            />
-
-            <TouchableOpacity
-              style={[styles.confirmRejectBtn, !rejectReasonText.trim() && styles.btnDisabled]}
-              disabled={!rejectReasonText.trim()}
-              onPress={handleConfirmReject}
+            <ScrollView 
+              ref={modalScrollRef}
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ flexGrow: 1 }}
             >
-              <Text style={styles.confirmRejectText}>{t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}</Text>
-            </TouchableOpacity>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalTitle}>{t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}</Text>
+                <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
+                  <X size={scale(20)} color={Colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
+
+              <View style={styles.chipsContainer}>
+                {reasonChips.map((chip) => (
+                  <TouchableOpacity
+                    key={chip}
+                    style={[
+                      styles.reasonChip,
+                      selectedReasonChip === chip && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip(prev => prev === chip ? null : chip);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.reasonChipText,
+                        selectedReasonChip === chip && styles.reasonChipTextSelected,
+                      ]}
+                    >
+                      {chip}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {(() => {
+                const isRescheduleSelected = selectedReasonChip === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
+                
+                if (isRescheduleSelected) {
+                  const rejectingBatch = batches.find(b => b.id === rejectingBatchId);
+                  const isHubPoint = rejectingBatch
+                    ? (rejectingBatch.pickupPointName === 'Gadhinglaj Hub' ||
+                       rejectingBatch.pickupPointName === 'Central Hub GMU' ||
+                       rejectingBatch.dropPointName === 'Gadhinglaj Hub' ||
+                       rejectingBatch.dropPointName === 'Central Hub GMU')
+                    : false;
+                  return (
+                    <View style={styles.rescheduleSection}>
+                      {/* Party Selection (Who is rejecting?) */}
+                      <View style={styles.partyOptionsContainer}>
+                        <Text style={styles.partyOptionsTitle}>
+                          {t('orders.who_is_rejecting', { defaultValue: 'Who is rejecting?' })}
+                        </Text>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.partyOptionCard,
+                            rescheduleParty === 'transporter' && styles.partyOptionCardSelected,
+                          ]}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            setRescheduleParty('transporter');
+                            setRescheduleReason(null);
+                            setCustomRescheduleText('');
+                            setSelectedDateStr(null);
+                            setTimeout(() => {
+                              modalScrollRef.current?.scrollToEnd({ animated: true });
+                            }, 100);
+                          }}
+                        >
+                          <View style={[
+                            styles.radioCircle,
+                            rescheduleParty === 'transporter' && styles.radioCircleSelected,
+                          ]}>
+                            {rescheduleParty === 'transporter' && <View style={styles.radioDot} />}
+                          </View>
+                          <Text style={[
+                            styles.partyOptionText,
+                            rescheduleParty === 'transporter' && styles.partyOptionTextSelected,
+                          ]}>
+                            {t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.partyOptionCard,
+                            rescheduleParty === 'shg' && styles.partyOptionCardSelected,
+                          ]}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            setRescheduleParty('shg');
+                            setRescheduleReason(null);
+                            setCustomRescheduleText('');
+                            setSelectedDateStr(null);
+                            setTimeout(() => {
+                              modalScrollRef.current?.scrollToEnd({ animated: true });
+                            }, 100);
+                          }}
+                        >
+                          <View style={[
+                            styles.radioCircle,
+                            rescheduleParty === 'shg' && styles.radioCircleSelected,
+                          ]}>
+                            {rescheduleParty === 'shg' && <View style={styles.radioDot} />}
+                          </View>
+                          <Text style={[
+                            styles.partyOptionText,
+                            rescheduleParty === 'shg' && styles.partyOptionTextSelected,
+                          ]}>
+                            {isHubPoint
+                              ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
+                              : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' })}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Sub-reason Selection */}
+                      {rescheduleParty && (
+                        <View style={[styles.partyOptionsContainer, { borderTopWidth: 0, marginTop: 0 }]}>
+                          <Text style={styles.partyOptionsTitle}>
+                            {t('orders.select_rejection_reason', { defaultValue: 'Select rejection reason:' })}
+                          </Text>
+                          <View style={styles.chipsContainer}>
+                            {(rescheduleParty === 'transporter'
+                              ? [
+                                  t('orders.reason_vehicle_unavailable', { defaultValue: 'Vehicle Unavailable' }),
+                                  t('orders.reason_pickup_not_ready', { defaultValue: 'Pickup Not Ready' }),
+                                  t('orders.reason_route_disruption', { defaultValue: 'Route Disruption' }),
+                                  t('orders.reason_custom', { defaultValue: 'Custom' })
+                                ]
+                              : (rejectingBatchId?.startsWith('drop-')
+                                  ? (isHubPoint
+                                      ? [
+                                          t('orders.reason_gmu_not_available', { defaultValue: 'GMU not available' }),
+                                          t('orders.reason_other', { defaultValue: 'Other' })
+                                        ]
+                                      : [
+                                          t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
+                                          t('orders.reason_not_enough_place', { defaultValue: 'Not Enough Place' }),
+                                          t('orders.reason_previous_orders_pending', { defaultValue: 'Previous Orders are Pending' }),
+                                          t('orders.reason_other', { defaultValue: 'Other' })
+                                        ]
+                                    )
+                                  : [
+                                      t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
+                                      t('orders.reason_not_enough_stock', { defaultValue: 'Not Enough Stock' }),
+                                      t('orders.reason_unable_complete', { defaultValue: 'Unable to Complete the Order' }),
+                                      t('orders.reason_other', { defaultValue: 'Other' })
+                                    ]
+                                )
+                            ).map((subReason) => {
+                              const isSubSelected = rescheduleReason === subReason;
+                              return (
+                                <TouchableOpacity
+                                  key={subReason}
+                                  style={[
+                                    styles.reasonChip,
+                                    isSubSelected && styles.reasonChipSelected,
+                                  ]}
+                                  onPress={() => {
+                                    setRescheduleReason(subReason);
+                                    setCustomRescheduleText('');
+                                    setSelectedDateStr(null);
+
+                                    const isCustomOrOther =
+                                      subReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
+                                      subReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
+                                      subReason === 'Custom' ||
+                                      subReason === 'Other';
+
+                                    if (isCustomOrOther) {
+                                      setIsEditingCustomReason(true);
+                                      setTimeout(() => {
+                                        rescheduleInputRef.current?.focus();
+                                      }, 150);
+                                    } else {
+                                      setIsEditingCustomReason(false);
+                                    }
+
+                                    setTimeout(() => {
+                                      modalScrollRef.current?.scrollToEnd({ animated: true });
+                                    }, 100);
+                                  }}
+                                >
+                                  <Text style={[
+                                    styles.reasonChipText,
+                                    isSubSelected && styles.reasonChipTextSelected,
+                                  ]}>
+                                    {subReason}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Custom/Other TextInput */}
+                      {rescheduleReason && (
+                        (() => {
+                          const isCustomOrOther =
+                            rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
+                            rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
+                            rescheduleReason === 'Custom' ||
+                            rescheduleReason === 'Other';
+                          
+                          if (isCustomOrOther) {
+                            return (
+                              <View style={{ marginTop: verticalScale(10), width: '100%' }}>
+                                <TextInput
+                                  ref={rescheduleInputRef}
+                                  style={styles.reasonInput}
+                                  placeholder={
+                                    rescheduleParty === 'transporter'
+                                      ? t('orders.specify_custom_reason', { defaultValue: 'Specify custom reason...' })
+                                      : t('orders.specify_other_reason', { defaultValue: 'Specify other reason...' })
+                                  }
+                                  placeholderTextColor={Colors.textPlaceholder}
+                                  multiline
+                                  numberOfLines={3}
+                                  value={customRescheduleText}
+                                  onChangeText={(text) => {
+                                    setCustomRescheduleText(text);
+                                  }}
+                                  onFocus={() => {
+                                    setIsEditingCustomReason(true);
+                                  }}
+                                  onBlur={() => {
+                                    setIsEditingCustomReason(false);
+                                  }}
+                                  onEndEditing={() => {
+                                    setIsEditingCustomReason(false);
+                                    setTimeout(() => {
+                                      modalScrollRef.current?.scrollToEnd({ animated: true });
+                                    }, 100);
+                                  }}
+                                />
+                              </View>
+                            );
+                          }
+                          return null;
+                        })()
+                      )}
+
+                      {/* Calendar for Date Selection */}
+                      {(() => {
+                        const isCustomOrOther =
+                          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
+                          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
+                          rescheduleReason === 'Custom' ||
+                          rescheduleReason === 'Other';
+
+                        const canShowCalendar = rescheduleReason && 
+                          (!isCustomOrOther || customRescheduleText.trim().length > 0);
+                        
+                        if (!canShowCalendar) return null;
+
+                        const today = new Date();
+                        const isCurrentMonthOrBefore = calendarMonth.getFullYear() <= today.getFullYear() && 
+                                                       calendarMonth.getMonth() <= today.getMonth();
+
+                        return (
+                          <View style={{ marginTop: verticalScale(16) }}>
+                            <Text style={[styles.partyOptionsTitle, { marginBottom: verticalScale(10) }]}>
+                              {t('orders.select_reschedule_date', { defaultValue: 'Select Reschedule Date' })}
+                            </Text>
+                            <View style={styles.calendarHeader}>
+                              <TouchableOpacity 
+                                disabled={isCurrentMonthOrBefore} 
+                                onPress={() => {
+                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
+                                }}
+                                style={[styles.calendarChevron, isCurrentMonthOrBefore && { opacity: 0.3 }]}
+                              >
+                                <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
+                              </TouchableOpacity>
+
+                              <Text style={styles.calendarMonthText}>
+                                {calendarMonth.toLocaleDateString('default', { month: 'long', year: 'numeric' })}
+                              </Text>
+
+                              <TouchableOpacity 
+                                onPress={() => {
+                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
+                                }}
+                                style={styles.calendarChevron}
+                              >
+                                <ChevronRight size={scale(20)} color={Colors.textPrimary} />
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.calendarWeekRow}>
+                              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
+                                <Text key={idx} style={styles.calendarWeekText}>{day}</Text>
+                              ))}
+                            </View>
+
+                            <View style={styles.calendarGrid}>
+                              {getDaysInMonth(calendarMonth).map((dayCell, index) => {
+                                if (!dayCell.dayNum) {
+                                  return <View key={index} style={styles.calendarDayCellEmpty} />;
+                                }
+
+                                const isSelected = selectedDateStr === dayCell.dateStr;
+                                const isPast = dayCell.isPast;
+
+                                return (
+                                  <TouchableOpacity
+                                    key={index}
+                                    disabled={isPast}
+                                    style={[
+                                      styles.calendarDayCell,
+                                      isPast && styles.calendarDayCellPast,
+                                      isSelected && styles.calendarDayCellSelected,
+                                    ]}
+                                    onPress={() => {
+                                      if (dayCell.dateStr) {
+                                        setSelectedDateStr(dayCell.dateStr);
+                                        setTimeout(() => {
+                                          modalScrollRef.current?.scrollToEnd({ animated: true });
+                                        }, 100);
+                                      }
+                                    }}
+                                  >
+                                    <Text style={[
+                                      styles.calendarDayText,
+                                      isPast && styles.calendarDayTextPast,
+                                      isSelected && styles.calendarDayTextSelected,
+                                      dayCell.isToday && !isSelected && styles.calendarDayTextToday,
+                                    ]}>
+                                      {dayCell.dayNum}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        );
+                      })()}
+
+                      {/* Confirm Reject Button */}
+                      {(() => {
+                        const isCustomOrOther =
+                          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
+                          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
+                          rescheduleReason === 'Custom' ||
+                          rescheduleReason === 'Other';
+
+                        const isConfirmDisabled = 
+                          !rescheduleParty || 
+                          !rescheduleReason || 
+                          (isCustomOrOther && !customRescheduleText.trim()) || 
+                          !selectedDateStr;
+
+                        return (
+                          <TouchableOpacity
+                            style={[
+                              styles.confirmRejectBtn,
+                              isConfirmDisabled && styles.btnDisabled,
+                              { marginTop: verticalScale(24) }
+                            ]}
+                            disabled={isConfirmDisabled}
+                            onPress={handleConfirmReject}
+                          >
+                            <Text style={styles.confirmRejectText}>
+                              {t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })()}
+                    </View>
+                  );
+                }
+
+                return (
+                  <View>
+                    <TextInput
+                      style={styles.reasonInput}
+                      placeholder={t('orders.or_write_custom_statement', { defaultValue: 'Or write custom statement...' })}
+                      placeholderTextColor={Colors.textPlaceholder}
+                      multiline
+                      numberOfLines={3}
+                      value={customReasonText}
+                      onChangeText={setCustomReasonText}
+                    />
+
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmRejectBtn,
+                        (!selectedReasonChip && !customReasonText.trim()) && styles.btnDisabled
+                      ]}
+                      disabled={!selectedReasonChip && !customReasonText.trim()}
+                      onPress={handleConfirmReject}
+                    >
+                      <Text style={styles.confirmRejectText}>
+                        {t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -706,6 +1211,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: moderateScale(24),
     elevation: 5,
+    maxHeight: '85%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
@@ -728,18 +1234,21 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(20),
   },
   chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: scale(8),
+    flexDirection: 'column',
+    gap: verticalScale(10),
     marginBottom: verticalScale(16),
+    width: '100%',
   },
   reasonChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(8),
-    borderRadius: scale(10),
-    borderWidth: 1,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(12),
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   reasonChipSelected: {
     backgroundColor: '#FEF2F2',
@@ -747,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   reasonChipText: {
     fontFamily: Fonts.medium,
-    fontSize: moderateScale(12),
+    fontSize: moderateScale(13.5),
     color: Colors.textSecondary,
   },
   reasonChipTextSelected: {
@@ -902,6 +1411,135 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(13.5),
     color: Colors.textPlaceholder,
+  },
+  rescheduleSection: {
+    marginTop: verticalScale(8),
+    width: '100%',
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(12),
+    backgroundColor: '#F8FAFC',
+    borderRadius: moderateScale(10),
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(6),
+  },
+  calendarChevron: {
+    padding: scale(6),
+  },
+  calendarMonthText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: Colors.textPrimary,
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: verticalScale(6),
+  },
+  calendarWeekText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: Colors.textPlaceholder,
+    width: '14.28%',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: '100%',
+    marginBottom: verticalScale(16),
+  },
+  calendarDayCell: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: verticalScale(2),
+    borderRadius: scale(100),
+  },
+  calendarDayCellEmpty: {
+    width: '14.28%',
+    aspectRatio: 1,
+  },
+  calendarDayCellPast: {
+    opacity: 0.25,
+  },
+  calendarDayCellSelected: {
+    backgroundColor: '#EF4444',
+  },
+  calendarDayText: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(12.5),
+    color: Colors.textPrimary,
+  },
+  calendarDayTextPast: {
+    color: Colors.textPlaceholder,
+  },
+  calendarDayTextSelected: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.bold,
+  },
+  calendarDayTextToday: {
+    color: Colors.primary,
+    fontFamily: Fonts.bold,
+  },
+  partyOptionsContainer: {
+    marginTop: verticalScale(8),
+    paddingTop: verticalScale(16),
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    gap: verticalScale(10),
+  },
+  partyOptionsTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13.5),
+    color: Colors.textPrimary,
+    marginBottom: verticalScale(4),
+  },
+  partyOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    gap: scale(12),
+  },
+  partyOptionCardSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+  },
+  radioCircle: {
+    width: scale(18),
+    height: scale(18),
+    borderRadius: scale(9),
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleSelected: {
+    borderColor: '#EF4444',
+  },
+  radioDot: {
+    width: scale(10),
+    height: scale(10),
+    borderRadius: scale(5),
+    backgroundColor: '#EF4444',
+  },
+  partyOptionText: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13),
+    color: Colors.textSecondary,
+  },
+  partyOptionTextSelected: {
+    fontFamily: Fonts.bold,
+    color: '#DC2626',
   },
 });
 

@@ -1,16 +1,53 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
+const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 
-let rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://slow-turtles-run.loca.lt').trim();
-if (rawUrl.startsWith('"') && rawUrl.endsWith('"')) {
-  rawUrl = rawUrl.slice(1, -1);
-}
-if (rawUrl.startsWith("'") && rawUrl.endsWith("'")) {
-  rawUrl = rawUrl.slice(1, -1);
-}
-export const BASE_URL = rawUrl.trim();
+const getLocalDevelopmentUrl = (): string => {
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)(:\d+)?/);
+      if (match) {
+        const host = match[1];
+        // The Transporter backend runs on port 3001
+        return `http://${host}:3001`;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to resolve dynamic backend URL from scriptURL:', e);
+  }
+
+  // Fallbacks based on platform
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3001'; // Android emulator host loopback
+  }
+  return 'http://localhost:3001';
+};
+
+const getBackendUrl = (): string => {
+  let envUrl = (process.env.EXPO_PUBLIC_API_URL || '').trim();
+  if (envUrl.startsWith('"') && envUrl.endsWith('"')) {
+    envUrl = envUrl.slice(1, -1);
+  }
+  if (envUrl.startsWith("'") && envUrl.endsWith("'")) {
+    envUrl = envUrl.slice(1, -1);
+  }
+  envUrl = envUrl.trim();
+
+  // In development, if the environment URL is empty or uses the unstable localtunnel placeholder, fallback immediately
+  if (isDev) {
+    if (!envUrl || envUrl.includes('loca.lt')) {
+      return getLocalDevelopmentUrl();
+    }
+  }
+
+  return envUrl || getLocalDevelopmentUrl();
+};
+
+export const BASE_URL = getBackendUrl();
+console.log('Transporter App BASE_URL resolved to:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -39,6 +76,40 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    const originalRequest = error.config;
+
+    // In development mode, if a request fails due to 503 Service Unavailable or Network Error on a tunnel URL,
+    // automatically fall back to the direct local network IP/localhost address.
+    if (isDev && originalRequest && !originalRequest._retry) {
+      const currentBaseURL = api.defaults.baseURL || '';
+      const isTunnelUrl = currentBaseURL.includes('.loca.lt') || 
+                          currentBaseURL.includes('.ngrok') || 
+                          currentBaseURL.includes('.trycloudflare.com');
+                          
+      const isConnectionFailure = !error.response || 
+                                  error.response.status === 503 || 
+                                  error.response.status === 502 || 
+                                  error.response.status === 504;
+
+      if (isTunnelUrl && isConnectionFailure) {
+        originalRequest._retry = true;
+        const fallbackUrl = getLocalDevelopmentUrl();
+        console.warn(`[API Connection Fallback] Tunnel URL (${currentBaseURL}) is offline or returned status ${error.response?.status || 'network/timeout error'}. Falling back to direct local connection: ${fallbackUrl}`);
+        
+        // Update global Axios defaults for all subsequent requests
+        api.defaults.baseURL = fallbackUrl;
+        
+        // Update current failed request config
+        originalRequest.baseURL = fallbackUrl;
+        if (originalRequest.url && originalRequest.url.startsWith(currentBaseURL)) {
+          originalRequest.url = originalRequest.url.replace(currentBaseURL, fallbackUrl);
+        }
+        
+        // Retry the request
+        return api(originalRequest);
+      }
+    }
+
     if (error.response?.status === 401) {
       // Handle unauthorized (e.g., clear token and redirect to login)
       await AsyncStorage.removeItem('access_token');
@@ -50,6 +121,13 @@ api.interceptors.response.use(
         });
       }
     }
+
+    // Enrich message for network errors (no response received)
+    if (!error.response) {
+      const currentURL = api.defaults.baseURL || BASE_URL;
+      error.message = `Network Error: Cannot connect to backend at ${currentURL}.\n\nTo fix this:\n1. Ensure the NestJS server is running on port 3001.\n2. If using a physical phone, ensure it's on the same Wi-Fi as your computer.\n3. Make sure Windows Defender Firewall allows Node.js on port 3001.`;
+    }
+
     return Promise.reject(error);
   }
 );

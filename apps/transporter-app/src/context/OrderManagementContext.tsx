@@ -88,11 +88,12 @@ interface OrderManagementContextType {
   rejectedOrdersCount: number;
   completedOrdersCount: number;
 
-  acceptBatch: (batchId: string) => Promise<void>;
+  acceptBatch: (batchId: string, skipToast?: boolean) => Promise<void>;
   rejectBatch: (batchId: string, reason: string) => Promise<void>;
   acceptBatchIds: (batchIds: string[]) => Promise<void>;
   captureProductPhoto: (batchId: string, productId: string, context: 'pickup' | 'drop', photoUri: string) => Promise<void>;
   rejectProductItem: (batchId: string, productId: string, context: 'pickup' | 'drop', reason: string) => Promise<void>;
+  rerouteBatchToHub: (batchId: string, productId: string, reason: string) => Promise<void>;
 
   finalizePickup: (batchId: string) => Promise<void>;
   finalizeDrop: (batchId: string) => Promise<void>;
@@ -288,6 +289,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       };
     });
 
+      // Reconcile completed drop pickups
+      const liveDropIds = new Set(mappedDrops.map((d: any) => d.id));
+      const cleanedDropPickups = resolvedDropPickups.filter((bId: string) => liveDropIds.has(bId));
+      if (cleanedDropPickups.length !== resolvedDropPickups.length) {
+        await AsyncStorage.setItem('completed_drop_pickups', JSON.stringify(cleanedDropPickups));
+      }
+
       // Build a masterOrderId → dropOrderId map so PICKUP_COMPLETED batches
       // can resolve their corresponding drop endpoint when completing delivery.
       const masterToDropId: Record<number, number> = {};
@@ -345,6 +353,34 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           return cleaned;
         });
       }
+
+      // Reconcile and clean up stale activities whose orders no longer exist on the server
+      setActivities(prev => {
+        const cleaned = prev.filter(act => liveIds.has(act.orderId));
+        if (cleaned.length !== prev.length) {
+          AsyncStorage.setItem('transporter_activities', JSON.stringify(cleaned)).catch(() => {});
+        }
+        return cleaned;
+      });
+
+      // Reconcile and clean up stale captured photo references
+      setCapturedPhotos(prev => {
+        const liveMasterOrderIds = new Set(freshLiveBatches.map(b => b.masterOrderId).filter(Boolean));
+        const cleaned = { ...prev };
+        let changed = false;
+        Object.keys(cleaned).forEach(key => {
+          const parts = key.split('-');
+          const masterId = Number(parts[0]);
+          if (!isNaN(masterId) && !liveMasterOrderIds.has(masterId)) {
+            delete cleaned[key];
+            changed = true;
+          }
+        });
+        if (changed) {
+          AsyncStorage.setItem('captured_photos', JSON.stringify(cleaned)).catch(() => {});
+        }
+        return cleaned;
+      });
 
       // Exclude DROP_COMPLETED from the live batches (they live in completedBatches)
       setBatches(freshLiveBatches.filter(b => b.status !== 'DROP_COMPLETED'));
@@ -420,9 +456,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       AsyncStorage.setItem('transporter_activities', JSON.stringify(updated)).catch(() => {});
       return updated;
     });
-  };
-
-  const acceptBatch = async (batchId: string) => {
+  };  const acceptBatch = async (batchId: string, skipToast: boolean = false) => {
     try {
       const type = batchId.startsWith('pickup-') ? 'pickup' : 'drop';
       const rawId = batchId.replace('pickup-', '').replace('drop-', '');
@@ -440,13 +474,38 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       // No activity log on accept — activity only updates on Confirm Pickup / Confirm Delivery
 
       await api.post(`/api/orders/${type}/${rawId}/accept`);
-      showToast(`Accepted`, 'success');
+      if (!skipToast) {
+        showToast(`Accepted`, 'success');
+      }
       // Confirm optimistic update with fresh server data
       await refreshBatchesList();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error accepting batch ${batchId}:`, error);
       // Roll back optimistic update on error
       await refreshBatchesList();
+      
+      const is404 = error.response?.status === 404;
+      const message = is404 
+        ? 'Order is no longer available.' 
+        : 'Failed to accept order. Please try again.';
+      if (!skipToast) {
+        showToast(message, 'error');
+      }
+      throw error;
+    }
+  };
+
+  const acceptBatchIds = async (batchIds: string[]) => {
+    try {
+      await Promise.all(batchIds.map(id => acceptBatch(id, true)));
+      showToast(`Accepted`, 'success');
+      await refreshBatchesList();
+    } catch (error: any) {
+      console.error('Error accepting batches:', error);
+      await refreshBatchesList();
+      const is404 = error.response?.status === 404;
+      showToast(is404 ? 'One or more orders are no longer available.' : 'Failed to accept some orders. Please try again.', 'error');
+      throw error;
     }
   };
 
@@ -468,16 +527,6 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       }
     } catch (error) {
       console.error(`Error rejecting batch ${batchId}:`, error);
-    }
-  };
-
-  const acceptBatchIds = async (batchIds: string[]) => {
-    try {
-      await Promise.all(batchIds.map(id => acceptBatch(id)));
-      showToast(`Accepted`, 'success');
-      await refreshBatchesList();
-    } catch (error) {
-      console.error('Error accepting batches:', error);
     }
   };
 
@@ -596,9 +645,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       
       // Confirm with fresh server data
       await refreshBatchesList();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error completing batch ${batchId}:`, error);
       await refreshBatchesList();
+      const is404 = error.response?.status === 404;
+      showToast(is404 ? 'Pickup order not found on server.' : 'Failed to confirm pickup. Please try again.', 'error');
       throw error;
     }
   };
@@ -647,9 +698,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
       // Confirm with fresh server data
       await refreshBatchesList();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error completing drop batch ${batchId}:`, error);
       await refreshBatchesList();
+      const is404 = error.response?.status === 404;
+      showToast(is404 ? 'Drop order not found on server.' : 'Failed to complete delivery. Please try again.', 'error');
       throw error;
     }
   };
@@ -685,10 +738,46 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     }
   };
 
+  const rerouteBatchToHub = async (batchId: string, productId: string, reason: string) => {
+    try {
+      setBatches(prev =>
+        prev.map(b => {
+          if (b.id === batchId) {
+            return {
+              ...b,
+              dropPointName: b.pickupPointName, // Reroute back to the pickup hub
+              shgContact: {
+                ...HUB_CONTACT,
+                name: HUB_CONTACT.name,
+                phone: HUB_CONTACT.phone,
+                address: HUB_CONTACT.address,
+              },
+              products: b.products.map(p => {
+                if (p.id === productId) {
+                  return {
+                    ...p,
+                    status: 'picked', // Keep it active so they can deliver back to the hub
+                    rejectReason: reason,
+                    isRTO: true,
+                  } as any;
+                }
+                return p;
+              })
+            };
+          }
+          return b;
+        })
+      );
+      showToast('Return-to-Hub initiated. Deliver to pickup hub.', 'info');
+    } catch (error) {
+      console.error('Error rerouting batch to hub:', error);
+    }
+  };
+
   return (
     <OrderManagementContext.Provider value={{
       batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount,
-      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, showToast, refreshBatchesList,
+      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
       finalizePickup, finalizeDrop,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],
       acceptShg: () => {}, completeProduct: () => {}, rejectProduct: () => {}, acceptAreaAssignment: () => {}, rejectAreaAssignment: () => {}, acceptAllRouteShgs: () => {}

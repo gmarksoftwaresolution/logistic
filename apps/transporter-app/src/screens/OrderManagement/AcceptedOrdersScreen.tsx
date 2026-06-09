@@ -9,6 +9,7 @@ import {
   Dimensions,
   Animated,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -22,8 +23,20 @@ type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
 
 const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches } = useOrderManagement();
+  const { batches, refreshBatchesList } = useOrderManagement();
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const pagerRef = React.useRef<ScrollView>(null);
   const { width: screenWidth } = Dimensions.get('window');
   const scrollX = React.useRef(new Animated.Value(0)).current;
@@ -142,7 +155,18 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   ) => {
     return (
       <View style={{ width: screenWidth }}>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
+        >
           {tabAreas.length === 0 ? (
             <View style={styles.emptyCard}>
               <Package size={scale(42)} color="#94A3B8" strokeWidth={1.5} />

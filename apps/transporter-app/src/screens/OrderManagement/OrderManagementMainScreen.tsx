@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   DeviceEventEmitter,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -26,7 +27,21 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
     rejectedOrdersCount,
     completedOrdersCount,
     activities,
+    refreshBatchesList,
   } = useOrderManagement();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const lastOffsetY = useRef(0);
   const handleScroll = (event: any) => {
@@ -82,6 +97,14 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
       >
 
         {/* Top Section: 4 Premium Summary Cards using precisely tailored HSL user parameters */}
