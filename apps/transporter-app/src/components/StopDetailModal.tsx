@@ -14,14 +14,14 @@ interface StopDetailModalProps {
 }
 
 // Memoized Product Item for Performance
-const ProductItem = React.memo(({ 
-  product, 
-  onAction, 
+const ProductItem = React.memo(({
+  product,
+  onAction,
   isProcessing,
   currentTime
-}: { 
-  product: Product; 
-  onAction: (p: Product) => void; 
+}: {
+  product: Product;
+  onAction: (p: Product) => void;
   isProcessing: boolean;
   currentTime: number;
 }) => {
@@ -35,21 +35,21 @@ const ProductItem = React.memo(({
           <Text style={styles.typeTagText}>{product.type}</Text>
         </View>
       </View>
-      
+
       <View style={{ flex: 1.2, alignItems: 'center' }}>
         <Text style={styles.qtyText}>
           {product.expectedQty} / <Text style={{ color: isDone ? '#10B981' : Colors.textPrimary }}>{product.completedQty}</Text>
         </Text>
       </View>
- 
+
       <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
         {isDone ? (
           <View style={styles.doneContainer}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
               {product.proofImage && (
-                <Image 
-                  source={{ uri: product.proofImage }} 
-                  style={styles.proofThumbnail} 
+                <Image
+                  source={{ uri: product.proofImage }}
+                  style={styles.proofThumbnail}
                 />
               )}
               {(() => {
@@ -71,9 +71,9 @@ const ProductItem = React.memo(({
             </View>
           </View>
         ) : (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.actionBtn, 
+              styles.actionBtn,
               { backgroundColor: product.type === 'Pickup' ? '#10B981' : '#3B82F6' },
               isProcessing && { opacity: 0.7 }
             ]}
@@ -123,7 +123,7 @@ const StopDetailModal: React.FC<StopDetailModalProps> = ({ visible, onClose, sto
   const handleCaptureProof = useCallback(async (product: Product) => {
     try {
       setProcessingId(product.id);
-      
+
       // Final permission check before launch
       const { status } = await ImagePicker.getCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -197,7 +197,7 @@ const StopDetailModal: React.FC<StopDetailModalProps> = ({ visible, onClose, sto
             </View>
 
             <Text style={styles.sectionTitle}>Product Inventory</Text>
-            
+
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, { flex: 2 }]}>PRODUCT</Text>
               <Text style={[styles.tableHeaderCell, { flex: 1.2, textAlign: 'center' }]}>QTY (E/C)</Text>
@@ -205,7 +205,7 @@ const StopDetailModal: React.FC<StopDetailModalProps> = ({ visible, onClose, sto
             </View>
 
             {stop.products.map((product) => (
-              <ProductItem 
+              <ProductItem
                 key={product.id}
                 product={product}
                 onAction={handleCaptureProof}

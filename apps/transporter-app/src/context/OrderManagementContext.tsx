@@ -318,7 +318,87 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         };
       });
 
-      const freshLiveBatches = [...pickupsWithDropId, ...mappedDrops];
+      const seedOrders: BatchOrder[] = [
+        {
+          id: 'pickup-seed-1234',
+          areaName: 'Nesari',
+          flowType: 'shg_to_gmu',
+          shgName: 'Savani Mahila SHG',
+          pickupPointName: 'Nesari Stand',
+          dropPointName: 'Gadhinglaj Hub',
+          pickupCount: 1,
+          dropCount: 0,
+          totalQty: 4,
+          totalWeight: '12 kg',
+          status: 'NEW_ORDER',
+          shgContact: {
+            name: 'Kamal Bai (SHG Lead)',
+            phone: '+91 9876543210',
+            address: 'Near Maruti Mandir, Nesari, Kolhapur',
+            village: 'Nesari',
+            pincode: '416504',
+          },
+          products: [
+            {
+              id: 'prod-seed-1',
+              name: 'Organic Turmeric Powder',
+              qty: 2,
+              weight: '4 kg',
+              legType: 'pickup',
+              status: 'pending',
+            },
+            {
+              id: 'prod-seed-2',
+              name: 'Handmade Soap Pack',
+              qty: 2,
+              weight: '8 kg',
+              legType: 'pickup',
+              status: 'pending',
+            },
+          ],
+          timestamp: '10:30 AM',
+        },
+        {
+          id: 'drop-seed-5678',
+          areaName: 'Gadhinglaj',
+          flowType: 'gmu_to_shg',
+          shgName: 'Gadhinglaj Hub',
+          pickupPointName: 'Gadhinglaj Hub',
+          dropPointName: 'Savita Deshmukh',
+          pickupCount: 0,
+          dropCount: 1,
+          totalQty: 3,
+          totalWeight: '9 kg',
+          status: 'NEW_ORDER',
+          shgContact: {
+            name: 'Savita Deshmukh (Buyer)',
+            phone: '+91 8765432109',
+            address: 'Plot No. 12, Ganesh Nagar, Gadhinglaj, Kolhapur',
+            village: 'Gadhinglaj',
+            pincode: '416502',
+          },
+          products: [
+            {
+              id: 'prod-seed-3',
+              name: 'Premium Wheat Flour',
+              qty: 3,
+              weight: '9 kg',
+              legType: 'drop',
+              status: 'pending',
+            },
+          ],
+          timestamp: '11:15 AM',
+        },
+      ];
+
+      // Merge seed orders, preserving their current status if already exists in state
+      const existingSeedBatches = batchesRef.current.filter(b => b.id.includes('seed'));
+      const resolvedSeedOrders = seedOrders.map(so => {
+        const existing = existingSeedBatches.find(eb => eb.id === so.id);
+        return existing ? existing : so;
+      });
+
+      const freshLiveBatches = [...pickupsWithDropId, ...mappedDrops, ...resolvedSeedOrders];
       const liveIds = new Set(freshLiveBatches.map(b => b.id));
 
       // Reconcile persisted rejected/completed caches — remove any IDs
@@ -384,14 +464,31 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
       // Exclude DROP_COMPLETED from the live batches (they live in completedBatches)
       setBatches(freshLiveBatches.filter(b => b.status !== 'DROP_COMPLETED'));
-    } catch (error) {
-      console.error('Error fetching live transporter batches:', error);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
+      } else {
+        console.error('Error fetching live transporter batches:', error);
+      }
     }
   };
 
   useEffect(() => {
     const loadPersistedAndFetch = async () => {
       try {
+        const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v3');
+        if (!hasCleared) {
+          await Promise.all([
+            AsyncStorage.removeItem('rejected_batches'),
+            AsyncStorage.removeItem('completed_batches'),
+            AsyncStorage.removeItem('captured_photos'),
+            AsyncStorage.removeItem('transporter_activities'),
+            AsyncStorage.removeItem('completed_drop_pickups'),
+          ]);
+          await AsyncStorage.setItem('has_cleared_verification_v3', 'true');
+          console.log('Cleared all legacy storage data for a clean slate.');
+        }
+
         const [storedRejected, storedCompleted, storedPhotos, storedActivities] = await Promise.all([
           AsyncStorage.getItem('rejected_batches'),
           AsyncStorage.getItem('completed_batches'),
@@ -458,6 +555,18 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     });
   };  const acceptBatch = async (batchId: string, skipToast: boolean = false) => {
     try {
+      if (batchId.includes('seed')) {
+        setBatches(prev =>
+          prev.map(b =>
+            b.id === batchId ? { ...b, status: 'ACCEPTED_PICKUP' as BatchOrder['status'] } : b
+          )
+        );
+        if (!skipToast) {
+          showToast(`Accepted`, 'success');
+        }
+        return;
+      }
+
       const type = batchId.startsWith('pickup-') ? 'pickup' : 'drop';
       const rawId = batchId.replace('pickup-', '').replace('drop-', '');
 
@@ -592,6 +701,24 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         logActivity(batchToLog.id, `${batchToLog.pickupPointName} > ${batchToLog.dropPointName}`, 'Picked', batchToLog.totalQty, batchToLog.totalWeight);
       }
 
+      if (batchId.includes('seed')) {
+        showToast('Pickup Confirmed', 'success');
+        setBatches(prev =>
+          prev.map(b =>
+            b.id === batchId
+              ? {
+                  ...b,
+                  status: 'PICKUP_COMPLETED' as BatchOrder['status'],
+                  products: b.products.map(p =>
+                    p.legType === 'pickup' ? { ...p, status: 'picked' as const } : p
+                  ),
+                }
+              : b
+          )
+        );
+        return;
+      }
+
       if (batchId.startsWith('drop-')) {
         // Save the batch ID to the completed_drop_pickups list in AsyncStorage
         const storedDropPickups = await AsyncStorage.getItem('completed_drop_pickups');
@@ -660,6 +787,23 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (batchToLog) {
         // Log 'Dropped' — the human-readable status shown in Recent Activities
         logActivity(batchToLog.id, `${batchToLog.pickupPointName} > ${batchToLog.dropPointName}`, 'Dropped', batchToLog.totalQty, batchToLog.totalWeight);
+      }
+
+      if (batchId.includes('seed')) {
+        const batchToComplete = batchesRef.current.find(b => b.id === batchId);
+        if (batchToComplete) {
+          setCompletedBatches(prev => {
+            if (prev.some(b => b.id === batchId)) return prev;
+            const updated = [...prev, { ...batchToComplete, status: 'DROP_COMPLETED' as const }];
+            AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(err =>
+              console.error('Failed to save completed batches:', err)
+            );
+            return updated;
+          });
+          setBatches(prev => prev.filter(b => b.id !== batchId));
+        }
+        showToast('Package delivered successfully!', 'success');
+        return;
       }
 
       let dropOrderId: number | undefined;

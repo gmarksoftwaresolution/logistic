@@ -114,11 +114,28 @@ api.interceptors.response.use(
       // Handle unauthorized (e.g., clear token and redirect to login)
       await AsyncStorage.removeItem('access_token');
       const { navigationRef } = require('../navigation/AppNavigator');
-      if (navigationRef.isReady()) {
-        navigationRef.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
+      
+      const navigateToLogin = () => {
+        if (navigationRef.isReady()) {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+          return true;
+        }
+        return false;
+      };
+
+      if (!navigateToLogin()) {
+        // If navigation container is not ready yet, retry periodically
+        const intervalId = setInterval(() => {
+          if (navigateToLogin()) {
+            clearInterval(intervalId);
+          }
+        }, 100);
+        
+        // Safety timeout to clear interval after 5 seconds if navigation never becomes ready
+        setTimeout(() => clearInterval(intervalId), 5000);
       }
     }
 

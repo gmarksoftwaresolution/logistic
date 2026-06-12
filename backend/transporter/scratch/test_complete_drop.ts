@@ -1,4 +1,4 @@
-process.env.DATABASE_URL = "postgresql://postgres.xbzmwdluefqbhicynhnp:Shridhar%4021@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:root@localhost:5432/logistic_db?schema=public";
 
 import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';

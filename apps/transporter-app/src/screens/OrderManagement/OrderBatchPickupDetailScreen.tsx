@@ -17,11 +17,21 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Camera, CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react-native';
+import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useTranslation } from 'react-i18next';
+import {
+  GenerateCodeButton,
+  EnterCodeButton,
+  VerificationBottomSheet,
+  OTPInputWidget,
+  VerificationStatusBadge,
+  CodeDisplayCard,
+  VerificationSuccessDialog,
+  VerificationFailureDialog,
+} from '../../components/VerificationComponents';
 
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
@@ -31,53 +41,70 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
-  const [currentTime, setCurrentTime] = useState(Date.now());
   const [isFinalizing, setIsFinalizing] = useState(false);
 
-  // Rescheduling states
-  const [rescheduleParty, setRescheduleParty] = useState<'transporter' | 'shg' | null>(null);
-  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
-  const [customRescheduleText, setCustomRescheduleText] = useState('');
-  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
-  const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
+  // Code-based Handover state
+  const [showVerificationSheet, setShowVerificationSheet] = useState(false);
+  const [otpCode, setOtpCode] = useState<string[]>(['', '', '', '']);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showFailureDialog, setShowFailureDialog] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [failureMessage, setFailureMessage] = useState('');
 
-  // Refs
-  const rescheduleInputRef = useRef<TextInput>(null);
   const modalScrollRef = useRef<ScrollView>(null);
 
-  const handleFinalize = async () => {
+  const handleVerifyPickupCode = async () => {
     if (!batch) return;
-    setIsFinalizing(true);
-    try {
-      if (type === 'pickup') {
+    const entered = otpCode.join('');
+    if (entered === '1234') {
+      setShowVerificationSheet(false);
+      setSuccessMessage('Pickup Verified Successfully');
+      setShowSuccessDialog(true);
+      try {
         await finalizePickup(batch.id);
-        navigation.navigate('AcceptedOrders', { activeTab: 'drop' });
-      } else {
-        await finalizeDrop(batch.id);
-        navigation.replace('OrderBatchCompleted');
+      } catch (err) {
+        console.error('Error finalizing pickup:', err);
       }
-    } catch (err) {
-      console.error('Error finalizing batch:', err);
-    } finally {
-      setIsFinalizing(false);
+    } else {
+      setFailureMessage('Invalid Verification Code');
+      setShowFailureDialog(true);
     }
   };
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-  
+  const handleVerifyDeliveryCode = async () => {
+    if (!batch) return;
+    const entered = otpCode.join('');
+    if (entered === '5678') {
+      setShowVerificationSheet(false);
+      setSuccessMessage('Delivery Verified Successfully');
+      setShowSuccessDialog(true);
+      try {
+        await finalizeDrop(batch.id);
+      } catch (err) {
+        console.error('Error finalizing drop:', err);
+      }
+    } else {
+      setFailureMessage('Invalid Verification Code');
+      setShowFailureDialog(true);
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setShowSuccessDialog(false);
+    if (type === 'pickup') {
+      navigation.navigate('AcceptedOrders', { activeTab: 'drop' });
+    } else {
+      navigation.replace('OrderBatchCompleted');
+    }
+  };
+
   const scrollRef = useRef<ScrollView>(null);
 
-  const foundBatch = batches.find((b) => b.id === batchId) || 
-                     (batchId.startsWith('pickup-') 
-                       ? batches.find((b) => b.id === `drop-${batchId.replace('pickup-', '')}`)
-                       : batches.find((b) => b.id === `pickup-${batchId.replace('drop-', '')}`));
-                       
+  const foundBatch = batches.find((b) => b.id === batchId) ||
+    (batchId.startsWith('pickup-')
+      ? batches.find((b) => b.id === `drop-${batchId.replace('pickup-', '')}`)
+      : batches.find((b) => b.id === `pickup-${batchId.replace('drop-', '')}`));
+
   const [localBatch, setLocalBatch] = useState<BatchOrder | undefined>(foundBatch);
 
   useEffect(() => {
@@ -91,30 +118,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   // Preserve the original context type so the user stays in the pickup/drop flow they navigated from
   const type = initialType;
 
-  const getDaysInMonth = (monthDate: Date) => {
-    const year = monthDate.getFullYear();
-    const month = monthDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    let startDayOfWeek = firstDay.getDay() - 1;
-    if (startDayOfWeek < 0) startDayOfWeek = 6;
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    const days: { dateStr: string | null; dayNum: number | null; isPast: boolean; isToday: boolean }[] = [];
-    for (let i = 0; i < startDayOfWeek; i++) {
-      days.push({ dateStr: null, dayNum: null, isPast: false, isToday: false });
-    }
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    for (let day = 1; day <= totalDays; day++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const cellDate = new Date(year, month, day);
-      const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const isPast = cellDate < todayZero;
-      const isToday = dateStr === todayStr;
-      days.push({ dateStr, dayNum: day, isPast, isToday });
-    }
-    return days;
-  };
+
 
   // Unified visual scroll choreography: scrolls to top for Map steps, scrolls to bottom for Capture steps
   useEffect(() => {
@@ -150,40 +154,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const handleCloseModal = () => {
     setRejectingProductId(null);
     setRejectReasonText('');
-    setRescheduleParty(null);
-    setRescheduleReason(null);
-    setCustomRescheduleText('');
-    setSelectedDateStr(null);
   };
 
   const handleConfirmReject = () => {
     if (!rejectingProductId) return;
-
-    const isRescheduleSelected = rejectReasonText === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
-    let finalReason = '';
-
-    if (isRescheduleSelected) {
-      if (!selectedDateStr) return; // Date is required for rescheduling
-      
-      const rescheduleText = t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
-      const partyText = rescheduleParty === 'transporter'
-        ? t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })
-        : (isHubPoint 
-            ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
-            : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' }));
-
-      const isCustomOrOther =
-        rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-        rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-        rescheduleReason === 'Custom' ||
-        rescheduleReason === 'Other';
-
-      const subReasonText = isCustomOrOther ? customRescheduleText.trim() : (rescheduleReason || '');
-      finalReason = `${rescheduleText} - ${partyText} - ${subReasonText} - ${selectedDateStr}`;
-    } else {
-      if (!rejectReasonText.trim()) return;
-      finalReason = rejectReasonText.trim();
-    }
+    if (!rejectReasonText.trim()) return;
+    const finalReason = rejectReasonText.trim();
 
     if (type === 'drop') {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);
@@ -209,49 +185,47 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     );
   };
 
-  const reasonChips = type === 'pickup' 
+  const reasonChips = type === 'pickup'
     ? [
-        t('orders.reason_item_broken', { defaultValue: 'Package item broken' }),
-        t('orders.reason_tolerance_error', { defaultValue: 'Weight tolerance error' }),
-        t('orders.reason_tag_stripped', { defaultValue: 'Security tag stripped' }),
-        t('orders.reason_reschedule', { defaultValue: 'Reschedule' })
-      ]
+      t('orders.reason_item_broken', { defaultValue: 'Package item broken' }),
+      t('orders.reason_tolerance_error', { defaultValue: 'Weight tolerance error' }),
+      t('orders.reason_tag_stripped', { defaultValue: 'Security tag stripped' }),
+    ]
     : [
-        t('orders.reason_missing_parcel', { defaultValue: 'Item missing in source parcel' }),
-        t('orders.reason_consignee_absent', { defaultValue: 'Consignee absent' }),
-        t('orders.reason_label_mismatch', { defaultValue: 'Packaging label mismatch' }),
-        t('orders.reason_reschedule', { defaultValue: 'Reschedule' })
-      ];
+      t('orders.reason_missing_parcel', { defaultValue: 'Item missing in source parcel' }),
+      t('orders.reason_consignee_absent', { defaultValue: 'Consignee absent' }),
+      t('orders.reason_label_mismatch', { defaultValue: 'Packaging label mismatch' }),
+    ];
 
   const displayProducts = type === 'drop'
     ? batch.products.filter(p => p.legType === 'drop' || p.status === 'picked' || p.status === 'completed')
-    : type === 'pickup' 
-      ? (batch.flowType === 'gmu_to_shg' 
-          ? batch.products.filter(p => p.legType === 'drop') 
-          : batch.products.filter(p => p.legType === 'pickup'))
+    : type === 'pickup'
+      ? (batch.flowType === 'gmu_to_shg'
+        ? batch.products.filter(p => p.legType === 'drop')
+        : batch.products.filter(p => p.legType === 'pickup'))
       : batch.products;
-
-  const canConfirm = displayProducts.length > 0 && displayProducts.every(p => p.status === 'rejected' || (type === 'pickup' ? !!p.pickupPhoto : !!p.dropPhoto));
 
   const isPickupLegCompleted = batch.status === 'PICKUP_COMPLETED' || batch.status === 'DROP_COMPLETED';
   const isDropLegCompleted = batch.status === 'DROP_COMPLETED';
   const isCurrentLegCompleted = type === 'pickup' ? isPickupLegCompleted : isDropLegCompleted;
   const isBatchRejected = batch.status === 'rejected';
 
+  const canConfirm = displayProducts.length > 0 && !isCurrentLegCompleted && !isBatchRejected;
+
   // Contextual Contact Logic matching precisely with user requirements
   const isPickup = type === 'pickup';
-  const isHubPoint = isPickup 
+  const isHubPoint = isPickup
     ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
     : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU');
-  
+
   const displayContact = isHubPoint ? HUB_CONTACT : batch.shgContact;
   const isSHG = !isHubPoint;
   const isRTOBatch = batch.products.some(p => (p as any).isRTO);
 
-  const sectionTitle = type === 'pickup' 
-    ? t('orders.items_for_collection', { defaultValue: 'Items for Collection' }) 
-    : type === 'drop' 
-      ? t('orders.items_for_handover', { defaultValue: 'Items for Handover' }) 
+  const sectionTitle = type === 'pickup'
+    ? t('orders.items_for_collection', { defaultValue: 'Items for Collection' })
+    : type === 'drop'
+      ? t('orders.items_for_handover', { defaultValue: 'Items for Handover' })
       : t('orders.associated_shipment_products', { defaultValue: 'Associated Shipment Products' });
 
   return (
@@ -332,7 +306,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               <Text style={styles.contactActionText}>{t('orders.call', { defaultValue: 'Call' })}</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.boxContentPadding}>
             {isRTOBatch && (
               <View style={styles.contactUpdateNote}>
@@ -388,21 +362,21 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                   </View>
 
-              <View style={[styles.contactGridItem, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: scale(10) }}>
-                  <View style={styles.contactIconCircle}>
-                    <MapPin size={scale(14)} color={Colors.primary} />
-                  </View>
-                  <View style={styles.contactDetailCol}>
-                    <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                    <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                  <View style={[styles.contactGridItem, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: scale(10) }}>
+                      <View style={styles.contactIconCircle}>
+                        <MapPin size={scale(14)} color={Colors.primary} />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
+                      <Text style={styles.addressNavigateBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
-                  <Text style={styles.addressNavigateBtnText}>{t('orders.navigate', { defaultValue: 'Navigate' })}</Text>
-                </TouchableOpacity>
-                </View>
-              </View>
               );
             })()}
           </View>
@@ -432,11 +406,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 const isCompleted = product.status === 'completed';
                 const isRejected = product.status === 'rejected';
                 const isActionDone = type === 'pickup' ? (isPicked || isCompleted) : isCompleted;
-                const localPhoto = type === 'pickup' ? product.pickupPhoto : product.dropPhoto;
-                const isPhotoCaptured = !!localPhoto;
-                // Retake window: visible for 30 seconds after capture, then auto-hides
-                const photoTime = type === 'pickup' ? product.pickupPhotoTime : product.dropPhotoTime;
-                const canRetake = !isActionDone && isPhotoCaptured && !!photoTime && (currentTime - photoTime) < 30000;
 
                 return (
                   <View
@@ -449,7 +418,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                   >
                     <View style={styles.productSideAccent} />
                     <View style={styles.productBody}>
-                       <View style={styles.productHeaderRow}>
+                      <View style={styles.productHeaderRow}>
                         <View style={styles.productTitleBox}>
                           <Text style={styles.productOrderId}>#{product.id.split('-').pop()}</Text>
                           {isRejected || isBatchRejected ? (
@@ -478,12 +447,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                                 ]}
                               >
                                 {type === 'pickup' ? t('orders.picked', { defaultValue: 'Picked' }) : t('orders.delivered', { defaultValue: 'Delivered' })}
-                              </Text>
-                            </View>
-                          ) : isPhotoCaptured ? (
-                            <View style={[styles.legBadge, { backgroundColor: '#ECFDF5' }]}>
-                              <Text style={[styles.legBadgeText, { color: '#16A34A' }]}>
-                                {t('orders.captured', { defaultValue: 'Captured' })}
                               </Text>
                             </View>
                           ) : (
@@ -535,89 +498,20 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                           <XCircle size={scale(24)} color="#EF4444" strokeWidth={2.5} />
                         </View>
                       ) : isCurrentLegCompleted ? (
-                        localPhoto ? (
-                          <View style={styles.successIconBox}>
-                            <Image
-                              source={{ uri: localPhoto }}
-                              style={styles.capturedButtonReplacementImage}
-                            />
-                          </View>
-                        ) : (
-                          <View style={styles.successIconBox}>
-                            <CheckCircle size={scale(24)} color="#10B981" strokeWidth={2.5} />
-                          </View>
-                        )
-                      ) : isActionDone || isPhotoCaptured ? (
-                        <>
-                          <View style={styles.successIconBox}>
-                            <Image
-                              source={{ uri: localPhoto }}
-                              style={styles.capturedButtonReplacementImage}
-                            />
-                          </View>
-                          {canRetake && (
-                            <TouchableOpacity
-                              style={styles.retakeIconButton}
-                              onPress={() =>
-                                navigation.navigate('CameraCapture', {
-                                  batchId: batch.id,
-                                  productId: product.id,
-                                  context: type === 'pickup' ? 'pickup' : 'drop',
-                                  productName: product.name,
-                                })
-                              }
-                            >
-                              <Text style={styles.btnTextRetake}>{t('orders.retake', { defaultValue: 'Retake' })}</Text>
-                            </TouchableOpacity>
-                          )}
-                        </>
+                        <View style={styles.successIconBox}>
+                          <CheckCircle size={scale(24)} color="#10B981" strokeWidth={2.5} />
+                        </View>
                       ) : isRejected ? (
                         <View style={styles.successIconBox}>
                           <XCircle size={scale(24)} color="#EF4444" />
                         </View>
                       ) : (
-                        <>
-                          {product.id === displayProducts[0].id ? (
-                            <WalkthroughElement stepId={type === 'pickup' ? 'upload_proof' : 'upload_proof_drop'}>
-                              <TouchableOpacity
-                                style={styles.actionIconButton}
-                                onPress={() =>
-                                  navigation.navigate('CameraCapture', {
-                                    batchId: batch.id,
-                                    productId: product.id,
-                                    context: type === 'pickup' ? 'pickup' : 'drop',
-                                    productName: product.name,
-                                  })
-                                }
-                              >
-                                <Camera size={scale(12)} color="#FFFFFF" strokeWidth={2.5} />
-                                <Text style={styles.btnTextWhite}>{t('orders.capture', { defaultValue: 'Capture' })}</Text>
-                              </TouchableOpacity>
-                            </WalkthroughElement>
-                          ) : (
-                            <TouchableOpacity
-                              style={styles.actionIconButton}
-                              onPress={() =>
-                                navigation.navigate('CameraCapture', {
-                                  batchId: batch.id,
-                                  productId: product.id,
-                                  context: type === 'pickup' ? 'pickup' : 'drop',
-                                  productName: product.name,
-                                })
-                              }
-                            >
-                              <Camera size={scale(12)} color="#FFFFFF" strokeWidth={2.5} />
-                              <Text style={styles.btnTextWhite}>{t('orders.capture', { defaultValue: 'Capture' })}</Text>
-                            </TouchableOpacity>
-                          )}
-
-                          <TouchableOpacity
-                            style={[styles.actionIconButton, styles.rejectIconButton]}
-                            onPress={() => setRejectingProductId(product.id)}
-                          >
-                            <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
-                          </TouchableOpacity>
-                        </>
+                        <TouchableOpacity
+                          style={[styles.actionIconButton, styles.rejectIconButton]}
+                          onPress={() => setRejectingProductId(product.id)}
+                        >
+                          <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
+                        </TouchableOpacity>
                       )}
                     </View>
                   </View>
@@ -643,20 +537,32 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           </View>
         )}
 
-        {canConfirm && !isCurrentLegCompleted && !isBatchRejected && (
-          <View style={styles.inlineFooterContainer}>
-            <TouchableOpacity
-              style={[styles.primaryConfirmBtn, type === 'pickup' ? styles.bgPickup : styles.bgDrop]}
-              onPress={handleFinalize}
-              activeOpacity={0.85}
-            >
-              <CheckCircle size={scale(20)} color="#FFFFFF" strokeWidth={2.5} />
-              <Text style={styles.primaryConfirmBtnText}>
-                {type === 'pickup' ? t('orders.confirm_pickup', { defaultValue: 'Confirm Pickup' }) : t('orders.confirm_delivery', { defaultValue: 'Confirm Delivery' })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Verification Flow Button or Status Indicators */}
+        <View style={styles.inlineFooterContainer}>
+          {isCurrentLegCompleted ? (
+            <VerificationStatusBadge status={type === 'pickup' ? 'pickup_verified' : 'delivery_verified'} />
+          ) : isBatchRejected ? (
+            <View style={styles.rejectedBannerContainer}>
+              <Text style={styles.rejectedBannerTextHeader}>Batch Rejected</Text>
+            </View>
+          ) : type === 'pickup' ? (
+            <GenerateCodeButton
+              text="Generate Pickup Code"
+              onPress={() => {
+                setOtpCode(['', '', '', '']);
+                setShowVerificationSheet(true);
+              }}
+            />
+          ) : (
+            <EnterCodeButton
+              text="Enter Delivery Code"
+              onPress={() => {
+                setOtpCode(['', '', '', '']);
+                setShowVerificationSheet(true);
+              }}
+            />
+          )}
+        </View>
       </ScrollView>
 
       <Modal
@@ -670,9 +576,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           style={styles.modalOverlay}
         >
           <View style={styles.modalCard}>
-            <ScrollView 
+            <ScrollView
               ref={modalScrollRef}
-              showsVerticalScrollIndicator={false} 
+              showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(20) }}
             >
@@ -692,13 +598,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     style={[styles.reasonChip, rejectReasonText === chip && styles.reasonChipSelected]}
                     onPress={() => {
                       setRejectReasonText(prev => prev === chip ? '' : chip);
-                      // Reset reschedule fields if chip is toggled off or changed
-                      if (rejectReasonText === chip || chip !== t('orders.reason_reschedule', { defaultValue: 'Reschedule' })) {
-                        setRescheduleParty(null);
-                        setRescheduleReason(null);
-                        setCustomRescheduleText('');
-                        setSelectedDateStr(null);
-                      }
                     }}
                   >
                     <Text style={[styles.reasonChipText, rejectReasonText === chip && styles.reasonChipTextSelected]}>
@@ -708,351 +607,82 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 ))}
               </View>
 
-              {(() => {
-                const isRescheduleSelected = rejectReasonText === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
-                
-                if (isRescheduleSelected) {
-                  return (
-                    <View style={styles.rescheduleSection}>
-                      {/* Party Selection (Who is rejecting?) */}
-                      <View style={styles.partyOptionsContainer}>
-                        <Text style={styles.partyOptionsTitle}>
-                          {t('orders.who_is_rejecting', { defaultValue: 'Who is rejecting?' })}
-                        </Text>
+              <View>
+                <TextInput
+                  style={styles.reasonInput}
+                  placeholder={t('orders.or_enter_custom_reason', { defaultValue: 'Or enter custom reason...' })}
+                  placeholderTextColor={Colors.textPlaceholder}
+                  multiline
+                  numberOfLines={3}
+                  value={rejectReasonText}
+                  onChangeText={setRejectReasonText}
+                />
 
-                        <TouchableOpacity
-                          style={[
-                            styles.partyOptionCard,
-                            rescheduleParty === 'transporter' && styles.partyOptionCardSelected,
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            setRescheduleParty('transporter');
-                            setRescheduleReason(null);
-                            setCustomRescheduleText('');
-                            setSelectedDateStr(null);
-                            setTimeout(() => {
-                              modalScrollRef.current?.scrollToEnd({ animated: true });
-                            }, 100);
-                          }}
-                        >
-                          <View style={[
-                            styles.radioCircle,
-                            rescheduleParty === 'transporter' && styles.radioCircleSelected,
-                          ]}>
-                            {rescheduleParty === 'transporter' && <View style={styles.radioDot} />}
-                          </View>
-                          <Text style={[
-                            styles.partyOptionText,
-                            rescheduleParty === 'transporter' && styles.partyOptionTextSelected,
-                          ]}>
-                            {t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.partyOptionCard,
-                            rescheduleParty === 'shg' && styles.partyOptionCardSelected,
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            setRescheduleParty('shg');
-                            setRescheduleReason(null);
-                            setCustomRescheduleText('');
-                            setSelectedDateStr(null);
-                            setTimeout(() => {
-                              modalScrollRef.current?.scrollToEnd({ animated: true });
-                            }, 100);
-                          }}
-                        >
-                          <View style={[
-                            styles.radioCircle,
-                            rescheduleParty === 'shg' && styles.radioCircleSelected,
-                          ]}>
-                            {rescheduleParty === 'shg' && <View style={styles.radioDot} />}
-                          </View>
-                          <Text style={[
-                            styles.partyOptionText,
-                            rescheduleParty === 'shg' && styles.partyOptionTextSelected,
-                          ]}>
-                            {isHubPoint
-                              ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
-                              : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' })}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Sub-reason Selection */}
-                      {rescheduleParty && (
-                        <View style={[styles.partyOptionsContainer, { borderTopWidth: 0, marginTop: 0 }]}>
-                          <Text style={styles.partyOptionsTitle}>
-                            {t('orders.select_rejection_reason', { defaultValue: 'Select rejection reason:' })}
-                          </Text>
-                          <View style={styles.chipsContainer}>
-                            {(rescheduleParty === 'transporter'
-                              ? [
-                                  t('orders.reason_vehicle_unavailable', { defaultValue: 'Vehicle Unavailable' }),
-                                  t('orders.reason_pickup_not_ready', { defaultValue: 'Pickup Not Ready' }),
-                                  t('orders.reason_route_disruption', { defaultValue: 'Route Disruption' }),
-                                  t('orders.reason_custom', { defaultValue: 'Custom' })
-                                ]
-                              : (type === 'drop'
-                                  ? (isHubPoint
-                                      ? [
-                                          t('orders.reason_gmu_not_available', { defaultValue: 'GMU not available' }),
-                                          t('orders.reason_other', { defaultValue: 'Other' })
-                                        ]
-                                      : [
-                                          t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
-                                          t('orders.reason_not_enough_place', { defaultValue: 'Not Enough Place' }),
-                                          t('orders.reason_previous_orders_pending', { defaultValue: 'Previous Orders are Pending' }),
-                                          t('orders.reason_other', { defaultValue: 'Other' })
-                                        ]
-                                    )
-                                  : [
-                                      t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
-                                      t('orders.reason_not_enough_stock', { defaultValue: 'Not Enough Stock' }),
-                                      t('orders.reason_unable_complete', { defaultValue: 'Unable to Complete the Order' }),
-                                      t('orders.reason_other', { defaultValue: 'Other' })
-                                    ]
-                                )
-                            ).map((subReason) => {
-                              const isSubSelected = rescheduleReason === subReason;
-                              return (
-                                <TouchableOpacity
-                                  key={subReason}
-                                  style={[
-                                    styles.reasonChip,
-                                    isSubSelected && styles.reasonChipSelected,
-                                  ]}
-                                  onPress={() => {
-                                    setRescheduleReason(subReason);
-                                    setCustomRescheduleText('');
-                                    setSelectedDateStr(null);
-
-                                    const isCustomOrOther =
-                                      subReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                                      subReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                                      subReason === 'Custom' ||
-                                      subReason === 'Other';
-
-                                    if (isCustomOrOther) {
-                                      setIsEditingCustomReason(true);
-                                      setTimeout(() => {
-                                        rescheduleInputRef.current?.focus();
-                                      }, 150);
-                                    } else {
-                                      setIsEditingCustomReason(false);
-                                    }
-
-                                    setTimeout(() => {
-                                      modalScrollRef.current?.scrollToEnd({ animated: true });
-                                    }, 100);
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.reasonChipText,
-                                    isSubSelected && styles.reasonChipTextSelected,
-                                  ]}>
-                                    {subReason}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Custom/Other TextInput */}
-                      {rescheduleReason && (
-                        (() => {
-                          const isCustomOrOther =
-                            rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                            rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                            rescheduleReason === 'Custom' ||
-                            rescheduleReason === 'Other';
-                          
-                          if (isCustomOrOther) {
-                            return (
-                              <View style={{ marginTop: verticalScale(10), width: '100%' }}>
-                                <TextInput
-                                  ref={rescheduleInputRef}
-                                  style={styles.reasonInput}
-                                  placeholder={
-                                    rescheduleParty === 'transporter'
-                                      ? t('orders.specify_custom_reason', { defaultValue: 'Specify custom reason...' })
-                                      : t('orders.specify_other_reason', { defaultValue: 'Specify other reason...' })
-                                  }
-                                  placeholderTextColor={Colors.textPlaceholder}
-                                  multiline
-                                  numberOfLines={3}
-                                  value={customRescheduleText}
-                                  onChangeText={(text) => {
-                                    setCustomRescheduleText(text);
-                                  }}
-                                  onFocus={() => {
-                                    setIsEditingCustomReason(true);
-                                  }}
-                                  onBlur={() => {
-                                    setIsEditingCustomReason(false);
-                                  }}
-                                  onEndEditing={() => {
-                                    setIsEditingCustomReason(false);
-                                    setTimeout(() => {
-                                      modalScrollRef.current?.scrollToEnd({ animated: true });
-                                    }, 100);
-                                  }}
-                                />
-                              </View>
-                            );
-                          }
-                          return null;
-                        })()
-                      )}
-
-                      {/* Calendar for Date Selection */}
-                      {(() => {
-                        const isCustomOrOther =
-                          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                          rescheduleReason === 'Custom' ||
-                          rescheduleReason === 'Other';
-
-                        const canShowCalendar = rescheduleReason && 
-                          (!isCustomOrOther || customRescheduleText.trim().length > 0);
-                        
-                        if (!canShowCalendar) return null;
-
-                        const today = new Date();
-                        const isCurrentMonthOrBefore = calendarMonth.getFullYear() <= today.getFullYear() && 
-                                                       calendarMonth.getMonth() <= today.getMonth();
-
-                        return (
-                          <View style={{ marginTop: verticalScale(16) }}>
-                            <Text style={[styles.partyOptionsTitle, { marginBottom: verticalScale(10) }]}>
-                              {t('orders.select_reschedule_date', { defaultValue: 'Select Reschedule Date' })}
-                            </Text>
-                            <View style={styles.calendarHeader}>
-                              <TouchableOpacity 
-                                disabled={isCurrentMonthOrBefore} 
-                                onPress={() => {
-                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
-                                }}
-                                style={[styles.calendarChevron, isCurrentMonthOrBefore && { opacity: 0.3 }]}
-                              >
-                                <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
-                              </TouchableOpacity>
-
-                              <Text style={styles.calendarMonthText}>
-                                {calendarMonth.toLocaleDateString('default', { month: 'long', year: 'numeric' })}
-                              </Text>
-
-                              <TouchableOpacity 
-                                onPress={() => {
-                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
-                                }}
-                                style={styles.calendarChevron}
-                              >
-                                <ChevronRight size={scale(20)} color={Colors.textPrimary} />
-                              </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.calendarWeekRow}>
-                              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
-                                <Text key={idx} style={styles.calendarWeekText}>{day}</Text>
-                              ))}
-                            </View>
-
-                            <View style={styles.calendarGrid}>
-                              {getDaysInMonth(calendarMonth).map((dayCell, index) => {
-                                if (!dayCell.dayNum) {
-                                  return <View key={index} style={styles.calendarDayCellEmpty} />;
-                                }
-
-                                const isSelected = selectedDateStr === dayCell.dateStr;
-                                const isPast = dayCell.isPast;
-
-                                return (
-                                  <TouchableOpacity
-                                    key={index}
-                                    disabled={isPast}
-                                    style={[
-                                      styles.calendarDayCell,
-                                      isPast && styles.calendarDayCellPast,
-                                      isSelected && styles.calendarDayCellSelected,
-                                    ]}
-                                    onPress={() => {
-                                      if (dayCell.dateStr) {
-                                        setSelectedDateStr(dayCell.dateStr);
-                                        setTimeout(() => {
-                                          modalScrollRef.current?.scrollToEnd({ animated: true });
-                                        }, 100);
-                                      }
-                                    }}
-                                  >
-                                    <Text style={[
-                                      styles.calendarDayText,
-                                      isPast && styles.calendarDayTextPast,
-                                      isSelected && styles.calendarDayTextSelected,
-                                      dayCell.isToday && !isSelected && styles.calendarDayTextToday,
-                                    ]}>
-                                      {dayCell.dayNum}
-                                    </Text>
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        );
-                      })()}
-
-                      {/* Confirm Rejection Button for Reschedule Flow */}
-                      <TouchableOpacity
-                        style={[
-                          styles.confirmRejectBtn,
-                          !selectedDateStr && styles.btnDisabled,
-                          { marginTop: verticalScale(24) }
-                        ]}
-                        onPress={handleConfirmReject}
-                        disabled={!selectedDateStr}
-                      >
-                        <Text style={styles.confirmRejectText}>{t('orders.confirm_rejection', { defaultValue: 'Confirm Rejection' })}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                }
-
-                // If reschedule is NOT selected, render standard text input and confirm button
-                return (
-                  <View>
-                    <TextInput
-                      style={styles.reasonInput}
-                      placeholder={t('orders.or_enter_custom_reason', { defaultValue: 'Or enter custom reason...' })}
-                      placeholderTextColor={Colors.textPlaceholder}
-                      multiline
-                      numberOfLines={3}
-                      value={rejectReasonText}
-                      onChangeText={setRejectReasonText}
-                    />
-
-                    <TouchableOpacity
-                      style={[
-                        styles.confirmRejectBtn,
-                        !rejectReasonText.trim() && styles.btnDisabled
-                      ]}
-                      onPress={handleConfirmReject}
-                      disabled={!rejectReasonText.trim()}
-                    >
-                      <Text style={styles.confirmRejectText}>{t('orders.confirm_rejection', { defaultValue: 'Confirm Rejection' })}</Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })()}
+                <TouchableOpacity
+                  style={[
+                    styles.confirmRejectBtn,
+                    !rejectReasonText.trim() && styles.btnDisabled
+                  ]}
+                  onPress={handleConfirmReject}
+                  disabled={!rejectReasonText.trim()}
+                >
+                  <Text style={styles.confirmRejectText}>{t('orders.confirm_rejection', { defaultValue: 'Confirm Rejection' })}</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Verification Bottom Sheet Modal */}
+      <VerificationBottomSheet
+        visible={showVerificationSheet}
+        onClose={() => setShowVerificationSheet(false)}
+        title={type === 'pickup' ? 'Pickup Verification Code' : 'Verify Delivery'}
+        subtitle={
+          type === 'pickup'
+            ? 'Generate a verification code and share it with Hub to confirm pickup.'
+            : 'Enter the 4-digit delivery code generated by SHG.'
+        }
+      >
+        {type === 'pickup' ? (
+          <View style={{ gap: verticalScale(16) }}>
+            <CodeDisplayCard code="1234" />
+            <View style={styles.demoEntryDivider} />
+            <Text style={styles.demoEntryLabel}>Hub Code Entry (Demo Mode)</Text>
+            <OTPInputWidget code={otpCode} onChangeCode={setOtpCode} />
+            <TouchableOpacity
+              style={styles.verifyCodeActionBtn}
+              onPress={handleVerifyPickupCode}
+            >
+              <Text style={styles.verifyCodeActionBtnText}>Verify Code</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ gap: verticalScale(16) }}>
+            <OTPInputWidget code={otpCode} onChangeCode={setOtpCode} />
+            <TouchableOpacity
+              style={styles.verifyCodeActionBtn}
+              onPress={handleVerifyDeliveryCode}
+            >
+              <Text style={styles.verifyCodeActionBtnText}>Verify Delivery</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </VerificationBottomSheet>
+
+      {/* Handover Success and Failure Dialogs */}
+      <VerificationSuccessDialog
+        visible={showSuccessDialog}
+        message={successMessage}
+        onClose={handleSuccessClose}
+      />
+
+      <VerificationFailureDialog
+        visible={showFailureDialog}
+        message={failureMessage}
+        onClose={() => setShowFailureDialog(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -1081,7 +711,7 @@ const styles = StyleSheet.create({
   metricValueText: { fontFamily: Fonts.extraBold, fontSize: moderateScale(15), color: '#FFFFFF' },
   metricLabelText: { fontFamily: Fonts.bold, fontSize: moderateScale(10), color: 'rgba(255, 255, 255, 0.6)' },
   metricLine: { width: 1, backgroundColor: 'rgba(255, 255, 255, 0.1)' },
-  
+
   masterSectionBox: {
     backgroundColor: '#FFFFFF',
     borderRadius: moderateScale(20),
@@ -1146,10 +776,10 @@ const styles = StyleSheet.create({
   contactDetailCol: { flex: 1, marginLeft: scale(10) },
   contactItemLabel: { fontFamily: Fonts.bold, fontSize: moderateScale(10), color: Colors.textSecondary, marginBottom: verticalScale(2) },
   contactItemValue: { fontFamily: Fonts.extraBold, fontSize: moderateScale(12), color: Colors.textPrimary },
-  
+
   itemCountBadge: { backgroundColor: '#F7FEE7', paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: scale(8), borderWidth: 1, borderColor: '#D9F99D' },
   itemCountText: { fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#3F6212' },
-  
+
   productsWrapper: { gap: verticalScale(12) },
   premiumProductCard: {
     flexDirection: 'row',
@@ -1171,26 +801,27 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontFamily: Fonts.bold, fontSize: moderateScale(9), textTransform: 'uppercase' },
   specsRow: { flexDirection: 'row', alignItems: 'center' },
   specInlineText: { fontFamily: Fonts.medium, fontSize: moderateScale(12), color: Colors.textSecondary },
-  
+
   proofContainer: { marginTop: verticalScale(10), borderRadius: scale(10), overflow: 'hidden', borderWidth: 1, borderColor: '#F1F5F9' },
   proofImage: { width: '100%', height: verticalScale(100) },
   rejectNarrative: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(6), marginTop: verticalScale(10), backgroundColor: '#FEF2F2', padding: scale(6), borderRadius: scale(6) },
   rejectText: { fontFamily: Fonts.bold, fontSize: moderateScale(10), color: '#DC2626', flex: 1 },
   rtoNarrative: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(6), marginTop: verticalScale(10), backgroundColor: '#FEF3C7', padding: scale(6), borderRadius: scale(6) },
   rtoText: { fontFamily: Fonts.bold, fontSize: moderateScale(10), color: '#D97706', flex: 1 },
-  
+
   sideActionStrip: { paddingRight: scale(12), paddingLeft: scale(4), alignItems: 'center', justifyContent: 'center', gap: verticalScale(14) },
   actionIconButton: { flexDirection: 'row', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(6), backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', minWidth: scale(65) },
   rejectIconButton: {
     backgroundColor: '#FEF2F2',
     borderWidth: 1.2,
     borderColor: '#FCA5A5',
-    paddingVertical: verticalScale(2),
-    paddingHorizontal: scale(5),
-    minWidth: scale(45),
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(12),
+    borderRadius: scale(8),
+    minWidth: scale(70),
   },
   btnTextWhite: { fontFamily: Fonts.bold, fontSize: moderateScale(10.5), color: '#FFFFFF' },
-  btnTextRed: { fontFamily: Fonts.bold, fontSize: moderateScale(8.5), color: '#DC2626' },
+  btnTextRed: { fontFamily: Fonts.bold, fontSize: moderateScale(12), color: '#DC2626' },
   successIconBox: { alignItems: 'center', justifyContent: 'center' },
   capturedButtonReplacementImage: {
     width: scale(56),
@@ -1199,7 +830,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
   },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', paddingHorizontal: scale(20) },
   modalCard: { backgroundColor: '#FFFFFF', borderRadius: moderateScale(24), padding: moderateScale(24), maxHeight: '85%' },
   modalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(8) },
@@ -1350,136 +981,7 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(32), // Extra bottom spacing to cleanly prevent any overlay clipping!
   },
 
-  // Reschedule styling
-  rescheduleSection: {
-    marginTop: verticalScale(8),
-    width: '100%',
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: verticalScale(12),
-    backgroundColor: '#F8FAFC',
-    borderRadius: moderateScale(10),
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(6),
-  },
-  calendarChevron: {
-    padding: scale(6),
-  },
-  calendarMonthText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(14),
-    color: Colors.textPrimary,
-  },
-  calendarWeekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: verticalScale(6),
-  },
-  calendarWeekText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(11),
-    color: Colors.textPlaceholder,
-    width: '14.28%',
-    textAlign: 'center',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%',
-    marginBottom: verticalScale(16),
-  },
-  calendarDayCell: {
-    width: '14.28%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: verticalScale(2),
-    borderRadius: scale(100),
-  },
-  calendarDayCellEmpty: {
-    width: '14.28%',
-    aspectRatio: 1,
-  },
-  calendarDayCellPast: {
-    opacity: 0.25,
-  },
-  calendarDayCellSelected: {
-    backgroundColor: '#EF4444',
-  },
-  calendarDayText: {
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(12.5),
-    color: Colors.textPrimary,
-  },
-  calendarDayTextPast: {
-    color: Colors.textPlaceholder,
-  },
-  calendarDayTextSelected: {
-    color: '#FFFFFF',
-    fontFamily: Fonts.bold,
-  },
-  calendarDayTextToday: {
-    color: Colors.primary,
-    fontFamily: Fonts.bold,
-  },
-  partyOptionsContainer: {
-    marginTop: verticalScale(8),
-    paddingTop: verticalScale(16),
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    gap: verticalScale(10),
-  },
-  partyOptionsTitle: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(13.5),
-    color: Colors.textPrimary,
-    marginBottom: verticalScale(4),
-  },
-  partyOptionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: moderateScale(12),
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    gap: scale(12),
-  },
-  partyOptionCardSelected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#EF4444',
-  },
-  radioCircle: {
-    width: scale(18),
-    height: scale(18),
-    borderRadius: scale(9),
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: '#EF4444',
-  },
-  radioDot: {
-    width: scale(10),
-    height: scale(10),
-    borderRadius: scale(5),
-    backgroundColor: '#EF4444',
-  },
-  partyOptionText: {
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13),
-    color: Colors.textSecondary,
-  },
-  partyOptionTextSelected: {
-    fontFamily: Fonts.bold,
-    color: '#DC2626',
-  },
+
   contactUpdateNote: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1497,6 +999,45 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(11.5),
     color: '#D97706',
   },
+  demoEntryDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: verticalScale(10),
+  },
+  demoEntryLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: verticalScale(4),
+  },
+  verifyCodeActionBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: verticalScale(14),
+    borderRadius: scale(10),
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: verticalScale(8),
+  },
+  verifyCodeActionBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(15),
+    color: '#FFFFFF',
+  },
+  rejectedBannerContainer: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+    borderWidth: 1,
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(10),
+    alignItems: 'center',
+  },
+  rejectedBannerTextHeader: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: '#DC2626',
+  },
 });
 
 export default OrderBatchPickupDetailScreen;
+

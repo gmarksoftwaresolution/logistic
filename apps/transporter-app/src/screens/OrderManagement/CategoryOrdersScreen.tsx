@@ -26,14 +26,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
   const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
   const [customReasonText, setCustomReasonText] = useState('');
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
-  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
-  const [rescheduleParty, setRescheduleParty] = useState<'transporter' | 'shg' | null>(null);
-  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
-  const [customRescheduleText, setCustomRescheduleText] = useState('');
   const modalScrollRef = useRef<ScrollView>(null);
-  const rescheduleInputRef = useRef<TextInput>(null);
+  const customReasonInputRef = useRef<TextInput>(null);
   const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
+  const [isCustomInputFocused, setIsCustomInputFocused] = useState(false);
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,30 +45,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   };
 
-  const getDaysInMonth = (monthDate: Date) => {
-    const year = monthDate.getFullYear();
-    const month = monthDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    let startDayOfWeek = firstDay.getDay() - 1;
-    if (startDayOfWeek < 0) startDayOfWeek = 6;
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    const days: { dateStr: string | null; dayNum: number | null; isPast: boolean; isToday: boolean }[] = [];
-    for (let i = 0; i < startDayOfWeek; i++) {
-      days.push({ dateStr: null, dayNum: null, isPast: false, isToday: false });
-    }
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    for (let day = 1; day <= totalDays; day++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const cellDate = new Date(year, month, day);
-      const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const isPast = cellDate < todayZero;
-      const isToday = dateStr === todayStr;
-      days.push({ dateStr, dayNum: day, isPast, isToday });
-    }
-    return days;
-  };
+
 
   useEffect(() => {
     if (route.params?.triggerRejectBatchId) {
@@ -149,53 +122,18 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     setRejectingBatchId(null);
     setSelectedReasonChip(null);
     setCustomReasonText('');
-    setSelectedDateStr(null);
-    setRescheduleParty(null);
-    setRescheduleReason(null);
-    setCustomRescheduleText('');
     setIsEditingCustomReason(false);
-    setCalendarMonth(new Date());
+    setIsCustomInputFocused(false);
   };
 
   const handleConfirmReject = async () => {
     if (rejectingBatchId) {
       let finalReason = '';
-      const isRescheduleSelected = selectedReasonChip === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
-      
-      if (isRescheduleSelected) {
-        const rejectingBatch = batches.find(b => b.id === rejectingBatchId);
-        const isHubPoint = rejectingBatch
-          ? (rejectingBatch.pickupPointName === 'Gadhinglaj Hub' ||
-             rejectingBatch.pickupPointName === 'Central Hub GMU' ||
-             rejectingBatch.dropPointName === 'Gadhinglaj Hub' ||
-             rejectingBatch.dropPointName === 'Central Hub GMU')
-          : false;
-
-        const rescheduleText = t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
-        const partyText = rescheduleParty === 'transporter' 
-          ? t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })
-          : (isHubPoint 
-              ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
-              : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' }));
-        
-        let subReasonText = '';
-        const isCustomOrOther =
-          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-          rescheduleReason === 'Custom' ||
-          rescheduleReason === 'Other';
-
-        if (isCustomOrOther) {
-          subReasonText = customRescheduleText.trim();
-        } else {
-          subReasonText = rescheduleReason || '';
-        }
-
-        finalReason = `${rescheduleText} - ${partyText} - ${subReasonText} - ${selectedDateStr}`;
+      const isCustomReason = selectedReasonChip === t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
+      if (isCustomReason) {
+        finalReason = customReasonText.trim();
       } else {
-        finalReason = customReasonText.trim()
-          ? (selectedReasonChip ? `${selectedReasonChip} - ${customReasonText.trim()}` : customReasonText.trim())
-          : (selectedReasonChip || '');
+        finalReason = selectedReasonChip || '';
       }
 
       if (finalReason.trim()) {
@@ -224,10 +162,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   };
 
   const reasonChips = [
-    t('orders.reason_damaged', { defaultValue: 'Damaged Stock Items' }),
-    t('orders.reason_discrepancy', { defaultValue: 'Weight/Qty Discrepancy' }),
-    t('orders.reason_capacity_unavailable', { defaultValue: 'Vehicle Capacity Unavailable' }),
-    t('orders.reason_reschedule', { defaultValue: 'Reschedule' })
+    t('orders.reason_vehicle_not_available', { defaultValue: 'Vehicle Not Available' }),
+    t('orders.reason_pickup_location_not_reachable', { defaultValue: 'Pickup Location Not Reachable' }),
+    t('orders.reason_transport_capacity_full', { defaultValue: 'Transport Capacity Full' }),
+    t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' }),
   ];
 
   return (
@@ -471,7 +409,8 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
               <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
 
               <View style={styles.chipsContainer}>
-                {reasonChips.map((chip) => (
+                {/* Standard Chips */}
+                {reasonChips.slice(0, 3).map((chip) => (
                   <TouchableOpacity
                     key={chip}
                     style={[
@@ -479,7 +418,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                       selectedReasonChip === chip && styles.reasonChipSelected,
                     ]}
                     onPress={() => {
-                      setSelectedReasonChip(prev => prev === chip ? null : chip);
+                      setSelectedReasonChip(prev => {
+                        const next = prev === chip ? null : chip;
+                        setCustomReasonText('');
+                        customReasonInputRef.current?.blur();
+                        return next;
+                      });
                     }}
                   >
                     <Text
@@ -492,366 +436,52 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                     </Text>
                   </TouchableOpacity>
                 ))}
+
+                {/* Custom Reason TextInput (Styled exactly like a Chip) */}
+                {(() => {
+                  const customReasonPlaceholder = t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
+                  const isCustomActive = selectedReasonChip === customReasonPlaceholder;
+
+                  return (
+                    <TextInput
+                      ref={customReasonInputRef}
+                      style={[
+                        styles.reasonChipInput,
+                        isCustomActive && styles.reasonChipInputSelected,
+                      ]}
+                      placeholder={isCustomInputFocused ? '' : customReasonPlaceholder}
+                      placeholderTextColor={Colors.textPlaceholder}
+                      value={customReasonText}
+                      onChangeText={(text) => {
+                        setCustomReasonText(text);
+                        setSelectedReasonChip(customReasonPlaceholder);
+                      }}
+                      onFocus={() => {
+                        setSelectedReasonChip(customReasonPlaceholder);
+                        setIsCustomInputFocused(true);
+                      }}
+                      onBlur={() => {
+                        setIsCustomInputFocused(false);
+                      }}
+                      onPressIn={() => {
+                        setSelectedReasonChip(customReasonPlaceholder);
+                      }}
+                    />
+                  );
+                })()}
               </View>
 
               {(() => {
-                const isRescheduleSelected = selectedReasonChip === t('orders.reason_reschedule', { defaultValue: 'Reschedule' });
+                const isCustomSelected = selectedReasonChip === t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
                 
-                if (isRescheduleSelected) {
-                  const rejectingBatch = batches.find(b => b.id === rejectingBatchId);
-                  const isHubPoint = rejectingBatch
-                    ? (rejectingBatch.pickupPointName === 'Gadhinglaj Hub' ||
-                       rejectingBatch.pickupPointName === 'Central Hub GMU' ||
-                       rejectingBatch.dropPointName === 'Gadhinglaj Hub' ||
-                       rejectingBatch.dropPointName === 'Central Hub GMU')
-                    : false;
-                  return (
-                    <View style={styles.rescheduleSection}>
-                      {/* Party Selection (Who is rejecting?) */}
-                      <View style={styles.partyOptionsContainer}>
-                        <Text style={styles.partyOptionsTitle}>
-                          {t('orders.who_is_rejecting', { defaultValue: 'Who is rejecting?' })}
-                        </Text>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.partyOptionCard,
-                            rescheduleParty === 'transporter' && styles.partyOptionCardSelected,
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            setRescheduleParty('transporter');
-                            setRescheduleReason(null);
-                            setCustomRescheduleText('');
-                            setSelectedDateStr(null);
-                            setTimeout(() => {
-                              modalScrollRef.current?.scrollToEnd({ animated: true });
-                            }, 100);
-                          }}
-                        >
-                          <View style={[
-                            styles.radioCircle,
-                            rescheduleParty === 'transporter' && styles.radioCircleSelected,
-                          ]}>
-                            {rescheduleParty === 'transporter' && <View style={styles.radioDot} />}
-                          </View>
-                          <Text style={[
-                            styles.partyOptionText,
-                            rescheduleParty === 'transporter' && styles.partyOptionTextSelected,
-                          ]}>
-                            {t('orders.reschedule_rejected_by_you', { defaultValue: 'Reschedule by you' })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.partyOptionCard,
-                            rescheduleParty === 'shg' && styles.partyOptionCardSelected,
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => {
-                            setRescheduleParty('shg');
-                            setRescheduleReason(null);
-                            setCustomRescheduleText('');
-                            setSelectedDateStr(null);
-                            setTimeout(() => {
-                              modalScrollRef.current?.scrollToEnd({ animated: true });
-                            }, 100);
-                          }}
-                        >
-                          <View style={[
-                            styles.radioCircle,
-                            rescheduleParty === 'shg' && styles.radioCircleSelected,
-                          ]}>
-                            {rescheduleParty === 'shg' && <View style={styles.radioDot} />}
-                          </View>
-                          <Text style={[
-                            styles.partyOptionText,
-                            rescheduleParty === 'shg' && styles.partyOptionTextSelected,
-                          ]}>
-                            {isHubPoint
-                              ? t('orders.reschedule_rejected_by_gmu', { defaultValue: 'Reschedule by GMU' })
-                              : t('orders.reschedule_rejected_by_shg', { defaultValue: 'Reschedule by SHG' })}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Sub-reason Selection */}
-                      {rescheduleParty && (
-                        <View style={[styles.partyOptionsContainer, { borderTopWidth: 0, marginTop: 0 }]}>
-                          <Text style={styles.partyOptionsTitle}>
-                            {t('orders.select_rejection_reason', { defaultValue: 'Select rejection reason:' })}
-                          </Text>
-                          <View style={styles.chipsContainer}>
-                            {(rescheduleParty === 'transporter'
-                              ? [
-                                  t('orders.reason_vehicle_unavailable', { defaultValue: 'Vehicle Unavailable' }),
-                                  t('orders.reason_pickup_not_ready', { defaultValue: 'Pickup Not Ready' }),
-                                  t('orders.reason_route_disruption', { defaultValue: 'Route Disruption' }),
-                                  t('orders.reason_custom', { defaultValue: 'Custom' })
-                                ]
-                              : (rejectingBatchId?.startsWith('drop-')
-                                  ? (isHubPoint
-                                      ? [
-                                          t('orders.reason_gmu_not_available', { defaultValue: 'GMU not available' }),
-                                          t('orders.reason_other', { defaultValue: 'Other' })
-                                        ]
-                                      : [
-                                          t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
-                                          t('orders.reason_not_enough_place', { defaultValue: 'Not Enough Place' }),
-                                          t('orders.reason_previous_orders_pending', { defaultValue: 'Previous Orders are Pending' }),
-                                          t('orders.reason_other', { defaultValue: 'Other' })
-                                        ]
-                                    )
-                                  : [
-                                      t('orders.reason_shg_not_available', { defaultValue: 'SHG Not Available' }),
-                                      t('orders.reason_not_enough_stock', { defaultValue: 'Not Enough Stock' }),
-                                      t('orders.reason_unable_complete', { defaultValue: 'Unable to Complete the Order' }),
-                                      t('orders.reason_other', { defaultValue: 'Other' })
-                                    ]
-                                )
-                            ).map((subReason) => {
-                              const isSubSelected = rescheduleReason === subReason;
-                              return (
-                                <TouchableOpacity
-                                  key={subReason}
-                                  style={[
-                                    styles.reasonChip,
-                                    isSubSelected && styles.reasonChipSelected,
-                                  ]}
-                                  onPress={() => {
-                                    setRescheduleReason(subReason);
-                                    setCustomRescheduleText('');
-                                    setSelectedDateStr(null);
-
-                                    const isCustomOrOther =
-                                      subReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                                      subReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                                      subReason === 'Custom' ||
-                                      subReason === 'Other';
-
-                                    if (isCustomOrOther) {
-                                      setIsEditingCustomReason(true);
-                                      setTimeout(() => {
-                                        rescheduleInputRef.current?.focus();
-                                      }, 150);
-                                    } else {
-                                      setIsEditingCustomReason(false);
-                                    }
-
-                                    setTimeout(() => {
-                                      modalScrollRef.current?.scrollToEnd({ animated: true });
-                                    }, 100);
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.reasonChipText,
-                                    isSubSelected && styles.reasonChipTextSelected,
-                                  ]}>
-                                    {subReason}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Custom/Other TextInput */}
-                      {rescheduleReason && (
-                        (() => {
-                          const isCustomOrOther =
-                            rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                            rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                            rescheduleReason === 'Custom' ||
-                            rescheduleReason === 'Other';
-                          
-                          if (isCustomOrOther) {
-                            return (
-                              <View style={{ marginTop: verticalScale(10), width: '100%' }}>
-                                <TextInput
-                                  ref={rescheduleInputRef}
-                                  style={styles.reasonInput}
-                                  placeholder={
-                                    rescheduleParty === 'transporter'
-                                      ? t('orders.specify_custom_reason', { defaultValue: 'Specify custom reason...' })
-                                      : t('orders.specify_other_reason', { defaultValue: 'Specify other reason...' })
-                                  }
-                                  placeholderTextColor={Colors.textPlaceholder}
-                                  multiline
-                                  numberOfLines={3}
-                                  value={customRescheduleText}
-                                  onChangeText={(text) => {
-                                    setCustomRescheduleText(text);
-                                  }}
-                                  onFocus={() => {
-                                    setIsEditingCustomReason(true);
-                                  }}
-                                  onBlur={() => {
-                                    setIsEditingCustomReason(false);
-                                  }}
-                                  onEndEditing={() => {
-                                    setIsEditingCustomReason(false);
-                                    setTimeout(() => {
-                                      modalScrollRef.current?.scrollToEnd({ animated: true });
-                                    }, 100);
-                                  }}
-                                />
-                              </View>
-                            );
-                          }
-                          return null;
-                        })()
-                      )}
-
-                      {/* Calendar for Date Selection */}
-                      {(() => {
-                        const isCustomOrOther =
-                          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                          rescheduleReason === 'Custom' ||
-                          rescheduleReason === 'Other';
-
-                        const canShowCalendar = rescheduleReason && 
-                          (!isCustomOrOther || customRescheduleText.trim().length > 0);
-                        
-                        if (!canShowCalendar) return null;
-
-                        const today = new Date();
-                        const isCurrentMonthOrBefore = calendarMonth.getFullYear() <= today.getFullYear() && 
-                                                       calendarMonth.getMonth() <= today.getMonth();
-
-                        return (
-                          <View style={{ marginTop: verticalScale(16) }}>
-                            <Text style={[styles.partyOptionsTitle, { marginBottom: verticalScale(10) }]}>
-                              {t('orders.select_reschedule_date', { defaultValue: 'Select Reschedule Date' })}
-                            </Text>
-                            <View style={styles.calendarHeader}>
-                              <TouchableOpacity 
-                                disabled={isCurrentMonthOrBefore} 
-                                onPress={() => {
-                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
-                                }}
-                                style={[styles.calendarChevron, isCurrentMonthOrBefore && { opacity: 0.3 }]}
-                              >
-                                <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
-                              </TouchableOpacity>
-
-                              <Text style={styles.calendarMonthText}>
-                                {calendarMonth.toLocaleDateString('default', { month: 'long', year: 'numeric' })}
-                              </Text>
-
-                              <TouchableOpacity 
-                                onPress={() => {
-                                  setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
-                                }}
-                                style={styles.calendarChevron}
-                              >
-                                <ChevronRight size={scale(20)} color={Colors.textPrimary} />
-                              </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.calendarWeekRow}>
-                              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
-                                <Text key={idx} style={styles.calendarWeekText}>{day}</Text>
-                              ))}
-                            </View>
-
-                            <View style={styles.calendarGrid}>
-                              {getDaysInMonth(calendarMonth).map((dayCell, index) => {
-                                if (!dayCell.dayNum) {
-                                  return <View key={index} style={styles.calendarDayCellEmpty} />;
-                                }
-
-                                const isSelected = selectedDateStr === dayCell.dateStr;
-                                const isPast = dayCell.isPast;
-
-                                return (
-                                  <TouchableOpacity
-                                    key={index}
-                                    disabled={isPast}
-                                    style={[
-                                      styles.calendarDayCell,
-                                      isPast && styles.calendarDayCellPast,
-                                      isSelected && styles.calendarDayCellSelected,
-                                    ]}
-                                    onPress={() => {
-                                      if (dayCell.dateStr) {
-                                        setSelectedDateStr(dayCell.dateStr);
-                                        setTimeout(() => {
-                                          modalScrollRef.current?.scrollToEnd({ animated: true });
-                                        }, 100);
-                                      }
-                                    }}
-                                  >
-                                    <Text style={[
-                                      styles.calendarDayText,
-                                      isPast && styles.calendarDayTextPast,
-                                      isSelected && styles.calendarDayTextSelected,
-                                      dayCell.isToday && !isSelected && styles.calendarDayTextToday,
-                                    ]}>
-                                      {dayCell.dayNum}
-                                    </Text>
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        );
-                      })()}
-
-                      {/* Confirm Reject Button */}
-                      {(() => {
-                        const isCustomOrOther =
-                          rescheduleReason === t('orders.reason_custom', { defaultValue: 'Custom' }) ||
-                          rescheduleReason === t('orders.reason_other', { defaultValue: 'Other' }) ||
-                          rescheduleReason === 'Custom' ||
-                          rescheduleReason === 'Other';
-
-                        const isConfirmDisabled = 
-                          !rescheduleParty || 
-                          !rescheduleReason || 
-                          (isCustomOrOther && !customRescheduleText.trim()) || 
-                          !selectedDateStr;
-
-                        return (
-                          <TouchableOpacity
-                            style={[
-                              styles.confirmRejectBtn,
-                              isConfirmDisabled && styles.btnDisabled,
-                              { marginTop: verticalScale(24) }
-                            ]}
-                            disabled={isConfirmDisabled}
-                            onPress={handleConfirmReject}
-                          >
-                            <Text style={styles.confirmRejectText}>
-                              {t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })()}
-                    </View>
-                  );
-                }
-
                 return (
-                  <View>
-                    <TextInput
-                      style={styles.reasonInput}
-                      placeholder={t('orders.or_write_custom_statement', { defaultValue: 'Or write custom statement...' })}
-                      placeholderTextColor={Colors.textPlaceholder}
-                      multiline
-                      numberOfLines={3}
-                      value={customReasonText}
-                      onChangeText={setCustomReasonText}
-                    />
-
+                  <View style={{ marginTop: verticalScale(12) }}>
                     <TouchableOpacity
                       style={[
                         styles.confirmRejectBtn,
-                        (!selectedReasonChip && !customReasonText.trim()) && styles.btnDisabled
+                        (!selectedReasonChip || (isCustomSelected && !customReasonText.trim())) && styles.btnDisabled
                       ]}
-                      disabled={!selectedReasonChip && !customReasonText.trim()}
+                      disabled={!selectedReasonChip || (isCustomSelected && !customReasonText.trim())}
                       onPress={handleConfirmReject}
                     >
                       <Text style={styles.confirmRejectText}>
@@ -1412,134 +1042,24 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(13.5),
     color: Colors.textPlaceholder,
   },
-  rescheduleSection: {
-    marginTop: verticalScale(8),
-    width: '100%',
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: verticalScale(12),
+
+  reasonChipInput: {
     backgroundColor: '#F8FAFC',
-    borderRadius: moderateScale(10),
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(6),
-  },
-  calendarChevron: {
-    padding: scale(6),
-  },
-  calendarMonthText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(14),
-    color: Colors.textPrimary,
-  },
-  calendarWeekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: verticalScale(6),
-  },
-  calendarWeekText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(11),
-    color: Colors.textPlaceholder,
-    width: '14.28%',
-    textAlign: 'center',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%',
-    marginBottom: verticalScale(16),
-  },
-  calendarDayCell: {
-    width: '14.28%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: verticalScale(2),
-    borderRadius: scale(100),
-  },
-  calendarDayCellEmpty: {
-    width: '14.28%',
-    aspectRatio: 1,
-  },
-  calendarDayCellPast: {
-    opacity: 0.25,
-  },
-  calendarDayCellSelected: {
-    backgroundColor: '#EF4444',
-  },
-  calendarDayText: {
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(12.5),
-    color: Colors.textPrimary,
-  },
-  calendarDayTextPast: {
-    color: Colors.textPlaceholder,
-  },
-  calendarDayTextSelected: {
-    color: '#FFFFFF',
-    fontFamily: Fonts.bold,
-  },
-  calendarDayTextToday: {
-    color: Colors.primary,
-    fontFamily: Fonts.bold,
-  },
-  partyOptionsContainer: {
-    marginTop: verticalScale(8),
-    paddingTop: verticalScale(16),
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    gap: verticalScale(10),
-  },
-  partyOptionsTitle: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(13.5),
-    color: Colors.textPrimary,
-    marginBottom: verticalScale(4),
-  },
-  partyOptionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    paddingHorizontal: scale(16),
+    paddingVertical: Platform.OS === 'ios' ? verticalScale(12) : verticalScale(10),
+    borderRadius: moderateScale(12),
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    borderRadius: moderateScale(12),
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    gap: scale(12),
-  },
-  partyOptionCardSelected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#EF4444',
-  },
-  radioCircle: {
-    width: scale(18),
-    height: scale(18),
-    borderRadius: scale(9),
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: '#EF4444',
-  },
-  radioDot: {
-    width: scale(10),
-    height: scale(10),
-    borderRadius: scale(5),
-    backgroundColor: '#EF4444',
-  },
-  partyOptionText: {
+    width: '100%',
     fontFamily: Fonts.medium,
-    fontSize: moderateScale(13),
+    fontSize: moderateScale(13.5),
     color: Colors.textSecondary,
   },
-  partyOptionTextSelected: {
-    fontFamily: Fonts.bold,
-    color: '#DC2626',
+  reasonChipInputSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+    color: Colors.textPrimary,
+    fontFamily: Fonts.medium,
   },
 });
 
