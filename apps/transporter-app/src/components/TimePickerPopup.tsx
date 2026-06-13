@@ -227,13 +227,6 @@ const TimePickerPopup: React.FC<TimePickerPopupProps> = ({ visible, onClose, onC
             
             <View style={styles.columnsWrapper}>
               <WheelPicker 
-                data={ampm} 
-                selectedIndex={selectedAmPmIndex} 
-                onValueChange={setSelectedAmPmIndex} 
-                visible={visible}
-                infinite={false}
-              />
-              <WheelPicker 
                 data={hours} 
                 selectedIndex={selectedHourIndex} 
                 onValueChange={setSelectedHourIndex} 
@@ -246,6 +239,13 @@ const TimePickerPopup: React.FC<TimePickerPopupProps> = ({ visible, onClose, onC
                 onValueChange={setSelectedMinuteIndex} 
                 label="M"
                 visible={visible}
+              />
+              <WheelPicker 
+                data={ampm} 
+                selectedIndex={selectedAmPmIndex} 
+                onValueChange={setSelectedAmPmIndex} 
+                visible={visible}
+                infinite={false}
               />
             </View>
 

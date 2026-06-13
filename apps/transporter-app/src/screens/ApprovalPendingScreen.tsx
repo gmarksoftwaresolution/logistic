@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Dimensions,
   Animated,
   ActivityIndicator
@@ -82,7 +82,7 @@ const ApprovalPendingScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.mainCard}>
             <Text style={styles.statusSub}>{t('signup.approval_pending', 'Application Under Review')}</Text>
             <Text style={styles.title}>{t('signup.approval_title', 'Registration Submitted!')}</Text>
-            
+
             <Text style={styles.descriptionText}>
               {t('signup.approval_desc_full', 'Thank you for registering. Your document verification is currently in progress. You will receive an SMS update once approved.')}
             </Text>
@@ -138,8 +138,8 @@ const ApprovalPendingScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Footer Navigation Button */}
         <View style={styles.footer}>
-          <TouchableOpacity 
-            style={styles.primaryButton} 
+          <TouchableOpacity
+            style={styles.primaryButton}
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.85}
           >

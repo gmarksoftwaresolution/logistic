@@ -331,6 +331,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           totalQty: 4,
           totalWeight: '12 kg',
           status: 'NEW_ORDER',
+          masterOrderId: 9999,
           shgContact: {
             name: 'Kamal Bai (SHG Lead)',
             phone: '+91 9876543210',
@@ -370,6 +371,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           totalQty: 3,
           totalWeight: '9 kg',
           status: 'NEW_ORDER',
+          masterOrderId: 9998,
           shgContact: {
             name: 'Savita Deshmukh (Buyer)',
             phone: '+91 8765432109',
@@ -476,7 +478,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   useEffect(() => {
     const loadPersistedAndFetch = async () => {
       try {
-        const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v3');
+        const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v5');
         if (!hasCleared) {
           await Promise.all([
             AsyncStorage.removeItem('rejected_batches'),
@@ -485,7 +487,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             AsyncStorage.removeItem('transporter_activities'),
             AsyncStorage.removeItem('completed_drop_pickups'),
           ]);
-          await AsyncStorage.setItem('has_cleared_verification_v3', 'true');
+          await AsyncStorage.setItem('has_cleared_verification_v5', 'true');
           console.log('Cleared all legacy storage data for a clean slate.');
         }
 

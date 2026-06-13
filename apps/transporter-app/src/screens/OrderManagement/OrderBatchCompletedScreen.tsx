@@ -21,20 +21,19 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
 
   // Consolidate both legs by masterOrderId into a single journey representation
   const journeys = useMemo(() => {
-    const journeyMap: Record<number, any> = {};
+    const journeyMap: Record<string, any> = {};
 
     batches.forEach((b) => {
-      if (!b.masterOrderId) return;
-      
       // We only care about orders that have completed at least one leg
       if (b.status !== 'PICKUP_COMPLETED' && b.status !== 'DROP_COMPLETED') {
         return;
       }
 
-      const mId = b.masterOrderId;
+      const mId = b.masterOrderId ? String(b.masterOrderId) : b.id;
       if (!journeyMap[mId]) {
         journeyMap[mId] = {
-          masterOrderId: mId,
+          masterOrderId: b.masterOrderId,
+          id: b.id,
           shgName: b.shgName || 'Nesari Bachat Gat',
           productName: b.products?.[0]?.name || 'General Shipment',
           totalQty: b.totalQty || 1,
@@ -69,7 +68,12 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
       }
     });
 
-    return Object.values(journeyMap).sort((a, b) => b.masterOrderId - a.masterOrderId);
+    return Object.values(journeyMap).sort((a, b) => {
+      if (b.masterOrderId && a.masterOrderId) {
+        return b.masterOrderId - a.masterOrderId;
+      }
+      return b.id.localeCompare(a.id);
+    });
   }, [batches]);
 
   return (
@@ -115,11 +119,13 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
           </View>
         ) : (
           journeys.map((journey) => (
-            <View key={journey.masterOrderId} style={styles.premiumBatchCard}>
+            <View key={journey.masterOrderId || journey.id} style={styles.premiumBatchCard}>
               {/* Header: ID & Status Badge */}
               <View style={styles.cardHeaderRow}>
                 <View style={styles.idGroup}>
-                  <Text style={styles.journeyIdText}>Order #{journey.masterOrderId}</Text>
+                  <Text style={styles.journeyIdText}>
+                    {journey.masterOrderId ? `Order #${journey.masterOrderId}` : `Seed Order`}
+                  </Text>
                   <View style={[styles.successPill, journey.dropCompleted ? styles.pillDelivered : styles.pillTransit]}>
                     <Text style={[styles.successPillText, journey.dropCompleted ? styles.textDelivered : styles.textTransit]}>
                       {journey.dropCompleted ? 'FULLY DELIVERED' : 'IN TRANSIT'}

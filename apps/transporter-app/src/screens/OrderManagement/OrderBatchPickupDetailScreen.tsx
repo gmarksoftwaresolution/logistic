@@ -17,8 +17,9 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react-native';
+import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Info, Clock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import TimePickerPopup from '../../components/TimePickerPopup';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +43,55 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  // Reschedule and multi-step reject states for item rejection
+  const [rejectStep, setRejectStep] = useState<'primary' | 'reschedule_reason' | 'reschedule_date_time'>('primary');
+  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
+  const [rescheduleCustomReason, setRescheduleCustomReason] = useState('');
+  const [rescheduleDate, setRescheduleDate] = useState<'today' | 'tomorrow' | 'day_after' | null>(null);
+  const [rescheduleStartTime, setRescheduleStartTime] = useState('');
+  const [rescheduleEndTime, setRescheduleEndTime] = useState('');
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  const formatTimeToString = (date: Date): string => {
+    let hours = date.getHours();
+    let minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strMinutes = minutes < 10 ? '0' + minutes : minutes;
+    const strHours = hours < 10 ? '0' + hours : hours;
+    return `${strHours}:${strMinutes} ${ampm}`;
+  };
+
+  const getThreeDays = () => {
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+    const dayAfter = new Date();
+    dayAfter.setDate(today.getDate() + 2);
+    
+    const formatDate = (d: Date) => {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
+    };
+
+    return {
+      todayStr: formatDate(today),
+      tomorrowStr: formatDate(tomorrow),
+      dayAfterStr: formatDate(dayAfter)
+    };
+  };
+
+  const onStartTimeConfirm = (timeStr: string) => {
+    setRescheduleStartTime(timeStr);
+  };
+
+  const onEndTimeConfirm = (timeStr: string) => {
+    setRescheduleEndTime(timeStr);
+  };
 
   // Code-based Handover state
   const [showVerificationSheet, setShowVerificationSheet] = useState(false);
@@ -154,12 +204,35 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const handleCloseModal = () => {
     setRejectingProductId(null);
     setRejectReasonText('');
+    setRejectStep('primary');
+    setRescheduleReason(null);
+    setRescheduleCustomReason('');
+    setRescheduleDate(null);
+    setRescheduleStartTime('');
+    setRescheduleEndTime('');
+    setShowStartTimePicker(false);
+    setShowEndTimePicker(false);
   };
 
   const handleConfirmReject = () => {
     if (!rejectingProductId) return;
-    if (!rejectReasonText.trim()) return;
-    const finalReason = rejectReasonText.trim();
+    
+    let finalReason = '';
+    if (rejectStep === 'reschedule_date_time') {
+      const rescheduleReasonLabel = 
+        rescheduleReason === 'Custom Reason' ? rescheduleCustomReason.trim() : rescheduleReason;
+      
+      const dates = getThreeDays();
+      const selectedDateStr = 
+        rescheduleDate === 'today' ? dates.todayStr : 
+        rescheduleDate === 'tomorrow' ? dates.tomorrowStr : dates.dayAfterStr;
+
+      finalReason = `Rescheduled: ${rescheduleReasonLabel} (Date: ${selectedDateStr}, Time: ${rescheduleStartTime.trim()} - ${rescheduleEndTime.trim()})`;
+    } else {
+      finalReason = rejectReasonText.trim();
+    }
+
+    if (!finalReason) return;
 
     if (type === 'drop') {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);
@@ -583,56 +656,259 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(20) }}
             >
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>{t('orders.reject_item', { defaultValue: 'Reject Item' })}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                  {rejectStep !== 'primary' && (
+                    <TouchableOpacity onPress={() => {
+                      if (rejectStep === 'reschedule_reason') setRejectStep('primary');
+                      else if (rejectStep === 'reschedule_date_time') setRejectStep('reschedule_reason');
+                    }} style={{ padding: scale(4) }}>
+                      <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={styles.modalTitle}>
+                    {rejectStep === 'primary' && (type === 'pickup' ? 'Reject Pickup' : 'Reject Delivery')}
+                    {rejectStep === 'reschedule_reason' && 'Reschedule Reason'}
+                    {rejectStep === 'reschedule_date_time' && 'Select Date & Time'}
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
                   <X size={scale(20)} color={Colors.textPrimary} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.modalSubtitle}>{t('orders.provide_reject_reason', { defaultValue: 'Please provide a reason for rejecting this item action.' })}</Text>
+              {rejectStep === 'primary' && (
+                <View>
+                  <Text style={styles.modalSubtitle}>Specify reason for failing this shipment action</Text>
+                  
+                  <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
+                    {(type === 'pickup' 
+                      ? ['Vehicle Problem', 'Invalid Address', 'Receiver Not Reachable', 'Reschedule', 'Custom Reason']
+                      : ['Receiver Not Available', 'Invalid Address', 'Reschedule', 'Custom Reason']
+                    ).map((chip) => (
+                      <TouchableOpacity
+                        key={chip}
+                        style={[
+                          styles.reasonChip,
+                          { width: '100%' },
+                          rejectReasonText === chip && styles.reasonChipSelected
+                        ]}
+                        onPress={() => {
+                          setRejectReasonText(chip);
+                          if (chip === 'Reschedule') {
+                            setRejectStep('reschedule_reason');
+                          }
+                        }}
+                      >
+                        <Text style={[styles.reasonChipText, rejectReasonText === chip && styles.reasonChipTextSelected]}>
+                          {chip}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
 
-              <View style={styles.chipsContainer}>
-                {reasonChips.map((chip) => (
+                    {rejectReasonText === 'Custom Reason' && (
+                      <TextInput
+                        style={styles.customReasonTextInput}
+                        placeholder="Enter custom reason here..."
+                        placeholderTextColor={Colors.textPlaceholder}
+                        value={rescheduleCustomReason}
+                        onChangeText={setRescheduleCustomReason}
+                        multiline
+                      />
+                    )}
+                  </View>
+
                   <TouchableOpacity
-                    key={chip}
-                    style={[styles.reasonChip, rejectReasonText === chip && styles.reasonChipSelected]}
+                    style={[
+                      styles.confirmRejectBtn,
+                      (!rejectReasonText || rejectReasonText === 'Reschedule' || (rejectReasonText === 'Custom Reason' && !rescheduleCustomReason.trim())) && styles.btnDisabled
+                    ]}
+                    disabled={!rejectReasonText || rejectReasonText === 'Reschedule' || (rejectReasonText === 'Custom Reason' && !rescheduleCustomReason.trim())}
                     onPress={() => {
-                      setRejectReasonText(prev => prev === chip ? '' : chip);
+                      if (rejectReasonText === 'Custom Reason') {
+                        setRejectReasonText(rescheduleCustomReason.trim());
+                      }
+                      setTimeout(() => {
+                        handleConfirmReject();
+                      }, 50);
                     }}
                   >
-                    <Text style={[styles.reasonChipText, rejectReasonText === chip && styles.reasonChipTextSelected]}>
-                      {chip}
-                    </Text>
+                    <Text style={styles.confirmRejectText}>Confirm Reject</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                </View>
+              )}
 
-              <View>
-                <TextInput
-                  style={styles.reasonInput}
-                  placeholder={t('orders.or_enter_custom_reason', { defaultValue: 'Or enter custom reason...' })}
-                  placeholderTextColor={Colors.textPlaceholder}
-                  multiline
-                  numberOfLines={3}
-                  value={rejectReasonText}
-                  onChangeText={setRejectReasonText}
-                />
+              {rejectStep === 'reschedule_reason' && (
+                <View>
+                  <Text style={styles.modalSubtitle}>Select reason for rescheduling availability</Text>
+                  
+                  <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
+                    {(type === 'pickup'
+                      ? (isSHG 
+                          ? ['SHG Request to Reschedule', 'Custom Reason'] 
+                          : ['GMU Not Available', 'Custom Reason'])
+                      : (isSHG 
+                          ? ['SHG Not Available', 'Custom Reason'] 
+                          : ['GMU Not Available', 'Custom Reason'])
+                    ).map((chip) => (
+                      <TouchableOpacity
+                        key={chip}
+                        style={[
+                          styles.reasonChip,
+                          { width: '100%' },
+                          rescheduleReason === chip && styles.reasonChipSelected
+                        ]}
+                        onPress={() => {
+                          setRescheduleReason(chip);
+                        }}
+                      >
+                        <Text style={[styles.reasonChipText, rescheduleReason === chip && styles.reasonChipTextSelected]}>
+                          {chip}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
 
-                <TouchableOpacity
-                  style={[
-                    styles.confirmRejectBtn,
-                    !rejectReasonText.trim() && styles.btnDisabled
-                  ]}
-                  onPress={handleConfirmReject}
-                  disabled={!rejectReasonText.trim()}
-                >
-                  <Text style={styles.confirmRejectText}>{t('orders.confirm_rejection', { defaultValue: 'Confirm Rejection' })}</Text>
-                </TouchableOpacity>
-              </View>
+                    {rescheduleReason === 'Custom Reason' && (
+                      <TextInput
+                        style={styles.customReasonTextInput}
+                        placeholder="Enter custom reschedule reason..."
+                        placeholderTextColor={Colors.textPlaceholder}
+                        value={rescheduleCustomReason}
+                        onChangeText={setRescheduleCustomReason}
+                        multiline
+                      />
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmRejectBtn,
+                      (!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())) && styles.btnDisabled
+                    ]}
+                    disabled={!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())}
+                    onPress={() => setRejectStep('reschedule_date_time')}
+                  >
+                    <Text style={styles.confirmRejectText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {rejectStep === 'reschedule_date_time' && (() => {
+                const dates = getThreeDays();
+                return (
+                  <View>
+                    <Text style={styles.modalSubtitle}>Specify availability date and time</Text>
+                    
+                    <Text style={styles.subHeadingLabel}>Available Date</Text>
+                    <View style={styles.dateTimeSelectorRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.dateSelectBtn,
+                          rescheduleDate === 'today' && styles.dateSelectBtnSelected,
+                        ]}
+                        onPress={() => setRescheduleDate('today')}
+                      >
+                        <Text style={[styles.dateSelectText, rescheduleDate === 'today' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          Today
+                        </Text>
+                        <Text style={[styles.dateSubtext, rescheduleDate === 'today' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          {dates.todayStr.split(',')[1]?.trim() || dates.todayStr}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.dateSelectBtn,
+                          rescheduleDate === 'tomorrow' && styles.dateSelectBtnSelected,
+                        ]}
+                        onPress={() => setRescheduleDate('tomorrow')}
+                      >
+                        <Text style={[styles.dateSelectText, rescheduleDate === 'tomorrow' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          Tomorrow
+                        </Text>
+                        <Text style={[styles.dateSubtext, rescheduleDate === 'tomorrow' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          {dates.tomorrowStr.split(',')[1]?.trim() || dates.tomorrowStr}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.dateSelectBtn,
+                          rescheduleDate === 'day_after' && styles.dateSelectBtnSelected,
+                        ]}
+                        onPress={() => setRescheduleDate('day_after')}
+                      >
+                        <Text style={[styles.dateSelectText, rescheduleDate === 'day_after' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          Day After
+                        </Text>
+                        <Text style={[styles.dateSubtext, rescheduleDate === 'day_after' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                          {dates.dayAfterStr.split(',')[1]?.trim() || dates.dayAfterStr}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.subHeadingLabel}>Available Time Range</Text>
+                    <View style={styles.timeInputGrid}>
+                      <TouchableOpacity
+                        style={styles.timeInputCol}
+                        activeOpacity={0.7}
+                        onPress={() => setShowStartTimePicker(true)}
+                      >
+                        <Text style={styles.timeInputLabel}>Start Time</Text>
+                        <View style={styles.timeDisplayBox}>
+                          <Clock size={scale(16)} color={rescheduleStartTime ? Colors.primary : Colors.textPlaceholder} />
+                          <Text style={[styles.timeDisplayText, !rescheduleStartTime && styles.timePlaceholderText]}>
+                            {rescheduleStartTime || "Select Time"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.timeInputCol}
+                        activeOpacity={0.7}
+                        onPress={() => setShowEndTimePicker(true)}
+                      >
+                        <Text style={styles.timeInputLabel}>End Time</Text>
+                        <View style={styles.timeDisplayBox}>
+                          <Clock size={scale(16)} color={rescheduleEndTime ? Colors.primary : Colors.textPlaceholder} />
+                          <Text style={[styles.timeDisplayText, !rescheduleEndTime && styles.timePlaceholderText]}>
+                            {rescheduleEndTime || "Select Time"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmRejectBtn,
+                        (!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()) && styles.btnDisabled,
+                        { marginTop: verticalScale(16) }
+                      ]}
+                      disabled={!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()}
+                      onPress={handleConfirmReject}
+                    >
+                      <Text style={styles.confirmRejectText}>Confirm Reschedule</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <TimePickerPopup
+        visible={showStartTimePicker}
+        onClose={() => setShowStartTimePicker(false)}
+        onConfirm={onStartTimeConfirm}
+        initialTime={rescheduleStartTime}
+      />
+
+      <TimePickerPopup
+        visible={showEndTimePicker}
+        onClose={() => setShowEndTimePicker(false)}
+        onConfirm={onEndTimeConfirm}
+        initialTime={rescheduleEndTime}
+      />
 
       {/* Verification Bottom Sheet Modal */}
       <VerificationBottomSheet
@@ -1036,6 +1312,98 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(14),
     color: '#DC2626',
+  },
+  customReasonTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: moderateScale(12),
+    padding: scale(12),
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13.5),
+    color: Colors.textPrimary,
+    textAlignVertical: 'top',
+    minHeight: verticalScale(60),
+    marginTop: verticalScale(4),
+    width: '100%',
+  },
+  subHeadingLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: Colors.textPrimary,
+    marginTop: verticalScale(14),
+    marginBottom: verticalScale(8),
+  },
+  dateTimeSelectorRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: scale(6),
+  },
+  dateSelectBtn: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: moderateScale(12),
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(4),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateSelectBtnSelected: {
+    backgroundColor: 'rgba(178, 213, 52, 0.08)',
+    borderColor: Colors.primary,
+  },
+  dateSelectText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13.5),
+    color: Colors.textSecondary,
+  },
+  dateSelectTextSelected: {
+    color: Colors.primary,
+  },
+  dateSubtext: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(10.5),
+    color: Colors.textPlaceholder,
+    marginTop: verticalScale(2),
+  },
+  dateSubtextSelected: {
+    color: Colors.primary,
+  },
+  timeInputGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: scale(10),
+  },
+  timeInputCol: {
+    flex: 1,
+  },
+  timeInputLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: Colors.textSecondary,
+    marginBottom: verticalScale(4),
+  },
+  timeDisplayBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: scale(12),
+    paddingVertical: Platform.OS === 'ios' ? verticalScale(12) : verticalScale(10),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  timeDisplayText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13.5),
+    color: Colors.textPrimary,
+  },
+  timePlaceholderText: {
+    fontFamily: Fonts.medium,
+    color: Colors.textPlaceholder,
   },
 });
 
