@@ -43,6 +43,7 @@ interface OrderContextType {
   deliveredOrders: Order[];
   pendingOrders: Order[];
   rejectedOrders: Order[];
+  returnedOrders: Order[];
   orders: Order[];
   highlightedOrders: Record<string, 'new' | 'updated'>;
   getStockItems: () => Order[];
@@ -59,117 +60,10 @@ interface OrderContextType {
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
-const MOCK_INCOMING = [
-  {
-    id: 'inc-3',
-    orderId: 'ORD003',
-    parcelName: 'Whirlpool Washing Machine 7kg',
-    category: 'Washing Machine - Electric',
-    categoryBg: 'bg-[#EFF6FF]',
-    categoryText: 'text-[#2563EB]',
-    mobile: '9654782390',
-    amount: '22,400',
-    payment: 'Prepaid',
-    address: 'Near Gram Panchayat, Kowad',
-    deliveryDay: '2 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1610557892470-76d740220a3f?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Sanjay Desai',
-    transporterMobile: '9654782390',
-    transporterId: 'Z1029KL',
-    pickupTime: '02:30 PM',
-    vehicleNumber: 'Z1029KL',
-    currentHolder: 'Seller',
-    remainingQty: 3,
-    weight: '35',
-    time: '1 hr ago',
-    distance: 3.1
-  },
-  {
-    id: 'inc-4',
-    orderId: 'ORD004',
-    parcelName: 'IFB Microwave Oven 20L',
-    category: 'Microwave - Electronics',
-    categoryBg: 'bg-[#FFF7ED]',
-    categoryText: 'text-[#EA580C]',
-    mobile: '8877665544',
-    amount: '9,800',
-    payment: 'Online',
-    address: 'Market Yard, Ajara',
-    deliveryDay: '1 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Rajesh Shinde',
-    transporterMobile: '8877665544',
-    transporterId: 'W8823NM',
-    pickupTime: '04:15 PM',
-    vehicleNumber: 'W8823NM',
-    currentHolder: 'Seller',
-    remainingQty: 1,
-    weight: '20',
-    time: '1 hr ago',
-  },
-  {
-    id: 'inc-5',
-    orderId: 'ORD005',
-    parcelName: 'Sony WH-1000XM4 Headphones',
-    category: 'Audio - Electronics',
-    categoryBg: 'bg-[#FEE2E2]',
-    categoryText: 'text-[#EF4444]',
-    mobile: '9765432109',
-    amount: '19,990',
-    payment: 'COD',
-    address: 'Gandhi Road, Belagavi',
-    deliveryDay: '1 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Vijay Kadam',
-    transporterMobile: '9765432109',
-    transporterId: 'V7362OP',
-    pickupTime: '09:45 AM',
-    vehicleNumber: 'V7362OP',
-    currentHolder: 'Transporter',
-    remainingQty: 2,
-    weight: '3',
-    time: '2 hrs ago',
-    distance: 2.5
-  },
-  {
-    id: 'inc-6',
-    orderId: 'ORD006',
-    parcelName: 'Apple iPad Air M1',
-    category: 'Tablets - Electronics',
-    categoryBg: 'bg-[#F5F3FF]',
-    categoryText: 'text-[#7C3AED]',
-    mobile: '9123456789',
-    amount: '54,900',
-    payment: 'Prepaid',
-    address: 'Station Road, Nipani',
-    deliveryDay: '2 DAY DELIVERY',
-    status: 'assigned',
-    image: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?q=80&w=400&auto=format&fit=crop',
-    transporterName: 'Mahesh Shinde',
-    transporterMobile: '9123456789',
-    transporterId: 'A8293KL',
-    pickupTime: '11:15 AM',
-    vehicleNumber: 'A8293KL',
-    currentHolder: 'Seller',
-    remainingQty: 1,
-    weight: '5',
-    time: '3 hrs ago',
-    distance: 7.1
-  }
-];
-
-const MOCK_SELLERS = ["Home No. 23, Chandgad", "Sakhi Center, Near Primary School", "Patil Galli, Nesari", "Market Road, Gadhinglaj", "Shivaji Chowk, Chandgad", "Gram Panchayat Road, Halkarni"];
-const MOCK_BUYERS = ["HDFC Bank, Nesari", "ICICI Bank, Chandgad", "SBI Bank, Gadhinglaj", "Post Office, Chandgad", "Main Market, Nesari", "Bus Stand, Gadhinglaj"];
-const MOCK_DISTANCES = ["2.1", "3.4", "4.9", "5.7", "6.1", "7.3"];
-const MOCK_QTYS = [1, 2, 3, 4, 5, 6];
-
 const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
   const items = dbOrder.items || [];
-  const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || 'General Package';
-  const category = items[0]?.product?.category || 'Other';
+  const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || '';
+  const category = items[0]?.product?.category || '';
   
   const masterId = dbOrder.masterOrderId || dbOrder.id;
   
@@ -187,7 +81,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
     dbOrder.masterOrder?.items?.[0]?.seller?.address?.addressLine1,
     dbOrder.masterOrder?.items?.[0]?.seller?.address?.village
   ].filter(Boolean);
-  const actualPickupAddress = sellerAddressArr.length > 0 ? sellerAddressArr[0] : 'Pickup Address';
+  const actualPickupAddress = sellerAddressArr.length > 0 ? sellerAddressArr[0] : '';
   
   const buyerAddressArr = [
     dbOrder.buyer?.address?.addressLine1,
@@ -198,10 +92,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
     dbOrder.masterOrder?.buyer?.address?.village
   ].filter(Boolean);
   
-  // Explicitly ignore any address named "Test Drop Address" or "Test Avenue" if there's a real alternative
   let actualDropAddress = dbOrder.deliveryAddress;
   if (!actualDropAddress || actualDropAddress.includes('Test')) {
-    actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || 'Delivery Address');
+    actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || '');
   }
 
   return {
@@ -216,12 +109,12 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
     sourceAddress: actualPickupAddress,
     deliveryDay: '1 DAY DELIVERY',
     status: dbOrder.status === 'PENDING' ? 'assigned' : dbOrder.status === 'ACCEPTED' ? 'Accepted' : dbOrder.status === 'PICKED_UP' ? 'PickedUp' : dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
-    image: items[0]?.product?.image || 'https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=400&auto=format&fit=crop',
+    image: items[0]?.product?.image || '',
     currentHolder: dbOrder.status === 'PENDING' ? 'Seller' : 'SHG',
     remainingQty: qty,
-    weight: orderItems.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || 5,
-    distance: dbOrder.distance || dbOrder.masterOrder?.distance || (dbOrder.id ? parseFloat(((dbOrder.id * 7.3) % 8 + 2).toFixed(1)) : 3.5),
-    time: 'Just now',
+    weight: orderItems.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || '',
+    distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
+    time: dbOrder.createdAt ? new Date(dbOrder.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '',
     legType: type,
     rejectReason: type === 'pickup' 
       ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '') 
@@ -244,12 +137,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
   const [rejectedOrders, setRejectedOrders] = useState<Order[]>([]);
+  const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
   const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
 
   const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
-  const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders];
+  const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders, ...returnedOrders];
 
   const refreshOrdersList = useCallback(async () => {
     try {
@@ -345,6 +239,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return bNum - aNum;
       });
       setRejectedOrders(sortedRejected);
+
+      const sortedReturned = finalMapped.filter(o => o.status === 'RETURNED').sort((a, b) => {
+        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
+        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
+        return bNum - aNum;
+      });
+      setReturnedOrders(sortedReturned);
 
       // Completed = Everything Completed
       setDeliveredOrders(finalMapped.filter(o => o.status === 'COMPLETED'));
@@ -464,6 +365,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       deliveredOrders,
       pendingOrders,
       rejectedOrders,
+      returnedOrders,
       orders,
       highlightedOrders,
       getStockItems,

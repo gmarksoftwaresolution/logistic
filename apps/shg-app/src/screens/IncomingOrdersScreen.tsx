@@ -61,6 +61,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
   const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [activeTab, setActiveTab] = useState<'new' | 'returns'>('new');
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -288,11 +289,11 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
         showsVerticalScrollIndicator={false}
-        data={incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)}
+        data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : []}
         keyExtractor={item => item.id}
         ListHeaderComponent={<>
         {/* Top Action Buttons Row */}
-        {incomingOrders.length > 0 && <>
+        {incomingOrders.length > 0 && (
           <View className="flex-row justify-between px-1" style={{
           marginBottom: Spacing.sm,
           marginTop: Spacing.xs
@@ -353,7 +354,66 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Segment Tab Switcher */}
+        <View
+          className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mb-4 gap-2 mx-1"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.04,
+            shadowRadius: 10,
+            elevation: 3,
+            marginTop: incomingOrders.length > 0 ? 8 : 12,
+          }}
+        >
+          {/* New Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('new')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'new' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'new' ? {
+              shadowColor: '#073318',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'new' ? 'text-white' : 'text-slate-500'
+            }`}>
+              New
+            </Text>
+          </TouchableOpacity>
+
+          {/* Returns Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('returns')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'returns' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'returns' ? {
+              shadowColor: '#073318',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'returns' ? 'text-white' : 'text-slate-500'
+            }`}>
+              Returns
+            </Text>
+          </TouchableOpacity>
+        </View>
           
+        {activeTab === 'new' && incomingOrders.length > 0 && (
           <View className="flex-row justify-between items-center px-1 mb-4 mt-2">
             <Text style={{ fontFamily: Fonts.bold, fontSize: normalize(14.5), color: '#1E293B' }}>
               {t('su_incoming_requests') || 'Incoming Requests'} ({incomingOrders.length})
@@ -381,7 +441,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </Text>
             </TouchableOpacity>
           </View>
-          </>}
+        )}
 
         {/* Success Banner */}
         {showSuccessBanner && <View className="p-4 rounded-[16px] bg-[#ECFDF5] border border-[#D1FAE5] flex-row items-center justify-between mb-6 shadow-sm">
@@ -410,7 +470,15 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           </View>}
         </>}
         ListEmptyComponent={
-          incomingOrders.length === 0 ? (
+          activeTab === 'returns' ? (
+            <View className="flex-1 items-center justify-center py-20 mt-4">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4 border border-slate-100 shadow-sm">
+                <Ionicons name="refresh" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-[17px] font-black text-slate-800 text-center mb-1.5">No Return Orders</Text>
+              <Text className="text-[13px] font-medium text-slate-500 text-center px-4">Return orders will appear here when available.</Text>
+            </View>
+          ) : incomingOrders.length === 0 ? (
             <View className="flex-1 items-center justify-center py-20">
               <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
                 <Ionicons name="cube-outline" size={32} color="#94A3B8" />

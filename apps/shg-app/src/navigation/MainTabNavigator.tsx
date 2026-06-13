@@ -19,6 +19,7 @@ import DeliveryScreen from '../screens/DeliveryScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
+import ReturnOrdersScreen from '../screens/ReturnOrdersScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -174,6 +175,7 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
       <OrdersStack.Screen name="Delivery" component={DeliveryRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
+      <OrdersStack.Screen name="ReturnOrders" component={ReturnOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
     </OrdersStack.Navigator>

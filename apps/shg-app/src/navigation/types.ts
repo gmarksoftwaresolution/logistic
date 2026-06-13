@@ -3,6 +3,7 @@ export type OrdersStackParamList = {
   IncomingOrders: undefined;
   AcceptedOrders: { initialTab?: 'pickup' | 'delivery' } | undefined;
   RejectedOrders: undefined;
+  ReturnOrders: undefined;
   Delivery: undefined;
   CompletedOrders: undefined;
   OrderDetails: { order: any };

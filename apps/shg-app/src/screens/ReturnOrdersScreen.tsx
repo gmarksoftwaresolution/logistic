@@ -4,15 +4,11 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
-  Platform,
-  Linking,
   Dimensions,
   FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import Toast from 'react-native-toast-message';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -22,13 +18,12 @@ import { useUser } from '../context/UserContext';
 import { useOrders, Order } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
-import { ConfirmModal } from '../components/ConfirmModal';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
 
 type Props = CompositeScreenProps<
-  NativeStackScreenProps<OrdersStackParamList, 'AcceptedOrders'>,
+  NativeStackScreenProps<OrdersStackParamList, 'ReturnOrders'>,
   CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList>,
     NativeStackScreenProps<RootStackParamList>
@@ -37,41 +32,24 @@ type Props = CompositeScreenProps<
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
+const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder, highlightedOrders } = useOrders();
+  const { returnedOrders, highlightedOrders } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Delivery tab
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
-  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
+  // Filter orders
+  const pickupOrders = returnedOrders.filter(o => o.legType === 'pickup');
+  const deliveryOrders = returnedOrders.filter(o => o.legType === 'drop');
 
-  // Swipe & Pager Tab Switcher State
-  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>(
-    route.params?.initialTab === 'delivery' ? 'delivery' : 'pickup'
-  );
+  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>('pickup');
   const scrollViewRef = useRef<ScrollView>(null);
 
   const PAGE_SIZE = 5;
   const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
   const [deliveryVisibleCount, setDeliveryVisibleCount] = useState(PAGE_SIZE);
-
-  // Sync tab index when navigating between routes or receiving new initialTab param
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    const isDelivery = route.params?.initialTab === 'delivery';
-    setActiveTab(isDelivery ? 'delivery' : 'pickup');
-    timer = setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        x: isDelivery ? SCREEN_WIDTH : 0,
-        animated: false
-      });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [route.params?.initialTab, route.name]);
 
   const handleTabPress = (tab: 'pickup' | 'delivery') => {
     setActiveTab(tab);
@@ -90,33 +68,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  // Confirm Modal State
-  const [modalConfig, setModalConfig] = useState({
-    visible: false,
-    title: '',
-    message: '',
-    confirmText: 'Confirm',
-    onConfirm: () => { },
-  });
-
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
-
-  const handleQRScan = (order: Order) => {
-    setModalConfig({
-      visible: true,
-      title: t('confirm_pickup') || "Confirm Pickup",
-      message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
-      confirmText: t('su_confirm_358') || 'Confirm',
-      onConfirm: async () => {
-        try {
-          await receiveOrder(order);
-          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
-        } catch (error) {
-          Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to confirm pickup' });
-        }
-      }
-    });
-  };
 
   const handleEyeDetails = (order: Order) => {
     navigation.navigate('OrderDetails', { order });
@@ -124,10 +76,10 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
-      {/* Brand-Aligned GramUnnati Header */}
+      {/* Shared Header */}
       <SharedHeader
-        title={t("title_accepted_orders")}
-        subtitle={t("subtitle_accepted_orders")}
+        title="Returned Orders"
+        subtitle="Manage return pickup and return delivery orders"
         navigation={navigation}
       />
       {/* Mockup-Perfect Segment Tab Switcher */}
@@ -164,7 +116,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text className={`font-bold text-[13px] ml-1.5 ${
             activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
           }`}>
-            {t("tab_pickup")}
+            Pickup Returns
           </Text>
           <View 
             className="px-2.5 py-0.5 rounded-full ml-2"
@@ -201,7 +153,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text className={`font-bold text-[13px] ml-1.5 ${
             activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
           }`}>
-            {t("tab_delivery")}
+            Delivery Returns
           </Text>
           <View 
             className="px-2.5 py-0.5 rounded-full ml-2"
@@ -246,8 +198,11 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 >
                   <Ionicons name="cube-outline" size={28} color="#94A3B8" />
                 </View>
-                <Text className="text-[15px] font-black text-slate-700 text-center">
-                  {t("no_orders_pickup")}
+                <Text className="text-[16px] font-black text-slate-800 text-center mb-1.5">
+                  No Pickup Return Orders
+                </Text>
+                <Text className="text-[13px] font-medium text-slate-500 text-center px-4">
+                  No return pickup orders available.
                 </Text>
               </View>
             ) : null
@@ -269,8 +224,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 date={info.date}
                 time={info.time}
                 distance={item.distance}
-                showScanner={true}
-                onScan={() => handleQRScan(item)}
+                showScanner={false}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
@@ -310,8 +264,11 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 >
                   <Ionicons name="cube-outline" size={28} color="#94A3B8" />
                 </View>
-                <Text className="text-[15px] font-black text-slate-700 text-center">
-                  {t("no_orders_delivery")}
+                <Text className="text-[16px] font-black text-slate-800 text-center mb-1.5">
+                  No Delivery Return Orders
+                </Text>
+                <Text className="text-[13px] font-medium text-slate-500 text-center px-4">
+                  No return delivery orders available.
                 </Text>
               </View>
             ) : null
@@ -355,18 +312,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       </ScrollView>
 
-      <ConfirmModal
-        visible={modalConfig.visible}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        confirmText={modalConfig.confirmText}
-        onCancel={() => setModalConfig({ ...modalConfig, visible: false })}
-        onConfirm={() => {
-          modalConfig.onConfirm();
-          setModalConfig({ ...modalConfig, visible: false });
-        }}
-      />
-
       {selectedAddressOrder && (() => {
         const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
         return (
@@ -384,4 +329,4 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   );
 };
 
-export default AcceptedOrdersScreen;
+export default ReturnOrdersScreen;
