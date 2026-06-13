@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,46 +9,77 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
+import { Package, ChevronDown, ChevronRight, ChevronLeft, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useTranslation } from 'react-i18next';
 
-const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches, acceptBatch, rejectBatch, acceptBatchIds } = useOrderManagement();
+  const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList } = useOrderManagement();
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
-  const [rejectReasonText, setRejectReasonText] = useState('');
+  const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
+  const [customReasonText, setCustomReasonText] = useState('');
+  const modalScrollRef = useRef<ScrollView>(null);
+  const customReasonInputRef = useRef<TextInput>(null);
+  const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
+  const [isCustomInputFocused, setIsCustomInputFocused] = useState(false);
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleAcceptSingle = (batchId: string) => {
-    acceptBatch(batchId);
-    setShowSuccessModal(true);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  const handleAcceptBulk = (ids: string[]) => {
-    acceptBatchIds(ids);
-    setShowSuccessModal(true);
+
+
+  useEffect(() => {
+    if (route.params?.triggerRejectBatchId) {
+      setRejectingBatchId(route.params.triggerRejectBatchId);
+      navigation.setParams({ triggerRejectBatchId: undefined });
+    }
+  }, [route.params?.triggerRejectBatchId]);
+
+  const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
+    try {
+      await acceptBatch(batchId);
+      navigation.navigate('AcceptedOrders', { activeTab: type });
+    } catch (err) {
+      console.error('Failed to accept single batch:', err);
+    }
   };
 
-  // Track accordion expansion states per area. Defaulting all to true for immediate dispatch visibility.
-  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({
-    nesari: true,
-    wagrale: true,
-    Mahagaon: true,
-    'Gadhinglaj Hub': true,
-  });
+  const handleAcceptBulk = async (ids: string[]) => {
+    try {
+      await acceptBatchIds(ids);
+      setShowSuccessModal(false);
+      navigation.navigate('AcceptedOrders');
+    } catch (err) {
+      console.error('Failed to accept bulk batches:', err);
+    }
+  };
+
+  // Track accordion expansion states per area. Collapsed by default.
+  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({});
 
   const toggleAreaExpand = (areaName: string) => {
     setExpandedAreas((prev) => ({
       ...prev,
-      [areaName]: prev[areaName] === undefined ? false : !prev[areaName],
+      [areaName]: prev[areaName] === false ? true : false,
     }));
   };
 
@@ -83,14 +114,32 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     groupedEntries[displayArea].push(entry);
   });
 
-  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub'];
-  const areas = ORDERED_AREAS.filter(a => groupedEntries[a]);
+  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
+  const allFoundAreas = Object.keys(groupedEntries);
+  const areas = Array.from(new Set([...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas]));
 
-  const handleConfirmReject = () => {
-    if (rejectingBatchId && rejectReasonText.trim()) {
-      rejectBatch(rejectingBatchId, rejectReasonText.trim());
-      setRejectingBatchId(null);
-      setRejectReasonText('');
+  const handleCloseModal = () => {
+    setRejectingBatchId(null);
+    setSelectedReasonChip(null);
+    setCustomReasonText('');
+    setIsEditingCustomReason(false);
+    setIsCustomInputFocused(false);
+  };
+
+  const handleConfirmReject = async () => {
+    if (rejectingBatchId) {
+      let finalReason = '';
+      const isCustomReason = selectedReasonChip === t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
+      if (isCustomReason) {
+        finalReason = customReasonText.trim();
+      } else {
+        finalReason = selectedReasonChip || '';
+      }
+
+      if (finalReason.trim()) {
+        await rejectBatch(rejectingBatchId, finalReason.trim());
+        handleCloseModal();
+      }
     }
   };
 
@@ -113,9 +162,10 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   };
 
   const reasonChips = [
-    t('orders.reason_damaged', { defaultValue: 'Damaged stock items' }),
-    t('orders.reason_discrepancy', { defaultValue: 'Weight/Qty discrepancy' }),
-    t('orders.reason_clash', { defaultValue: 'Logistics schedule clash' })
+    t('orders.reason_vehicle_not_available', { defaultValue: 'Vehicle Not Available' }),
+    t('orders.reason_pickup_location_not_reachable', { defaultValue: 'Pickup Location Not Reachable' }),
+    t('orders.reason_transport_capacity_full', { defaultValue: 'Transport Capacity Full' }),
+    t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' }),
   ];
 
   return (
@@ -130,7 +180,18 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       <View style={{ height: verticalScale(14) }} />
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
+      >
         {areas.length === 0 ? (
           <View style={styles.emptyCard}>
             <Package size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
@@ -190,7 +251,13 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                             const routeText = getRouteDisplayText(batch, type, areaName);
                             return (
                               <View key={`${batch.id}-pickup-${index}`} style={styles.notificationWidgetCard}>
-                                <View style={styles.widgetLeftData}>
+                                <TouchableOpacity
+                                   style={styles.widgetLeftData}
+                                   activeOpacity={0.7}
+                                   onPress={() => {
+                                     navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'pickup' });
+                                   }}
+                                 >
                                   <View style={styles.widgetTopRow}>
                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
                                   </View>
@@ -201,22 +268,26 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                       <Text style={[styles.legTagText, { color: '#2563EB' }]}>{t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}</Text>
                                     </View>
                                   </View>
-                                </View>
+                                </TouchableOpacity>
                                 <View style={styles.actionStrip}>
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
                                         style={styles.modernAcceptBtn} 
-                                        onPress={() => {
-                                          acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type });
+                                        onPress={async () => {
+                                          try {
+                                            await acceptBatch(batch.id);
+                                            navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                          } catch (err) {
+                                            console.error('Failed to accept batch during walkthrough:', err);
+                                          }
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id)}>
+                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
@@ -240,33 +311,43 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                             const routeText = getRouteDisplayText(batch, type, areaName);
                             return (
                               <View key={`${batch.id}-drop-${index}`} style={styles.notificationWidgetCard}>
-                                <View style={styles.widgetLeftData}>
-                                  <View style={styles.widgetTopRow}>
-                                    <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
-                                  </View>
-                                  <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                                    <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
-                                    <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
-                                      <Text style={[styles.legTagText, { color: '#059669' }]}>{t('orders.drop_orders', { defaultValue: 'Drop Order' })}</Text>
-                                    </View>
-                                  </View>
-                                </View>
+                                <TouchableOpacity
+                                   style={styles.widgetLeftData}
+                                   activeOpacity={0.7}
+                                   onPress={() => {
+                                     navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'drop' });
+                                   }}
+                                 >
+                                   <View style={styles.widgetTopRow}>
+                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
+                                   </View>
+                                   <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
+                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                                     <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
+                                     <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
+                                       <Text style={[styles.legTagText, { color: '#059669' }]}>{t('orders.drop_orders', { defaultValue: 'Drop Order' })}</Text>
+                                     </View>
+                                   </View>
+                                 </TouchableOpacity>
                                 <View style={styles.actionStrip}>
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
                                         style={styles.modernAcceptBtn} 
-                                        onPress={() => {
-                                          acceptBatch(batch.id);
-                                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type });
+                                        onPress={async () => {
+                                          try {
+                                            await acceptBatch(batch.id);
+                                            navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
+                                          } catch (err) {
+                                            console.error('Failed to accept batch during walkthrough:', err);
+                                          }
                                         }}
                                       >
                                         <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id)}>
+                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
@@ -305,61 +386,112 @@ const CategoryOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         visible={!!rejectingBatchId}
         transparent
         animationType="fade"
-        onRequestClose={() => setRejectingBatchId(null)}
+        onRequestClose={handleCloseModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>{t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}</Text>
-              <TouchableOpacity onPress={() => setRejectingBatchId(null)} style={styles.closeBtn}>
-                <X size={scale(20)} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
-
-            <View style={styles.chipsContainer}>
-              {reasonChips.map((chip) => (
-                <TouchableOpacity
-                  key={chip}
-                  style={[
-                    styles.reasonChip,
-                    rejectReasonText === chip && styles.reasonChipSelected,
-                  ]}
-                  onPress={() => setRejectReasonText(chip)}
-                >
-                  <Text
-                    style={[
-                      styles.reasonChipText,
-                      rejectReasonText === chip && styles.reasonChipTextSelected,
-                    ]}
-                  >
-                    {chip}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput
-              style={styles.reasonInput}
-              placeholder={t('orders.or_write_custom_statement', { defaultValue: 'Or write custom statement...' })}
-              placeholderTextColor={Colors.textPlaceholder}
-              multiline
-              numberOfLines={3}
-              value={rejectReasonText}
-              onChangeText={setRejectReasonText}
-            />
-
-            <TouchableOpacity
-              style={[styles.confirmRejectBtn, !rejectReasonText.trim() && styles.btnDisabled]}
-              disabled={!rejectReasonText.trim()}
-              onPress={handleConfirmReject}
+            <ScrollView 
+              ref={modalScrollRef}
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ flexGrow: 1 }}
             >
-              <Text style={styles.confirmRejectText}>{t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}</Text>
-            </TouchableOpacity>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalTitle}>{t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}</Text>
+                <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
+                  <X size={scale(20)} color={Colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
+
+              <View style={styles.chipsContainer}>
+                {/* Standard Chips */}
+                {reasonChips.slice(0, 3).map((chip) => (
+                  <TouchableOpacity
+                    key={chip}
+                    style={[
+                      styles.reasonChip,
+                      selectedReasonChip === chip && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip(prev => {
+                        const next = prev === chip ? null : chip;
+                        setCustomReasonText('');
+                        customReasonInputRef.current?.blur();
+                        return next;
+                      });
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.reasonChipText,
+                        selectedReasonChip === chip && styles.reasonChipTextSelected,
+                      ]}
+                    >
+                      {chip}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                {/* Custom Reason TextInput (Styled exactly like a Chip) */}
+                {(() => {
+                  const customReasonPlaceholder = t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
+                  const isCustomActive = selectedReasonChip === customReasonPlaceholder;
+
+                  return (
+                    <TextInput
+                      ref={customReasonInputRef}
+                      style={[
+                        styles.reasonChipInput,
+                        isCustomActive && styles.reasonChipInputSelected,
+                      ]}
+                      placeholder={isCustomInputFocused ? '' : customReasonPlaceholder}
+                      placeholderTextColor={Colors.textPlaceholder}
+                      value={customReasonText}
+                      onChangeText={(text) => {
+                        setCustomReasonText(text);
+                        setSelectedReasonChip(customReasonPlaceholder);
+                      }}
+                      onFocus={() => {
+                        setSelectedReasonChip(customReasonPlaceholder);
+                        setIsCustomInputFocused(true);
+                      }}
+                      onBlur={() => {
+                        setIsCustomInputFocused(false);
+                      }}
+                      onPressIn={() => {
+                        setSelectedReasonChip(customReasonPlaceholder);
+                      }}
+                    />
+                  );
+                })()}
+              </View>
+
+              {(() => {
+                const isCustomSelected = selectedReasonChip === t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' });
+                
+                return (
+                  <View style={{ marginTop: verticalScale(12) }}>
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmRejectBtn,
+                        (!selectedReasonChip || (isCustomSelected && !customReasonText.trim())) && styles.btnDisabled
+                      ]}
+                      disabled={!selectedReasonChip || (isCustomSelected && !customReasonText.trim())}
+                      onPress={handleConfirmReject}
+                    >
+                      <Text style={styles.confirmRejectText}>
+                        {t('orders.confirm_reject', { defaultValue: 'Confirm Reject' })}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -709,6 +841,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: moderateScale(24),
     elevation: 5,
+    maxHeight: '85%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
@@ -731,18 +864,21 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(20),
   },
   chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: scale(8),
+    flexDirection: 'column',
+    gap: verticalScale(10),
     marginBottom: verticalScale(16),
+    width: '100%',
   },
   reasonChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(8),
-    borderRadius: scale(10),
-    borderWidth: 1,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(12),
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   reasonChipSelected: {
     backgroundColor: '#FEF2F2',
@@ -750,7 +886,7 @@ const styles = StyleSheet.create({
   },
   reasonChipText: {
     fontFamily: Fonts.medium,
-    fontSize: moderateScale(12),
+    fontSize: moderateScale(13.5),
     color: Colors.textSecondary,
   },
   reasonChipTextSelected: {
@@ -905,6 +1041,25 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(13.5),
     color: Colors.textPlaceholder,
+  },
+
+  reasonChipInput: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: scale(16),
+    paddingVertical: Platform.OS === 'ios' ? verticalScale(12) : verticalScale(10),
+    borderRadius: moderateScale(12),
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    width: '100%',
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13.5),
+    color: Colors.textSecondary,
+  },
+  reasonChipInputSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+    color: Colors.textPrimary,
+    fontFamily: Fonts.medium,
   },
 });
 

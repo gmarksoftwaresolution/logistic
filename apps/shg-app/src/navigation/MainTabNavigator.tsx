@@ -3,6 +3,9 @@ import { View, Text, Pressable, Platform, Animated } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LanguageContext } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { StepId } from '../context/OnboardingContext';
 
 import { MainTabParamList, OrdersStackParamList } from './types';
 
@@ -25,6 +28,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const context = useContext(LanguageContext);
   if (!context) return null;
   const { t } = context;
@@ -104,45 +108,51 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         let iconName: any;
         let displayLabel: string;
         let IconComponent: any = Ionicons;
+        let stepId: StepId = 'dashboard_tab';
 
         if (route.name === 'Dashboard') {
           iconName = isFocused ? 'grid' : 'grid-outline';
           displayLabel = t('home') || 'Home';
+          stepId = 'dashboard_tab';
         } else if (route.name === 'Orders') {
           IconComponent = MaterialCommunityIcons;
           iconName = isFocused ? 'truck' : 'truck-outline';
           displayLabel = t('title_order_management') || 'Order Management';
+          stepId = 'orders_tab';
         } else if (route.name === 'Earning') {
           IconComponent = Ionicons;
           iconName = isFocused ? 'wallet' : 'wallet-outline';
           displayLabel = t('earning') || 'Earnings';
+          stepId = 'earning_tab';
         } else {
           iconName = isFocused ? 'person' : 'person-outline';
           displayLabel = t('profile') || 'Profile';
+          stepId = 'profile_tab';
         }
 
         return (
-          <Pressable
-            key={index}
-            onPress={onPress}
-            className="items-center justify-center flex-1 h-full relative"
-          >
-            <View className="items-center justify-center pt-2">
-              <IconComponent 
-                name={iconName} 
-                size={22} 
-                color={isFocused ? "#073318" : "#94A3B8"} 
-              />
-              <Text 
-                numberOfLines={1}
-                className={`text-[10px] mt-1 text-center tracking-tight ${
-                  isFocused ? 'font-black text-[#073318]' : 'font-bold text-slate-400'
-                }`}
-              >
-                {displayLabel}
-              </Text>
-            </View>
-          </Pressable>
+          <WalkthroughElement key={index} stepId={stepId} style={{ flex: 1 }}>
+            <Pressable
+              onPress={onPress}
+              className="items-center justify-center flex-1 h-full relative"
+            >
+              <View className="items-center justify-center pt-2">
+                <IconComponent 
+                  name={iconName} 
+                  size={22} 
+                  color={isFocused ? "#073318" : "#94A3B8"} 
+                />
+                <Text 
+                  numberOfLines={1}
+                  className={`text-[10px] mt-1 text-center tracking-tight ${
+                    isFocused ? 'font-black text-[#073318]' : 'font-bold text-slate-400'
+                  }`}
+                >
+                  {displayLabel}
+                </Text>
+              </View>
+            </Pressable>
+          </WalkthroughElement>
         );
       })}
     </View>

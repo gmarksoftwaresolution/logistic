@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -9,6 +9,7 @@ import { PrismaModule } from './common/prisma.module';
 import { AdminModule } from './admin/admin.module';
 import { UserModule } from './user/user.module';
 import { ApplicationModule } from './application/application.module';
+import { LoggerMiddleware } from './common/logger.middleware';
 import { OrderModule } from './order/order.module';
 
 @Module({
@@ -28,4 +29,8 @@ import { OrderModule } from './order/order.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}

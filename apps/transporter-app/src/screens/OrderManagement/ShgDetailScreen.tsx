@@ -166,6 +166,13 @@ const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, nav
                       {product.proofImage && (
                         <Image source={{ uri: product.proofImage }} style={styles.capturedButtonReplacementImage} />
                       )}
+                      <TouchableOpacity
+                        style={styles.retakeIconButton}
+                        activeOpacity={0.8}
+                        onPress={() => handleDirectCapture(product.id)}
+                      >
+                        <Text style={styles.btnTextRetake}>Retake</Text>
+                      </TouchableOpacity>
                       <View style={styles.completedBadgePill}>
                         <CheckCircle size={scale(12)} color="#10B981" strokeWidth={2.5} />
                         <Text style={styles.completedBadgeText}>
@@ -607,6 +614,22 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(8.5),
     color: '#DC2626',
+  },
+  retakeIconButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.2,
+    borderColor: '#BFDBFE',
+    paddingVertical: verticalScale(4),
+    paddingHorizontal: scale(8),
+    borderRadius: scale(8),
+    minWidth: scale(56),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnTextRetake: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: '#2563EB',
   },
   modalOverlay: {
     flex: 1,

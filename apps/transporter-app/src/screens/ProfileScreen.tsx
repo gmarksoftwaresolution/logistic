@@ -50,6 +50,59 @@ import { useOnboarding } from '../context/OnboardingContext';
 
 const { width } = Dimensions.get('window');
 
+const parseLocations = (locationsVal: any): string[] => {
+  if (!locationsVal || locationsVal === '-' || locationsVal === '[]') {
+    return [];
+  }
+  if (Array.isArray(locationsVal)) {
+    return locationsVal;
+  }
+  if (typeof locationsVal === 'string') {
+    try {
+      const parsed = JSON.parse(locationsVal);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (e) {
+      if (locationsVal.includes(',')) {
+        return locationsVal.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return [locationsVal];
+    }
+  }
+  return [];
+};
+
+const renderConnectingDots = (locations: string[], themeColor: string = Colors.primary) => {
+  if (!locations || locations.length === 0) {
+    return <Text style={styles.detailValue}>-</Text>;
+  }
+
+  return (
+    <View style={styles.timelineContainer}>
+      {locations.map((loc, index) => {
+        const isLast = index === locations.length - 1;
+        return (
+          <View key={index} style={styles.timelineItem}>
+            {/* Left Column: Dot and line */}
+            <View style={styles.timelineLeftCol}>
+              <View style={[styles.timelineDotOuter, { backgroundColor: themeColor + '20' }]}>
+                <View style={[styles.timelineDotInner, { backgroundColor: themeColor }]} />
+              </View>
+              {!isLast && <View style={[styles.timelineLine, { backgroundColor: themeColor + '30' }]} />}
+            </View>
+            
+            {/* Right Column: Content */}
+            <View style={styles.timelineRightCol}>
+              <Text style={styles.timelineText}>{loc}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
 const ProfileScreen: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigation = useNavigation<any>();
@@ -167,6 +220,11 @@ const ProfileScreen: React.FC = () => {
       async () => {
         await AsyncStorage.removeItem('access_token');
         await AsyncStorage.removeItem('cached-profile-data');
+        await AsyncStorage.removeItem('completed_drop_pickups');
+        await AsyncStorage.removeItem('transporter_activities');
+        await AsyncStorage.removeItem('rejected_batches');
+        await AsyncStorage.removeItem('completed_batches');
+        await AsyncStorage.removeItem('captured_photos');
         navigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],
@@ -237,6 +295,7 @@ const ProfileScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       <ScreenHeader
         title={t('profile.my_profile')}
+        subtitle={t('profile.subtitle')}
         showBackButton={true}
         showProfile={false}
         showHelp={false}
@@ -512,36 +571,83 @@ const ProfileScreen: React.FC = () => {
             <Calendar size={scale(20)} color={Colors.primary} />,
             'route'
           )}
-          {activeSection === 'route' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.route_from')}</Text>
-                <Text style={styles.detailValue}>{routeDetails?.routeFrom || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.route_to')}</Text>
-                <Text style={styles.detailValue}>{routeDetails?.routeTo || '-'}</Text>
-              </View>
+          {activeSection === 'route' && (() => {
+            const isMilkVan = profileData.vehicleCategory === 'MILK_VAN';
+            
+            // Format working days array/string
+            const days = routeDetails?.workingDays;
+            let formattedDays = '-';
+            if (Array.isArray(days)) {
+              formattedDays = days.join(', ');
+            } else if (typeof days === 'string') {
+              try {
+                if (days.startsWith('[')) {
+                  formattedDays = JSON.parse(days).join(', ');
+                } else {
+                  formattedDays = days;
+                }
+              } catch (e) {
+                formattedDays = days;
+              }
+            }
 
-              <View style={styles.gridRow}>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.morning_shift')}</Text>
-                  <Text style={styles.detailValue}>{routeDetails?.morningShift || '-'}</Text>
-                </View>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.evening_shift')}</Text>
-                  <Text style={styles.detailValue}>{routeDetails?.eveningShift || '-'}</Text>
-                </View>
-              </View>
+            if (isMilkVan) {
+              const villages = parseLocations(milkVanDetails?.assignedVillages);
 
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.days_available')}</Text>
-                <Text style={styles.detailValue}>
-                  {routeDetails?.daysAvailable ? JSON.parse(routeDetails.daysAvailable).join(', ') : '-'}
-                </Text>
-              </View>
-            </View>
-          )}
+              return (
+                <View style={styles.sectionBody}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.assigned_villages') || 'Assigned Villages'}</Text>
+                    {renderConnectingDots(villages, '#10B981')}
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.milk_center_name') || 'Milk Center'}</Text>
+                    <Text style={styles.detailValue}>{milkVanDetails?.centerName || '-'}</Text>
+                  </View>
+
+                  <View style={styles.gridRow}>
+                    <View style={styles.gridCol}>
+                      <Text style={styles.detailLabel}>{t('signup.morning_shift') || 'Morning Shift'}</Text>
+                      <Text style={styles.detailValue}>{milkVanDetails?.morningShiftTime || '-'}</Text>
+                    </View>
+                    <View style={styles.gridCol}>
+                      <Text style={styles.detailLabel}>{t('signup.evening_shift') || 'Evening Shift'}</Text>
+                      <Text style={styles.detailValue}>{milkVanDetails?.eveningShiftTime || '-'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
+                    <Text style={styles.detailValue}>{formattedDays}</Text>
+                  </View>
+                </View>
+              );
+            } else {
+              const pickupLocs = parseLocations(routeDetails?.pickupLocations);
+              const dropLocs = parseLocations(routeDetails?.dropLocations);
+
+              return (
+                <View style={styles.sectionBody}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.route_from') || 'Route From'}</Text>
+                    {renderConnectingDots(pickupLocs, '#10B981')}
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.route_to') || 'Route To'}</Text>
+                    {renderConnectingDots(dropLocs, '#F59E0B')}
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.operating_area') || 'Operating Area'}</Text>
+                    <Text style={styles.detailValue}>{routeDetails?.operatingArea || '-'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
+                    <Text style={styles.detailValue}>{formattedDays}</Text>
+                  </View>
+                </View>
+              );
+            }
+          })()}
         </View>
 
         {/* Settings & App Quick actions */}
@@ -1380,6 +1486,49 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(14),
     color: '#FFFFFF',
+  },
+  timelineContainer: {
+    marginTop: verticalScale(8),
+    paddingLeft: scale(4),
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  timelineLeftCol: {
+    alignItems: 'center',
+    width: scale(16),
+    marginRight: scale(12),
+  },
+  timelineDotOuter: {
+    width: scale(16),
+    height: scale(16),
+    borderRadius: scale(8),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: verticalScale(3),
+  },
+  timelineDotInner: {
+    width: scale(8),
+    height: scale(8),
+    borderRadius: scale(4),
+  },
+  timelineLine: {
+    width: scale(2),
+    position: 'absolute',
+    top: verticalScale(20),
+    bottom: 0,
+  },
+  timelineRightCol: {
+    flex: 1,
+    paddingBottom: verticalScale(14),
+    justifyContent: 'center',
+  },
+  timelineText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: Colors.textPrimary,
+    lineHeight: moderateScale(18),
   },
 });
 

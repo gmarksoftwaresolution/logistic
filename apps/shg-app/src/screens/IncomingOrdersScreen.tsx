@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import TextTicker from 'react-native-text-ticker';
@@ -21,6 +21,8 @@ import { RejectReasonModal } from '../components/RejectReasonModal';
 import { OrderDistance } from '../components/OrderDistance';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
+import WalkthroughElement from '../components/WalkthroughElement';
+import { useOnboarding } from '../context/OnboardingContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
   navigation
@@ -36,6 +38,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     acceptAllOrders,
     rejectOrder
   } = useOrders();
+  const { isActive, currentStep, nextStep } = useOnboarding();
+  const insets = useSafeAreaInsets();
   if (!context || !user) return null;
   const {
     t
@@ -84,6 +88,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     { key: 'orders_other', default: 'Other' }
   ];
   const isAllSelected = incomingOrders.length > 0 && selectedIds.length === incomingOrders.length;
+
   const handleSelectAllToggle = () => {
     if (isAllSelected) {
       setSelectedIds([]);
@@ -284,16 +289,17 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             </TouchableOpacity>
 
             {/* Right Button: Accept All */}
-            <TouchableOpacity onPress={handleAcceptAll} activeOpacity={0.75} className="flex-1 h-[50px] bg-[#073318] rounded-[25px] flex-row items-center justify-center ml-2 shadow-md" style={{
-            shadowColor: '#073318',
-            shadowOffset: {
-              width: 0,
-              height: 3
-            },
-            shadowOpacity: 0.2,
-            shadowRadius: 5,
-            elevation: 4
-          }}>
+            <TouchableOpacity onPress={handleAcceptAll} activeOpacity={0.75} className="flex-1 h-[50px] bg-[#073318] rounded-[25px] flex-row items-center justify-center shadow-md" style={{
+              shadowColor: '#073318',
+              shadowOffset: {
+                width: 0,
+                height: 3
+              },
+              shadowOpacity: 0.2,
+              shadowRadius: 5,
+              elevation: 4,
+              marginLeft: 8
+            }}>
               <Ionicons name="checkmark-circle-outline" size={18} color="white" />
               <Text style={{
               fontFamily: Fonts.bold,
@@ -355,7 +361,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               <Ionicons name="cube-outline" size={32} color="#94A3B8" />
             </View>
             <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
-          </View> : incomingOrders.map(item => {
+          </View> : incomingOrders.map((item, index) => {
         const isSelected = selectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
@@ -513,20 +519,43 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           </TouchableOpacity>
 
           {/* Accept Button */}
-          <TouchableOpacity onPress={handleAcceptSelected} activeOpacity={0.8} className="flex-1 flex-row items-center justify-center bg-[#073318] py-3.5 rounded-[22px] shadow-md" style={{
-        shadowColor: '#073318',
-        shadowOffset: {
-          width: 0,
-          height: 3
-        },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 4
-      }}>
-            <Ionicons name="checkmark-circle" size={18} color="white" />
-            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})
-            </Text>
-          </TouchableOpacity>
+          {modalConfig.visible ? (
+            <View style={{ flex: 1 }}>
+              <TouchableOpacity onPress={handleAcceptSelected} activeOpacity={0.8} className="w-full flex-row items-center justify-center bg-[#073318] py-3.5 rounded-[22px] shadow-md" style={{
+                shadowColor: '#073318',
+                shadowOffset: {
+                  width: 0,
+                  height: 3
+                },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 4
+              }}>
+                <Ionicons name="checkmark-circle" size={18} color="white" />
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <WalkthroughElement
+              stepId="accept_selected_button"
+              autoAdvance={false}
+              style={{ flex: 1 }}
+            >
+              <TouchableOpacity onPress={handleAcceptSelected} activeOpacity={0.8} className="w-full flex-row items-center justify-center bg-[#073318] py-3.5 rounded-[22px] shadow-md" style={{
+                shadowColor: '#073318',
+                shadowOffset: {
+                  width: 0,
+                  height: 3
+                },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 4
+              }}>
+                <Ionicons name="checkmark-circle" size={18} color="white" />
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+              </TouchableOpacity>
+            </WalkthroughElement>
+          )}
         </Animated.View>}
 
       {/* Centered Modal for Rescheduling Date/Time */}
@@ -739,7 +768,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         ...modalConfig,
         visible: false
       });
-    }} />
+    }} confirmStepId="accept_selected_button" />
 
       {/* Reject Reason Modal */}
       <RejectReasonModal visible={rejectModalVisible} order={ordersToRejectBatch[currentRejectIndex] || null} onClose={() => {

@@ -1,4 +1,4 @@
-process.env.DATABASE_URL = "postgresql://postgres.xbzmwdluefqbhicynhnp:Shridhar@21@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:root@localhost:5432/logistic_db?schema=public";
 
 import { PrismaClient, UserRole } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -138,23 +138,317 @@ async function main() {
     console.log('Product already exists:', product.name);
   }
 
-  // 5. Query specific SHG user (7777777777) & specific Transporter user (9999999999)
-  console.log('Querying target SHG (7777777777) & Transporter (9999999999)...');
-  const targetShg = await prisma.user.findFirst({
+  // 5. Ensure target SHG (7777777777) exists
+  console.log('Ensuring target SHG (7777777777) exists...');
+  let targetShg = await prisma.user.findFirst({
     where: { phoneNumber: '7777777777', role: UserRole.SHG }
   });
 
-  const targetTransporter = await prisma.user.findFirst({
-    where: { phoneNumber: '9999999999', role: UserRole.TRANSPORTER }
+  if (!targetShg) {
+    targetShg = await prisma.user.create({
+      data: {
+        authId: randomUUID(),
+        phoneNumber: '7777777777',
+        role: UserRole.SHG,
+        fullName: 'Mahadev (SHG Leader)',
+        isVerified: true,
+        address: {
+          create: {
+            addressLine1: 'Gram Panchayat Marg',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+          }
+        },
+        shgDetail: {
+          create: {
+            shgName: 'Nesari Bachat Gat',
+            shgLeaderName: 'Mahadev',
+            shgLeaderContact: '7777777777',
+            groupSize: 12,
+          }
+        }
+      }
+    });
+    console.log('Created new target SHG user:', targetShg.fullName);
+  } else {
+    console.log('Found existing target SHG User:', targetShg.fullName);
+  }
+
+  // 6. Ensure Transporter User 9999999999 is fully seeded with all fields
+  console.log('Ensuring Transporter User 9999999999 is fully seeded with all fields...');
+  
+  const existingTransporter = await prisma.user.findUnique({
+    where: { phoneNumber: '9999999999' }
   });
 
-  if (!targetShg) {
-    console.error('ERROR: Could not find SHG user with phone "7777777777" in DB.');
-    return;
-  }
-  if (!targetTransporter) {
-    console.error('ERROR: Could not find Transporter user with phone "9999999999" in DB.');
-    return;
+  let targetTransporter;
+
+  if (existingTransporter) {
+    console.log('Resetting relations for existing Transporter User to perform clean seed...');
+    await prisma.address.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.bankDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.document.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.vehicle.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.transporterDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.drivingDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.routeDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.milkVanDetail.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.application.deleteMany({ where: { userId: existingTransporter.id } });
+    await prisma.stepTracking.deleteMany({ where: { userId: existingTransporter.id } });
+
+    targetTransporter = await prisma.user.update({
+      where: { id: existingTransporter.id },
+      data: {
+        role: UserRole.TRANSPORTER,
+        fullName: 'Mahendra Powar',
+        profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        language: 'English',
+        isVerified: true,
+        currentStep: 6,
+        profileCompletion: 100,
+        applicationStatus: 'APPROVED',
+        ...(!existingTransporter.uniqueCode ? { uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000) } : {}),
+        approvedAt: new Date(),
+        
+        address: {
+          create: {
+            addressLine1: 'Shivaji Chowk, Main Road',
+            addressLine2: 'Near Gram Panchayat',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+            landmark: 'Water Tank',
+            latitude: 16.0333,
+            longitude: 74.3333,
+          }
+        },
+        
+        bankDetails: {
+          create: {
+            accountHolderName: 'Mahendra Powar',
+            bankName: 'State Bank of India',
+            accountNumber: '32109876543',
+            ifscCode: 'SBIN0001234',
+            branchName: 'Nesari Branch',
+            upiId: 'mahendra@sbi',
+            isVerified: true,
+          }
+        },
+        
+        documents: {
+          create: {
+            aadhaarNumber: '123456789012',
+            panNumber: 'ABCDE1234F',
+            drivingLicenseNo: 'MH-09-2023-1234567',
+            aadhaarFrontUrl: '/uploads/license_placeholder.png',
+            aadhaarBackUrl: '/uploads/license_placeholder.png',
+            panCardUrl: '/uploads/license_placeholder.png',
+            drivingLicenseUrl: '/uploads/license_placeholder.png',
+          }
+        },
+        
+        vehicles: {
+          create: {
+            vehicleType: 'FOUR_WHEELER',
+            vehicleName: 'Mahindra Bolero Pickup',
+            registrationNumber: 'MH-09-EQ-4321',
+            licenseNumber: 'MH-09-2023-1234567',
+            rcUrl: '/uploads/rc_book_placeholder.png',
+            insuranceUrl: '/uploads/insurance_placeholder.png',
+            vehicleImageUrl: '/uploads/rc_book_placeholder.png',
+          }
+        },
+        
+        transporterDetail: {
+          create: {
+            transporterCode: 'TRP-M-50',
+            vehicleCategory: 'FOUR_WHEELER',
+            experienceYears: 5,
+            availableFullTime: true,
+          }
+        },
+        
+        drivingDetail: {
+          create: {
+            licenseNumber: 'MH-09-2023-1234567',
+            expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
+            drivingExperience: 5,
+          }
+        },
+        
+        routeDetail: {
+          create: {
+            operatingArea: 'Gadhinglaj and surrounding talukas',
+            pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
+            dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
+            workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
+            workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
+          }
+        },
+        
+        milkVanDetail: {
+          create: {
+            sangathanName: 'Warna Dairy Sangathan',
+            centerName: 'Nesari Center',
+            assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
+            morningShiftTime: '06:00 - 09:00',
+            eveningShiftTime: '17:00 - 20:00',
+          }
+        },
+        
+        applications: {
+          create: {
+            status: 'APPROVED',
+            reviewedBy: 'Admin',
+            approvedAt: new Date(),
+          }
+        },
+        
+        stepTracking: {
+          createMany: {
+            data: [
+              { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
+              { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
+              { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
+              { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
+              { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
+              { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
+            ]
+          }
+        }
+      }
+    });
+  } else {
+    targetTransporter = await prisma.user.create({
+      data: {
+        authId: randomUUID(),
+        phoneNumber: '9999999999',
+        role: UserRole.TRANSPORTER,
+        fullName: 'Mahendra Powar',
+        profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        language: 'English',
+        isVerified: true,
+        currentStep: 6,
+        profileCompletion: 100,
+        applicationStatus: 'APPROVED',
+        uniqueCode: 'TRP-' + Math.floor(100000 + Math.random() * 900000),
+        approvedAt: new Date(),
+        
+        address: {
+          create: {
+            addressLine1: 'Shivaji Chowk, Main Road',
+            addressLine2: 'Near Gram Panchayat',
+            village: 'Nesari',
+            taluka: 'Gadhinglaj',
+            district: 'Kolhapur',
+            state: 'Maharashtra',
+            pincode: '416504',
+            landmark: 'Water Tank',
+            latitude: 16.0333,
+            longitude: 74.3333,
+          }
+        },
+        
+        bankDetails: {
+          create: {
+            accountHolderName: 'Mahendra Powar',
+            bankName: 'State Bank of India',
+            accountNumber: '32109876543',
+            ifscCode: 'SBIN0001234',
+            branchName: 'Nesari Branch',
+            upiId: 'mahendra@sbi',
+            isVerified: true,
+          }
+        },
+        
+        documents: {
+          create: {
+            aadhaarNumber: '123456789012',
+            panNumber: 'ABCDE1234F',
+            drivingLicenseNo: 'MH-09-2023-1234567',
+            aadhaarFrontUrl: '/uploads/license_placeholder.png',
+            aadhaarBackUrl: '/uploads/license_placeholder.png',
+            panCardUrl: '/uploads/license_placeholder.png',
+            drivingLicenseUrl: '/uploads/license_placeholder.png',
+          }
+        },
+        
+        vehicles: {
+          create: {
+            vehicleType: 'FOUR_WHEELER',
+            vehicleName: 'Mahindra Bolero Pickup',
+            registrationNumber: 'MH-09-EQ-4321',
+            licenseNumber: 'MH-09-2023-1234567',
+            rcUrl: '/uploads/rc_book_placeholder.png',
+            insuranceUrl: '/uploads/insurance_placeholder.png',
+            vehicleImageUrl: '/uploads/rc_book_placeholder.png',
+          }
+        },
+        
+        transporterDetail: {
+          create: {
+            transporterCode: 'TRP-M-50',
+            vehicleCategory: 'FOUR_WHEELER',
+            experienceYears: 5,
+            availableFullTime: true,
+          }
+        },
+        
+        drivingDetail: {
+          create: {
+            licenseNumber: 'MH-09-2023-1234567',
+            expiryDate: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000),
+            drivingExperience: 5,
+          }
+        },
+        
+        routeDetail: {
+          create: {
+            operatingArea: 'Gadhinglaj and surrounding talukas',
+            pickupLocations: JSON.stringify(['Nesari', 'Koulage', 'Hingalaj']),
+            dropLocations: JSON.stringify(['Gadhinglaj Hub', 'Kolhapur City']),
+            workingDays: JSON.stringify(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']),
+            workingSchedule: JSON.stringify({ shift: 'Morning', hours: '08:00 - 18:00' }),
+          }
+        },
+        
+        milkVanDetail: {
+          create: {
+            sangathanName: 'Warna Dairy Sangathan',
+            centerName: 'Nesari Center',
+            assignedVillages: JSON.stringify(['Nesari', 'Koulage']),
+            morningShiftTime: '06:00 - 09:00',
+            eveningShiftTime: '17:00 - 20:00',
+          }
+        },
+        
+        applications: {
+          create: {
+            status: 'APPROVED',
+            reviewedBy: 'Admin',
+            approvedAt: new Date(),
+          }
+        },
+        
+        stepTracking: {
+          createMany: {
+            data: [
+              { step: 1, status: 'COMPLETED', data: JSON.stringify({ role: 'TRANSPORTER' }) },
+              { step: 2, status: 'COMPLETED', data: JSON.stringify({ personalInfo: 'done' }) },
+              { step: 3, status: 'COMPLETED', data: JSON.stringify({ address: 'done' }) },
+              { step: 4, status: 'COMPLETED', data: JSON.stringify({ vehicle: 'done' }) },
+              { step: 5, status: 'COMPLETED', data: JSON.stringify({ route: 'done' }) },
+              { step: 6, status: 'COMPLETED', data: JSON.stringify({ bankAndDocs: 'done' }) },
+            ]
+          }
+        }
+      }
+    });
   }
 
   console.log(`Found SHG User: ${targetShg.fullName} (ID: ${targetShg.id})`);
@@ -163,84 +457,133 @@ async function main() {
   // 6. Generate test orders for this specific pair
   console.log('Generating customized mock orders...');
 
-  // --- Order 1: Assigned Pickup ---
-  const orderNo1 = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-  const masterOrder1 = await prisma.masterOrder.create({
-    data: {
-      orderNumber: orderNo1,
-      buyerId: buyer.id,
-      totalAmount: 240.0,
-      paymentStatus: 'PENDING',
-      status: 'CREATED',
-      items: {
-        create: {
-          productId: product.id,
-          sellerId: seller.id,
-          quantity: 2,
-          price: 120.0,
+  // Generate 5 Pickup Orders
+  for (let i = 1; i <= 5; i++) {
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-P${i}-${Math.floor(Math.random() * 100)}`;
+    const quantity = i + 1;
+    const price = 120.0;
+    const totalAmount = quantity * price;
+
+    const masterOrder = await prisma.masterOrder.create({
+      data: {
+        orderNumber: orderNo,
+        buyerId: buyer.id,
+        totalAmount,
+        paymentStatus: 'PENDING',
+        status: 'CREATED',
+        items: {
+          create: {
+            productId: product.id,
+            sellerId: seller.id,
+            quantity,
+            price,
+          }
         }
       }
-    }
-  });
+    });
 
-  const pickupOrder = await prisma.pickupOrder.create({
-    data: {
-      pickupOrderNumber: `PKP-${orderNo1}`,
-      masterOrderId: masterOrder1.id,
-      sellerId: seller.id,
-      shgId: targetShg.id,
-      transporterId: targetTransporter.id,
-      status: 'PENDING',
-      items: {
-        create: {
-          productId: product.id,
-          quantity: 2,
+    const pickupOrder = await prisma.pickupOrder.create({
+      data: {
+        pickupOrderNumber: `PKP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        sellerId: seller.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
         }
       }
-    }
-  });
+    });
 
-  console.log(`  -> Created assigned Pickup Order: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
+    console.log(`  -> Created assigned Pickup Order ${i}: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
 
-  // --- Order 2: Assigned Drop ---
-  const orderNo2 = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-  const masterOrder2 = await prisma.masterOrder.create({
-    data: {
-      orderNumber: orderNo2,
-      buyerId: buyer.id,
-      totalAmount: 360.0,
-      paymentStatus: 'PENDING',
-      status: 'CREATED',
-      items: {
-        create: {
-          productId: product.id,
-          sellerId: seller.id,
-          quantity: 3,
-          price: 120.0,
+    const dropPointNamesForPickup = [
+      'Nesari Stand, Gadhinglaj',
+      'Koulage Crossing, Gadhinglaj',
+      'Hingalaj Road Primary School',
+      'Wagharale Naka Market',
+      'Mahagaon Gram Panchayat'
+    ];
+    const deliveryAddressForPickup = dropPointNamesForPickup[i - 1] || 'Nesari Stand, Gadhinglaj';
+
+    const correlatedDropOrder = await prisma.dropOrder.create({
+      data: {
+        dropOrderNumber: `DRP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        buyerId: buyer.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        deliveryAddress: deliveryAddressForPickup,
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
         }
       }
-    }
-  });
+    });
+    console.log(`  -> Created correlated Drop Order for Pickup ${i}: ${correlatedDropOrder.dropOrderNumber} (ID: ${correlatedDropOrder.id})`);
+  }
 
-  const dropOrder = await prisma.dropOrder.create({
-    data: {
-      dropOrderNumber: `DRP-${orderNo2}`,
-      masterOrderId: masterOrder2.id,
-      buyerId: buyer.id,
-      shgId: targetShg.id,
-      transporterId: targetTransporter.id,
-      status: 'PENDING',
-      deliveryAddress: buyer.address ? `${buyer.address.addressLine1}, ${buyer.address.village}` : 'Nesari Stand, Gadhinglaj',
-      items: {
-        create: {
-          productId: product.id,
-          quantity: 3,
+  // Generate 5 Drop Orders
+  for (let i = 1; i <= 5; i++) {
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-D${i}-${Math.floor(Math.random() * 100)}`;
+    const quantity = i + 2;
+    const price = 120.0;
+    const totalAmount = quantity * price;
+
+    const masterOrder = await prisma.masterOrder.create({
+      data: {
+        orderNumber: orderNo,
+        buyerId: buyer.id,
+        totalAmount,
+        paymentStatus: 'PENDING',
+        status: 'CREATED',
+        items: {
+          create: {
+            productId: product.id,
+            sellerId: seller.id,
+            quantity,
+            price,
+          }
         }
       }
-    }
-  });
+    });
 
-  console.log(`  -> Created assigned Drop Order: ${dropOrder.dropOrderNumber} (ID: ${dropOrder.id})`);
+    const dropPointNames = [
+      'Nesari Stand, Gadhinglaj',
+      'Koulage Crossing, Gadhinglaj',
+      'Hingalaj Road Primary School',
+      'Wagharale Naka Market',
+      'Mahagaon Gram Panchayat'
+    ];
+    const deliveryAddress = dropPointNames[i - 1] || 'Nesari Stand, Gadhinglaj';
+
+    const dropOrder = await prisma.dropOrder.create({
+      data: {
+        dropOrderNumber: `DRP-${orderNo}`,
+        masterOrderId: masterOrder.id,
+        buyerId: buyer.id,
+        shgId: targetShg.id,
+        transporterId: targetTransporter.id,
+        status: 'PENDING',
+        deliveryAddress,
+        items: {
+          create: {
+            productId: product.id,
+            quantity,
+          }
+        }
+      }
+    });
+
+    console.log(`  -> Created assigned Drop Order ${i}: ${dropOrder.dropOrderNumber} (ID: ${dropOrder.id})`);
+  }
 
   console.log('--- SEEDING COMPLETED SUCCESSFULLY ---');
 }

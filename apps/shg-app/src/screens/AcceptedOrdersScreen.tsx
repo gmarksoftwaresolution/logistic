@@ -23,6 +23,7 @@ import { SharedHeader } from '../components/SharedHeader';
 import { OrderCard } from '../components/OrderCard';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
+import { useOnboarding } from '../context/OnboardingContext';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'AcceptedOrders'>,
@@ -38,6 +39,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
   const { acceptedOrders, receiveOrder } = useOrders();
+  const { isActive, currentStep } = useOnboarding();
 
   if (!context || !user) return null;
   const { t } = context;

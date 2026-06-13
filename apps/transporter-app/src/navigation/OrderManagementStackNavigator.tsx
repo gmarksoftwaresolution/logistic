@@ -7,7 +7,7 @@ import AcceptedOrdersScreen from '../screens/OrderManagement/AcceptedOrdersScree
 import OrderBatchRejectedScreen from '../screens/OrderManagement/OrderBatchRejectedScreen';
 import OrderBatchCompletedScreen from '../screens/OrderManagement/OrderBatchCompletedScreen';
 import OrderBatchPickupDetailScreen from '../screens/OrderManagement/OrderBatchPickupDetailScreen';
-import CameraCaptureScreen from '../screens/OrderManagement/CameraCaptureScreen';
+import ActivityOrderDetailScreen from '../screens/OrderManagement/ActivityOrderDetailScreen';
 
 // Legacy components fallback import
 import GmuDetailScreen from '../screens/OrderManagement/GmuDetailScreen';
@@ -16,13 +16,13 @@ import ShgDetailScreen from '../screens/OrderManagement/ShgDetailScreen';
 
 export type OrderManagementStackParamList = {
   OrderManagementMain: undefined;
-  CategoryOrders: { category: 'new' | 'accepted' | 'rejected' | 'completed' };
-  AcceptedOrders: undefined;
+  CategoryOrders: { category: 'new' | 'accepted' | 'rejected' | 'completed'; triggerRejectBatchId?: string };
+  AcceptedOrders: { activeTab?: 'pickup' | 'drop' } | undefined;
   OrderBatchRejected: undefined;
   OrderBatchCompleted: undefined;
   OrderBatchPickupDetail: { batchId: string };
-  CameraCapture: { batchId: string; productId: string; context: 'pickup' | 'drop'; productName: string; shgId?: string };
-  
+  ActivityOrderDetail: { batchId: string };
+
   // legacy backwards safety parameter map
   GmuDetail: undefined;
   AreaShgList: { routeId: string; areaName: string };
@@ -40,15 +40,15 @@ const OrderManagementStackNavigator = () => {
       <Stack.Screen name="OrderBatchRejected" component={OrderBatchRejectedScreen} />
       <Stack.Screen name="OrderBatchCompleted" component={OrderBatchCompletedScreen} />
       <Stack.Screen name="OrderBatchPickupDetail" component={OrderBatchPickupDetailScreen} />
-      <Stack.Screen 
-        name="CameraCapture" 
-        component={CameraCaptureScreen} 
-        options={{ 
-          presentation: 'fullScreenModal',
-          animation: 'fade' 
-        }} 
+      <Stack.Screen
+        name="ActivityOrderDetail"
+        component={ActivityOrderDetailScreen}
+        options={{
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom'
+        }}
       />
-      
+
       {/* Legacy registered bindings to keep older folders from unused breakages */}
       <Stack.Screen name="GmuDetail" component={GmuDetailScreen} />
       <Stack.Screen name="AreaShgList" component={AreaShgListScreen} />
@@ -58,3 +58,4 @@ const OrderManagementStackNavigator = () => {
 };
 
 export default OrderManagementStackNavigator;
+

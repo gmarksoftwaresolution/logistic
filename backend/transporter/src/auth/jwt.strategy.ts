@@ -20,17 +20,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     const userId = payload.sub;
     
-    if (!userId || typeof userId !== 'number') {
+    if (userId === undefined || userId === null) {
+      throw new UnauthorizedException('Invalid user ID in token');
+    }
+
+    const parsedUserId = typeof userId === 'string' ? parseInt(userId, 10) : Number(userId);
+    if (isNaN(parsedUserId)) {
       throw new UnauthorizedException('Invalid user ID in token');
     }
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: parsedUserId },
     });
 
     if (!user) {
       throw new UnauthorizedException();
     }
+
+    console.log('--- JWT AUTH VALIDATION ---');
+    console.log(`User ID: ${user.id} | Phone: ${user.phoneNumber} | Role: ${user.role}`);
+    console.log('---------------------------');
 
     return user;
   }

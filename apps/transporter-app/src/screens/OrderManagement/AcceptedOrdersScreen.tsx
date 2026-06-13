@@ -8,24 +8,55 @@ import {
   Platform,
   Dimensions,
   Animated,
+  Linking,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
-import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
+import { useOrderManagement, BatchOrder, HUB_CONTACT } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
 
-const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches } = useOrderManagement();
+  const { batches, refreshBatchesList } = useOrderManagement();
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const pagerRef = React.useRef<ScrollView>(null);
   const { width: screenWidth } = Dimensions.get('window');
   const scrollX = React.useRef(new Animated.Value(0)).current;
+
+  // Automatically scroll and switch tabs if navigated with activeTab param
+  React.useEffect(() => {
+    if (route.params?.activeTab) {
+      const tab = route.params.activeTab;
+      setActiveTab(tab);
+      if (tab === 'drop') {
+        setTimeout(() => {
+          pagerRef.current?.scrollTo({ x: screenWidth, animated: true });
+        }, 100);
+      } else {
+        setTimeout(() => {
+          pagerRef.current?.scrollTo({ x: 0, animated: true });
+        }, 100);
+      }
+    }
+  }, [route.params?.activeTab, screenWidth]);
 
   // Track accordion expansion states per area.
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({
@@ -42,9 +73,30 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }));
   };
 
+  const handleNavigate = (batch: BatchOrder, type: 'pickup' | 'drop') => {
+    const isPickup = type === 'pickup';
+    const isHubPoint = isPickup 
+      ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
+      : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU');
+    
+    const contact = isHubPoint ? HUB_CONTACT : batch.shgContact;
+    
+    const queryAddress = [
+      contact.address,
+      (contact as any).village,
+      (contact as any).pincode,
+      'Maharashtra',
+      'India'
+    ].filter(Boolean).join(', ');
+
+    Linking.openURL(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryAddress)}`
+    );
+  };
+
   const getCounts = (b: BatchOrder) => {
-    const pickup = b.products.filter(p => p.legType === 'pickup' && p.status === 'pending').length;
-    const drop = b.products.filter(p => (p.legType === 'drop' && p.status === 'pending') || p.status === 'picked').length;
+    const pickup = b.products.filter(p => p.status === 'pending').length;
+    const drop = b.products.filter(p => p.status === 'picked').length;
     return { pickup, drop };
   };
 
@@ -54,26 +106,24 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     const pickupBatches = batches.filter((b) => b.status === 'ACCEPTED_PICKUP');
     const pickupDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
     pickupBatches.forEach(b => {
-      if (b.products.some(p => p.legType === 'pickup' && p.status === 'pending')) {
+      if (b.products.some(p => p.status === 'pending')) {
         pickupDisplayEntries.push({ batch: b, type: 'pickup' });
       }
     });
 
     const pickupGroupedEntries: Record<string, typeof pickupDisplayEntries> = {};
     pickupDisplayEntries.forEach((entry) => {
-      const displayArea = entry.batch.areaName;
+      let displayArea = entry.batch.areaName;
+      if (entry.batch.flowType === 'gmu_to_shg') displayArea = 'Gadhinglaj Hub';
       if (!pickupGroupedEntries[displayArea]) pickupGroupedEntries[displayArea] = [];
       pickupGroupedEntries[displayArea].push(entry);
     });
 
     // 2. Drops Data
     const dropBatches = batches.filter((b) => b.status === 'PICKUP_COMPLETED');
-    const nativeDropBatches = batches.filter(b => 
-      b.status === 'ACCEPTED_PICKUP' && !b.products.some(p => p.legType === 'pickup')
-    );
     
     const dropDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
-    [...dropBatches, ...nativeDropBatches].forEach(b => {
+    dropBatches.forEach(b => {
       dropDisplayEntries.push({ batch: b, type: 'drop' });
     });
 
@@ -85,15 +135,15 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       dropGroupedEntries[displayArea].push(entry);
     });
 
-    const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub'];
-    const pickupAreas = ORDERED_AREAS.filter(a => pickupGroupedEntries[a]);
-    const dropAreas = ORDERED_AREAS.filter(a => dropGroupedEntries[a]);
+    const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
+    const allFoundPickupAreas = Object.keys(pickupGroupedEntries);
+    const pickupAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => pickupGroupedEntries[a]), ...allFoundPickupAreas]));
 
-    const totalPickups = pickupBatches.filter(b => b.products.some(p => p.legType === 'pickup' && p.status === 'pending')).length;
-    const totalDrops = batches.filter(b => 
-      b.status === 'PICKUP_COMPLETED' || 
-      (b.status === 'ACCEPTED_PICKUP' && !b.products.some(p => p.legType === 'pickup'))
-    ).length;
+    const allFoundDropAreas = Object.keys(dropGroupedEntries);
+    const dropAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => dropGroupedEntries[a]), ...allFoundDropAreas]));
+
+    const totalPickups = pickupBatches.filter(b => b.products.some(p => p.status === 'pending')).length;
+    const totalDrops = dropBatches.length;
 
     return { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops };
   }, [batches]);
@@ -105,7 +155,18 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   ) => {
     return (
       <View style={{ width: screenWidth }}>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
+        >
           {tabAreas.length === 0 ? (
             <View style={styles.emptyCard}>
               <Package size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
@@ -202,6 +263,13 @@ const AcceptedOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                                     }
                                   >
                                     <Text style={styles.btnTextWhite}>{t('orders.view', { defaultValue: 'View' })}</Text>
+                                  </TouchableOpacity>
+
+                                  <TouchableOpacity
+                                    style={styles.modernNavigateBtn}
+                                    onPress={() => handleNavigate(batch, type)}
+                                  >
+                                    <Text style={styles.btnTextGreen}>{t('orders.navigate_short', { defaultValue: 'Navigate' })}</Text>
                                   </TouchableOpacity>
                               </View>
                             </TouchableOpacity>
@@ -523,13 +591,14 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: verticalScale(12),
     paddingLeft: scale(16),
     borderLeftWidth: 1.5,
     borderLeftColor: '#F1F5F9',
     marginLeft: scale(4),
   },
   modernViewBtn: {
-    paddingHorizontal: scale(14),
+    width: scale(75),
     paddingVertical: verticalScale(6),
     borderRadius: moderateScale(8),
     backgroundColor: Colors.primary,
@@ -547,10 +616,25 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  modernNavigateBtn: {
+    width: scale(75),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(8),
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.2,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   btnTextWhite: {
     fontFamily: Fonts.bold,
     fontSize: moderateScale(11.5),
     color: '#FFFFFF',
+  },
+  btnTextGreen: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11.5),
+    color: '#059669',
   },
 });
 

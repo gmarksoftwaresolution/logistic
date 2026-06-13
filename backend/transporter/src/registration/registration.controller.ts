@@ -58,7 +58,7 @@ export class RegistrationController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get current registration status and data' })
-  getMe(@Request() req: any) {
+  getMe(@Request() req: any): Promise<any> {
     return this.registrationService.getRegistrationStatus(req.user.phoneNumber);
   }
 

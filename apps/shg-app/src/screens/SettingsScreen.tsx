@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { useUser } from '../context/UserContext';
+import { useOnboarding } from '../context/OnboardingContext';
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 export default function SettingsScreen({
   navigation
@@ -23,8 +24,22 @@ export default function SettingsScreen({
   const currentLanguageTitle = languages.find(l => l.id === locale)?.title || 'English';
 
   const {
-    user
+    user,
+    logout
   } = useUser();
+  const { startOnboarding } = useOnboarding();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Landing' }],
+      });
+    } catch (e) {
+      console.warn('Logout error:', e);
+    }
+  };
   const [lockApp, setLockApp] = useState(true);
   const SectionHeader = ({
     title
@@ -80,6 +95,15 @@ export default function SettingsScreen({
                   <Text className="text-xs text-[#64748B] mr-2">{t("su_light_441")}</Text>
                   <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
                 </View>} />
+            <SettingRow 
+              icon={<Ionicons name="compass-outline" size={20} color="#16A34A" />} 
+              title={t("app_walkthrough")} 
+              subtitle={t("app_walkthrough_subtitle")} 
+              onPress={() => {
+                startOnboarding();
+                navigation.navigate("Main");
+              }} 
+            />
           </>)}
 
         <SectionHeader title={t("su_privacy_security_442")} />
@@ -114,7 +138,7 @@ export default function SettingsScreen({
 
         {/* Logout */}
         <View className="mb-12 mt-4">
-          <TouchableOpacity className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
+          <TouchableOpacity onPress={handleLogout} className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
             <Ionicons name="log-out-outline" size={20} color="#EF4444" className="mr-2" />
             <Text className="text-[#EF4444] font-bold text-base ml-2">{t("logout")}</Text>
           </TouchableOpacity>

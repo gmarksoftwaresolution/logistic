@@ -147,7 +147,7 @@ export class RegistrationService {
     };
   }
 
-  async getRegistrationStatus(phoneNumber: string) {
+  async getRegistrationStatus(phoneNumber: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { phoneNumber },
       include: {

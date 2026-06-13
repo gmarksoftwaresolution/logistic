@@ -133,7 +133,7 @@ const TasksScreen = () => {
           if (stop.id === stopId) {
             const updatedProducts = stop.products.map(p => {
               if (p.id === productId) {
-                const updatedP = { ...p, status: 'Completed' as const, completedQty: p.expectedQty, proofImage };
+                const updatedP = { ...p, status: 'Completed' as const, completedQty: p.expectedQty, proofImage, proofImageTime: Date.now() };
                 if (trip.type === 'Inbound' && p.type === 'Pickup') {
                   productToForward = updatedP;
                 }

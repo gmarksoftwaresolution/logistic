@@ -18,6 +18,7 @@ export default function ProfileScreen({
     user,
     logout
   } = useUser();
+
   const [isOnline, setIsOnline] = useState(true);
 
   const handleLogout = async () => {
@@ -178,6 +179,9 @@ export default function ProfileScreen({
             <Text className="text-[#EF4444] font-bold text-base ml-2">{t("logout")}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Bottom Spacer to push content above floating navigation tab bar */}
+        <View className="h-32" />
 
       </ScrollView>
     </SafeAreaView>;

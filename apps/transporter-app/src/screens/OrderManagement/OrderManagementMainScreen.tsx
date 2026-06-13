@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   DeviceEventEmitter,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -26,14 +27,28 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
     rejectedOrdersCount,
     completedOrdersCount,
     activities,
+    refreshBatchesList,
   } = useOrderManagement();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshBatchesList();
+    } catch (e) {
+      console.error('Failed to refresh batches:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const lastOffsetY = useRef(0);
   const handleScroll = (event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const direction = currentOffset > lastOffsetY.current ? 'down' : 'up';
     const diff = Math.abs(currentOffset - lastOffsetY.current);
-    
+
     if (currentOffset <= 0) {
       DeviceEventEmitter.emit('show-tabbar');
     } else if (diff > 10) {
@@ -52,39 +67,44 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
   const getActivityBadgeStyle = (status: ActivityEntry['status']) => {
     switch (status) {
       case 'Picked':
-        return { bg: '#EFF6FF', text: '#2563EB' };
-      case 'Dropped':
-        return { bg: '#ECFDF5', text: '#059669' };
-      case 'Accepted':
-        return { bg: '#DCFCE7', text: '#15803D' };
-      case 'Rejected':
-        return { bg: '#FEE2E2', text: '#B91C1C' };
-      case 'Completed':
-        return { bg: '#ECFDF5', text: '#047857' };
       case 'PICKUP_COMPLETED':
-        return { bg: '#EFF6FF', text: '#1D4ED8' };
+        return { bg: '#EFF6FF', text: '#2563EB', label: 'Pickup Confirmed' };
+      case 'Dropped':
       case 'DROP_COMPLETED':
-        return { bg: '#DCFCE7', text: '#15803D' };
+      case 'Completed':
+        return { bg: '#ECFDF5', text: '#059669', label: 'Delivered' };
+      case 'Rejected':
+        return { bg: '#FEE2E2', text: '#B91C1C', label: 'Rejected' };
+      case 'Accepted':
+        return { bg: '#DCFCE7', text: '#15803D', label: 'Accepted' };
       default:
-        return { bg: '#F1F5F9', text: '#64748B' };
+        return { bg: '#F1F5F9', text: '#64748B', label: status };
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScreenHeader 
-        title={t('tabs.orderMgmt')} 
-        subtitle={t('orders.order_mgmt_subtitle')} 
-        showBackButton={true} 
-        showProfile={false} 
-        showHelp={true} 
+      <ScreenHeader
+        title={t('tabs.orderMgmt')}
+        subtitle={t('orders.order_mgmt_subtitle')}
+        showBackButton={true}
+        showProfile={false}
+        showHelp={true}
         helpContent="This dashboard allows you to manage all active batches. View incoming orders, check accepted routes, and monitor live deliveries."
       />
-      <ScrollView 
-        contentContainerStyle={styles.container} 
+      <ScrollView
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
       >
 
         {/* Top Section: 4 Premium Summary Cards using precisely tailored HSL user parameters */}
@@ -218,13 +238,22 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
               const badge = getActivityBadgeStyle(act.status);
 
               return (
-                <View key={act.id} style={styles.activityCard}>
+                <TouchableOpacity
+                  key={act.id}
+                  style={styles.activityCard}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const isDropLeg = act.status === 'Dropped' || act.status === 'Completed' || act.status === 'DROP_COMPLETED';
+                    const legType = isDropLeg ? 'drop' : 'pickup';
+                    navigation.navigate('ActivityOrderDetail', { batchId: act.orderId, type: legType });
+                  }}
+                >
                   {/* Top Row */}
                   <View style={styles.activityTopRow}>
-                    <Text style={styles.orderIdText}>{act.orderId}</Text>
+                    <Text style={styles.orderIdText} numberOfLines={1}>{act.orderId}</Text>
                     <View style={[styles.statusBadgePill, { backgroundColor: badge.bg }]}>
                       <Text style={[styles.statusBadgeText, { color: badge.text }]}>
-                        {t(`orders.${act.status.toLowerCase()}`, { defaultValue: act.status })}
+                        {(badge as any).label || act.status}
                       </Text>
                     </View>
                   </View>
@@ -243,7 +272,7 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
                     <Text style={styles.activityStatText}>{act.weight}</Text>
                     <Text style={styles.timestampText}>{act.timestamp}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}

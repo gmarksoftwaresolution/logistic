@@ -9,13 +9,11 @@ import OnboardingOverlay from './src/components/OnboardingOverlay';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { 
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold 
-} from '@expo-google-fonts/plus-jakarta-sans';
+const PlusJakartaSans_400Regular = require('./src/assets/fonts/PlusJakartaSans_400Regular.ttf');
+const PlusJakartaSans_500Medium = require('./src/assets/fonts/PlusJakartaSans_500Medium.ttf');
+const PlusJakartaSans_600SemiBold = require('./src/assets/fonts/PlusJakartaSans_600SemiBold.ttf');
+const PlusJakartaSans_700Bold = require('./src/assets/fonts/PlusJakartaSans_700Bold.ttf');
+const PlusJakartaSans_800ExtraBold = require('./src/assets/fonts/PlusJakartaSans_800ExtraBold.ttf');
 import { View } from 'react-native';
 
 // Keep the splash screen visible while we fetch resources
