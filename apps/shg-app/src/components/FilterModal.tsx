@@ -28,7 +28,7 @@ export const FilterModal: React.FC<Props> = ({
       setTempFilter(currentFilter);
     }
   }, [visible, currentFilter]);
-  const filterOptions: FilterType[] = ['today', '1_week', '15_days', '1_month', 'custom_date_range'];
+  const filterOptions: FilterType[] = ['all', 'today', '1_week', '15_days', '1_month', 'custom_date_range'];
   const handleApply = () => {
     onApply(tempFilter);
     onClose();

@@ -1,13 +1,34 @@
 export const getRouteForOrder = (item: any) => {
-  // item.address contains the formatted address from the backend
-  // legType tells us if it's a pickup or drop
   if (item.legType === 'pickup') {
-    // Seller -> Transporter
+    // Seller Address -> Transporter
     return `${item.address} > Transporter`;
+  } else if (item.legType === 'drop') {
+    const isToTransporter = item.address?.toLowerCase().includes('transporter');
+    if (isToTransporter) {
+      // Seller order delivery leg (Seller Address -> Transporter)
+      const source = item.sourceAddress || 'Seller';
+      return `${source} > Transporter`;
+    } else {
+      // Transporter order delivery leg (Transporter -> Buyer Address)
+      return `Transporter > ${item.address}`;
+    }
   } else {
-    // Transporter -> Buyer
-    return `Transporter > ${item.address}`;
+    // Fallback if no legType
+    if (item.status === 'assigned') {
+      return `Transporter > ${item.address}`;
+    }
+    const source = item.sourceAddress || item.address;
+    return `${source} > Transporter`;
   }
+};
+
+export const getModalAddresses = (item: any, t: any) => {
+  const routeStr = getRouteForOrder(item);
+  const routeParts = routeStr.split('>');
+  const pickup = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+  const delivery = translateRoutePart(routeParts[1]?.trim() || 'Transporter', t);
+  
+  return { pickup, delivery };
 };
 
 export const getInfoForOrder = (item: any) => {
@@ -19,9 +40,26 @@ export const getInfoForOrder = (item: any) => {
   return { date, time };
 };
 
+export const formatOrderNumber = (orderNumber: string | any) => {
+  if (!orderNumber) return '';
+  
+  let rawId = typeof orderNumber === 'string' 
+    ? orderNumber 
+    : (orderNumber.orderId || orderNumber.id || '');
+  
+  rawId = rawId.replace('inc-', '');
+
+  let formatted = rawId
+    .replace(/-pickup-/gi, '-')
+    .replace(/-drop-/gi, '-')
+    .replace(/-pickup$/gi, '')
+    .replace(/-drop$/gi, '');
+    
+  return formatted.replace(/^#/, '');
+};
+
 export const getFormattedOrderId = (item: any) => {
-  // Use the actual backend orderId instead of generating a custom one
-  return item.orderId || item.id;
+  return formatOrderNumber(item);
 };
 
 export const translateRoutePart = (part: string, t: any) => {

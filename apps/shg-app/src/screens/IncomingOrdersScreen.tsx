@@ -1,10 +1,10 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput } from 'react-native';
+import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import TextTicker from 'react-native-text-ticker';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -14,13 +14,17 @@ import { useOrders } from '../context/OrderContext';
 import { Colors, Fonts } from '../constants/theme';
 import { Typography } from '../constants/typography';
 import { Spacing, Grid } from '../constants/spacing';
+import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
+import { ViewMoreButton } from '../components/ViewMoreButton';
 import { OrderDistance } from '../components/OrderDistance';
-import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId } from '../utils/orderHelpers';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
@@ -36,7 +40,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     acceptOrder,
     acceptOrders,
     acceptAllOrders,
-    rejectOrder
+    rejectOrder,
+    highlightedOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -44,11 +49,23 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const {
     t
   } = context;
+  const { refreshOrdersList } = useOrders();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrdersList();
+    }, [refreshOrdersList])
+  );
 
   // Selection and Animation states
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [activeTab, setActiveTab] = useState<'new' | 'returns'>('new');
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -56,6 +73,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     title: '',
     message: '',
     isDestructive: false,
+    isInfoOnly: false,
     confirmText: 'Confirm',
     onConfirm: () => {}
   });
@@ -75,6 +93,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     reason?: string;
   }>>({});
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [rescheduledCount, setRescheduledCount] = useState(0);
   const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
   const [selectedRescheduleReason, setSelectedRescheduleReason] = useState<string | null>(null);
   const [customRescheduleReason, setCustomRescheduleReason] = useState('');
@@ -129,6 +148,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
+  
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
+
   const handleAcceptSelected = () => {
     const ordersToAccept = incomingOrders.filter(o => selectedIds.includes(o.id));
     if (ordersToAccept.length === 0) return;
@@ -137,8 +159,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       title: t('su_confirm_action') || "Confirm Action",
       message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
+      isInfoOnly: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         try {
@@ -150,6 +174,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text2: t("su_orders_have_been_suc_389")
           });
           
+          setModalConfig({ ...modalConfig, visible: false });
           // Redirect directly to AcceptedOrders (pickup tab)
           navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
         } catch (error) {
@@ -158,6 +183,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text1: 'Error',
             text2: 'Failed to accept orders.'
           });
+        } finally {
+          setIsProcessing(false);
         }
       }
     });
@@ -169,24 +196,32 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     setCurrentRejectIndex(0);
     setRejectModalVisible(true);
   };
-  const handleRejectModalSubmit = (order: Order, reason: string) => {
-    rejectOrder({
-      ...order,
-      rejectReason: reason
-    });
-    const nextIndex = currentRejectIndex + 1;
-    if (nextIndex < ordersToRejectBatch.length) {
-      setCurrentRejectIndex(nextIndex);
-    } else {
-      setRejectModalVisible(false);
-      setSelectedIds([]);
-      import('react-native-toast-message').then(({
-        default: Toast
-      }) => Toast.show({
-        type: 'success',
-        text1: t("su_done_359"),
-        text2: t("su_selected_orders_have_391")
-      }));
+  const handleRejectModalSubmit = async (order: Order, reason: string) => {
+    try {
+      await rejectOrder({
+        ...order,
+        rejectReason: reason
+      });
+      const nextIndex = currentRejectIndex + 1;
+      if (nextIndex < ordersToRejectBatch.length) {
+        setCurrentRejectIndex(nextIndex);
+      } else {
+        setRejectModalVisible(false);
+        setSelectedIds([]);
+        import('react-native-toast-message').then(({
+          default: Toast
+        }) => Toast.show({
+          type: 'success',
+          text1: t("su_done_359"),
+          text2: t("su_selected_orders_have_391")
+        }));
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to reject order.'
+      });
     }
   };
   const handleAcceptAll = () => {
@@ -204,8 +239,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       title: t('su_confirm_action') || "Confirm Action",
       message: (t('su_are_you_sure_accept_all') || "Are you sure you want to accept all {count} order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
+      isInfoOnly: false,
       confirmText: t('su_accept') || 'Accept',
       onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         try {
@@ -221,6 +258,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text2: t("su_orders_have_been_suc_389")
           });
           
+          setModalConfig({ ...modalConfig, visible: false });
           // Redirect directly to AcceptedOrders (pickup tab)
           navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
         } catch (error) {
@@ -229,6 +267,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             text1: 'Error',
             text2: 'Failed to accept orders.'
           });
+        } finally {
+          setIsProcessing(false);
         }
       }
     });
@@ -249,11 +289,16 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   }}>
       <SharedHeader title={t("su_new_orders_398")} subtitle={t('su_new_orders_sub') || 'Verify & accept incoming requests'} navigation={navigation} />
 
-      <ScrollView style={{
-      paddingHorizontal: Spacing.lg
-    }} className="flex-1 pt-2" showsVerticalScrollIndicator={false}>
+      <FlatList 
+        contentContainerStyle={{ paddingBottom: 120 }}
+        style={{ paddingHorizontal: Spacing.lg }} 
+        className="flex-1 pt-2" 
+        showsVerticalScrollIndicator={false}
+        data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : []}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={<>
         {/* Top Action Buttons Row */}
-        {incomingOrders.length > 0 && <>
+        {incomingOrders.length > 0 && (
           <View className="flex-row justify-between px-1" style={{
           marginBottom: Spacing.sm,
           marginTop: Spacing.xs
@@ -261,10 +306,14 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             {/* Left Button: Reschedule */}
             <TouchableOpacity onPress={() => {
             if (selectedIds.length === 0) {
-              Toast.show({
-                type: 'error',
-                text1: t("su_validation_error_83"),
-                text2: t("su_please_select_at_lea_400")
+              setModalConfig({
+                visible: true,
+                title: t('su_select_order') || 'Select Order',
+                message: t('su_please_select_at_lea_400') || 'Please select at least one order to reschedule.',
+                isDestructive: false,
+                isInfoOnly: true,
+                confirmText: 'OK',
+                onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false }))
               });
             } else {
               setRescheduleReasonModalVisible(true);
@@ -311,7 +360,66 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Segment Tab Switcher */}
+        <View
+          className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mb-4 gap-2 mx-1"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.04,
+            shadowRadius: 10,
+            elevation: 3,
+            marginTop: incomingOrders.length > 0 ? 8 : 12,
+          }}
+        >
+          {/* New Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('new')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'new' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'new' ? {
+              shadowColor: '#073318',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'new' ? 'text-white' : 'text-slate-500'
+            }`}>
+              New
+            </Text>
+          </TouchableOpacity>
+
+          {/* Returns Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('returns')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'returns' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'returns' ? {
+              shadowColor: '#073318',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'returns' ? 'text-white' : 'text-slate-500'
+            }`}>
+              Returns
+            </Text>
+          </TouchableOpacity>
+        </View>
           
+        {activeTab === 'new' && incomingOrders.length > 0 && (
           <View className="flex-row justify-between items-center px-1 mb-4 mt-2">
             <Text style={{ fontFamily: Fonts.bold, fontSize: normalize(14.5), color: '#1E293B' }}>
               {t('su_incoming_requests') || 'Incoming Requests'} ({incomingOrders.length})
@@ -339,29 +447,53 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </Text>
             </TouchableOpacity>
           </View>
-          </>}
+        )}
 
         {/* Success Banner */}
         {showSuccessBanner && <View className="p-4 rounded-[16px] bg-[#ECFDF5] border border-[#D1FAE5] flex-row items-center justify-between mb-6 shadow-sm">
             <View className="flex-row items-center flex-1 pr-4">
               <Ionicons name="checkmark-circle" size={24} color="#10B981" />
               <View className="ml-3">
-                <Text className="text-[#065F46] font-bold text-[14px]">{t("su_all_orders_reschedul_402")}</Text>
-                <Text className="text-[#047857] text-[11px] mt-0.5">{t("su_all_orders_have_been_403")}</Text>
+                <Text className="text-[#065F46] font-bold text-[14px]">
+                  {rescheduledCount === 1 
+                    ? t("su_order_rescheduled_success") || "1 order rescheduled successfully"
+                    : rescheduledCount === incomingOrders.length 
+                      ? t("su_all_orders_reschedul_402") || "All orders rescheduled successfully"
+                      : (t("su_orders_rescheduled_success") || "{count} orders rescheduled successfully").replace('{count}', rescheduledCount.toString())}
+                </Text>
+                <Text className="text-[#047857] text-[11px] mt-0.5">
+                  {rescheduledCount === 1 
+                    ? t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+                    : rescheduledCount === incomingOrders.length 
+                      ? t("su_all_orders_have_been_403") || "All orders have been updated with the new date and time."
+                      : (t("su_orders_have_been_updated") || "Selected orders have been updated with the new date and time.")}
+                </Text>
               </View>
             </View>
             <TouchableOpacity onPress={() => setShowSuccessBanner(false)}>
               <Ionicons name="close" size={20} color="#10B981" />
             </TouchableOpacity>
           </View>}
-
-        {/* Vertical Order Card List */}
-        {incomingOrders.length === 0 ? <View className="flex-1 items-center justify-center py-20">
-            <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
-              <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+        </>}
+        ListEmptyComponent={
+          activeTab === 'returns' ? (
+            <View className="flex-1 items-center justify-center py-20 mt-4">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4 border border-slate-100 shadow-sm">
+                <Ionicons name="refresh" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-[17px] font-black text-slate-800 text-center mb-1.5">No Return Orders</Text>
+              <Text className="text-[13px] font-medium text-slate-500 text-center px-4">Return orders will appear here when available.</Text>
             </View>
-            <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
-          </View> : incomingOrders.map((item, index) => {
+          ) : incomingOrders.length === 0 ? (
+            <View className="flex-1 items-center justify-center py-20">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
+                <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => {
         const isSelected = selectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
@@ -373,22 +505,24 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
         const orderReschedule = rescheduledOrders[item.id];
         const isOrderRescheduled = !!orderReschedule;
-        return <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: 4
-          },
-          shadowOpacity: 0.03,
-          shadowRadius: 8,
-          elevation: 2,
-          padding: 14,
-          marginBottom: 12,
-          borderRadius: 20,
-          borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
-          borderWidth: 1.5,
-          backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
-        }} className="flex-row items-center">
+        return (
+          <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
+            <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 0,
+                height: 4
+              },
+              shadowOpacity: 0.03,
+              shadowRadius: 8,
+              elevation: 2,
+              padding: 14,
+              marginBottom: 12,
+              borderRadius: 20,
+              borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
+              borderWidth: 1.5,
+              backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
+            }} className="flex-row items-center">
                 {/* Left Selection Circular Checkbox */}
                 <View style={{
                   width: 24,
@@ -419,20 +553,24 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                     </Text>
                   </View>
 
-                  {/* Route Visual Section (Horizontal Marquee) */}
-                  <View className="mt-2.5 mb-1" style={{ overflow: 'hidden' }}>
-                    <TextTicker
-                      style={{ fontSize: 13, fontWeight: 'bold', color: '#073318' }}
-                      duration={7000}
-                      loop
-                      bounce={false}
-                      repeatSpacer={50}
-                      marqueeDelay={2000}
-                      animationType="scroll"
-                    >
-                      {source}   ➔   {destination}
-                    </TextTicker>
+                  {/* Route Visual Section (Horizontal) */}
+                  <View className="flex-row items-center mt-2.5 pr-2">
+                    <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                    <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
                   </View>
+
+                  {/* View Address Button */}
+                  <TouchableOpacity 
+                    onPress={() => setSelectedAddressOrder(item)} 
+                    activeOpacity={0.7}
+                    className="mt-2 mb-1 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                  >
+                    <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                    <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                      {t("view_address") || "View Address"}
+                    </Text>
+                  </TouchableOpacity>
 
                   {/* Bottom Info Badges Row */}
                   <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
@@ -473,10 +611,18 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
                 {/* Right Side: Distance Badge */}
                 <OrderDistance distance={item.distance} />
-              </TouchableOpacity>;
-      })}
-
-
+              </TouchableOpacity>
+            </HighlightCardWrapper>
+          );
+        }}
+        ListFooterComponent={<>
+        {incomingOrders.length > 0 && (
+          <ViewMoreButton 
+            totalCount={incomingOrders.length}
+            visibleCount={visibleCount}
+            onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+          />
+        )}
         {/* Refresh Orders Button */}
         {incomingOrders.length > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
             {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
@@ -485,7 +631,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               </>}
           </TouchableOpacity>}
         <View className="h-28" />
-      </ScrollView>
+        </>}
+      />
 
       {/* Floating Animated Selection Action Bar */}
       {shouldRender && <Animated.View style={{
@@ -675,6 +822,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   reason: finalReason || undefined
                 };
               });
+              setRescheduledCount(selectedIds.length);
               setRescheduledOrders(newRescheduled);
               setShowSuccessBanner(true);
               setShowBottomSheet(false);
@@ -759,22 +907,31 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         </View>
       </Modal>
 
-      <ConfirmModal visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} onCancel={() => setModalConfig({
+      <ConfirmModal isLoading={isProcessing} loadingText={t("su_processing") || "Processing..."} visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} isInfoOnly={modalConfig.isInfoOnly} onCancel={() => setModalConfig({
       ...modalConfig,
       visible: false
     })} onConfirm={() => {
       modalConfig.onConfirm();
-      setModalConfig({
-        ...modalConfig,
-        visible: false
-      });
-    }} confirmStepId="accept_selected_button" />
+    }} />
 
       {/* Reject Reason Modal */}
       <RejectReasonModal visible={rejectModalVisible} order={ordersToRejectBatch[currentRejectIndex] || null} onClose={() => {
       setRejectModalVisible(false);
       setSelectedIds([]);
     }} onSubmit={handleRejectModalSubmit} />
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
     </SafeAreaView>;
 };
 export default IncomingOrdersScreen;

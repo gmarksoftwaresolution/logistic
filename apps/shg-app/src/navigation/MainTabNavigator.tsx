@@ -14,13 +14,15 @@ import DashboardScreen from '../screens/DashboardScreen';
 import OrderManagementScreen from '../screens/OrderManagementScreen';
 import OrdersOverviewScreen from '../screens/OrdersOverviewScreen';
 import StockManagementScreen from '../screens/StockManagementScreen';
-import OrderHistoryScreen from '../screens/OrderHistoryScreen';
+import CompletedOrdersScreen from '../screens/CompletedOrdersScreen';
+import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
 import DeliveryScreen from '../screens/DeliveryScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
+import ReturnOrdersScreen from '../screens/ReturnOrdersScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -38,7 +40,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 
   React.useEffect(() => {
     if (containerWidth > 0) {
-      const tabWidth = containerWidth / 4;
+      const tabWidth = containerWidth / 5;
       const targetValue = state.index * tabWidth;
       Animated.spring(translateX, {
         toValue: targetValue,
@@ -51,7 +53,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
   }, [state.index, containerWidth]);
 
   const indicatorWidth = 32;
-  const tabWidth = containerWidth > 0 ? containerWidth / 4 : 0;
+  const tabWidth = containerWidth > 0 ? containerWidth / 5 : 0;
   // Center the horizontal pill indicator inside the first tab space initially
   const indicatorLeft = tabWidth > 0 ? (tabWidth / 2 - indicatorWidth / 2) : 0;
 
@@ -118,7 +120,10 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
           IconComponent = MaterialCommunityIcons;
           iconName = isFocused ? 'truck' : 'truck-outline';
           displayLabel = t('title_order_management') || 'Order Management';
-          stepId = 'orders_tab';
+        } else if (route.name === 'OrderHistory') {
+          IconComponent = Ionicons;
+          iconName = isFocused ? 'document-text' : 'document-text-outline';
+          displayLabel = t('order_history') || 'Order History';
         } else if (route.name === 'Earning') {
           IconComponent = Ionicons;
           iconName = isFocused ? 'wallet' : 'wallet-outline';
@@ -131,28 +136,29 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         }
 
         return (
-          <WalkthroughElement key={index} stepId={stepId} style={{ flex: 1 }}>
-            <Pressable
-              onPress={onPress}
-              className="items-center justify-center flex-1 h-full relative"
-            >
-              <View className="items-center justify-center pt-2">
+          <Pressable
+            key={index}
+            onPress={onPress}
+            className="items-center justify-center flex-1 h-full relative"
+          >
+            <View className="items-center justify-center pt-2">
+              <View className={`${isFocused && route.name === 'OrderHistory' ? 'bg-[#F0FDF4] w-[46px] h-[46px] rounded-full items-center justify-center mb-0.5' : 'mb-0.5'}`}>
                 <IconComponent 
                   name={iconName} 
                   size={22} 
                   color={isFocused ? "#073318" : "#94A3B8"} 
                 />
-                <Text 
-                  numberOfLines={1}
-                  className={`text-[10px] mt-1 text-center tracking-tight ${
-                    isFocused ? 'font-black text-[#073318]' : 'font-bold text-slate-400'
-                  }`}
-                >
-                  {displayLabel}
-                </Text>
               </View>
-            </Pressable>
-          </WalkthroughElement>
+              <Text 
+                numberOfLines={1}
+                className={`text-[10px] text-center tracking-tight ${
+                  isFocused ? 'font-black text-[#073318]' : 'font-bold text-slate-400'
+                }`}
+              >
+                {displayLabel}
+              </Text>
+            </View>
+          </Pressable>
         );
       })}
     </View>
@@ -176,7 +182,8 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
       <OrdersStack.Screen name="Delivery" component={DeliveryRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
-      <OrdersStack.Screen name="OrderHistory" component={OrderHistoryScreen} />
+      <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
+      <OrdersStack.Screen name="ReturnOrders" component={ReturnOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
     </OrdersStack.Navigator>
@@ -194,6 +201,7 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Orders" component={OrdersStackNavigator} />
+      <Tab.Screen name="OrderHistory" component={OrderHistoryScreen} />
       <Tab.Screen name="Earning" component={PlaceholderScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

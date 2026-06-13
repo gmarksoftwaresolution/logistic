@@ -1,4 +1,4 @@
-export type FilterType = 'today' | '1_week' | '15_days' | '1_month' | 'custom_date_range';
+export type FilterType = 'all' | 'today' | '1_week' | '15_days' | '1_month' | 'custom_date_range';
 
 export interface FilterState {
   type: FilterType;
@@ -31,6 +31,8 @@ export const isOrderInDateRange = (dateString: string, filterState: FilterState)
   const orderTime = orderDate.getTime();
   
   switch (filterState.type) {
+    case 'all':
+      return true;
     case 'today': {
       const startOfToday = new Date(today);
       startOfToday.setHours(0, 0, 0, 0);

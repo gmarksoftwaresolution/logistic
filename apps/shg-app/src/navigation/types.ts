@@ -3,8 +3,9 @@ export type OrdersStackParamList = {
   IncomingOrders: undefined;
   AcceptedOrders: { initialTab?: 'pickup' | 'delivery' } | undefined;
   RejectedOrders: undefined;
+  ReturnOrders: undefined;
   Delivery: undefined;
-  OrderHistory: undefined;
+  CompletedOrders: undefined;
   OrderDetails: { order: any };
   CompletedOrderDetails: { order: any };
 };
@@ -13,6 +14,7 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Orders: { filter?: string } | undefined;
   Earning: undefined;
+  OrderHistory: undefined;
   Profile: undefined;
 };
 
@@ -40,4 +42,5 @@ export type RootStackParamList = {
   ApplicationStatus: undefined;
   Delivery: undefined;
   CompletedOrderDetails: { order: any };
+  OrderHistoryDetails: { order: any };
 };

@@ -1,19 +1,20 @@
-import React, { useContext } from 'react';
+import React, { useContext, useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
-import { useOrders } from '../context/OrderContext';
+import { useOrders, Order } from '../context/OrderContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SharedHeader } from '../components/SharedHeader';
-import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, translateRoutePart, getModalAddresses } from '../utils/orderHelpers';
 import { LanguageContext } from '../context/LanguageContext';
-import TextTicker from 'react-native-text-ticker';
-import WalkthroughElement from '../components/WalkthroughElement';
+import { DashboardLoader } from '../components/DashboardLoader';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'OrdersOverview'>,
@@ -26,12 +27,22 @@ type Props = CompositeScreenProps<
 const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
-  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders } = useOrders();
+  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders, returnedOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrdersList();
+    }, [refreshOrdersList])
+  );
 
   // Helper to translate route parts on the UI level without breaking core logic
   const translateRoute = (route: string) => {
     return route.split('>').map(part => translateRoutePart(part, t)).join(' > ');
   };
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   // Build real activity list from live order state — NO hardcoded demo data
   const recentActivities = [
@@ -42,6 +53,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.acceptedAt || '',
       status: t('overview_accepted') || 'Accepted',
       _sortKey: order.acceptedAt || '',
+      originalOrder: order,
     })),
     ...rejectedOrders.map(order => ({
       id: `#${getFormattedOrderId(order)}`,
@@ -50,6 +62,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.rejectedAt || '',
       status: t('overview_rejected') || 'Rejected',
       _sortKey: order.rejectedAt || '',
+      originalOrder: order,
     })),
     ...deliveredOrders.map(order => ({
       id: `#${getFormattedOrderId(order)}`,
@@ -58,6 +71,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       time: order.completedAt || '',
       status: t('overview_completed') || 'Completed',
       _sortKey: order.completedAt || '',
+      originalOrder: order,
     })),
   ].sort((a, b) => b._sortKey.localeCompare(a._sortKey));
 
@@ -81,10 +95,12 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const isInitialLoad = isOrdersLoading && incomingOrders.length === 0 && acceptedOrders.length === 0 && rejectedOrders.length === 0 && deliveredOrders.length === 0;
+
   return (
     <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1">
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
           
           {/* Custom Navbar */}
           <SharedHeader 
@@ -97,103 +113,185 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
           <View className="px-4 mt-6 flex-row flex-wrap justify-between">
             
             {/* New Orders */}
-            <WalkthroughElement
-              stepId="incoming_orders_card"
-              style={{ width: '48%', marginBottom: 16 }}
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('IncomingOrders')}
+              className="w-full rounded-[24px] mb-4 shadow-sm"
+              style={{ 
+                shadowColor: '#004797', 
+                shadowOffset: { width: 0, height: 8 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 8 
+              }}
             >
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('IncomingOrders')}
-                className="w-full rounded-[24px] shadow-sm overflow-hidden flex-1"
-                style={{ elevation: 3 }}
-              >
-                <LinearGradient colors={['#0265AD', '#0097FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                  <View className="flex-row justify-between items-start">
-                    <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_new_orders")}</Text>
-                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                      <Feather name="package" size={14} color="#FFFFFF" />
-                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <View className="rounded-[24px] overflow-hidden flex-1">
+                <LinearGradient colors={['#004797', '#0071D5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
+                  {/* Background Decoration */}
+                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
+                    <Ionicons name="cube-outline" size={140} color="rgba(255,255,255,0.08)" style={{ position: 'absolute', bottom: -30, right: -30, transform: [{ rotate: '-10deg' }] }} />
+                    <View style={{ position: 'absolute', top: '30%', left: '20%', width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.1)', transform: [{ rotate: '-45deg' }] }} />
+                    <View style={{ position: 'absolute', top: '40%', left: '30%', width: 80, height: 2, backgroundColor: 'rgba(255,255,255,0.15)', transform: [{ rotate: '-45deg' }] }} />
+                  </View>
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_new_orders")}</Text>
+                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
+                      <Feather name="package" size={16} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
                     </View>
                   </View>
-                  <View className="mt-5">
-                    <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
-                    <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_incoming_items")}</Text>
+                  <View className="mt-6 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_incoming_items")}</Text>
                   </View>
                 </LinearGradient>
-              </TouchableOpacity>
-            </WalkthroughElement>
+              </View>
+            </TouchableOpacity>
 
             {/* Accepted */}
-            <WalkthroughElement
-              stepId="accepted_orders_card"
-              style={{ width: '48%', marginBottom: 16 }}
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('AcceptedOrders')}
+              className="w-[48%] rounded-[24px] mb-4 shadow-sm"
+              style={{ 
+                shadowColor: '#3F1E9A', 
+                shadowOffset: { width: 0, height: 8 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 8 
+              }}
             >
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('AcceptedOrders')}
-                className="w-full rounded-[24px] shadow-sm overflow-hidden flex-1"
-                style={{ elevation: 3 }}
-              >
-                <LinearGradient colors={['#5B4FAD', '#897CE0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                  <View className="flex-row justify-between items-start">
-                    <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_accepted")}</Text>
-                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                      <Feather name="clock" size={14} color="#FFFFFF" />
-                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <View className="rounded-[24px] overflow-hidden flex-1">
+                <LinearGradient colors={['#3F1E9A', '#6D3CD8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
+                  {/* Background Decoration */}
+                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
+                    <Feather name="clock" size={140} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', bottom: -30, right: -30 }} />
+                    <View style={{ position: 'absolute', bottom: -20, right: -20, width: 160, height: 160, borderRadius: 80, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }} />
+                    <View style={{ position: 'absolute', bottom: -60, right: -60, width: 240, height: 240, borderRadius: 120, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }} />
+                  </View>
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_accepted")}</Text>
+                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
+                      <Feather name="clock" size={16} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
                     </View>
                   </View>
-                  <View className="mt-5">
-                    <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{acceptedOrders.length}</Text>
-                    <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_accepted_desc")}</Text>
+                  <View className="mt-6 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{acceptedOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_accepted_desc")}</Text>
                   </View>
                 </LinearGradient>
-              </TouchableOpacity>
-            </WalkthroughElement>
+              </View>
+            </TouchableOpacity>
+
+            {/* Return Orders */}
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('ReturnOrders' as never)}
+              className="w-[48%] rounded-[24px] mb-4 shadow-sm"
+              style={{ 
+                shadowColor: '#D34800', 
+                shadowOffset: { width: 0, height: 8 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 8 
+              }}
+            >
+              <View className="rounded-[24px] overflow-hidden flex-1">
+                <LinearGradient colors={['#D34800', '#FFA400']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
+                  {/* Background Decoration */}
+                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
+                    <Feather name="corner-up-left" size={160} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', bottom: -40, right: -20 }} />
+                    <View style={{ position: 'absolute', bottom: -100, right: -40, width: 240, height: 240, borderRadius: 120, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }} />
+                    <View style={{ position: 'absolute', top: -60, left: -60, width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.06)' }} />
+                  </View>
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Returned </Text>
+                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
+                      <Feather name="corner-up-left" size={16} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
+                    </View>
+                  </View>
+                  <View className="mt-6 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{returnedOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>Return / RTO Items</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            </TouchableOpacity>
 
             {/* Rejected */}
             <TouchableOpacity 
               onPress={() => navigation.navigate('RejectedOrders')}
-              className="w-[48%] rounded-[24px] mb-4 shadow-sm overflow-hidden"
-              style={{ elevation: 3 }}
+              className="w-[48%] rounded-[24px] mb-4 shadow-sm"
+              style={{ 
+                shadowColor: '#A80A16', 
+                shadowOffset: { width: 0, height: 8 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 8 
+              }}
             >
-              <LinearGradient colors={['#BA2931', '#F05A61']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                <View className="flex-row justify-between items-start">
-                  <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_rejected")}</Text>
-                  <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                    <Feather name="x" size={14} color="#FFFFFF" />
-                    <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <View className="rounded-[24px] overflow-hidden flex-1">
+                <LinearGradient colors={['#A80A16', '#E72A32']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
+                  {/* Background Decoration */}
+                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
+                    <Feather name="x" size={160} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', bottom: -40, right: -40 }} />
+                    <View style={{ position: 'absolute', top: 30, right: 60, width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                    <View style={{ position: 'absolute', bottom: 40, left: 40, width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)' }} />
+                    <View style={{ position: 'absolute', top: 60, left: 20, width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.2)' }} />
                   </View>
-                </View>
-                <View className="mt-5">
-                  <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{rejectedOrders.length}</Text>
-                  <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_rejected_desc")}</Text>
-                </View>
-              </LinearGradient>
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_rejected")}</Text>
+                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
+                      <Feather name="x" size={16} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
+                    </View>
+                  </View>
+                  <View className="mt-6 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{rejectedOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_rejected_desc")}</Text>
+                  </View>
+                </LinearGradient>
+              </View>
             </TouchableOpacity>
 
             {/* Completed */}
-            <WalkthroughElement
-              stepId="completed_orders_card"
-              style={{ width: '48%', marginBottom: 16 }}
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('CompletedOrders')}
+              className="w-[48%] rounded-[24px] mb-4 shadow-sm"
+              style={{ 
+                shadowColor: '#005A12', 
+                shadowOffset: { width: 0, height: 8 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 8 
+              }}
             >
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('OrderHistory')}
-                className="w-full rounded-[24px] shadow-sm overflow-hidden flex-1"
-                style={{ elevation: 3 }}
-              >
-                <LinearGradient colors={['#297C11', '#51B833']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1">
-                  <View className="flex-row justify-between items-start">
-                    <Text className="text-[15px] font-bold text-white mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_completed")}</Text>
-                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative bg-white/10">
-                      <Feather name="check" size={14} color="#FFFFFF" />
-                      <View className="absolute top-0 right-0 w-1.5 h-1.5 bg-white rounded-full" />
+              <View className="rounded-[24px] overflow-hidden flex-1">
+                <LinearGradient colors={['#005A12', '#159121']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
+                  {/* Background Decoration */}
+                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
+                    <Ionicons name="checkmark-circle-outline" size={160} color="rgba(255,255,255,0.08)" style={{ position: 'absolute', bottom: -40, right: -40 }} />
+                    <View style={{ position: 'absolute', bottom: -80, right: -20, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                    <View style={{ position: 'absolute', bottom: -120, left: -40, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                  </View>
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_completed")}</Text>
+                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
+                      <Feather name="check" size={16} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
                     </View>
                   </View>
-                  <View className="mt-5">
-                    <Text className="text-[40px] font-black text-white leading-[48px]" adjustsFontSizeToFit numberOfLines={1}>{deliveredOrders.length}</Text>
-                    <Text className="text-[11px] text-white/90 mt-1 font-medium" numberOfLines={1}>{t("overview_completed_desc")}</Text>
+                  <View className="mt-6 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{deliveredOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_completed_desc")}</Text>
                   </View>
                 </LinearGradient>
-              </TouchableOpacity>
-            </WalkthroughElement>
+              </View>
+            </TouchableOpacity>
 
           </View>
 
@@ -227,48 +325,55 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
               recentActivities.map((activity, index) => {
                 const statusStyle = getStatusStyle(activity.status);
                 return (
-                  <View
-                    key={index}
-                    className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-                    style={{
-                      elevation: 3,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.05,
-                      shadowRadius: 10,
-                      backgroundColor: 'rgba(255, 255, 255, 0.85)'
-                    }}
-                  >
-                    <BlurView intensity={50} tint="light">
-                      <View className="p-5 bg-white/70">
-                        <View className="flex-row justify-between items-center mb-3">
-                          <Text className="text-[14px] font-black text-[#073318] tracking-wide">{activity.id}</Text>
-                          <View className={`px-3.5 py-1.5 rounded-full ${statusStyle.bg}`}>
-                            <Text className={`text-[11px] font-bold ${statusStyle.text}`}>{activity.status}</Text>
+                  <HighlightCardWrapper key={index} isHighlighted={highlightedOrders[activity.originalOrder.id]}>
+                    <View
+                      className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
+                      style={{
+                        elevation: 3,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 10,
+                        backgroundColor: 'rgba(255, 255, 255, 0.85)'
+                      }}
+                    >
+                      <BlurView intensity={50} tint="light">
+                        <View className="p-5 bg-white/70">
+                          <View className="flex-row justify-between items-center mb-3">
+                            <Text className="text-[14px] font-black text-[#073318] tracking-wide">{activity.id}</Text>
+                            <View className={`px-3.5 py-1.5 rounded-full ${statusStyle.bg}`}>
+                              <Text className={`text-[11px] font-bold ${statusStyle.text}`}>{activity.status}</Text>
+                            </View>
+                          </View>
+
+                          <View className="mb-2 mt-1">
+                            <View className="flex-row items-center pr-2">
+                              <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[0]}</Text>
+                              <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                              <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[1]}</Text>
+                            </View>
+                          </View>
+                          
+                          {/* View Address Button */}
+                          <TouchableOpacity 
+                            onPress={() => setSelectedAddressOrder(activity.originalOrder)} 
+                            activeOpacity={0.7}
+                            className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                          >
+                            <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                            <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                              {t("view_address") || "View Address"}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <View className="flex-row justify-between items-center">
+                            <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
+                            <Text className="text-[12px] text-[#8792A1] font-medium">{activity.time}</Text>
                           </View>
                         </View>
-
-                        <View className="mb-4 overflow-hidden">
-                          <TextTicker
-                            style={{ fontSize: 16, fontWeight: '900', color: '#111827', letterSpacing: -0.5 }}
-                            duration={7000}
-                            loop
-                            bounce={false}
-                            repeatSpacer={50}
-                            marqueeDelay={2000}
-                            animationType="scroll"
-                          >
-                            {activity.route}
-                          </TextTicker>
-                        </View>
-
-                        <View className="flex-row justify-between items-center">
-                          <Text className="text-[13px] text-[#8792A1] font-medium">{activity.details}</Text>
-                          <Text className="text-[12px] text-[#8792A1] font-medium">{activity.time}</Text>
-                        </View>
-                      </View>
-                    </BlurView>
-                  </View>
+                      </BlurView>
+                    </View>
+                  </HighlightCardWrapper>
                 );
               })
             )}
@@ -276,6 +381,20 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
 
         </ScrollView>
       </SafeAreaView>
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
+      {isInitialLoad && <DashboardLoader t={t} />}
     </View>
   );
 };

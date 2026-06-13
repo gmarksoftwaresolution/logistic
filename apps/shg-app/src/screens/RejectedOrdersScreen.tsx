@@ -3,7 +3,8 @@ import {
   View, 
   Text, 
   TouchableOpacity, 
-  ScrollView 
+  ScrollView,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,10 +17,15 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useOrders } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
+import { OrderCard } from '../components/OrderCard';
 import { OrderDistance } from '../components/OrderDistance';
-import { getRouteForOrder, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
+import { ViewMoreButton } from '../components/ViewMoreButton';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
+import { Order } from '../context/OrderContext';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'RejectedOrders'>,
@@ -32,10 +38,15 @@ type Props = CompositeScreenProps<
 const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { rejectedOrders } = useOrders();
+  const { rejectedOrders, highlightedOrders } = useOrders();
   
-  const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
+  const [filterState, setFilterState] = useState<FilterState>({ type: 'all' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   if (!context || !user) return null;
   const { t } = context;
@@ -64,6 +75,7 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/* Main Content Area */}
+      {/* Main Content Area */}
       {(() => {
         const filteredOrders = rejectedOrders.filter(item => {
           const info = getInfoForOrder(item);
@@ -71,88 +83,115 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           return isOrderInDateRange(dateStr, filterState);
         });
 
-        if (filteredOrders.length === 0) {
-          return (
-            <View className="px-6 pt-6">
-              <View 
-                className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
-                style={{ borderStyle: 'dashed' }}
-              >
-                <View
-                  className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
-                  style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
-                >
-                  <Ionicons name="file-tray-outline" size={28} color="#94A3B8" />
-                </View>
-                <Text className="text-[15px] font-black text-slate-700 text-center">
-                  {t("no_orders_found")}
-                </Text>
-              </View>
-            </View>
-          );
-        }
-
         return (
-          <ScrollView 
-            className="flex-1 px-6 pt-2"
+          <FlatList 
+            className="flex-1 pt-2"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60 }}
-          >
-            {filteredOrders.map((item, index) => {
-              const orderIdText = `#ORD-1769749895005-${item.id.replace('inc-', '')}`;
-              const routeText = getRouteForOrder(item).split('>').map(part => translateRoutePart(part, t)).join(' > ');
+            contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 24 }}
+            data={filteredOrders.length === 0 ? [] : filteredOrders.slice(0, visibleCount)}
+            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+            ListEmptyComponent={
+              filteredOrders.length === 0 ? (
+                <View className="pt-6">
+                  <View 
+                    className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
+                    style={{ borderStyle: 'dashed' }}
+                  >
+                    <View
+                      className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
+                      style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
+                    >
+                      <Ionicons name="file-tray-outline" size={28} color="#94A3B8" />
+                    </View>
+                    <Text className="text-[15px] font-black text-slate-700 text-center">
+                      {t("no_orders_found")}
+                    </Text>
+                  </View>
+                </View>
+              ) : null
+            }
+            renderItem={({ item, index }) => {
+              const orderIdText = `#${getFormattedOrderId(item)}`;
+              const routeStr = getRouteForOrder(item);
+              const routeParts = routeStr.split('>');
+              const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+              const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
               const info = getInfoForOrder(item);
 
               return (
-                <View 
-                  key={item.id || index} 
-                  className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-                  style={{ 
-                    elevation: 3,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 10,
-                    backgroundColor: 'rgba(255, 255, 255, 0.85)'
-                  }}
-                >
-                  <BlurView intensity={50} tint="light">
-                    <View className="p-5 bg-white/70">
-                      <View className="flex-row justify-between items-center mb-3">
-                        <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
-                        <View className="px-3.5 py-1.5 rounded-full bg-[#FEECEE]">
-                          <Text className="text-[11px] font-bold text-[#D0303F]">{t("status_rejected") || "Rejected"}</Text>
+                <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
+                  <View 
+                    className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
+                    style={{ 
+                      elevation: 3,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 10,
+                      backgroundColor: 'rgba(255, 255, 255, 0.85)'
+                    }}
+                  >
+                    <BlurView intensity={50} tint="light">
+                      <View className="p-5 bg-white/70">
+                        <View className="flex-row justify-between items-center mb-3">
+                          <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
+                          <View className="px-3.5 py-1.5 rounded-full bg-[#FEECEE]">
+                            <Text className="text-[11px] font-bold text-[#D0303F]">{t("status_rejected") || "Rejected"}</Text>
+                          </View>
                         </View>
-                      </View>
-                      
-                      <View className="flex-row justify-between items-center mb-4">
-                        <Text className="flex-1 text-[16px] font-extrabold text-[#111827] tracking-tight">
-                          {routeText}
-                        </Text>
-                        <OrderDistance distance={item.distance} />
-                      </View>
-                      
-                      <View className="flex-row justify-between items-center">
-                        <Text className="text-[13px] text-[#8792A1] font-medium">
-                          {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
-                        </Text>
-                        <Text className="text-[12px] text-[#8792A1] font-medium">
-                          {item.rejectedAt || `${info.date}, ${info.time}`}
-                        </Text>
-                      </View>
+                        
+                        <View className="flex-row items-center justify-between mb-2 mt-1">
+                          <View className="flex-1 flex-row items-center pr-2">
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+                            <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                            <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
+                          </View>
+                          <OrderDistance distance={item.distance} />
+                        </View>
 
-                      {item.rejectReason ? (
-                        <View className="mt-3 pt-3 border-t border-red-100/50">
-                          <Text className="text-[11px] font-bold text-[#D0303F] tracking-wide mb-1">{t("rejection_reason_label")}</Text>
-                          <Text className="text-[13px] text-slate-700 font-medium leading-[18px]">{t("reason_" + item.rejectReason) || item.rejectReason}</Text>
+                        {/* View Address Button */}
+                        <TouchableOpacity 
+                          onPress={() => setSelectedAddressOrder(item)} 
+                          activeOpacity={0.7}
+                          className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                        >
+                          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                            {t("view_address") || "View Address"}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <View className="flex-row justify-between items-center">
+                          <Text className="text-[13px] text-[#8792A1] font-medium">
+                            {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
+                          </Text>
+                          <Text className="text-[12px] text-[#8792A1] font-medium">
+                            {item.rejectedAt || `${info.date}, ${info.time}`}
+                          </Text>
                         </View>
-                      ) : null}
-                    </View>
-                  </BlurView>
-                </View>
+
+                        {item.rejectReason ? (
+                          <View className="mt-3 pt-3 border-t border-red-100/50">
+                            <Text className="text-[11px] font-bold text-[#D0303F] tracking-wide mb-1">{t("rejection_reason_label")}</Text>
+                            <Text className="text-[13px] text-slate-700 font-medium leading-[18px]">{t("reason_" + item.rejectReason) || item.rejectReason}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </BlurView>
+                  </View>
+                </HighlightCardWrapper>
               );
-            })}
-          </ScrollView>
+            }}
+            ListFooterComponent={
+              filteredOrders.length > 0 ? (
+                <ViewMoreButton 
+                  totalCount={filteredOrders.length}
+                  visibleCount={visibleCount}
+                  onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+                />
+              ) : null
+            }
+          />
         );
       })()}
 
@@ -162,6 +201,20 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         onClose={() => setIsFilterModalVisible(false)}
         onApply={(f) => setFilterState(f)}
       />
+
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
     </SafeAreaView>
   );
 };

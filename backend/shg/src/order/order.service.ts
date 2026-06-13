@@ -13,7 +13,7 @@ export class OrderService {
     return this.prisma.pickupOrder.findMany({
       where: {
         shgId,
-        status: { in: ['PENDING', 'ACCEPTED', 'REJECTED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'] },
       },
       include: {
         seller: {
@@ -88,13 +88,30 @@ export class OrderService {
       });
 
       const pendingDrops = await tx.dropOrder.findMany({
-        where: { masterOrderId: updated.masterOrderId, shgId, status: 'PENDING' }
+        where: {
+          masterOrderId: updated.masterOrderId,
+          status: 'PENDING',
+          OR: [
+            { shgId: null },
+            { shgId }
+          ]
+        }
       });
 
       if (pendingDrops.length > 0) {
         await tx.dropOrder.updateMany({
-          where: { masterOrderId: updated.masterOrderId, shgId, status: 'PENDING' },
-          data: { status: 'REJECTED' }
+          where: {
+            masterOrderId: updated.masterOrderId,
+            status: 'PENDING',
+            OR: [
+              { shgId: null },
+              { shgId }
+            ]
+          },
+          data: {
+            status: 'REJECTED',
+            shgId
+          }
         });
 
         for (const drop of pendingDrops) {
@@ -140,21 +157,38 @@ export class OrderService {
 
       // Auto-accept associated PENDING drop orders
       const pendingDrops = await tx.dropOrder.findMany({
-        where: { masterOrderId: updated.masterOrderId, shgId, status: 'PENDING' }
+        where: {
+          masterOrderId: updated.masterOrderId,
+          status: 'PENDING',
+          OR: [
+            { shgId: null },
+            { shgId }
+          ]
+        }
       });
 
       if (pendingDrops.length > 0) {
         await tx.dropOrder.updateMany({
-          where: { masterOrderId: updated.masterOrderId, shgId, status: 'PENDING' },
-          data: { status: 'ACCEPTED' }
+          where: {
+            masterOrderId: updated.masterOrderId,
+            status: 'PENDING',
+            OR: [
+              { shgId: null },
+              { shgId }
+            ]
+          },
+          data: {
+            status: 'PICKED_UP',
+            shgId
+          }
         });
 
         for (const drop of pendingDrops) {
           await tx.dropTracking.create({
             data: {
               dropOrderId: drop.id,
-              status: 'ACCEPTED',
-              remarks: 'Delivery leg auto-accepted upon pickup completion.'
+              status: 'PICKED_UP',
+              remarks: 'Delivery leg auto-picked up upon pickup completion.'
             }
           });
         }
@@ -168,7 +202,7 @@ export class OrderService {
     return this.prisma.dropOrder.findMany({
       where: {
         shgId,
-        status: { in: ['ACCEPTED', 'COMPLETED', 'REJECTED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED'] },
       },
       include: {
         buyer: {
@@ -183,7 +217,19 @@ export class OrderService {
             product: true,
           },
         },
-        masterOrder: true,
+        masterOrder: {
+          include: {
+            items: {
+              include: {
+                seller: {
+                  include: {
+                    address: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         tracking: true,
       },
       orderBy: {
@@ -192,7 +238,59 @@ export class OrderService {
     });
   }
 
+  async acceptDrop(dropOrderId: number, shgId: number) {
+    const dropOrder = await this.prisma.dropOrder.findFirst({
+      where: { id: dropOrderId, shgId },
+    });
 
+    if (!dropOrder) {
+      throw new NotFoundException(`Drop order with ID ${dropOrderId} not assigned to this SHG.`);
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const updated = await tx.dropOrder.update({
+        where: { id: dropOrderId },
+        data: { status: 'ACCEPTED' },
+      });
+
+      await tx.dropTracking.create({
+        data: {
+          dropOrderId,
+          status: 'ACCEPTED',
+          remarks: 'Delivery leg accepted by SHG.',
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  async pickupDrop(dropOrderId: number, shgId: number) {
+    const dropOrder = await this.prisma.dropOrder.findFirst({
+      where: { id: dropOrderId, shgId, status: 'ACCEPTED' },
+    });
+
+    if (!dropOrder) {
+      throw new NotFoundException(`Drop order with ID ${dropOrderId} not accepted by this SHG.`);
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const updated = await tx.dropOrder.update({
+        where: { id: dropOrderId },
+        data: { status: 'PICKED_UP' },
+      });
+
+      await tx.dropTracking.create({
+        data: {
+          dropOrderId,
+          status: 'PICKED_UP',
+          remarks: 'Delivery leg picked up successfully from transporter by SHG.',
+        },
+      });
+
+      return updated;
+    });
+  }
 
   async completeDrop(dropOrderId: number, shgId: number) {
     const dropOrder = await this.prisma.dropOrder.findFirst({
