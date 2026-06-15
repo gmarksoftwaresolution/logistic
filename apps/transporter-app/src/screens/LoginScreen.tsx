@@ -198,6 +198,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       
       const { accessToken } = response.data;
       await AsyncStorage.setItem('access_token', accessToken);
+      await AsyncStorage.setItem('user_phone_number', mobileNumber);
       
       try {
         const isFirstTimeRegister = await AsyncStorage.getItem('IS_FIRST_TIME_REGISTER');

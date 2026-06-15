@@ -11,13 +11,12 @@ import {
   KeyboardAvoidingView,
   RefreshControl,
 } from 'react-native';
-import TimePickerPopup from '../../components/TimePickerPopup';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, ChevronDown, ChevronRight, ChevronLeft, Check, X, MapPin, ArrowRight, Info, Calendar, Clock } from 'lucide-react-native';
+import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useTranslation } from 'react-i18next';
 
@@ -26,63 +25,13 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList } = useOrderManagement();
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
   const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
+  const [activeSubStep, setActiveSubStep] = useState<'none' | 'shg_gmu_not_available' | 'unsufficient_details'>('none');
   const [customReasonText, setCustomReasonText] = useState('');
   const modalScrollRef = useRef<ScrollView>(null);
   const customReasonInputRef = useRef<TextInput>(null);
   const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
   const [isCustomInputFocused, setIsCustomInputFocused] = useState(false);
 
-  // Reschedule and multi-step reject flow states
-  const [rejectStep, setRejectStep] = useState<'primary' | 'reschedule_type' | 'reschedule_reason' | 'reschedule_date_time'>('primary');
-  const [rescheduleBy, setRescheduleBy] = useState<'you' | 'shg' | 'gmu' | null>(null);
-  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
-  const [rescheduleCustomReason, setRescheduleCustomReason] = useState('');
-  const [rescheduleDate, setRescheduleDate] = useState<'today' | 'tomorrow' | 'day_after' | null>(null);
-  const [rescheduleStartTime, setRescheduleStartTime] = useState('');
-  const [rescheduleEndTime, setRescheduleEndTime] = useState('');
-
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
-
-  const formatTimeToString = (date: Date): string => {
-    let hours = date.getHours();
-    let minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
-    const strMinutes = minutes < 10 ? '0' + minutes : minutes;
-    const strHours = hours < 10 ? '0' + hours : hours;
-    return `${strHours}:${strMinutes} ${ampm}`;
-  };
-
-  const onStartTimeConfirm = (timeStr: string) => {
-    setRescheduleStartTime(timeStr);
-  };
-
-  const onEndTimeConfirm = (timeStr: string) => {
-    setRescheduleEndTime(timeStr);
-  };
-
-  const getThreeDays = () => {
-    const today = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(today.getDate() + 1);
-    const dayAfter = new Date();
-    dayAfter.setDate(today.getDate() + 2);
-    
-    const formatDate = (d: Date) => {
-      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
-    };
-
-    return {
-      todayStr: formatDate(today),
-      tomorrowStr: formatDate(tomorrow),
-      dayAfterStr: formatDate(dayAfter)
-    };
-  };
-  
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -109,7 +58,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
     try {
       await acceptBatch(batchId);
-      navigation.navigate('AcceptedOrders', { activeTab: type });
+      navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
     } catch (err) {
       console.error('Failed to accept single batch:', err);
     }
@@ -173,49 +122,16 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const handleCloseModal = () => {
     setRejectingBatchId(null);
     setSelectedReasonChip(null);
+    setActiveSubStep('none');
     setCustomReasonText('');
     setIsEditingCustomReason(false);
     setIsCustomInputFocused(false);
-
-    setRejectStep('primary');
-    setRescheduleBy(null);
-    setRescheduleReason(null);
-    setRescheduleCustomReason('');
-    setRescheduleDate(null);
-    setRescheduleStartTime('');
-    setRescheduleEndTime('');
-    setShowStartTimePicker(false);
-    setShowEndTimePicker(false);
-  };
-
-  const handleBackStep = () => {
-    if (rejectStep === 'reschedule_type') {
-      setRejectStep('primary');
-    } else if (rejectStep === 'reschedule_reason') {
-      setRejectStep('reschedule_type');
-    } else if (rejectStep === 'reschedule_date_time') {
-      setRejectStep('reschedule_reason');
-    }
   };
 
   const handleConfirmReject = async () => {
     if (rejectingBatchId) {
       let finalReason = '';
-      if (selectedReasonChip === 'Reschedule') {
-        const rescheduleTypeLabel = 
-          rescheduleBy === 'you' ? 'You' : 
-          rescheduleBy === 'shg' ? 'SHG' : 'GMU';
-
-        const rescheduleReasonLabel = 
-          rescheduleReason === 'Custom Reason' ? rescheduleCustomReason.trim() : rescheduleReason;
-
-        const dates = getThreeDays();
-        const selectedDateStr = 
-          rescheduleDate === 'today' ? dates.todayStr : 
-          rescheduleDate === 'tomorrow' ? dates.tomorrowStr : dates.dayAfterStr;
-
-        finalReason = `Rescheduled by ${rescheduleTypeLabel}: ${rescheduleReasonLabel} (Date: ${selectedDateStr}, Time: ${rescheduleStartTime.trim()} - ${rescheduleEndTime.trim()})`;
-      } else if (selectedReasonChip === 'Custom Reason') {
+      if (selectedReasonChip === 'Custom Reason') {
         finalReason = customReasonText.trim();
       } else {
         finalReason = selectedReasonChip || '';
@@ -465,7 +381,6 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
           })
         )}
       </ScrollView>
-
       {/* Reject Modal */}
       <Modal
         visible={!!rejectingBatchId}
@@ -479,19 +394,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         >
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                {rejectStep !== 'primary' && (
-                  <TouchableOpacity onPress={handleBackStep} style={{ padding: scale(4) }}>
-                    <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
-                  </TouchableOpacity>
-                )}
-                <Text style={styles.modalTitle}>
-                  {rejectStep === 'primary' && t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}
-                  {rejectStep === 'reschedule_type' && 'Reschedule Type'}
-                  {rejectStep === 'reschedule_reason' && 'Reschedule Reason'}
-                  {rejectStep === 'reschedule_date_time' && 'Select Date & Time'}
-                </Text>
-              </View>
+              <Text style={styles.modalTitle}>
+                {t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}
+              </Text>
               <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
                 <X size={scale(20)} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -503,404 +408,199 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(10) }}
             >
-              {/* Step 1: Primary Rejection Reasons */}
-              {rejectStep === 'primary' && (
-                <View>
-                  <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
-                  
-                  <View style={styles.chipsContainer}>
-                    {/* Chip 1: Vehicle Not Available */}
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedReasonChip('Vehicle Not Available');
-                        setCustomReasonText('');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.reasonChipText,
-                          selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipTextSelected,
-                        ]}
-                      >
-                        Vehicle Not Available
-                      </Text>
-                    </TouchableOpacity>
+              <View>
+                <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
+                
+                <View style={styles.chipsContainer}>
+                  {/* Option 1: Vehicle Not Available */}
+                  <TouchableOpacity
+                    style={[
+                      styles.reasonChip,
+                      selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip('Vehicle Not Available');
+                      setActiveSubStep('none');
+                      setCustomReasonText('');
+                    }}
+                  >
+                    <Text style={[styles.reasonChipText, selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipTextSelected]}>
+                      Vehicle Not Available
+                    </Text>
+                  </TouchableOpacity>
 
-                    {/* Chip 2: Transport Capacity Full */}
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedReasonChip('Transport Capacity Full');
-                        setCustomReasonText('');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.reasonChipText,
-                          selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipTextSelected,
-                        ]}
-                      >
-                        Transport Capacity Full
-                      </Text>
-                    </TouchableOpacity>
+                  {/* Option 2: Transport Capacity Full */}
+                  <TouchableOpacity
+                    style={[
+                      styles.reasonChip,
+                      selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip('Transport Capacity Full');
+                      setActiveSubStep('none');
+                      setCustomReasonText('');
+                    }}
+                  >
+                    <Text style={[styles.reasonChipText, selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipTextSelected]}>
+                      Transport Capacity Full
+                    </Text>
+                  </TouchableOpacity>
 
-                    {/* Chip 3: Reschedule */}
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        selectedReasonChip === 'Reschedule' && styles.reasonChipSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedReasonChip('Reschedule');
-                        setCustomReasonText('');
-                        setRejectStep('reschedule_type');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.reasonChipText,
-                          selectedReasonChip === 'Reschedule' && styles.reasonChipTextSelected,
-                        ]}
-                      >
-                        Reschedule
-                      </Text>
-                    </TouchableOpacity>
+                  {/* Option 3: SHG/Gmu Not Available */}
+                  <TouchableOpacity
+                    style={[
+                      styles.reasonChip,
+                      (activeSubStep === 'shg_gmu_not_available' || selectedReasonChip === 'SHG Not Available' || selectedReasonChip === 'GMU Not Available') && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip(null);
+                      setActiveSubStep('shg_gmu_not_available');
+                      setCustomReasonText('');
+                    }}
+                  >
+                    <Text style={[styles.reasonChipText, (activeSubStep === 'shg_gmu_not_available' || selectedReasonChip === 'SHG Not Available' || selectedReasonChip === 'GMU Not Available') && styles.reasonChipTextSelected]}>
+                      SHG/Gmu Not Available
+                    </Text>
+                  </TouchableOpacity>
 
-                    {/* Chip 4: Custom Reason */}
-                    <TouchableOpacity
+                  {/* Option 4: Unsufficient Details */}
+                  <TouchableOpacity
+                    style={[
+                      styles.reasonChip,
+                      (activeSubStep === 'unsufficient_details' || selectedReasonChip === 'Unsufficient Details of SHG' || selectedReasonChip === 'Unsufficient Details of GMU') && styles.reasonChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedReasonChip(null);
+                      setActiveSubStep('unsufficient_details');
+                      setCustomReasonText('');
+                    }}
+                  >
+                    <Text style={[styles.reasonChipText, (activeSubStep === 'unsufficient_details' || selectedReasonChip === 'Unsufficient Details of SHG' || selectedReasonChip === 'Unsufficient Details of GMU') && styles.reasonChipTextSelected]}>
+                      Unsufficient Details
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Option 5: Custom Reason */}
+                  {selectedReasonChip === 'Custom Reason' ? (
+                    <TextInput
+                      ref={customReasonInputRef}
                       style={[
                         styles.reasonChip,
-                        selectedReasonChip === 'Custom Reason' && styles.reasonChipSelected,
+                        styles.reasonChipSelected,
+                        {
+                          fontFamily: Fonts.medium,
+                          fontSize: moderateScale(13.5),
+                          color: '#DC2626',
+                          minHeight: verticalScale(50),
+                          textAlignVertical: 'top',
+                        }
                       ]}
+                      placeholder="Custom Reason here"
+                      placeholderTextColor={Colors.textPlaceholder}
+                      value={customReasonText}
+                      onChangeText={setCustomReasonText}
+                      multiline
+                      autoFocus
+                      onFocus={() => {
+                        setTimeout(() => {
+                          modalScrollRef.current?.scrollToEnd({ animated: true });
+                        }, 100);
+                      }}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.reasonChip}
                       onPress={() => {
                         setSelectedReasonChip('Custom Reason');
+                        setActiveSubStep('none');
                         setTimeout(() => {
                           customReasonInputRef.current?.focus();
                         }, 100);
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.reasonChipText,
-                          selectedReasonChip === 'Custom Reason' && styles.reasonChipTextSelected,
-                        ]}
-                      >
+                      <Text style={styles.reasonChipText}>
                         Custom Reason
                       </Text>
                     </TouchableOpacity>
-
-                    {selectedReasonChip === 'Custom Reason' && (
-                      <TextInput
-                        ref={customReasonInputRef}
-                        style={styles.customReasonTextInput}
-                        placeholder="Enter custom reason here..."
-                        placeholderTextColor={Colors.textPlaceholder}
-                        value={customReasonText}
-                        onChangeText={setCustomReasonText}
-                        multiline
-                      />
-                    )}
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.confirmRejectBtn,
-                      (!selectedReasonChip || selectedReasonChip === 'Reschedule' || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())) && styles.btnDisabled
-                    ]}
-                    disabled={!selectedReasonChip || selectedReasonChip === 'Reschedule' || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())}
-                    onPress={handleConfirmReject}
-                  >
-                    <Text style={styles.confirmRejectText}>Confirm Reject</Text>
-                  </TouchableOpacity>
+                  )}
                 </View>
-              )}
 
-              {/* Step 2: Choose Reschedule Type */}
-              {rejectStep === 'reschedule_type' && (
-                <View>
-                  <Text style={styles.modalSubtitle}>Select who is rescheduling this order</Text>
-                  
-                  <View style={styles.chipsContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        rescheduleBy === 'you' && styles.rescheduleTypeChipSelected,
-                      ]}
-                      onPress={() => {
-                        setRescheduleBy('you');
-                        setRescheduleReason(null);
-                        setRescheduleCustomReason('');
-                        setRejectStep('reschedule_reason');
-                      }}
-                    >
-                      <Text style={[styles.reasonChipText, rescheduleBy === 'you' && styles.rescheduleTypeTextSelected]}>
-                        Reschedule by You (Transporter)
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        rescheduleBy === 'shg' && styles.rescheduleTypeChipSelected,
-                      ]}
-                      onPress={() => {
-                        setRescheduleBy('shg');
-                        setRescheduleReason(null);
-                        setRescheduleCustomReason('');
-                        setRejectStep('reschedule_reason');
-                      }}
-                    >
-                      <Text style={[styles.reasonChipText, rescheduleBy === 'shg' && styles.rescheduleTypeTextSelected]}>
-                        Reschedule by SHG
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        rescheduleBy === 'gmu' && styles.rescheduleTypeChipSelected,
-                      ]}
-                      onPress={() => {
-                        setRescheduleBy('gmu');
-                        setRescheduleReason(null);
-                        setRescheduleCustomReason('');
-                        setRejectStep('reschedule_reason');
-                      }}
-                    >
-                      <Text style={[styles.reasonChipText, rescheduleBy === 'gmu' && styles.rescheduleTypeTextSelected]}>
-                        Reschedule by GMU
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Step 3: Choose Reschedule Reason */}
-              {rejectStep === 'reschedule_reason' && (
-                <View>
-                  <Text style={styles.modalSubtitle}>
-                    {rescheduleBy === 'you' && 'Specify reason for transporter rescheduling'}
-                    {rescheduleBy === 'shg' && 'Specify reason for SHG rescheduling'}
-                    {rescheduleBy === 'gmu' && 'Specify reason for GMU rescheduling'}
-                  </Text>
-
-                  <View style={styles.chipsContainer}>
-                    {rescheduleBy === 'you' && (
+                 {/* Sub-steps container */}
+                {activeSubStep === 'shg_gmu_not_available' && (
+                  <View style={{ marginTop: verticalScale(10), marginBottom: verticalScale(16) }}>
+                    <Text style={styles.subHeadingLabel}>Select Specific Location:</Text>
+                    <View style={styles.chipsContainer}>
                       <TouchableOpacity
                         style={[
                           styles.reasonChip,
-                          rescheduleReason === 'Time Insufficient' && styles.rescheduleReasonChipSelected,
+                          selectedReasonChip === 'SHG Not Available' && styles.reasonChipSelected,
                         ]}
-                        onPress={() => {
-                          setRescheduleReason('Time Insufficient');
-                          setRescheduleCustomReason('');
-                        }}
+                        onPress={() => setSelectedReasonChip('SHG Not Available')}
                       >
-                        <Text style={[styles.reasonChipText, rescheduleReason === 'Time Insufficient' && styles.rescheduleReasonTextSelected]}>
-                          Time Insufficient
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {rescheduleBy === 'shg' && (
-                      <TouchableOpacity
-                        style={[
-                          styles.reasonChip,
-                          rescheduleReason === 'SHG Not Available' && styles.rescheduleReasonChipSelected,
-                        ]}
-                        onPress={() => {
-                          setRescheduleReason('SHG Not Available');
-                          setRescheduleCustomReason('');
-                        }}
-                      >
-                        <Text style={[styles.reasonChipText, rescheduleReason === 'SHG Not Available' && styles.rescheduleReasonTextSelected]}>
+                        <Text style={[styles.reasonChipText, selectedReasonChip === 'SHG Not Available' && styles.reasonChipTextSelected]}>
                           SHG Not Available
                         </Text>
                       </TouchableOpacity>
-                    )}
 
-                    {rescheduleBy === 'gmu' && (
                       <TouchableOpacity
                         style={[
                           styles.reasonChip,
-                          rescheduleReason === 'GMU Not Available' && styles.rescheduleReasonChipSelected,
+                          selectedReasonChip === 'GMU Not Available' && styles.reasonChipSelected,
                         ]}
-                        onPress={() => {
-                          setRescheduleReason('GMU Not Available');
-                          setRescheduleCustomReason('');
-                        }}
+                        onPress={() => setSelectedReasonChip('GMU Not Available')}
                       >
-                        <Text style={[styles.reasonChipText, rescheduleReason === 'GMU Not Available' && styles.rescheduleReasonTextSelected]}>
+                        <Text style={[styles.reasonChipText, selectedReasonChip === 'GMU Not Available' && styles.reasonChipTextSelected]}>
                           GMU Not Available
                         </Text>
                       </TouchableOpacity>
-                    )}
-
-                    {/* Custom Option */}
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonChip,
-                        rescheduleReason === 'Custom Reason' && styles.rescheduleReasonChipSelected,
-                      ]}
-                      onPress={() => {
-                        setRescheduleReason('Custom Reason');
-                        setTimeout(() => {
-                          customReasonInputRef.current?.focus();
-                        }, 100);
-                      }}
-                    >
-                      <Text style={[styles.reasonChipText, rescheduleReason === 'Custom Reason' && styles.rescheduleReasonTextSelected]}>
-                        Custom Reason
-                      </Text>
-                    </TouchableOpacity>
-
-                    {rescheduleReason === 'Custom Reason' && (
-                      <TextInput
-                        ref={customReasonInputRef}
-                        style={styles.customReasonTextInput}
-                        placeholder="Enter custom reason..."
-                        placeholderTextColor={Colors.textPlaceholder}
-                        value={rescheduleCustomReason}
-                        onChangeText={setRescheduleCustomReason}
-                        multiline
-                      />
-                    )}
+                    </View>
                   </View>
+                )}
 
-                  <TouchableOpacity
-                    style={[
-                      styles.confirmRejectBtn,
-                      (!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())) && styles.btnDisabled
-                    ]}
-                    disabled={!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())}
-                    onPress={() => setRejectStep('reschedule_date_time')}
-                  >
-                    <Text style={styles.confirmRejectText}>Next</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Step 4: Date & Time Select */}
-              {rejectStep === 'reschedule_date_time' && (() => {
-                const dates = getThreeDays();
-                return (
-                  <View>
-                    <Text style={styles.modalSubtitle}>Specify your availability date and time</Text>
-                    
-                    <Text style={styles.subHeadingLabel}>Available Date</Text>
-                    <View style={styles.dateTimeSelectorRow}>
+                {activeSubStep === 'unsufficient_details' && (
+                  <View style={{ marginTop: verticalScale(10), marginBottom: verticalScale(16) }}>
+                    <Text style={styles.subHeadingLabel}>Select Specific Party:</Text>
+                    <View style={styles.chipsContainer}>
                       <TouchableOpacity
                         style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'today' && styles.dateSelectBtnSelected,
+                          styles.reasonChip,
+                          selectedReasonChip === 'Unsufficient Details of SHG' && styles.reasonChipSelected,
                         ]}
-                        onPress={() => setRescheduleDate('today')}
+                        onPress={() => setSelectedReasonChip('Unsufficient Details of SHG')}
                       >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'today' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Today
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'today' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.todayStr.split(',')[1]?.trim() || dates.todayStr}
+                        <Text style={[styles.reasonChipText, selectedReasonChip === 'Unsufficient Details of SHG' && styles.reasonChipTextSelected]}>
+                          Unsufficient Details of SHG
                         </Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
                         style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'tomorrow' && styles.dateSelectBtnSelected,
+                          styles.reasonChip,
+                          selectedReasonChip === 'Unsufficient Details of GMU' && styles.reasonChipSelected,
                         ]}
-                        onPress={() => setRescheduleDate('tomorrow')}
+                        onPress={() => setSelectedReasonChip('Unsufficient Details of GMU')}
                       >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'tomorrow' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Tomorrow
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'tomorrow' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.tomorrowStr.split(',')[1]?.trim() || dates.tomorrowStr}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'day_after' && styles.dateSelectBtnSelected,
-                        ]}
-                        onPress={() => setRescheduleDate('day_after')}
-                      >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'day_after' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Day After
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'day_after' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.dayAfterStr.split(',')[1]?.trim() || dates.dayAfterStr}
+                        <Text style={[styles.reasonChipText, selectedReasonChip === 'Unsufficient Details of GMU' && styles.reasonChipTextSelected]}>
+                          Unsufficient Details of GMU
                         </Text>
                       </TouchableOpacity>
                     </View>
-
-                    <Text style={styles.subHeadingLabel}>Available Time Range</Text>
-                    <View style={styles.timeInputGrid}>
-                      <TouchableOpacity
-                        style={styles.timeInputCol}
-                        activeOpacity={0.7}
-                        onPress={() => setShowStartTimePicker(true)}
-                      >
-                        <Text style={styles.timeInputLabel}>Start Time</Text>
-                        <View style={styles.timeDisplayBox}>
-                          <Clock size={scale(16)} color={rescheduleStartTime ? Colors.primary : Colors.textPlaceholder} />
-                          <Text style={[styles.timeDisplayText, !rescheduleStartTime && styles.timePlaceholderText]}>
-                            {rescheduleStartTime || "Select Time"}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.timeInputCol}
-                        activeOpacity={0.7}
-                        onPress={() => setShowEndTimePicker(true)}
-                      >
-                        <Text style={styles.timeInputLabel}>End Time</Text>
-                        <View style={styles.timeDisplayBox}>
-                          <Clock size={scale(16)} color={rescheduleEndTime ? Colors.primary : Colors.textPlaceholder} />
-                          <Text style={[styles.timeDisplayText, !rescheduleEndTime && styles.timePlaceholderText]}>
-                            {rescheduleEndTime || "Select Time"}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TimePickerPopup
-                      visible={showStartTimePicker}
-                      onClose={() => setShowStartTimePicker(false)}
-                      onConfirm={onStartTimeConfirm}
-                      initialTime={rescheduleStartTime}
-                    />
-
-                    <TimePickerPopup
-                      visible={showEndTimePicker}
-                      onClose={() => setShowEndTimePicker(false)}
-                      onConfirm={onEndTimeConfirm}
-                      initialTime={rescheduleEndTime}
-                    />
-
-                    <TouchableOpacity
-                      style={[
-                        styles.confirmRejectBtn,
-                        (!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()) && styles.btnDisabled,
-                        { marginTop: verticalScale(16) }
-                      ]}
-                      disabled={!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()}
-                      onPress={handleConfirmReject}
-                    >
-                      <Text style={styles.confirmRejectText}>Confirm Reschedule</Text>
-                    </TouchableOpacity>
                   </View>
-                );
-              })()}
+                )}
+
+
+
+                <TouchableOpacity
+                  style={[
+                    styles.confirmRejectBtn,
+                    (!selectedReasonChip || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())) && styles.btnDisabled
+                  ]}
+                  disabled={!selectedReasonChip || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())}
+                  onPress={handleConfirmReject}
+                >
+                  <Text style={styles.confirmRejectText}>Confirm Reject</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

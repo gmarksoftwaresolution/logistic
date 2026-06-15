@@ -16,10 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
-import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Info, Clock } from 'lucide-react-native';
+import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
+import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import TimePickerPopup from '../../components/TimePickerPopup';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useTranslation } from 'react-i18next';
@@ -43,55 +42,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
   const [isFinalizing, setIsFinalizing] = useState(false);
-
-  // Reschedule and multi-step reject states for item rejection
-  const [rejectStep, setRejectStep] = useState<'primary' | 'reschedule_reason' | 'reschedule_date_time'>('primary');
-  const [rescheduleReason, setRescheduleReason] = useState<string | null>(null);
-  const [rescheduleCustomReason, setRescheduleCustomReason] = useState('');
-  const [rescheduleDate, setRescheduleDate] = useState<'today' | 'tomorrow' | 'day_after' | null>(null);
-  const [rescheduleStartTime, setRescheduleStartTime] = useState('');
-  const [rescheduleEndTime, setRescheduleEndTime] = useState('');
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
-
-  const formatTimeToString = (date: Date): string => {
-    let hours = date.getHours();
-    let minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    const strMinutes = minutes < 10 ? '0' + minutes : minutes;
-    const strHours = hours < 10 ? '0' + hours : hours;
-    return `${strHours}:${strMinutes} ${ampm}`;
-  };
-
-  const getThreeDays = () => {
-    const today = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(today.getDate() + 1);
-    const dayAfter = new Date();
-    dayAfter.setDate(today.getDate() + 2);
-    
-    const formatDate = (d: Date) => {
-      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
-    };
-
-    return {
-      todayStr: formatDate(today),
-      tomorrowStr: formatDate(tomorrow),
-      dayAfterStr: formatDate(dayAfter)
-    };
-  };
-
-  const onStartTimeConfirm = (timeStr: string) => {
-    setRescheduleStartTime(timeStr);
-  };
-
-  const onEndTimeConfirm = (timeStr: string) => {
-    setRescheduleEndTime(timeStr);
-  };
 
   // Code-based Handover state
   const [showVerificationSheet, setShowVerificationSheet] = useState(false);
@@ -145,6 +95,25 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       navigation.navigate('AcceptedOrders', { activeTab: 'drop' });
     } else {
       navigation.replace('OrderBatchCompleted');
+    }
+  };
+
+  const handleGmuConfirm = async () => {
+    if (!batch) return;
+    setIsFinalizing(true);
+    try {
+      if (type === 'pickup') {
+        await finalizePickup(batch.id);
+        setSuccessMessage('Pickup Completed Successfully');
+      } else {
+        await finalizeDrop(batch.id);
+        setSuccessMessage('Delivery Completed Successfully');
+      }
+      setShowSuccessDialog(true);
+    } catch (err) {
+      console.error('Error finalizing GMU batch:', err);
+    } finally {
+      setIsFinalizing(false);
     }
   };
 
@@ -204,33 +173,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const handleCloseModal = () => {
     setRejectingProductId(null);
     setRejectReasonText('');
-    setRejectStep('primary');
-    setRescheduleReason(null);
-    setRescheduleCustomReason('');
-    setRescheduleDate(null);
-    setRescheduleStartTime('');
-    setRescheduleEndTime('');
-    setShowStartTimePicker(false);
-    setShowEndTimePicker(false);
   };
 
   const handleConfirmReject = () => {
     if (!rejectingProductId) return;
     
-    let finalReason = '';
-    if (rejectStep === 'reschedule_date_time') {
-      const rescheduleReasonLabel = 
-        rescheduleReason === 'Custom Reason' ? rescheduleCustomReason.trim() : rescheduleReason;
-      
-      const dates = getThreeDays();
-      const selectedDateStr = 
-        rescheduleDate === 'today' ? dates.todayStr : 
-        rescheduleDate === 'tomorrow' ? dates.tomorrowStr : dates.dayAfterStr;
-
-      finalReason = `Rescheduled: ${rescheduleReasonLabel} (Date: ${selectedDateStr}, Time: ${rescheduleStartTime.trim()} - ${rescheduleEndTime.trim()})`;
-    } else {
-      finalReason = rejectReasonText.trim();
-    }
+    const finalReason = rejectReasonText.trim();
 
     if (!finalReason) return;
 
@@ -381,14 +329,19 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           </View>
 
           <View style={styles.boxContentPadding}>
-            {isRTOBatch && (
-              <View style={styles.contactUpdateNote}>
-                <Info size={scale(14)} color="#D97706" />
-                <Text style={styles.contactUpdateNoteText}>
-                  {t('orders.note_address_updated', { defaultValue: 'Note: Address updated to return hub.' })}
-                </Text>
-              </View>
-            )}
+            {isRTOBatch && (() => {
+              const rtoProducts = batch.products.filter(p => (p as any).isRTO);
+              const isPlural = rtoProducts.length > 1;
+              const noteText = isPlural
+                ? t('orders.note_address_updated_plural', { defaultValue: 'Address updated. The products should be returned to the hub.' })
+                : t('orders.note_address_updated_singular', { defaultValue: 'Address updated. The product should be returned to the hub.' });
+              return (
+                <View style={styles.contactUpdateNote}>
+                  <Info size={scale(14)} color="#D97706" />
+                  <Text style={styles.contactUpdateNoteText}>{noteText}</Text>
+                </View>
+              );
+            })()}
             {(() => {
               const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
               const resolvedVillage = (displayContact as any).village || batch.areaName || 'Nesari';
@@ -401,7 +354,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                     <View style={styles.contactDetailCol}>
                       <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.name}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name)}</Text>
                     </View>
                   </View>
 
@@ -554,15 +507,6 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                           <Text style={styles.rejectText}>{product.rejectReason}</Text>
                         </View>
                       )}
-
-                      {(product as any).isRTO && (
-                        <View style={styles.rtoNarrative}>
-                          <MapPin size={scale(14)} color="#D97706" style={{ marginTop: scale(2) }} />
-                          <Text style={styles.rtoText}>
-                            {t('orders.address_updated_note', { defaultValue: 'Address updated: Return the picked product to the hub.' })}
-                          </Text>
-                        </View>
-                      )}
                     </View>
 
                     <View style={styles.sideActionStrip}>
@@ -578,14 +522,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                         <View style={styles.successIconBox}>
                           <XCircle size={scale(24)} color="#EF4444" />
                         </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.actionIconButton, styles.rejectIconButton]}
-                          onPress={() => setRejectingProductId(product.id)}
-                        >
-                          <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
-                        </TouchableOpacity>
-                      )}
+                      ) : null}
                     </View>
                   </View>
                 );
@@ -619,21 +556,65 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               <Text style={styles.rejectedBannerTextHeader}>Batch Rejected</Text>
             </View>
           ) : type === 'pickup' ? (
-            <GenerateCodeButton
-              text="Generate Pickup Code"
-              onPress={() => {
-                setOtpCode(['', '', '', '']);
-                setShowVerificationSheet(true);
-              }}
-            />
+            <View style={{ gap: verticalScale(12) }}>
+              {isHubPoint ? (
+                <TouchableOpacity
+                  style={[styles.primaryConfirmBtn, styles.bgPickup, isFinalizing && styles.btnDisabled]}
+                  disabled={isFinalizing}
+                  onPress={handleGmuConfirm}
+                >
+                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={styles.primaryConfirmBtnText}>
+                    {isFinalizing ? 'Confirming...' : 'Confirm Pickup'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <GenerateCodeButton
+                  text="Generate Pickup Code"
+                  onPress={() => {
+                    setOtpCode(['', '', '', '']);
+                    setShowVerificationSheet(true);
+                  }}
+                />
+              )}
+              <TouchableOpacity
+                style={styles.bottomRejectBtn}
+                onPress={() => setRejectingProductId('all')}
+              >
+                <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
+                <Text style={styles.bottomRejectBtnText}>Reject Collection</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <EnterCodeButton
-              text="Enter Delivery Code"
-              onPress={() => {
-                setOtpCode(['', '', '', '']);
-                setShowVerificationSheet(true);
-              }}
-            />
+            <View style={{ gap: verticalScale(12) }}>
+              {isHubPoint ? (
+                <TouchableOpacity
+                  style={[styles.primaryConfirmBtn, styles.bgDrop, isFinalizing && styles.btnDisabled]}
+                  disabled={isFinalizing}
+                  onPress={handleGmuConfirm}
+                >
+                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={styles.primaryConfirmBtnText}>
+                    {isFinalizing ? 'Confirming...' : 'Confirm Delivery'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <EnterCodeButton
+                  text="Enter Delivery Code"
+                  onPress={() => {
+                    setOtpCode(['', '', '', '']);
+                    setShowVerificationSheet(true);
+                  }}
+                />
+              )}
+              <TouchableOpacity
+                style={styles.bottomRejectBtn}
+                onPress={() => setRejectingProductId('all')}
+              >
+                <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
+                <Text style={styles.bottomRejectBtnText}>Reject Delivery</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -657,18 +638,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             >
               <View style={styles.modalHeaderRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                  {rejectStep !== 'primary' && (
-                    <TouchableOpacity onPress={() => {
-                      if (rejectStep === 'reschedule_reason') setRejectStep('primary');
-                      else if (rejectStep === 'reschedule_date_time') setRejectStep('reschedule_reason');
-                    }} style={{ padding: scale(4) }}>
-                      <ChevronLeft size={scale(20)} color={Colors.textPrimary} />
-                    </TouchableOpacity>
-                  )}
                   <Text style={styles.modalTitle}>
-                    {rejectStep === 'primary' && (type === 'pickup' ? 'Reject Pickup' : 'Reject Delivery')}
-                    {rejectStep === 'reschedule_reason' && 'Reschedule Reason'}
-                    {rejectStep === 'reschedule_date_time' && 'Select Date & Time'}
+                    {type === 'pickup' ? 'Reject Pickup' : 'Reject Delivery'}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
@@ -676,239 +647,143 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 </TouchableOpacity>
               </View>
 
-              {rejectStep === 'primary' && (
-                <View>
-                  <Text style={styles.modalSubtitle}>Specify reason for failing this shipment action</Text>
-                  
-                  <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
-                    {(type === 'pickup' 
-                      ? ['Vehicle Problem', 'Invalid Address', 'Receiver Not Reachable', 'Reschedule', 'Custom Reason']
-                      : ['Receiver Not Available', 'Invalid Address', 'Reschedule', 'Custom Reason']
-                    ).map((chip) => (
-                      <TouchableOpacity
-                        key={chip}
-                        style={[
-                          styles.reasonChip,
-                          { width: '100%' },
-                          rejectReasonText === chip && styles.reasonChipSelected
-                        ]}
-                        onPress={() => {
-                          setRejectReasonText(chip);
-                          if (chip === 'Reschedule') {
-                            setRejectStep('reschedule_reason');
-                          }
-                        }}
-                      >
-                        <Text style={[styles.reasonChipText, rejectReasonText === chip && styles.reasonChipTextSelected]}>
-                          {chip}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-
-                    {rejectReasonText === 'Custom Reason' && (
-                      <TextInput
-                        style={styles.customReasonTextInput}
-                        placeholder="Enter custom reason here..."
-                        placeholderTextColor={Colors.textPlaceholder}
-                        value={rescheduleCustomReason}
-                        onChangeText={setRescheduleCustomReason}
-                        multiline
-                      />
-                    )}
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.confirmRejectBtn,
-                      (!rejectReasonText || rejectReasonText === 'Reschedule' || (rejectReasonText === 'Custom Reason' && !rescheduleCustomReason.trim())) && styles.btnDisabled
-                    ]}
-                    disabled={!rejectReasonText || rejectReasonText === 'Reschedule' || (rejectReasonText === 'Custom Reason' && !rescheduleCustomReason.trim())}
-                    onPress={() => {
-                      if (rejectReasonText === 'Custom Reason') {
-                        setRejectReasonText(rescheduleCustomReason.trim());
+              <View>
+                <Text style={styles.modalSubtitle}>Specify reason for failing this shipment action</Text>
+                
+                <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
+                  {(() => {
+                    let chips: string[] = [];
+                    if (type === 'pickup') {
+                      const entityName = isHubPoint ? 'GMU' : 'SHG';
+                      chips = [
+                        'Vehicle Problem',
+                        `${entityName} Not Reachable`,
+                        `${entityName} Not Available`
+                      ];
+                    } else {
+                      // type === 'drop'
+                      if (isHubPoint) {
+                        // Drop destination is GMU Hub
+                        chips = ['GMU Not Available', 'Transporter Emergency'];
+                      } else {
+                        // Drop destination is SHG
+                        chips = [
+                          'SHG Not Available',
+                          'SHG Not Reachable',
+                          'Vehicle Issue from Transporter'
+                        ];
                       }
-                      setTimeout(() => {
-                        handleConfirmReject();
-                      }, 50);
-                    }}
-                  >
-                    <Text style={styles.confirmRejectText}>Confirm Reject</Text>
-                  </TouchableOpacity>
+                    }
+
+                    return chips.map((chip) => {
+                      return (
+                        <TouchableOpacity
+                          key={chip}
+                          style={[
+                            styles.reasonChip,
+                            { width: '100%' },
+                            rejectReasonText === chip && styles.reasonChipSelected
+                          ]}
+                          onPress={() => {
+                            setRejectReasonText(chip);
+                          }}
+                        >
+                          <Text style={[styles.reasonChipText, rejectReasonText === chip && styles.reasonChipTextSelected]}>
+                            {chip}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    });
+                  })()}
                 </View>
-              )}
 
-              {rejectStep === 'reschedule_reason' && (
-                <View>
-                  <Text style={styles.modalSubtitle}>Select reason for rescheduling availability</Text>
-                  
-                  <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
-                    {(type === 'pickup'
-                      ? (isSHG 
-                          ? ['SHG Request to Reschedule', 'Custom Reason'] 
-                          : ['GMU Not Available', 'Custom Reason'])
-                      : (isSHG 
-                          ? ['SHG Not Available', 'Custom Reason'] 
-                          : ['GMU Not Available', 'Custom Reason'])
-                    ).map((chip) => (
-                      <TouchableOpacity
-                        key={chip}
-                        style={[
-                          styles.reasonChip,
-                          { width: '100%' },
-                          rescheduleReason === chip && styles.reasonChipSelected
-                        ]}
-                        onPress={() => {
-                          setRescheduleReason(chip);
-                        }}
-                      >
-                        <Text style={[styles.reasonChipText, rescheduleReason === chip && styles.reasonChipTextSelected]}>
-                          {chip}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-
-                    {rescheduleReason === 'Custom Reason' && (
-                      <TextInput
-                        style={styles.customReasonTextInput}
-                        placeholder="Enter custom reschedule reason..."
-                        placeholderTextColor={Colors.textPlaceholder}
-                        value={rescheduleCustomReason}
-                        onChangeText={setRescheduleCustomReason}
-                        multiline
-                      />
-                    )}
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.confirmRejectBtn,
-                      (!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())) && styles.btnDisabled
-                    ]}
-                    disabled={!rescheduleReason || (rescheduleReason === 'Custom Reason' && !rescheduleCustomReason.trim())}
-                    onPress={() => setRejectStep('reschedule_date_time')}
-                  >
-                    <Text style={styles.confirmRejectText}>Next</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {rejectStep === 'reschedule_date_time' && (() => {
-                const dates = getThreeDays();
-                return (
-                  <View>
-                    <Text style={styles.modalSubtitle}>Specify availability date and time</Text>
-                    
-                    <Text style={styles.subHeadingLabel}>Available Date</Text>
-                    <View style={styles.dateTimeSelectorRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'today' && styles.dateSelectBtnSelected,
-                        ]}
-                        onPress={() => setRescheduleDate('today')}
-                      >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'today' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Today
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'today' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.todayStr.split(',')[1]?.trim() || dates.todayStr}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'tomorrow' && styles.dateSelectBtnSelected,
-                        ]}
-                        onPress={() => setRescheduleDate('tomorrow')}
-                      >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'tomorrow' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Tomorrow
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'tomorrow' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.tomorrowStr.split(',')[1]?.trim() || dates.tomorrowStr}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.dateSelectBtn,
-                          rescheduleDate === 'day_after' && styles.dateSelectBtnSelected,
-                        ]}
-                        onPress={() => setRescheduleDate('day_after')}
-                      >
-                        <Text style={[styles.dateSelectText, rescheduleDate === 'day_after' && styles.dateSelectTextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          Day After
-                        </Text>
-                        <Text style={[styles.dateSubtext, rescheduleDate === 'day_after' && styles.dateSubtextSelected]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-                          {dates.dayAfterStr.split(',')[1]?.trim() || dates.dayAfterStr}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.subHeadingLabel}>Available Time Range</Text>
-                    <View style={styles.timeInputGrid}>
-                      <TouchableOpacity
-                        style={styles.timeInputCol}
-                        activeOpacity={0.7}
-                        onPress={() => setShowStartTimePicker(true)}
-                      >
-                        <Text style={styles.timeInputLabel}>Start Time</Text>
-                        <View style={styles.timeDisplayBox}>
-                          <Clock size={scale(16)} color={rescheduleStartTime ? Colors.primary : Colors.textPlaceholder} />
-                          <Text style={[styles.timeDisplayText, !rescheduleStartTime && styles.timePlaceholderText]}>
-                            {rescheduleStartTime || "Select Time"}
+                {type === 'drop' && isHubPoint && (rejectReasonText === 'GMU Not Available' || rejectReasonText === 'Transporter Emergency') ? (
+                  <View style={{ marginTop: verticalScale(10), gap: verticalScale(14) }}>
+                    {/* Inline contact card for Hub Manager */}
+                    <View style={[
+                      styles.masterSectionBox, 
+                      { 
+                        borderWidth: 1.5, 
+                        borderColor: rejectReasonText === 'Transporter Emergency' ? '#DC2626' : Colors.primary, 
+                        marginBottom: 0 
+                      }
+                    ]}>
+                      <View style={[
+                        styles.boxHeaderRow, 
+                        { 
+                          backgroundColor: rejectReasonText === 'Transporter Emergency' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(178, 213, 52, 0.08)' 
+                        }
+                      ]}>
+                        <View style={styles.boxHeaderLeft}>
+                          {rejectReasonText === 'Transporter Emergency' ? (
+                            <AlertTriangle size={scale(18)} color="#DC2626" strokeWidth={2.5} />
+                          ) : (
+                            <User size={scale(18)} color={Colors.primary} strokeWidth={2.5} />
+                          )}
+                          <Text style={[
+                            styles.boxTitleText, 
+                            rejectReasonText === 'Transporter Emergency' && { color: '#DC2626' }
+                          ]}>
+                            {rejectReasonText === 'Transporter Emergency' ? 'Emergency Support' : 'Hub Manager Contact'}
                           </Text>
                         </View>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.timeInputCol}
-                        activeOpacity={0.7}
-                        onPress={() => setShowEndTimePicker(true)}
-                      >
-                        <Text style={styles.timeInputLabel}>End Time</Text>
-                        <View style={styles.timeDisplayBox}>
-                          <Clock size={scale(16)} color={rescheduleEndTime ? Colors.primary : Colors.textPlaceholder} />
-                          <Text style={[styles.timeDisplayText, !rescheduleEndTime && styles.timePlaceholderText]}>
-                            {rescheduleEndTime || "Select Time"}
+                      </View>
+                      <View style={styles.boxContentPadding}>
+                        <View style={{ gap: verticalScale(8) }}>
+                          <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(14), color: Colors.textPrimary }}>
+                            {cleanPersonName(HUB_CONTACT.name)}
+                          </Text>
+                          <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(12), color: Colors.textSecondary }}>
+                            Phone: {HUB_CONTACT.phone}
+                          </Text>
+                          <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(12), color: Colors.textSecondary }} numberOfLines={2}>
+                            Address: {HUB_CONTACT.address}
+                          </Text>
+                          <Text style={{ fontFamily: Fonts.semiBold, fontSize: moderateScale(11.5), color: '#DC2626', marginTop: verticalScale(6) }}>
+                            {rejectReasonText === 'Transporter Emergency'
+                              ? 'Emergency Alert: Since you have already picked up this shipment, you cannot cancel it now. In case of an emergency, please contact the Hub Manager immediately to report your emergency and obtain a safe resolution.'
+                              : 'Note: Rejection is not permitted at this stage. Please contact the hub manager to complete delivery. If the manager is not reachable or not answering the phone, please try again after some time.'}
                           </Text>
                         </View>
-                      </TouchableOpacity>
+                      </View>
                     </View>
 
                     <TouchableOpacity
                       style={[
-                        styles.confirmRejectBtn,
-                        (!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()) && styles.btnDisabled,
-                        { marginTop: verticalScale(16) }
+                        styles.confirmRejectBtn, 
+                        { backgroundColor: rejectReasonText === 'Transporter Emergency' ? '#DC2626' : Colors.primary }
                       ]}
-                      disabled={!rescheduleDate || !rescheduleStartTime.trim() || !rescheduleEndTime.trim()}
-                      onPress={handleConfirmReject}
+                      onPress={() => {
+                        Linking.openURL(`tel:${HUB_CONTACT.phone.replace(/\s+/g, '')}`);
+                      }}
                     >
-                      <Text style={styles.confirmRejectText}>Confirm Reschedule</Text>
+                      <Text style={styles.confirmRejectText}>Call Hub Manager</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.confirmRejectBtn, { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }]}
+                      onPress={handleCloseModal}
+                    >
+                      <Text style={[styles.confirmRejectText, { color: Colors.textSecondary }]}>Close</Text>
                     </TouchableOpacity>
                   </View>
-                );
-              })()}
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmRejectBtn,
+                      !rejectReasonText && styles.btnDisabled
+                    ]}
+                    disabled={!rejectReasonText}
+                    onPress={handleConfirmReject}
+                  >
+                    <Text style={styles.confirmRejectText}>Confirm Reject</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <TimePickerPopup
-        visible={showStartTimePicker}
-        onClose={() => setShowStartTimePicker(false)}
-        onConfirm={onStartTimeConfirm}
-        initialTime={rescheduleStartTime}
-      />
-
-      <TimePickerPopup
-        visible={showEndTimePicker}
-        onClose={() => setShowEndTimePicker(false)}
-        onConfirm={onEndTimeConfirm}
-        initialTime={rescheduleEndTime}
-      />
 
       {/* Verification Bottom Sheet Modal */}
       <VerificationBottomSheet
@@ -917,15 +792,15 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         title={type === 'pickup' ? 'Pickup Verification Code' : 'Verify Delivery'}
         subtitle={
           type === 'pickup'
-            ? 'Generate a verification code and share it with Hub to confirm pickup.'
-            : 'Enter the 4-digit delivery code generated by SHG.'
+            ? `Generate a verification code and share it with ${isHubPoint ? 'Hub' : 'SHG'} to confirm pickup.`
+            : `Enter the 4-digit delivery code generated by ${isHubPoint ? 'Hub' : 'SHG'}.`
         }
       >
         {type === 'pickup' ? (
           <View style={{ gap: verticalScale(16) }}>
             <CodeDisplayCard code="1234" />
             <View style={styles.demoEntryDivider} />
-            <Text style={styles.demoEntryLabel}>Hub Code Entry (Demo Mode)</Text>
+            <Text style={styles.demoEntryLabel}>{isHubPoint ? 'Hub' : 'SHG'} Code Entry (Demo Mode)</Text>
             <OTPInputWidget code={otpCode} onChangeCode={setOtpCode} />
             <TouchableOpacity
               style={styles.verifyCodeActionBtn}
@@ -1180,6 +1055,22 @@ const styles = StyleSheet.create({
     marginTop: verticalScale(12),
     marginBottom: verticalScale(16),
     paddingHorizontal: scale(4),
+  },
+  bottomRejectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderColor: '#FCA5A5',
+    borderWidth: 1.5,
+    paddingVertical: verticalScale(14),
+    borderRadius: scale(12),
+    backgroundColor: '#FEF2F2',
+    marginTop: verticalScale(4),
+  },
+  bottomRejectBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(15),
+    color: '#DC2626',
   },
   primaryConfirmBtn: {
     flexDirection: 'row',

@@ -1086,6 +1086,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
       const { accessToken, user } = response.data;
       await AsyncStorage.setItem('access_token', accessToken);
+      await AsyncStorage.setItem('user_phone_number', formData.mobile);
 
       setIsOtpVerified(true);
       if (user && user.currentStep > 1) {

@@ -45,7 +45,7 @@ export class RegistrationService {
     };
 
     const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '3650d' });
 
     // In a real app we might store refresh token somewhere or in a dedicated field
     // For now we omit storing it since refreshToken field is not in new User schema

@@ -219,6 +219,7 @@ const ProfileScreen: React.FC = () => {
       'logout',
       async () => {
         await AsyncStorage.removeItem('access_token');
+        await AsyncStorage.removeItem('user_phone_number');
         await AsyncStorage.removeItem('cached-profile-data');
         await AsyncStorage.removeItem('completed_drop_pickups');
         await AsyncStorage.removeItem('transporter_activities');

@@ -20,7 +20,7 @@ export class AuthService {
     };
     
     const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '3650d' });
     
     return { accessToken, refreshToken };
   }

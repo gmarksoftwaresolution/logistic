@@ -19,7 +19,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOrderManagement, ActivityEntry, BatchOrder } from '../context/OrderManagementContext';
 import { useTranslation } from 'react-i18next';
-import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { scale, verticalScale, moderateScale, cleanPersonName } from '../utils/responsive';
 import { Search, MapPin, Package, Clock, Filter, XCircle, CheckCircle, History as HistoryIcon, X, ChevronRight, Hash, Phone, User, Globe, AlertCircle, TrendingUp, Calendar, ChevronLeft } from 'lucide-react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -673,7 +673,7 @@ const OrderHistoryScreen = () => {
                 <View style={styles.contactRow}>
                   <User size={scale(18)} color={Colors.textSecondary} />
                   <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>{detailsBatch?.shgContact.name}</Text>
+                    <Text style={styles.contactName}>{cleanPersonName(detailsBatch?.shgContact.name)}</Text>
                     <Text style={styles.contactRole}>{t('orders.shg_lead', { defaultValue: 'SHG Lead Representative' })}</Text>
                   </View>
                 </View>

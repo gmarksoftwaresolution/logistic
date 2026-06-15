@@ -40,3 +40,11 @@ export const normalize = (size: number) => {
 export const isLandscape = () => SCREEN_WIDTH > SCREEN_HEIGHT;
 
 export { SCREEN_WIDTH, SCREEN_HEIGHT };
+
+/**
+ * Cleans a person's name to show only their name and surname by removing roles/suffixes in parentheses.
+ */
+export const cleanPersonName = (name?: string): string => {
+  if (!name) return '';
+  return name.replace(/\s*\([^)]*\)/g, '').trim();
+};

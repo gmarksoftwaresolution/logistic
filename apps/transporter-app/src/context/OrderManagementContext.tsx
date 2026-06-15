@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, Easing, TouchableOpacity, Platform } from 'react-native';
 import { CheckCircle, XCircle, Info, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -478,7 +478,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   useEffect(() => {
     const loadPersistedAndFetch = async () => {
       try {
-        const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v5');
+        const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v10');
         if (!hasCleared) {
           await Promise.all([
             AsyncStorage.removeItem('rejected_batches'),
@@ -487,7 +487,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             AsyncStorage.removeItem('transporter_activities'),
             AsyncStorage.removeItem('completed_drop_pickups'),
           ]);
-          await AsyncStorage.setItem('has_cleared_verification_v5', 'true');
+          await AsyncStorage.setItem('has_cleared_verification_v10', 'true');
           console.log('Cleared all legacy storage data for a clean slate.');
         }
 
@@ -525,7 +525,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const newOrdersCount = activeBatches.filter(b => b.status === 'NEW_ORDER').length;
   const acceptedOrdersCount = activeBatches.filter(b => b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED').length;
   const rejectedOrdersCount = rejectedBatches.length;
-  const completedOrdersCount = completedBatches.length;
+  const completedOrdersCount = useMemo(() => {
+    const journeyMap: Record<string, boolean> = {};
+    allBatches.forEach((b) => {
+      if (b.status === 'PICKUP_COMPLETED' || b.status === 'DROP_COMPLETED') {
+        const mId = b.masterOrderId ? String(b.masterOrderId) : b.id;
+        journeyMap[mId] = true;
+      }
+    });
+    return Object.keys(journeyMap).length;
+  }, [allBatches]);
 
   const logActivity = (orderId: string, route: string, status: ActivityEntry['status'], qty: number, weight: string) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -899,7 +908,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
                 address: HUB_CONTACT.address,
               },
               products: b.products.map(p => {
-                if (p.id === productId) {
+                if ((productId === 'all' && p.status !== 'completed') || p.id === productId) {
                   return {
                     ...p,
                     status: 'picked', // Keep it active so they can deliver back to the hub

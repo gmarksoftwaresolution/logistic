@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Colors, Fonts } from '../../constants/Colors';
 import { useOrderManagement, HUB_CONTACT } from '../../context/OrderManagementContext';
-import { scale, verticalScale, moderateScale } from '../../utils/responsive';
+import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
 import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -194,7 +194,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
-                    <Text style={styles.contactTextValue}>{pickupContact?.name || 'Seller'}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName(pickupContact?.name) || 'Seller'}</Text>
                   </View>
                 </View>
 
@@ -284,7 +284,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
-                    <Text style={styles.contactTextValue}>{dropContact?.name || 'Buyer'}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName(dropContact?.name) || 'Buyer'}</Text>
                   </View>
                 </View>
 
@@ -474,7 +474,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                       try {
                         await acceptBatch(batch.id);
                         navigation.goBack();
-                        navigation.navigate('AcceptedOrders', { activeTab: type });
+                        navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
                       } catch (err) {
                         console.error('Failed to accept batch in detail view:', err);
                       }

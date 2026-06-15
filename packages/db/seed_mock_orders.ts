@@ -117,25 +117,38 @@ async function main() {
   }
 
   // 4. Create/Ensure Products
-  console.log('Ensuring Product exists...');
-  let product = await prisma.product.findFirst({
-    where: { name: 'Tasty Homemade Papad' }
-  });
+  console.log('Ensuring Products exist...');
+  const productNames = [
+    'Tasty Homemade Papad',
+    'Spicy Chilli Powder',
+    'Organic Mango Pickle',
+    'Premium Wheat Flour',
+    'Pure Cow Ghee'
+  ];
+  const productWeights = [1.5, 0.5, 1.0, 5.0, 1.0];
+  const productPrices = [120.0, 80.0, 150.0, 250.0, 600.0];
+  const products: any[] = [];
 
-  if (!product) {
-    product = await prisma.product.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Tasty Homemade Papad',
-        category: 'FOOD',
-        price: 120.0,
-        stock: 500,
-        weight: 1.5,
-      }
+  for (let idx = 0; idx < productNames.length; idx++) {
+    let prod = await prisma.product.findFirst({
+      where: { name: productNames[idx] }
     });
-    console.log('Created new Product:', product.name);
-  } else {
-    console.log('Product already exists:', product.name);
+    if (!prod) {
+      prod = await prisma.product.create({
+        data: {
+          sellerId: seller.id,
+          name: productNames[idx],
+          category: 'FOOD',
+          price: productPrices[idx],
+          stock: 500,
+          weight: productWeights[idx],
+        }
+      });
+      console.log('Created new Product:', prod.name);
+    } else {
+      console.log('Product already exists:', prod.name);
+    }
+    products.push(prod);
   }
 
   // 5. Ensure target SHG (7777777777) exists
@@ -457,27 +470,111 @@ async function main() {
   // 6. Generate test orders for this specific pair
   console.log('Generating customized mock orders...');
 
-  // Generate 5 Pickup Orders
-  for (let i = 1; i <= 5; i++) {
-    const orderNo = `ORD-${Date.now().toString().slice(-6)}-P${i}-${Math.floor(Math.random() * 100)}`;
-    const quantity = i + 1;
-    const price = 120.0;
-    const totalAmount = quantity * price;
+  // 6.1 Create/Ensure additional Sellers
+  const sellersData = [
+    { phoneNumber: '8888888881', fullName: 'Kamal Bai (SHG Lead)', village: 'Nesari', addressLine1: 'Near Maruti Mandir, Nesari' },
+    { phoneNumber: '8888888882', fullName: 'Aruna Patil (SHG Member)', village: 'Koulage', addressLine1: 'Shivaji Chowk, Koulage' },
+    { phoneNumber: '8888888883', fullName: 'Sunita Deshmukh (SHG Lead)', village: 'Nesari', addressLine1: 'Gram Panchayat Road, Nesari' },
+    { phoneNumber: '8888888884', fullName: 'Sujata Sawant (SHG Member)', village: 'Hingalaj', addressLine1: 'Bazar Peth, Hingalaj' },
+    { phoneNumber: '8888888885', fullName: 'Vandana Jadhav (SHG Lead)', village: 'Nesari', addressLine1: 'Station Road, Nesari' }
+  ];
+  const seededSellers: any[] = [];
+  for (const sData of sellersData) {
+    let s = await prisma.user.findUnique({ where: { phoneNumber: sData.phoneNumber }, include: { address: true } });
+    if (!s) {
+      s = await prisma.user.create({
+        data: {
+          authId: randomUUID(),
+          phoneNumber: sData.phoneNumber,
+          role: UserRole.SELLER,
+          fullName: sData.fullName,
+          isVerified: true,
+          address: {
+            create: {
+              addressLine1: sData.addressLine1,
+              village: sData.village,
+              taluka: 'Gadhinglaj',
+              district: 'Kolhapur',
+              state: 'Maharashtra',
+              pincode: '416504'
+            }
+          }
+        },
+        include: { address: true }
+      });
+    }
+    seededSellers.push(s);
+  }
+
+  // 6.2 Create/Ensure additional Buyers
+  const buyersData = [
+    { phoneNumber: '9999999991', fullName: 'Raju Patil (Buyer)', village: 'Nesari', addressLine1: 'Plot No 24, Nesari Stand Area' },
+    { phoneNumber: '9999999992', fullName: 'Aniket Powar (Buyer)', village: 'Gadhinglaj', addressLine1: 'Ganesh Nagar, Gadhinglaj' },
+    { phoneNumber: '9999999993', fullName: 'Dipak Mane (Buyer)', village: 'Gadhinglaj', addressLine1: 'Pragati Colony, Gadhinglaj' },
+    { phoneNumber: '9999999994', fullName: 'Sanjay Shinde (Buyer)', village: 'Nesari', addressLine1: 'Naka Chowk, Nesari' },
+    { phoneNumber: '9999999995', fullName: 'Rahul Koli (Buyer)', village: 'Gadhinglaj', addressLine1: 'Market Yard, Gadhinglaj' }
+  ];
+  const seededBuyers: any[] = [];
+  for (const bData of buyersData) {
+    let b = await prisma.user.findUnique({ where: { phoneNumber: bData.phoneNumber }, include: { address: true } });
+    if (!b) {
+      b = await prisma.user.create({
+        data: {
+          authId: randomUUID(),
+          phoneNumber: bData.phoneNumber,
+          role: UserRole.BUYER,
+          fullName: bData.fullName,
+          isVerified: true,
+          address: {
+            create: {
+              addressLine1: bData.addressLine1,
+              village: bData.village,
+              taluka: 'Gadhinglaj',
+              district: 'Kolhapur',
+              state: 'Maharashtra',
+              pincode: '416504'
+            }
+          }
+        },
+        include: { address: true }
+      });
+    }
+    seededBuyers.push(b);
+  }
+
+  // Create 5 separate consolidated Pickup Orders
+  console.log('Generating 5 consolidated Pickup MasterOrders and correlated DropOrders...');
+  for (let i = 0; i < 5; i++) {
+    const sel = seededSellers[i];
+    const buy = seededBuyers[i];
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-P-${i + 1}`;
+    
+    // Pick 2-3 products
+    const itemCount = 2 + (i % 2); // 2 or 3
+    const orderProds = products.slice(0, itemCount);
+    
+    const itemsData = orderProds.map((prod, idx) => ({
+      productId: prod.id,
+      sellerId: sel.id,
+      quantity: idx + 2,
+      price: prod.price,
+    }));
+    const totalAmount = itemsData.reduce((sum, item) => sum + item.quantity * item.price, 0);
 
     const masterOrder = await prisma.masterOrder.create({
       data: {
         orderNumber: orderNo,
-        buyerId: buyer.id,
+        buyerId: buy.id,
         totalAmount,
         paymentStatus: 'PENDING',
         status: 'CREATED',
         items: {
-          create: {
-            productId: product.id,
-            sellerId: seller.id,
-            quantity,
-            price,
-          }
+          create: itemsData.map(item => ({
+            productId: item.productId,
+            sellerId: item.sellerId,
+            quantity: item.quantity,
+            price: item.price,
+          }))
         }
       }
     });
@@ -486,103 +583,95 @@ async function main() {
       data: {
         pickupOrderNumber: `PKP-${orderNo}`,
         masterOrderId: masterOrder.id,
-        sellerId: seller.id,
+        sellerId: sel.id,
         shgId: targetShg.id,
         transporterId: targetTransporter.id,
         status: 'PENDING',
         items: {
-          create: {
-            productId: product.id,
-            quantity,
-          }
+          create: itemsData.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          }))
         }
       }
     });
-
-    console.log(`  -> Created assigned Pickup Order ${i}: ${pickupOrder.pickupOrderNumber} (ID: ${pickupOrder.id})`);
-
-    const dropPointNamesForPickup = [
-      'Nesari Stand, Gadhinglaj',
-      'Koulage Crossing, Gadhinglaj',
-      'Hingalaj Road Primary School',
-      'Wagharale Naka Market',
-      'Mahagaon Gram Panchayat'
-    ];
-    const deliveryAddressForPickup = dropPointNamesForPickup[i - 1] || 'Nesari Stand, Gadhinglaj';
+    console.log(`  -> Created Pickup Order #${i + 1}: ${pickupOrder.pickupOrderNumber}`);
 
     const correlatedDropOrder = await prisma.dropOrder.create({
       data: {
         dropOrderNumber: `DRP-${orderNo}`,
         masterOrderId: masterOrder.id,
-        buyerId: buyer.id,
+        buyerId: buy.id,
         shgId: targetShg.id,
         transporterId: targetTransporter.id,
         status: 'PENDING',
-        deliveryAddress: deliveryAddressForPickup,
+        deliveryAddress: buy.address?.addressLine1 || 'Nesari Stand, Gadhinglaj',
         items: {
-          create: {
-            productId: product.id,
-            quantity,
-          }
+          create: itemsData.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          }))
         }
       }
     });
-    console.log(`  -> Created correlated Drop Order for Pickup ${i}: ${correlatedDropOrder.dropOrderNumber} (ID: ${correlatedDropOrder.id})`);
+    console.log(`     Correlated Drop Order: ${correlatedDropOrder.dropOrderNumber}`);
   }
 
-  // Generate 5 Drop Orders
-  for (let i = 1; i <= 5; i++) {
-    const orderNo = `ORD-${Date.now().toString().slice(-6)}-D${i}-${Math.floor(Math.random() * 100)}`;
-    const quantity = i + 2;
-    const price = 120.0;
-    const totalAmount = quantity * price;
+  // Create 5 separate consolidated standalone Drop Orders
+  console.log('Generating 5 consolidated standalone Drop MasterOrders...');
+  for (let i = 0; i < 5; i++) {
+    const sel = seededSellers[(i + 1) % 5];
+    const buy = seededBuyers[(i + 2) % 5];
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}-D-${i + 1}`;
+    
+    // Pick 2-3 products
+    const itemCount = 2 + ((i + 1) % 2); // 2 or 3
+    const orderProds = products.slice(2, 2 + itemCount);
+    
+    const itemsData = orderProds.map((prod, idx) => ({
+      productId: prod.id,
+      sellerId: sel.id,
+      quantity: idx + 3,
+      price: prod.price,
+    }));
+    const totalAmount = itemsData.reduce((sum, item) => sum + item.quantity * item.price, 0);
 
     const masterOrder = await prisma.masterOrder.create({
       data: {
         orderNumber: orderNo,
-        buyerId: buyer.id,
+        buyerId: buy.id,
         totalAmount,
         paymentStatus: 'PENDING',
         status: 'CREATED',
         items: {
-          create: {
-            productId: product.id,
-            sellerId: seller.id,
-            quantity,
-            price,
-          }
+          create: itemsData.map(item => ({
+            productId: item.productId,
+            sellerId: item.sellerId,
+            quantity: item.quantity,
+            price: item.price,
+          }))
         }
       }
     });
-
-    const dropPointNames = [
-      'Nesari Stand, Gadhinglaj',
-      'Koulage Crossing, Gadhinglaj',
-      'Hingalaj Road Primary School',
-      'Wagharale Naka Market',
-      'Mahagaon Gram Panchayat'
-    ];
-    const deliveryAddress = dropPointNames[i - 1] || 'Nesari Stand, Gadhinglaj';
 
     const dropOrder = await prisma.dropOrder.create({
       data: {
         dropOrderNumber: `DRP-${orderNo}`,
         masterOrderId: masterOrder.id,
-        buyerId: buyer.id,
+        buyerId: buy.id,
         shgId: targetShg.id,
         transporterId: targetTransporter.id,
         status: 'PENDING',
-        deliveryAddress,
+        deliveryAddress: buy.address?.addressLine1 || 'Gadhinglaj Hub Market',
         items: {
-          create: {
-            productId: product.id,
-            quantity,
-          }
+          create: itemsData.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          }))
         }
       }
     });
-
-    console.log(`  -> Created assigned Drop Order ${i}: ${dropOrder.dropOrderNumber} (ID: ${dropOrder.id})`);
+    console.log(`  -> Created standalone Drop Order #${i + 1}: ${dropOrder.dropOrderNumber}`);
   }
 
   console.log('--- SEEDING COMPLETED SUCCESSFULLY ---');

@@ -29,9 +29,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid user ID in token');
     }
 
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { id: parsedUserId },
     });
+
+    if (!user && payload.phoneNumber) {
+      user = await this.prisma.user.findUnique({
+        where: { phoneNumber: payload.phoneNumber },
+      });
+      if (user) {
+        console.log(`[JWT Strategy] User ID ${parsedUserId} not found. Found user by phone number ${payload.phoneNumber} instead (new ID: ${user.id}).`);
+      }
+    }
 
     if (!user) {
       throw new UnauthorizedException();
