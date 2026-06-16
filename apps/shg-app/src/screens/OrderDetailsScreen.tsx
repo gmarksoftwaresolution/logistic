@@ -41,13 +41,16 @@ const OrderDetailsScreen: React.FC<Props> = ({
   }, [isActive, currentStep?.id]);
 
   const {
-    order
+    order: routeOrder
   } = route.params;
   const {
     receiveOrder,
     rejectOrder,
-    deliverOrder
+    deliverOrder,
+    orders
   } = useOrders();
+
+  const order = orders.find(o => o.id === routeOrder.id) || routeOrder;
   const routeStr = getRouteForOrder(order);
   const routeParts = routeStr.split('>');
   const rawSource = routeParts[0]?.trim() || 'Transporter';
@@ -56,7 +59,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
-  const isDeliveryPhase = order.legType === 'drop' && order.status === 'PickedUp';
+  const isDeliveryPhase = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
   // 2. Helper to get entity type
   const getEntityType = (name: string): 'transporter' | 'seller' | 'buyer' => {
@@ -84,6 +87,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
   let addressOrVehicleLabel = t('su_vehicle_number') || "Vehicle Number";
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "MH-09-AB-1234";
+
+  if (order.isRejectedDelivery && activeType === 'transporter') {
+    addressOrVehicleLabel = "Return Hub Address";
+    addressOrVehicleIcon = "location-outline";
+    addressOrVehicleValue = "Kolhapur Transporter Hub, Main Road, Kolhapur";
+  }
+
   if (activeType === 'seller') {
     detailsTitle = t('su_seller_details') || "Seller Details";
     headerIcon = "storefront-outline";
@@ -95,13 +105,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
     addressOrVehicleIcon = "location-outline";
 
     // Dynamic detailed address logic
-    let resolvedAddress = source;
-    if (source.toLowerCase().includes('hifi')) {
+    let resolvedAddress = order.isRejectedDelivery ? destination : source;
+    if (resolvedAddress.toLowerCase().includes('hifi')) {
       resolvedAddress = "Hifi Shop, Bramhan galli, Chandgad, kolhapur, Maharastra";
-    } else if (source.toLowerCase().includes('home no')) {
+    } else if (resolvedAddress.toLowerCase().includes('home no')) {
       resolvedAddress = "Home No. 23, Market Road, Kowad, kolhapur, Maharastra";
     } else {
-      resolvedAddress = `${source}, Chandgad, kolhapur, Maharastra`;
+      resolvedAddress = `${resolvedAddress}, Chandgad, kolhapur, Maharastra`;
     }
     addressOrVehicleValue = resolvedAddress;
   } else if (activeType === 'buyer') {
@@ -285,10 +295,18 @@ const OrderDetailsScreen: React.FC<Props> = ({
           image: capturedPhotoUri
         });
       }
-      if (navigation.canGoBack()) {
-        navigation.goBack();
+      if (order.id.startsWith('RTO-')) {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('ReturnOrders' as never);
+        }
       } else {
-        navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+        }
       }
     } catch (error) {
       Alert.alert("Error", "Failed to submit order. Please try again.");
@@ -306,10 +324,18 @@ const OrderDetailsScreen: React.FC<Props> = ({
         ...ord,
         rejectReason: reason
       });
-      if (navigation.canGoBack()) {
-        navigation.goBack();
+      if (isDeliveryPhase) {
+        Toast.show({
+          type: 'success',
+          text1: t("su_address_updated") || "Return Address Updated",
+          text2: t("su_please_return_to_source") || "Please deliver the order back to the pickup point."
+        });
       } else {
-        navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        }
       }
     } catch (error) {
       Alert.alert("Error", "Failed to reject order. Please try again.");
@@ -367,9 +393,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 </Text>
               </View>
             </View>
-            <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0">
-              <Text className="text-[10px] font-black text-[#6EE7B7] uppercase tracking-wider">
-                {order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status}
+            <View className={order.isRejectedDelivery ? "bg-[#7F1D1D] border border-red-500/20 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0" : "bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0"}>
+              <Text className={`text-[10px] font-black uppercase tracking-wider ${order.isRejectedDelivery ? 'text-[#FECACA]' : 'text-[#6EE7B7]'}`}>
+                {order.isRejectedDelivery ? "RETURNING" : (order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status)}
               </Text>
             </View>
           </View>
@@ -503,6 +529,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
               <Text className="text-[14px] font-black text-[#111827] pr-2">
                 {addressOrVehicleValue}
               </Text>
+              
+              {order.isRejectedDelivery && (
+                <View className="mt-3 bg-[#FEF2F2] border border-[#FECACA] p-3 rounded-[16px] flex-row items-start">
+                  <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
+                  <View className="flex-1">
+                    <Text className="text-[12px] font-extrabold text-[#991B1B] uppercase tracking-wider mb-1">
+                      Return Address Updated
+                    </Text>
+                    <Text className="text-[12px] font-medium text-[#7F1D1D] leading-tight">
+                      This order was rejected during delivery. The address has been updated to the original pickup point from where the order was collected. Please return the products to this location.
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -511,7 +551,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
         <View className="flex-row justify-between items-center mb-4 mx-1">
           <View className="flex-row items-center">
             <Ionicons name="cube-outline" size={20} color="#073318" />
-            <Text className="text-[16px] font-black text-[#111827] ml-2">{t("su_products_for_collect_354")}</Text>
+            <Text className="text-[16px] font-black text-[#111827] ml-2">
+              {isDeliveryPhase ? (t("su_products_for_delivery") || "Products for Delivery") : (t("su_products_for_collect_354") || "Products for Collection")}
+            </Text>
           </View>
           <View className="flex-row items-center">
             <View className="bg-[#ECFDF5] px-2.5 py-1 rounded-[6px] mr-2 border border-[#D1FAE5]">
@@ -583,34 +625,42 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </TouchableOpacity>
 
           {/* Action Buttons Row */}
-          <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
-            {/* Reschedule Button */}
-            <TouchableOpacity 
-              onPress={() => setRescheduleReasonModalVisible(true)}
-              disabled={isSubmitting} 
-              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
-            >
-              <Ionicons name="calendar-outline" size={16} color={isSubmitting ? "#94A3B8" : "#073318"} />
-              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
-                {t("su_reschedule_401") || "Reschedule"}
-              </Text>
-            </TouchableOpacity>
+          {!order.isRejectedDelivery && (
+            <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
+              {/* Reschedule Button */}
+              <TouchableOpacity 
+                onPress={() => setRescheduleReasonModalVisible(true)}
+                disabled={isSubmitting} 
+                className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
+              >
+                <Ionicons name="calendar-outline" size={16} color={isSubmitting ? "#94A3B8" : "#073318"} />
+                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
+                  {t("su_reschedule_401") || "Reschedule"}
+                </Text>
+              </TouchableOpacity>
 
-            {/* Reject Order button */}
-            <TouchableOpacity 
-              onPress={handleRejectOrder} 
-              disabled={isSubmitting} 
-              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
-            >
-              <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
-              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
-            </TouchableOpacity>
-          </View>
+              {/* Reject Order button */}
+              <TouchableOpacity 
+                onPress={handleRejectOrder} 
+                disabled={isSubmitting} 
+                className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
+              >
+                <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
+                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Submit Order full-width button */}
           <TouchableOpacity onPress={handleSubmitOrder} disabled={isSubmitting} className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitting ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
             {isSubmitting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="checkmark-circle-outline" size={16} color="white" />}
-            <Text className="text-[14px] font-bold text-white ml-2">{isSubmitting ? (t("su_submitting_order") || "Submitting Order...") : t("su_submit_order_357")}</Text>
+            <Text className="text-[14px] font-bold text-white ml-2">
+              {isSubmitting 
+                ? (t("su_submitting_order") || "Submitting Order...") 
+                : (order.isRejectedDelivery 
+                  ? (t("su_confirm_return_delivery") || "Confirm Return Delivery") 
+                  : (isDeliveryPhase ? t("su_submit_delivery") || "Submit Delivery" : t("su_submit_order_357") || "Submit Order"))}
+            </Text>
           </TouchableOpacity>
         </View>
         

@@ -36,6 +36,7 @@ export interface Order {
   acceptedAt?: string;
   completedAt?: string;
   legType?: 'pickup' | 'drop';
+  isRejectedDelivery?: boolean;
 }
 
 interface OrderContextType {
@@ -226,6 +227,28 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [incomingReturnOrders, setIncomingReturnOrders] = useState<Order[]>(DEMO_RETURN_ORDERS);
   const localAcceptedReturnsRef = useRef<Order[]>([]);
 
+  const [localPickedUpPickups, setLocalPickedUpPickups] = useState<string[]>([]);
+  const [rejectedDeliveries, setRejectedDeliveries] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadLocalData = async () => {
+      try {
+        const val = await AsyncStorage.getItem('picked_up_pickups');
+        if (val) {
+          setLocalPickedUpPickups(JSON.parse(val));
+        }
+        
+        const rejectedVal = await AsyncStorage.getItem('rejected_deliveries');
+        if (rejectedVal) {
+          setRejectedDeliveries(JSON.parse(rejectedVal));
+        }
+      } catch (e) {
+        console.warn('Failed to load local data from storage:', e);
+      }
+    };
+    loadLocalData();
+  }, []);
+
   const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders, ...returnedOrders];
@@ -240,6 +263,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
+      // Fetch local picked up pickups directly from AsyncStorage to avoid state race conditions on mount
+      const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+      const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+
+      const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
+      const localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
+
       // 1. Fetch live assigned pickups
       const pickupResponse = await axiosInstance.get('/orders/pickup/assigned');
       const rawPickups = pickupResponse.data || [];
@@ -249,8 +279,23 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const rawDrops = dropResponse.data || [];
 
       // Map pickups to UI shape
-      const mappedPickups = rawPickups.map((o: any) => mapDbOrderToUi(o, 'pickup'));
-      const mappedDrops = rawDrops.map((o: any) => mapDbOrderToUi(o, 'drop'));
+      const mappedPickups = rawPickups.map((o: any) => {
+        const order = mapDbOrderToUi(o, 'pickup');
+        if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
+          order.status = 'PickedUp';
+        }
+        if (localRejected.includes(order.id)) {
+          order.isRejectedDelivery = true;
+        }
+        return order;
+      });
+      const mappedDrops = rawDrops.map((o: any) => {
+        const order = mapDbOrderToUi(o, 'drop');
+        if (localRejected.includes(order.id)) {
+          order.isRejectedDelivery = true;
+        }
+        return order;
+      });
 
       const allMapped = [...mappedPickups, ...mappedDrops];
 
@@ -330,7 +375,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
       });
-      setReturnedOrders([...sortedReturned, ...localAcceptedReturnsRef.current]);
+      const mappedReturned = [...sortedReturned, ...localAcceptedReturnsRef.current].map(o => {
+        if (localRejected.includes(o.id)) {
+          return { ...o, isRejectedDelivery: true };
+        }
+        return o;
+      });
+      setReturnedOrders(mappedReturned);
 
       // Completed = Everything Completed
       setDeliveredOrders(finalMapped.filter(o => o.status === 'COMPLETED'));
@@ -402,11 +453,34 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const rejectOrder = async (order: Order) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+
+      // Intercept rejections in the delivery phase to transition them to "Return to Source" flow
+      if (order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop')) {
+        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
+        const localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
+        if (!localRejected.includes(order.id)) {
+          localRejected.push(order.id);
+          await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
+          setRejectedDeliveries(localRejected);
+        }
+        await refreshOrdersList();
+        return;
+      }
+      
       const endpoint = order.legType === 'pickup' 
         ? `/orders/pickup/${rawId}/reject` 
         : `/orders/drop/${rawId}/reject`;
       
       await axiosInstance.post(endpoint, { reason: order.rejectReason || '' });
+
+      if (order.legType === 'pickup') {
+        const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+        let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+        localPickedUp = localPickedUp.filter(id => id !== order.id);
+        await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
+        setLocalPickedUpPickups(localPickedUp);
+      }
+
       await refreshOrdersList();
       
       // Keep local state update for immediate UI feedback if needed, 
@@ -437,11 +511,21 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      const endpoint = order.legType === 'drop'
-        ? `/orders/drop/${rawId}/pickup`
-        : `/orders/pickup/${rawId}/complete`;
-      await axiosInstance.post(endpoint);
-      await refreshOrdersList();
+      if (order.legType === 'pickup') {
+        // Local simulation: move to PickedUp status locally to place it in the Delivery tab
+        const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+        const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+        if (!localPickedUp.includes(order.id)) {
+          localPickedUp.push(order.id);
+          await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
+          setLocalPickedUpPickups(localPickedUp);
+        }
+        await refreshOrdersList();
+      } else {
+        const endpoint = `/orders/drop/${rawId}/pickup`;
+        await axiosInstance.post(endpoint);
+        await refreshOrdersList();
+      }
     } catch (error) {
       console.error(`Error completing pickup for order ${order.id}:`, error);
       throw error;
@@ -456,10 +540,67 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deliverOrder = async (order: Order) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      const endpoint = `/orders/drop/${rawId}/complete`;
       
-      await axiosInstance.post(endpoint);
-      await refreshOrdersList();
+      if (order.id.startsWith('RTO-')) {
+        // Complete the return order locally
+        localAcceptedReturnsRef.current = localAcceptedReturnsRef.current.filter(o => o.id !== order.id);
+        setReturnedOrders(prev => prev.filter(o => o.id !== order.id));
+
+        // Remove from rejected deliveries
+        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
+        let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
+        localRejected = localRejected.filter(id => id !== order.id);
+        await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
+        setRejectedDeliveries(localRejected);
+
+        await refreshOrdersList();
+        return;
+      }
+      
+      if (order.isRejectedDelivery) {
+        // Complete the order on backend (return to origin complete)
+        const endpoint = order.legType === 'pickup'
+          ? `/orders/pickup/${rawId}/complete`
+          : `/orders/drop/${rawId}/complete`;
+        await axiosInstance.post(endpoint);
+
+        // Remove from rejected deliveries
+        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
+        let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
+        localRejected = localRejected.filter(id => id !== order.id);
+        await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
+        setRejectedDeliveries(localRejected);
+
+        // Also clean up picked_up_pickups if it was a pickup leg
+        if (order.legType === 'pickup') {
+          const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+          let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+          localPickedUp = localPickedUp.filter(id => id !== order.id);
+          await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
+          setLocalPickedUpPickups(localPickedUp);
+        }
+
+        await refreshOrdersList();
+        return;
+      }
+
+      if (order.legType === 'pickup') {
+        // Complete the pickup order on the backend now that it is delivered to the transporter
+        const endpoint = `/orders/pickup/${rawId}/complete`;
+        await axiosInstance.post(endpoint);
+
+        const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+        let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+        localPickedUp = localPickedUp.filter(id => id !== order.id);
+        await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
+        setLocalPickedUpPickups(localPickedUp);
+
+        await refreshOrdersList();
+      } else {
+        const endpoint = `/orders/drop/${rawId}/complete`;
+        await axiosInstance.post(endpoint);
+        await refreshOrdersList();
+      }
     } catch (error) {
       console.error(`Error completing order ${order.id}:`, error);
     }

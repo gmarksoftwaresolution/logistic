@@ -1,4 +1,36 @@
 export const getRouteForOrder = (item: any) => {
+  if (item.id?.startsWith('RTO-')) {
+    if (item.isRejectedDelivery) {
+      if (item.id === 'RTO-1769749895005-201' || item.id === 'RTO-1769749895005-204') {
+        // Return drops (Transporter -> Customer). If rejected, returns to Transporter.
+        return `${item.address} > Transporter`;
+      } else {
+        // Return pickups (Customer -> Transporter). If rejected, returns to Customer.
+        return `Transporter > ${item.address}`;
+      }
+    }
+    
+    if (item.legType === 'pickup') {
+      return `${item.address} > Transporter`;
+    } else {
+      if (item.id === 'RTO-1769749895005-201' || item.id === 'RTO-1769749895005-204') {
+        return `Transporter > ${item.address}`;
+      } else {
+        return `${item.address} > Transporter`;
+      }
+    }
+  }
+
+  if (item.isRejectedDelivery) {
+    if (item.legType === 'pickup') {
+      // Returned back to Seller: Transporter -> Seller
+      return `Transporter > ${item.sourceAddress || item.address}`;
+    } else {
+      // Returned back to Transporter: Buyer -> Transporter
+      return `${item.address} > Transporter`;
+    }
+  }
+
   if (item.legType === 'pickup') {
     // Seller Address -> Transporter
     return `${item.address} > Transporter`;

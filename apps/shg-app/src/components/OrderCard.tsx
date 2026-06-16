@@ -18,6 +18,7 @@ interface OrderCardProps {
   distance?: string | number;
   onViewAddress?: () => void;
   isHighlighted?: 'new' | 'updated';
+  isRejectedDelivery?: boolean;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -32,7 +33,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   onScan,
   distance,
   onViewAddress,
-  isHighlighted
+  isHighlighted,
+  isRejectedDelivery
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -75,16 +77,27 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
           {/* View Address Button */}
           {onViewAddress && (
-            <TouchableOpacity 
-              onPress={onViewAddress} 
-              activeOpacity={0.7}
-              className="mt-2 mb-1 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
-            >
-              <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
-              <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
-                {t("view_address") || "View Address"}
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center mt-2 mb-1 gap-2 flex-wrap">
+              <TouchableOpacity 
+                onPress={onViewAddress} 
+                activeOpacity={0.7}
+                className="self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+              >
+                <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                  {t("view_address") || "View Address"}
+                </Text>
+              </TouchableOpacity>
+              
+              {isRejectedDelivery && (
+                <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#EF4444]/40 bg-[#FEF2F2]">
+                  <Ionicons name="information-circle" size={10} color="#DC2626" style={{ marginRight: 4 }} />
+                  <Text className="text-[9px] font-black text-[#DC2626] tracking-wide">
+                    Return Address Updated
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
 
           {/* Bottom Info Badges Row (All in one line) */}
