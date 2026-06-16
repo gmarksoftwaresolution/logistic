@@ -134,7 +134,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>{t("overview_new_orders")}</Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Incoming Orders</Text>
                     <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
                       <Feather name="package" size={16} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
@@ -142,7 +142,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                   <View className="mt-6 relative z-10">
                     <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
-                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_incoming_items")}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>New orders received and awaiting review</Text>
                   </View>
                 </LinearGradient>
               </View>

@@ -223,7 +223,6 @@ const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
-                distance={item.distance}
                 showScanner={false}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
@@ -289,7 +288,6 @@ const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
-                distance={item.distance}
                 showScanner={false}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}

@@ -27,6 +27,7 @@ import { Order } from '../context/OrderContext';
 import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
+
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
   navigation
@@ -41,7 +42,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     acceptOrders,
     acceptAllOrders,
     rejectOrder,
-    highlightedOrders
+    highlightedOrders,
+    incomingReturnOrders,
+    acceptReturnOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -65,7 +68,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
   const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleReturnCount, setVisibleReturnCount] = useState(PAGE_SIZE);
   const [activeTab, setActiveTab] = useState<'new' | 'returns'>('new');
+  const [selectedReturnIds, setSelectedReturnIds] = useState<string[]>([]);
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -106,13 +111,17 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     { key: 'orders_route_problem', default: 'Route Problem' },
     { key: 'orders_other', default: 'Other' }
   ];
-  const isAllSelected = incomingOrders.length > 0 && selectedIds.length === incomingOrders.length;
+  const currentTabData = activeTab === 'new' ? incomingOrders : incomingReturnOrders;
+  const currentSelectedIds = activeTab === 'new' ? selectedIds : selectedReturnIds;
+  const setCurrentSelectedIds = activeTab === 'new' ? setSelectedIds : setSelectedReturnIds;
+
+  const isAllSelected = currentTabData.length > 0 && currentSelectedIds.length === currentTabData.length;
 
   const handleSelectAllToggle = () => {
     if (isAllSelected) {
-      setSelectedIds([]);
+      setCurrentSelectedIds([]);
     } else {
-      setSelectedIds(incomingOrders.map(o => o.id));
+      setCurrentSelectedIds(currentTabData.map((o: any) => o.id));
     }
   };
   const animatedY = useRef(new Animated.Value(100)).current;
@@ -120,7 +129,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
   // Animate bottom action bar visibility based on selection count
   useEffect(() => {
-    if (selectedIds.length > 0) {
+    if (currentSelectedIds.length > 0) {
       setShouldRender(true);
       Animated.parallel([Animated.timing(animatedY, {
         toValue: 0,
@@ -144,14 +153,21 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         setShouldRender(false);
       });
     }
-  }, [selectedIds.length]);
+  }, [currentSelectedIds.length]);
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    setCurrentSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
   
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleAcceptSelected = () => {
+    if (activeTab === 'returns') {
+      acceptReturnOrders(selectedReturnIds);
+      setSelectedReturnIds([]);
+      setModalConfig(prev => ({ ...prev, visible: false }));
+      setShowSuccessBanner(true);
+      return;
+    }
     const ordersToAccept = incomingOrders.filter(o => selectedIds.includes(o.id));
     if (ordersToAccept.length === 0) return;
     setModalConfig({
@@ -287,81 +303,16 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   return <SafeAreaView className="flex-1" style={{
     backgroundColor: Colors.background
   }}>
-      <SharedHeader title={t("su_new_orders_398")} subtitle={t('su_new_orders_sub') || 'Verify & accept incoming requests'} navigation={navigation} />
+      <SharedHeader title="Incoming Orders" subtitle="Review and manage newly received orders" navigation={navigation} />
 
       <FlatList 
         contentContainerStyle={{ paddingBottom: 120 }}
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
         showsVerticalScrollIndicator={false}
-        data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : []}
+        data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : incomingReturnOrders.slice(0, visibleReturnCount)}
         keyExtractor={item => item.id}
         ListHeaderComponent={<>
-        {/* Top Action Buttons Row */}
-        {incomingOrders.length > 0 && (
-          <View className="flex-row justify-between px-1" style={{
-          marginBottom: Spacing.sm,
-          marginTop: Spacing.xs
-        }}>
-            {/* Left Button: Reschedule */}
-            <TouchableOpacity onPress={() => {
-            if (selectedIds.length === 0) {
-              setModalConfig({
-                visible: true,
-                title: t('su_select_order') || 'Select Order',
-                message: t('su_please_select_at_lea_400') || 'Please select at least one order to reschedule.',
-                isDestructive: false,
-                isInfoOnly: true,
-                confirmText: 'OK',
-                onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false }))
-              });
-            } else {
-              setRescheduleReasonModalVisible(true);
-            }
-          }} activeOpacity={0.75} className="flex-1 h-[50px] bg-white border border-[#CBD5E1] rounded-[25px] flex-row items-center justify-center mr-2 shadow-sm" style={{
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2
-            },
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 2
-          }}>
-              <Ionicons name="calendar-outline" size={18} color="#073318" />
-              <Text style={{
-              fontFamily: Fonts.bold,
-              fontSize: normalize(13.5),
-              color: '#073318',
-              marginLeft: Spacing.xs + 1
-            }}>{t("su_reschedule_401")}</Text>
-            </TouchableOpacity>
-
-            {/* Right Button: Accept All */}
-            <TouchableOpacity onPress={handleAcceptAll} activeOpacity={0.75} className="flex-1 h-[50px] bg-[#073318] rounded-[25px] flex-row items-center justify-center shadow-md" style={{
-              shadowColor: '#073318',
-              shadowOffset: {
-                width: 0,
-                height: 3
-              },
-              shadowOpacity: 0.2,
-              shadowRadius: 5,
-              elevation: 4,
-              marginLeft: 8
-            }}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="white" />
-              <Text style={{
-              fontFamily: Fonts.bold,
-              fontSize: normalize(13.5),
-              color: 'white',
-              marginLeft: Spacing.xs + 1
-            }}>
-                {`${t('su_accept_all') || 'Accept All'} (${incomingOrders.length})`}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Segment Tab Switcher */}
         <View
           className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mb-4 gap-2 mx-1"
@@ -371,7 +322,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             shadowOpacity: 0.04,
             shadowRadius: 10,
             elevation: 3,
-            marginTop: incomingOrders.length > 0 ? 8 : 12,
+            marginTop: 4,
           }}
         >
           {/* New Tab Button */}
@@ -419,10 +370,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           </TouchableOpacity>
         </View>
           
-        {activeTab === 'new' && incomingOrders.length > 0 && (
+        {currentTabData.length > 0 && (
           <View className="flex-row justify-between items-center px-1 mb-4 mt-2">
             <Text style={{ fontFamily: Fonts.bold, fontSize: normalize(14.5), color: '#1E293B' }}>
-              {t('su_incoming_requests') || 'Incoming Requests'} ({incomingOrders.length})
+              {activeTab === 'new' ? (t('su_incoming_requests') || 'Incoming Requests') : 'Return Requests'} ({currentTabData.length})
             </Text>
             <TouchableOpacity 
               onPress={handleSelectAllToggle} 
@@ -455,18 +406,22 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               <Ionicons name="checkmark-circle" size={24} color="#10B981" />
               <View className="ml-3">
                 <Text className="text-[#065F46] font-bold text-[14px]">
-                  {rescheduledCount === 1 
-                    ? t("su_order_rescheduled_success") || "1 order rescheduled successfully"
-                    : rescheduledCount === incomingOrders.length 
-                      ? t("su_all_orders_reschedul_402") || "All orders rescheduled successfully"
-                      : (t("su_orders_rescheduled_success") || "{count} orders rescheduled successfully").replace('{count}', rescheduledCount.toString())}
+                  {activeTab === 'returns' 
+                    ? t("su_return_order_accepted") || "Return Order Accepted Successfully"
+                    : rescheduledCount === 1 
+                      ? t("su_order_rescheduled_success") || "1 order rescheduled successfully"
+                      : rescheduledCount === incomingOrders.length 
+                        ? t("su_all_orders_reschedul_402") || "All orders rescheduled successfully"
+                        : (t("su_orders_rescheduled_success") || "{count} orders rescheduled successfully").replace('{count}', rescheduledCount.toString())}
                 </Text>
                 <Text className="text-[#047857] text-[11px] mt-0.5">
-                  {rescheduledCount === 1 
-                    ? t("su_order_has_been_updated") || "Order has been updated with the new date and time."
-                    : rescheduledCount === incomingOrders.length 
-                      ? t("su_all_orders_have_been_403") || "All orders have been updated with the new date and time."
-                      : (t("su_orders_have_been_updated") || "Selected orders have been updated with the new date and time.")}
+                  {activeTab === 'returns'
+                    ? t("su_pickup_return_created") || "Pickup return order has been created"
+                    : rescheduledCount === 1 
+                      ? t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+                      : rescheduledCount === incomingOrders.length 
+                        ? t("su_all_orders_have_been_403") || "All orders have been updated with the new date and time."
+                        : (t("su_orders_have_been_updated") || "Selected orders have been updated with the new date and time.")}
                 </Text>
               </View>
             </View>
@@ -493,8 +448,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             </View>
           ) : null
         }
-        renderItem={({ item }) => {
-        const isSelected = selectedIds.includes(item.id);
+        renderItem={({ item, index }) => {
+        const isSelected = currentSelectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
         const orderIdText = getFormattedOrderId(item);
@@ -586,7 +541,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                     <View className="flex-row items-center">
                       <Feather name="calendar" size={9} color="#64748B" />
                       <Text className="text-[10px] font-medium text-slate-600 ml-1">
-                        {isOrderRescheduled ? orderReschedule.date : info.date}
+                        {isOrderRescheduled ? orderReschedule.date : ((item as any).date || info.date)}
                       </Text>
                     </View>
 
@@ -596,7 +551,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                     <View className="flex-row items-center">
                       <Feather name="clock" size={9} color="#64748B" />
                       <Text className="text-[10px] font-medium text-slate-600 ml-1">
-                        {isOrderRescheduled ? orderReschedule.time : info.time}
+                        {isOrderRescheduled ? orderReschedule.time : ((item as any).time || info.time)}
                       </Text>
                     </View>
 
@@ -609,22 +564,21 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   </View>
                 </View>
 
-                {/* Right Side: Distance Badge */}
-                <OrderDistance distance={item.distance} />
+
               </TouchableOpacity>
             </HighlightCardWrapper>
           );
         }}
         ListFooterComponent={<>
-        {incomingOrders.length > 0 && (
+        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && (
           <ViewMoreButton 
-            totalCount={incomingOrders.length}
-            visibleCount={visibleCount}
-            onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+            totalCount={activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length}
+            visibleCount={activeTab === 'new' ? visibleCount : visibleReturnCount}
+            onPress={() => activeTab === 'new' ? setVisibleCount(prev => prev + PAGE_SIZE) : setVisibleReturnCount(prev => prev + PAGE_SIZE)}
           />
         )}
         {/* Refresh Orders Button */}
-        {incomingOrders.length > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
+        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
             {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
                 <Ionicons name="refresh-outline" size={16} color="#073318" />
                 <Text className="text-[#073318] font-bold text-sm ml-2">{t("su_refresh_orders_407")}</Text>
@@ -661,7 +615,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         elevation: 3
       }}>
             <Ionicons name="close-circle" size={18} color="white" />
-            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_reject_408")}{selectedIds.length})
+            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_reject_408")}{currentSelectedIds.length})
             </Text>
           </TouchableOpacity>
 
@@ -679,7 +633,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                 elevation: 4
               }}>
                 <Ionicons name="checkmark-circle" size={18} color="white" />
-                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{currentSelectedIds.length})</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -699,7 +653,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                 elevation: 4
               }}>
                 <Ionicons name="checkmark-circle" size={18} color="white" />
-                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{currentSelectedIds.length})</Text>
               </TouchableOpacity>
             </WalkthroughElement>
           )}

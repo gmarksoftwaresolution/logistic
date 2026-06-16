@@ -25,6 +25,7 @@ export interface Order {
   remainingQty?: number;
   weight?: string | number;
   time?: string;
+  date?: string;
   distance?: string | number;
   categoryBg?: string;
   categoryText?: string;
@@ -56,9 +57,90 @@ interface OrderContextType {
   deliverOrder: (order: Order) => Promise<void>;
   refreshOrdersList: () => Promise<void>;
   isOrdersLoading: boolean;
+  incomingReturnOrders: Order[];
+  acceptReturnOrders: (orderIds: string[]) => void;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
+
+const DEMO_RETURN_ORDERS: Order[] = [
+  {
+    id: 'RTO-1769749895005-201',
+    orderId: 'RTO-1769749895005-201',
+    parcelName: 'Return Parcel',
+    category: 'Returns',
+    mobile: '9876543210',
+    amount: '0',
+    payment: 'Online',
+    address: 'Mahagaon Collection Center',
+    sourceAddress: 'Transporter',
+    deliveryDay: '1 DAY',
+    status: 'assigned',
+    currentHolder: 'Transporter',
+    remainingQty: 2,
+    date: '22 Jun 2026',
+    time: '10:30 AM',
+    distance: '2.5 km',
+    legType: 'drop'
+  },
+  {
+    id: 'RTO-1769749895005-202',
+    orderId: 'RTO-1769749895005-202',
+    parcelName: 'Return Parcel',
+    category: 'Returns',
+    mobile: '9876543210',
+    amount: '0',
+    payment: 'Online',
+    address: 'Nesari Market',
+    sourceAddress: 'Nesari Market',
+    deliveryDay: '1 DAY',
+    status: 'assigned',
+    currentHolder: 'Nesari Market',
+    remainingQty: 5,
+    date: '22 Jun 2026',
+    time: '01:15 PM',
+    distance: '5.1 km',
+    legType: 'pickup'
+  },
+  {
+    id: 'RTO-1769749895005-203',
+    orderId: 'RTO-1769749895005-203',
+    parcelName: 'Return Parcel',
+    category: 'Returns',
+    mobile: '9876543210',
+    amount: '0',
+    payment: 'Online',
+    address: 'Ajara Hub',
+    sourceAddress: 'Ajara Hub',
+    deliveryDay: '1 DAY',
+    status: 'assigned',
+    currentHolder: 'Ajara Hub',
+    remainingQty: 3,
+    date: '23 Jun 2026',
+    time: '04:00 PM',
+    distance: '12.0 km',
+    legType: 'pickup'
+  },
+  {
+    id: 'RTO-1769749895005-204',
+    orderId: 'RTO-1769749895005-204',
+    parcelName: 'Return Parcel',
+    category: 'Returns',
+    mobile: '9876543210',
+    amount: '0',
+    payment: 'Online',
+    address: 'Chandgad Return Center',
+    sourceAddress: 'Transporter',
+    deliveryDay: '1 DAY',
+    status: 'assigned',
+    currentHolder: 'Transporter',
+    remainingQty: 1,
+    date: '23 Jun 2026',
+    time: '05:45 PM',
+    distance: '8.4 km',
+    legType: 'drop'
+  }
+];
 
 const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
   const items = dbOrder.items || [];
@@ -140,6 +222,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
   const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
+
+  const [incomingReturnOrders, setIncomingReturnOrders] = useState<Order[]>(DEMO_RETURN_ORDERS);
+  const localAcceptedReturnsRef = useRef<Order[]>([]);
 
   const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
@@ -245,7 +330,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
       });
-      setReturnedOrders(sortedReturned);
+      setReturnedOrders([...sortedReturned, ...localAcceptedReturnsRef.current]);
 
       // Completed = Everything Completed
       setDeliveredOrders(finalMapped.filter(o => o.status === 'COMPLETED'));
@@ -296,6 +381,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const acceptReturnOrders = (orderIds: string[]) => {
+    const accepted = incomingReturnOrders
+      .filter(o => orderIds.includes(o.id))
+      .map(o => ({
+        ...o,
+        status: 'RETURN_ACCEPTED',
+        legType: 'pickup' as 'pickup'
+      }));
+    
+    setIncomingReturnOrders(prev => prev.filter(o => !orderIds.includes(o.id)));
+    localAcceptedReturnsRef.current = [...localAcceptedReturnsRef.current, ...accepted];
+    setReturnedOrders(prev => [...prev, ...accepted]);
+  };
+
   const acceptAllOrders = async () => {
     await acceptOrders(incomingOrders);
   };
@@ -328,6 +427,14 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const receiveOrder = async (order: Order) => {
+    if (order.id.startsWith('RTO-')) {
+      // It's a dummy return order. Process it locally to move it to Delivery Returns Tab.
+      const updatedOrder = { ...order, legType: 'drop' as 'drop' };
+      localAcceptedReturnsRef.current = localAcceptedReturnsRef.current.map(o => o.id === order.id ? updatedOrder : o);
+      setReturnedOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+      return;
+    }
+    
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
       const endpoint = order.legType === 'drop'
@@ -378,6 +485,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       deliverOrder,
       refreshOrdersList,
       isOrdersLoading,
+      incomingReturnOrders,
+      acceptReturnOrders,
     }}>
       {children}
     </OrderContext.Provider>

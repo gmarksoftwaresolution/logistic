@@ -13,6 +13,8 @@ import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
+import { RescheduleModals } from '../components/RescheduleModals';
+import Toast from 'react-native-toast-message';
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
@@ -169,6 +171,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
   const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  
+  // Reschedule state hooks
+  const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
+  const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
+
   const scanLaserAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
@@ -246,6 +253,24 @@ const OrderDetailsScreen: React.FC<Props> = ({
       if (!capturedPhotoUri) {
         Alert.alert("Photo Required", "Please capture product photos first.");
         setIsSubmitting(false);
+        return;
+      }
+
+      if (order.id.startsWith('RTO-') && !isDeliveryPhase) {
+        await receiveOrder({
+          ...order,
+          image: capturedPhotoUri
+        });
+        Toast.show({
+          type: 'success',
+          text1: t("su_pickup_return_completed") || "Pickup Return Completed",
+          text2: t("su_order_moved_delivery_returns") || "Order moved to Delivery Returns successfully"
+        });
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('ReturnOrders' as never);
+        }
         return;
       }
 
@@ -363,15 +388,59 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
           </View>
 
-          <View className="flex-row gap-3">
-            <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
-              <Text className="text-[18px] font-black text-white">{order.remainingQty || 1}</Text>
-              <Text className="text-[11px] font-bold text-white/60 mt-1">{t("su_items_350")}</Text>
+          <View className="flex-row gap-2">
+            <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
+              <View className="flex-row items-center">
+                <Ionicons name="cube-outline" size={14} color="white" />
+                <Text className="text-[14px] font-black text-white ml-1">{order.remainingQty || 1}</Text>
+              </View>
+              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_items") || "Items"}</Text>
             </View>
-            <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
-              <Text className="text-[18px] font-black text-white">{order.weight || '10'}{t("su_kg_351")}</Text>
-              <Text className="text-[11px] font-bold text-white/60 mt-1">{t("su_total_weight_352")}</Text>
+            <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
+              <View className="flex-row items-center">
+                <Ionicons name="bag-handle-outline" size={14} color="white" />
+                <Text className="text-[14px] font-black text-white ml-1">{order.weight || '0'} {t("su_kg") || "kg"}</Text>
+              </View>
+              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_weight") || "Total Weight"}</Text>
             </View>
+            <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
+              <View className="flex-row items-center">
+                <Text className="text-[14px] font-black text-white">₹</Text>
+                <Text className="text-[14px] font-black text-white ml-1">{order.amount || '0'}</Text>
+              </View>
+              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_amount") || "Total Amount"}</Text>
+            </View>
+            <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
+              <View className="flex-row items-center">
+                <Ionicons name="card-outline" size={14} color="white" />
+                <Text className="text-[14px] font-black text-white ml-1">{order.payment || 'Prepaid'}</Text>
+              </View>
+              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_payment") || "Payment"}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Info Strip */}
+        <View className="bg-white rounded-[16px] py-3 px-4 border border-[#F1F5F9] mb-6 flex-row items-center justify-between" style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+          elevation: 2
+        }}>
+          <View className="flex-row items-center">
+            <Ionicons name="time-outline" size={14} color="#059669" />
+            <Text className="text-[11px] font-bold text-[#059669] ml-1.5">{isDeliveryPhase ? (t("su_expected_delivery") || "Expected Delivery") : (t("su_expected_collection") || "Expected Collection")}</Text>
+          </View>
+          <View className="w-[1px] h-4 bg-slate-200 mx-2" />
+          <View className="flex-row items-center flex-1 justify-center">
+            <Ionicons name="calendar-outline" size={14} color="#059669" />
+            <Text className="text-[11px] font-bold text-[#111827] ml-1.5" numberOfLines={1}>{(order as any).date || order.deliveryDay || (order.acceptedAt ? order.acceptedAt.split(',')[0] : '')}</Text>
+          </View>
+          <View className="w-[1px] h-4 bg-slate-200 mx-2" />
+          <View className="flex-row items-center">
+            <Ionicons name="time-outline" size={14} color="#059669" />
+            <Text className="text-[11px] font-bold text-[#111827] ml-1.5" numberOfLines={1}>{order.pickupTime || order.time || ''}</Text>
           </View>
         </View>
 
@@ -513,11 +582,30 @@ const OrderDetailsScreen: React.FC<Props> = ({
             {capturedPhotoUri ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
           </TouchableOpacity>
 
-          {/* Reject Order full-width button */}
-          <TouchableOpacity onPress={handleRejectOrder} disabled={isSubmitting} className={`mx-2 mt-3.5 mb-3 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}>
-            <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
-            <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356")}</Text>
-          </TouchableOpacity>
+          {/* Action Buttons Row */}
+          <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
+            {/* Reschedule Button */}
+            <TouchableOpacity 
+              onPress={() => setRescheduleReasonModalVisible(true)}
+              disabled={isSubmitting} 
+              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
+            >
+              <Ionicons name="calendar-outline" size={16} color={isSubmitting ? "#94A3B8" : "#073318"} />
+              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
+                {t("su_reschedule_401") || "Reschedule"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Reject Order button */}
+            <TouchableOpacity 
+              onPress={handleRejectOrder} 
+              disabled={isSubmitting} 
+              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
+            >
+              <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
+              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Submit Order full-width button */}
           <TouchableOpacity onPress={handleSubmitOrder} disabled={isSubmitting} className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitting ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
@@ -638,6 +726,27 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
       {/* Reject Reason Modal */}
       <RejectReasonModal visible={rejectModalVisible} order={order} onClose={() => setRejectModalVisible(false)} onSubmit={handleRejectModalSubmit} />
+
+      {/* Reschedule Modals */}
+      <RescheduleModals
+        showBottomSheet={showRescheduleBottomSheet}
+        setShowBottomSheet={setShowRescheduleBottomSheet}
+        rescheduleReasonModalVisible={rescheduleReasonModalVisible}
+        setRescheduleReasonModalVisible={setRescheduleReasonModalVisible}
+        onConfirm={(date, time, reason) => {
+          Toast.show({
+            type: 'success',
+            text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
+            text2: t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+          });
+          
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          }
+        }}
+      />
     </SafeAreaView>;
 };
 export default OrderDetailsScreen;
