@@ -36,6 +36,8 @@ export interface Order {
   acceptedAt?: string;
   completedAt?: string;
   legType?: 'pickup' | 'drop';
+  fromLocation?: string;
+  toLocation?: string;
 }
 
 interface OrderContextType {
@@ -81,7 +83,9 @@ const DEMO_RETURN_ORDERS: Order[] = [
     date: '22 Jun 2026',
     time: '10:30 AM',
     distance: '2.5 km',
-    legType: 'drop'
+    legType: 'drop',
+    fromLocation: 'Transporter',
+    toLocation: 'Mahagaon Collection Center'
   },
   {
     id: 'RTO-1769749895005-202',
@@ -100,7 +104,10 @@ const DEMO_RETURN_ORDERS: Order[] = [
     date: '22 Jun 2026',
     time: '01:15 PM',
     distance: '5.1 km',
-    legType: 'pickup'
+    legType: 'pickup',
+    acceptedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 mins ago
+    fromLocation: 'Nesari Market',
+    toLocation: 'Transporter'
   },
   {
     id: 'RTO-1769749895005-203',
@@ -119,7 +126,10 @@ const DEMO_RETURN_ORDERS: Order[] = [
     date: '23 Jun 2026',
     time: '04:00 PM',
     distance: '12.0 km',
-    legType: 'pickup'
+    legType: 'pickup',
+    acceptedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(), // 90 mins ago
+    fromLocation: 'Ajara Hub',
+    toLocation: 'Transporter'
   },
   {
     id: 'RTO-1769749895005-204',
@@ -138,7 +148,9 @@ const DEMO_RETURN_ORDERS: Order[] = [
     date: '23 Jun 2026',
     time: '05:45 PM',
     distance: '8.4 km',
-    legType: 'drop'
+    legType: 'drop',
+    fromLocation: 'Transporter',
+    toLocation: 'Chandgad Return Center'
   }
 ];
 
@@ -210,6 +222,8 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop'): Order => {
     completedAt: type === 'pickup'
       ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
       : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+    fromLocation: actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'),
+    toLocation: actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter',
   };
 };
 
@@ -387,7 +401,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .map(o => ({
         ...o,
         status: 'RETURN_ACCEPTED',
-        legType: 'pickup' as 'pickup'
+        legType: 'pickup' as 'pickup',
+        acceptedAt: new Date().toISOString()
       }));
     
     setIncomingReturnOrders(prev => prev.filter(o => !orderIds.includes(o.id)));

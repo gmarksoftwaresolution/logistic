@@ -1,4 +1,18 @@
 export const getRouteForOrder = (item: any) => {
+  // Use explicitly stored original route data for Return orders to prevent swapping
+  if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-')) {
+    if (item.fromLocation && item.toLocation) {
+      return `${item.fromLocation} > ${item.toLocation}`;
+    }
+    // Fallback if fromLocation/toLocation are missing for some reason, reconstruct original based on sourceAddress
+    if (item.sourceAddress === 'Transporter') {
+      return `Transporter > ${item.address}`;
+    } else {
+      const source = item.sourceAddress || item.address;
+      return `${source} > Transporter`;
+    }
+  }
+
   if (item.legType === 'pickup') {
     // Seller Address -> Transporter
     return `${item.address} > Transporter`;

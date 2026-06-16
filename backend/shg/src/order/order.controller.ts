@@ -22,7 +22,7 @@ export class OrderController {
   @Get('pickup/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in SHG' })
   async getAssignedPickups(@GetUser() user: User) {
-    return this.orderService.getAssignedPickups(user.id);
+    return this.orderService.getAssignedPickups(user.id, user.phoneNumber);
   }
 
   @Post('pickup/:id/accept')
@@ -50,7 +50,7 @@ export class OrderController {
   @Get('drop/assigned')
   @ApiOperation({ summary: 'Get all active drop-off delivery assignments for the SHG' })
   async getAssignedDrops(@GetUser() user: User) {
-    return this.orderService.getAssignedDrops(user.id);
+    return this.orderService.getAssignedDrops(user.id, user.phoneNumber);
   }
 
   @Post('drop/:id/accept')

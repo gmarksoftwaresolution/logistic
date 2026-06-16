@@ -39,6 +39,11 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { deliveredOrders, highlightedOrders } = useOrders();
   
+  const normalCompletedOrders = deliveredOrders.filter(o => !o.id.startsWith('RTO-'));
+  const returnCompletedOrders = deliveredOrders.filter(o => o.id.startsWith('RTO-'));
+  
+  const [activeTab, setActiveTab] = useState<'new' | 'return'>('new');
+  
   const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
@@ -73,10 +78,87 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Segment Tab Switcher */}
+      <View
+        className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mx-6 my-4 gap-2"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.04,
+          shadowRadius: 10,
+          elevation: 3,
+        }}
+      >
+        {/* New Tab Button */}
+        <TouchableOpacity
+          onPress={() => setActiveTab('new')}
+          activeOpacity={0.8}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+            activeTab === 'new' ? 'bg-[#073318]' : 'bg-transparent'
+          }`}
+          style={activeTab === 'new' ? {
+            shadowColor: '#073318',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
+          } : undefined}
+        >
+          <Text className={`font-bold text-[13px] ${
+            activeTab === 'new' ? 'text-white' : 'text-slate-500'
+          }`}>
+            New
+          </Text>
+          <View 
+            className="px-2.5 py-0.5 rounded-full ml-2"
+            style={activeTab === 'new' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${
+              activeTab === 'new' ? 'text-white' : 'text-slate-500'
+            }`}>
+              {normalCompletedOrders.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Return Tab Button */}
+        <TouchableOpacity
+          onPress={() => setActiveTab('return')}
+          activeOpacity={0.8}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+            activeTab === 'return' ? 'bg-[#073318]' : 'bg-transparent'
+          }`}
+          style={activeTab === 'return' ? {
+            shadowColor: '#073318',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
+          } : undefined}
+        >
+          <Text className={`font-bold text-[13px] ${
+            activeTab === 'return' ? 'text-white' : 'text-slate-500'
+          }`}>
+            Return
+          </Text>
+          <View 
+            className="px-2.5 py-0.5 rounded-full ml-2"
+            style={activeTab === 'return' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${
+              activeTab === 'return' ? 'text-white' : 'text-slate-500'
+            }`}>
+              {returnCompletedOrders.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
       {/* Main Content Area */}
       {/* Main Content Area */}
       {(() => {
-        const filteredOrders = deliveredOrders.filter(item => {
+        const currentData = activeTab === 'new' ? normalCompletedOrders : returnCompletedOrders;
+        const filteredOrders = currentData.filter(item => {
           const info = getInfoForOrder(item);
           const dateStr = item.time || info.date; 
           return isOrderInDateRange(dateStr, filterState);

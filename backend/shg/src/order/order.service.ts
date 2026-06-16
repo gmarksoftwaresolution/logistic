@@ -9,10 +9,11 @@ export class OrderService {
   // NEW CLEAN ARCHITECTURE METHODS
   //////////////////////////////////////////////////////
 
-  async getAssignedPickups(shgId: number) {
+  async getAssignedPickups(shgId: number, mobileNumber: string) {
     return this.prisma.pickupOrder.findMany({
       where: {
         shgId,
+        shg: { phoneNumber: mobileNumber },
         status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'] },
       },
       include: {
@@ -198,10 +199,11 @@ export class OrderService {
     });
   }
 
-  async getAssignedDrops(shgId: number) {
+  async getAssignedDrops(shgId: number, mobileNumber: string) {
     return this.prisma.dropOrder.findMany({
       where: {
         shgId,
+        shg: { phoneNumber: mobileNumber },
         status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED'] },
       },
       include: {

@@ -15,7 +15,7 @@ export class OrderHistoryController {
 
   @Get()
   async getHistory(@GetUser() user: User, @Query() query: HistoryQueryDto) {
-    return this.orderHistoryService.getHistory(user.id, query);
+    return this.orderHistoryService.getHistory(user.id, user.phoneNumber, query);
   }
 
   @Get('stats')
@@ -27,7 +27,7 @@ export class OrderHistoryController {
   async searchHistory(@GetUser() user: User, @Query('query') query: string) {
     const dto = new HistoryQueryDto();
     dto.query = query;
-    return this.orderHistoryService.getHistory(user.id, dto);
+    return this.orderHistoryService.getHistory(user.id, user.phoneNumber, dto);
   }
 
   @Get('filter')
@@ -41,7 +41,7 @@ export class OrderHistoryController {
     dto.status = status;
     dto.fromDate = fromDate;
     dto.toDate = toDate;
-    return this.orderHistoryService.getHistory(user.id, dto);
+    return this.orderHistoryService.getHistory(user.id, user.phoneNumber, dto);
   }
 
   @Get(':id')

@@ -176,6 +176,55 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
   const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
 
+  // Reschedule timer logic
+  const [rescheduleTimeLeft, setRescheduleTimeLeft] = useState<number | null>(null);
+  const [rescheduleProgress, setRescheduleProgress] = useState<number>(100);
+  const [rescheduleExpired, setRescheduleExpired] = useState<boolean>(false);
+  
+  const isPickupAccepted = !isDeliveryPhase && order.status === 'Accepted' && !order.id.startsWith('RTO-');
+  const isReturnPickup = !isDeliveryPhase && order.id.startsWith('RTO-') && order.legType === 'pickup';
+  const showRescheduleTimer = isPickupAccepted || isReturnPickup;
+  
+  useEffect(() => {
+    if (!showRescheduleTimer || !order.acceptedAt) return;
+    
+    const acceptedDate = new Date(order.acceptedAt);
+    if (isNaN(acceptedDate.getTime())) return;
+
+    const endTime = acceptedDate.getTime() + 2 * 60 * 60 * 1000;
+    
+    const updateTimer = () => {
+      const now = Date.now();
+      const left = Math.max(0, endTime - now);
+      
+      setRescheduleTimeLeft(left);
+      
+      const totalDuration = 2 * 60 * 60 * 1000;
+      const prog = Math.max(0, Math.min(100, (left / totalDuration) * 100));
+      setRescheduleProgress(prog);
+      
+      if (left <= 0) {
+        setRescheduleExpired(true);
+      } else {
+        setRescheduleExpired(false);
+      }
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [showRescheduleTimer, order.acceptedAt]);
+  
+  const formatTimeLeft = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    const pad = (num: number) => num.toString().padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  };
+
   const scanLaserAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
@@ -584,27 +633,53 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
           {/* Action Buttons Row */}
           <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
-            {/* Reschedule Button */}
-            <TouchableOpacity 
-              onPress={() => setRescheduleReasonModalVisible(true)}
-              disabled={isSubmitting} 
-              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
-            >
-              <Ionicons name="calendar-outline" size={16} color={isSubmitting ? "#94A3B8" : "#073318"} />
-              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
-                {t("su_reschedule_401") || "Reschedule"}
-              </Text>
-            </TouchableOpacity>
+            {/* Reschedule Button Area */}
+            <View className="flex-1 justify-end">
+              {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
+                <View className="mb-2">
+                  {rescheduleExpired ? (
+                    <Text className="text-[12px] font-bold text-red-500 text-center mb-1">
+                      Reschedule Window Expired
+                    </Text>
+                  ) : (
+                    <>
+                      <Text className="text-[10px] font-bold text-slate-500 text-center">
+                        Reschedule Available
+                      </Text>
+                      <Text className="text-[13px] font-black text-[#073318] text-center mb-1.5 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
+                        {rescheduleTimeLeft !== null ? formatTimeLeft(rescheduleTimeLeft) : '02:00:00'}
+                      </Text>
+                      <View className="h-1 bg-slate-100 rounded-full w-full overflow-hidden mx-auto max-w-[120px]">
+                        <View className="h-full bg-[#059669] rounded-full" style={{ width: `${rescheduleProgress}%` }} />
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
+              <TouchableOpacity 
+                onPress={() => setRescheduleReasonModalVisible(true)}
+                disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)} 
+                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
+                style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.6 : 1 }}
+              >
+                <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
+                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
+                  {t("su_reschedule_401") || "Reschedule"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            {/* Reject Order button */}
-            <TouchableOpacity 
-              onPress={handleRejectOrder} 
-              disabled={isSubmitting} 
-              className={`flex-1 border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
-            >
-              <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
-              <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
-            </TouchableOpacity>
+            {/* Reject Order Button Area */}
+            <View className="flex-1 justify-end">
+              <TouchableOpacity 
+                onPress={handleRejectOrder} 
+                disabled={isSubmitting} 
+                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
+              >
+                <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
+                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Submit Order full-width button */}

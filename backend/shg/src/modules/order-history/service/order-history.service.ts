@@ -7,7 +7,7 @@ import { IHistoryStats, IHistoryResponse } from '../interfaces/history.interface
 export class OrderHistoryService {
   constructor(private prisma: PrismaService) {}
 
-  async getHistory(shgId: number, queryDto: HistoryQueryDto): Promise<IHistoryResponse> {
+  async getHistory(shgId: number, mobileNumber: string, queryDto: HistoryQueryDto): Promise<IHistoryResponse> {
     const { page = 1, limit = 20, query, status, fromDate, toDate } = queryDto;
     const skip = (page - 1) * limit;
 
@@ -23,8 +23,8 @@ export class OrderHistoryService {
       }
     }
 
-    let pickupWhere: any = { shgId, ...commonDateFilter };
-    let dropWhere: any = { shgId, ...commonDateFilter };
+    let pickupWhere: any = { shgId, shg: { phoneNumber: mobileNumber }, ...commonDateFilter };
+    let dropWhere: any = { shgId, shg: { phoneNumber: mobileNumber }, ...commonDateFilter };
 
     if (status && status !== OrderHistoryStatus.ALL) {
       if (status === OrderHistoryStatus.COMPLETED) {

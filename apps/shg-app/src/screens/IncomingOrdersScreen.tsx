@@ -345,6 +345,16 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             }`}>
               New
             </Text>
+            <View 
+              className="px-2.5 py-0.5 rounded-full ml-2"
+              style={activeTab === 'new' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            >
+              <Text className={`text-[10px] font-extrabold ${
+                activeTab === 'new' ? 'text-white' : 'text-slate-500'
+              }`}>
+                {incomingOrders.length}
+              </Text>
+            </View>
           </TouchableOpacity>
 
           {/* Returns Tab Button */}
@@ -367,6 +377,16 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             }`}>
               Returns
             </Text>
+            <View 
+              className="px-2.5 py-0.5 rounded-full ml-2"
+              style={activeTab === 'returns' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            >
+              <Text className={`text-[10px] font-extrabold ${
+                activeTab === 'returns' ? 'text-white' : 'text-slate-500'
+              }`}>
+                {incomingReturnOrders.length}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
           
