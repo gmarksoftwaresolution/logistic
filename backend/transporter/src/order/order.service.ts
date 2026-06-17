@@ -10,13 +10,37 @@ export class OrderService {
   //////////////////////////////////////////////////////
 
   private async ensureAssignments(transporterId: number) {
+    // 1. Auto-assign any unassigned orders (transporterId is null) to the logged-in transporter
+    const unassignedPickupsCount = await this.prisma.pickupOrder.count({
+      where: { transporterId: null }
+    });
+    if (unassignedPickupsCount > 0) {
+      console.log(`[Dev Auto-Assign] Assigning ${unassignedPickupsCount} unassigned pickup orders to logged-in transporter ID ${transporterId}`);
+      await this.prisma.pickupOrder.updateMany({
+        where: { transporterId: null },
+        data: { transporterId }
+      });
+    }
+
+    const unassignedDropsCount = await this.prisma.dropOrder.count({
+      where: { transporterId: null }
+    });
+    if (unassignedDropsCount > 0) {
+      console.log(`[Dev Auto-Assign] Assigning ${unassignedDropsCount} unassigned drop orders to logged-in transporter ID ${transporterId}`);
+      await this.prisma.dropOrder.updateMany({
+        where: { transporterId: null },
+        data: { transporterId }
+      });
+    }
+
+    // 2. Fallback: if transporter still has 0 assigned pickup orders, assign all existing orders to this transporter
     const count = await this.prisma.pickupOrder.count({
       where: { transporterId }
     });
     if (count === 0) {
       const totalCount = await this.prisma.pickupOrder.count();
       if (totalCount > 0) {
-        console.log(`[Dev Auto-Assign] Assigning all ${totalCount} orders to logged-in transporter ID ${transporterId}`);
+        console.log(`[Dev Auto-Assign Fallback] Assigning all ${totalCount} orders to logged-in transporter ID ${transporterId}`);
         await this.prisma.pickupOrder.updateMany({
           data: { transporterId }
         });
@@ -31,7 +55,10 @@ export class OrderService {
     await this.ensureAssignments(transporterId);
     const pickups = await this.prisma.pickupOrder.findMany({
       where: {
-        transporterId,
+        OR: [
+          { transporterId },
+          { transporterId: null },
+        ],
         // Include COMPLETED so the frontend can show them in the Drop tab
         status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
       },
@@ -95,6 +122,9 @@ export class OrderService {
     );
 
     return updatedPickups.map((pickup) => {
+      if (pickup.status === 'COMPLETED') {
+        return pickup;
+      }
       const { handoverCode, ...rest } = pickup;
       return rest;
     });
@@ -129,6 +159,38 @@ export class OrderService {
         },
       });
 
+      // Automatically accept and assign the associated delivery leg (DropOrder) if it exists and is PENDING
+      const associatedDrops = await tx.dropOrder.findMany({
+        where: {
+          masterOrderId: pickupOrder.masterOrderId,
+          status: 'PENDING',
+        },
+      });
+
+      if (associatedDrops.length > 0) {
+        await tx.dropOrder.updateMany({
+          where: {
+            masterOrderId: pickupOrder.masterOrderId,
+            status: 'PENDING',
+          },
+          data: {
+            status: nextStatus === 'RETURN_ACCEPTED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+            transporterId,
+            handoverCode: generatedCode,
+          },
+        });
+
+        for (const drop of associatedDrops) {
+          await tx.dropTracking.create({
+            data: {
+              dropOrderId: drop.id,
+              status: nextStatus === 'RETURN_ACCEPTED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+              remarks: 'Delivery leg accepted automatically via pickup acceptance.',
+            },
+          });
+        }
+      }
+
       return updated;
     });
   }
@@ -144,7 +206,8 @@ export class OrderService {
     }
 
     const isFromGmuHub = pickupOrder.seller?.fullName?.toLowerCase().includes('gmu') || 
-                         pickupOrder.seller?.fullName?.toLowerCase().includes('hub');
+                         pickupOrder.seller?.fullName?.toLowerCase().includes('hub') ||
+                         pickupOrder.seller?.phoneNumber === '9999999992';
 
     if (!isFromGmuHub) {
       if (!code) {
@@ -183,9 +246,12 @@ export class OrderService {
     await this.ensureAssignments(transporterId);
     const drops = await this.prisma.dropOrder.findMany({
       where: {
-        transporterId,
+        OR: [
+          { transporterId },
+          { transporterId: null },
+        ],
         // Include COMPLETED so the frontend can track completed deliveries
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] },
       },
       select: {
         id: true,
@@ -257,9 +323,10 @@ export class OrderService {
       })
     );
 
-    return updatedDrops.map((drop) => {
-      if (drop.status === 'REJECTED') {
-        return {
+    const mappedDrops = updatedDrops.map((drop) => {
+      let finalDrop = drop;
+      if (drop.status === 'REJECTED' || drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP') {
+        finalDrop = {
           ...drop,
           status: 'ACCEPTED',
           deliveryAddress: 'Gadhinglaj Hub',
@@ -272,49 +339,28 @@ export class OrderService {
             }
           }
         };
-      }
-      if (drop.status === 'RETURNED') {
-        return {
+      } else if (drop.status === 'RETURNED') {
+        finalDrop = {
           ...drop,
           status: 'COMPLETED',
         };
+      } else if (drop.status === 'PICKED_UP') {
+        finalDrop = {
+          ...drop,
+          status: 'ACCEPTED',
+        };
+      } else {
+        finalDrop = drop;
       }
-      return drop;
+
+      const { handoverCode, ...rest } = finalDrop;
+      return rest;
     });
+
+    return mappedDrops;
   }
 
-  async acceptDrop(dropOrderId: number, transporterId: number) {
-    const dropOrder = await this.prisma.dropOrder.findUnique({
-      where: { id: dropOrderId },
-    });
 
-    if (!dropOrder) {
-      throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const generatedCode = '1234';
-      const nextStatus = dropOrder.status === 'RETURN_PENDING' ? 'RETURN_ACCEPTED' : 'ACCEPTED';
-      const updated = await tx.dropOrder.update({
-        where: { id: dropOrderId },
-        data: { 
-          status: nextStatus,
-          transporterId, // Align on-the-fly for smooth dev/testing flow
-          handoverCode: generatedCode,
-        },
-      });
-
-      await tx.dropTracking.create({
-        data: {
-          dropOrderId,
-          status: nextStatus,
-          remarks: 'Delivery leg accepted by transporter.',
-        },
-      });
-
-      return updated;
-    });
-  }
 
   async completeDrop(dropOrderId: number, transporterId: number, code?: string) {
     const dropOrder = await this.prisma.dropOrder.findUnique({
@@ -326,10 +372,14 @@ export class OrderService {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
     }
 
-    const isToGmuHub = dropOrder.deliveryAddress?.toLowerCase().includes('gmu') || 
+    const isReturnDrop = ['REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP'].includes(dropOrder.status);
+
+    const isToGmuHub = isReturnDrop ||
+                       dropOrder.deliveryAddress?.toLowerCase().includes('gmu') || 
                        dropOrder.deliveryAddress?.toLowerCase().includes('hub') ||
                        dropOrder.buyer?.fullName?.toLowerCase().includes('gmu') ||
-                       dropOrder.buyer?.fullName?.toLowerCase().includes('hub');
+                       dropOrder.buyer?.fullName?.toLowerCase().includes('hub') ||
+                       dropOrder.buyer?.phoneNumber === '9999999992';
 
     if (!isToGmuHub) {
       if (!code) {
@@ -381,7 +431,7 @@ export class OrderService {
       if (pickupOrder.status === 'PENDING') {
         nextStatus = 'REJECTED';
       } else if (pickupOrder.status === 'ACCEPTED') {
-        nextStatus = 'RETURN_PENDING';
+        nextStatus = 'REJECTED';
       } else if (pickupOrder.status === 'COMPLETED') {
         nextStatus = 'RETURN_PENDING';
       } else {
@@ -419,7 +469,7 @@ export class OrderService {
             status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] },
           },
           data: {
-            status: 'REJECTED',
+            status: nextStatus,
           },
         });
 
@@ -427,7 +477,7 @@ export class OrderService {
           await tx.dropTracking.create({
             data: {
               dropOrderId: drop.id,
-              status: 'REJECTED',
+              status: nextStatus,
               remarks: remarks ? `Delivery leg rejected due to pickup rejection: ${remarks}` : `Delivery leg rejected due to pickup rejection.`,
             },
           });
@@ -452,11 +502,17 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Find the associated pickup order to see if it was completed (picked up)
+      const associatedPickup = await tx.pickupOrder.findFirst({
+        where: { masterOrderId: dropOrder.masterOrderId }
+      });
+      const isPickupCompleted = associatedPickup?.status === 'COMPLETED';
+
       let nextStatus: string;
       if (dropOrder.status === 'PENDING') {
         nextStatus = 'REJECTED';
       } else if (dropOrder.status === 'ACCEPTED') {
-        nextStatus = 'RETURN_PENDING';
+        nextStatus = isPickupCompleted ? 'RETURN_PENDING' : 'REJECTED';
       } else {
         throw new BadRequestException(`Cannot reject drop order in its current status (${dropOrder.status})`);
       }
@@ -476,6 +532,22 @@ export class OrderService {
           remarks: remarks || `Drop leg rejected by transporter. Status changed to ${nextStatus}.`,
         },
       });
+
+      // Synchronize the associated pickup order status if it hasn't been completed yet
+      if (associatedPickup && associatedPickup.status !== 'COMPLETED') {
+        await tx.pickupOrder.update({
+          where: { id: associatedPickup.id },
+          data: { status: nextStatus },
+        });
+
+        await tx.pickupTracking.create({
+          data: {
+            pickupOrderId: associatedPickup.id,
+            status: nextStatus,
+            remarks: `Pickup leg status synchronized to ${nextStatus} due to drop leg rejection.`,
+          },
+        });
+      }
 
       return updated;
     });

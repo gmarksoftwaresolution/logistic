@@ -61,11 +61,7 @@ export class OrderController {
     return this.orderService.getAssignedDrops(req.user.id);
   }
 
-  @Post('drop/:id/accept')
-  @ApiOperation({ summary: 'Accept a delivery order' })
-  async acceptDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.acceptDrop(id, req.user.id);
-  }
+
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
