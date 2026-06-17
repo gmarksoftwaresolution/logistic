@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
@@ -6,7 +6,7 @@ import { OrderService } from './order.service';
 @ApiTags('Transporter Order Management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/orders')
+@Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
@@ -24,8 +24,22 @@ export class OrderController {
 
   @Post('pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a pickup order as complete' })
-  async completePickup(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.completePickup(id, req.user.id);
+  async completePickup(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completePickup(id, req.user.id, code);
+  }
+
+  @Post('pickup/:id/reject')
+  @ApiOperation({ summary: 'Reject a pickup order' })
+  async rejectPickup(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.rejectPickup(id, req.user.id, remarks);
   }
 
   @Get('drop/assigned')
@@ -42,7 +56,22 @@ export class OrderController {
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
-  async completeDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.completeDrop(id, req.user.id);
+  async completeDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completeDrop(id, req.user.id, code);
+  }
+
+  @Post('drop/:id/reject')
+  @ApiOperation({ summary: 'Reject a drop order' })
+  async rejectDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.rejectDrop(id, req.user.id, remarks);
   }
 }
+

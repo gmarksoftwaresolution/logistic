@@ -30,7 +30,7 @@ class RejectionDto {
 
 @ApiTags('Admin')
 @ApiBearerAuth()
-@Controller('api/admin/requests')
+@Controller('admin/requests')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN)
 export class AdminController {
