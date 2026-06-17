@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
 
@@ -24,6 +24,19 @@ export class OrderController {
 
   @Post('pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a pickup order as complete' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Verification code (e.g. 1234)',
+          example: '1234',
+        },
+      },
+      required: ['code'],
+    },
+  })
   async completePickup(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
@@ -56,6 +69,18 @@ export class OrderController {
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Verification code (e.g. 5678)',
+          example: '5678',
+        },
+      },
+    },
+  })
   async completeDrop(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,

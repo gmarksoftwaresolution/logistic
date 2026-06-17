@@ -136,18 +136,24 @@ export class OrderService {
   async completePickup(pickupOrderId: number, transporterId: number, code?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findUnique({
       where: { id: pickupOrderId },
+      include: { seller: true },
     });
 
     if (!pickupOrder) {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
     }
 
-    if (!code) {
-      throw new BadRequestException('Verification code is required');
-    }
-    const expectedCode = pickupOrder.handoverCode || '1234';
-    if (expectedCode !== code) {
-      throw new BadRequestException('Invalid verification code');
+    const isFromGmuHub = pickupOrder.seller?.fullName?.toLowerCase().includes('gmu') || 
+                         pickupOrder.seller?.fullName?.toLowerCase().includes('hub');
+
+    if (!isFromGmuHub) {
+      if (!code) {
+        throw new BadRequestException('Verification code is required');
+      }
+      const expectedCode = pickupOrder.handoverCode || '1234';
+      if (expectedCode !== code) {
+        throw new BadRequestException('Invalid verification code');
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -313,13 +319,22 @@ export class OrderService {
   async completeDrop(dropOrderId: number, transporterId: number, code?: string) {
     const dropOrder = await this.prisma.dropOrder.findUnique({
       where: { id: dropOrderId },
+      include: { buyer: true },
     });
 
     if (!dropOrder) {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
     }
 
-    if (code !== undefined) {
+    const isToGmuHub = dropOrder.deliveryAddress?.toLowerCase().includes('gmu') || 
+                       dropOrder.deliveryAddress?.toLowerCase().includes('hub') ||
+                       dropOrder.buyer?.fullName?.toLowerCase().includes('gmu') ||
+                       dropOrder.buyer?.fullName?.toLowerCase().includes('hub');
+
+    if (!isToGmuHub) {
+      if (!code) {
+        throw new BadRequestException('Verification code is required');
+      }
       const expectedCode = dropOrder.handoverCode || '5678';
       if (expectedCode !== code) {
         throw new BadRequestException('Invalid verification code');
