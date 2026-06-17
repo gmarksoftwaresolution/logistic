@@ -336,7 +336,7 @@ export class OrderService {
             address: {
               village: 'Gadhinglaj',
               pincode: '416502',
-            }
+            } as any
           }
         };
       } else if (drop.status === 'RETURNED') {

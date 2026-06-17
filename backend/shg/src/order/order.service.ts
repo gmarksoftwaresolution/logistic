@@ -618,7 +618,7 @@ export class OrderService {
             addressLine2: null,
             village: null,
             district: null,
-          },
+          } as any,
         },
         buyer: {
           fullName: d.shg?.fullName || 'SHG Hub',
@@ -645,7 +645,7 @@ export class OrderService {
             addressLine2: null,
             village: null,
             district: null,
-          },
+          } as any,
         },
         buyer: {
           fullName: sellerInfo?.fullName || 'Seller',
