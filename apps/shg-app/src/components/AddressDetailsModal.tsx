@@ -10,6 +10,7 @@ interface AddressDetailsModalProps {
   pickupAddress: string;
   deliveryAddress: string;
   distance: string | number;
+  isRejectedDelivery?: boolean;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -21,6 +22,7 @@ export const AddressDetailsModal: React.FC<AddressDetailsModalProps> = ({
   pickupAddress,
   deliveryAddress,
   distance,
+  isRejectedDelivery,
 }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (key: string) => key;
@@ -62,6 +64,29 @@ export const AddressDetailsModal: React.FC<AddressDetailsModalProps> = ({
           </View>
 
           <View style={{ height: 1, backgroundColor: '#E2E8F0', marginBottom: 20 }} />
+
+          {isRejectedDelivery && (
+            <View style={{
+              backgroundColor: '#FEF2F2',
+              borderColor: '#FECACA',
+              borderWidth: 1,
+              padding: 12,
+              borderRadius: 16,
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              marginBottom: 20
+            }}>
+              <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#991B1B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+                  Return Address Updated
+                </Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#7F1D1D', lineHeight: 16 }}>
+                  This order was rejected. The delivery address has been updated to the original pickup point.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Pickup Address */}
           <View style={{ marginBottom: 20 }}>

@@ -13,6 +13,16 @@ export const getRouteForOrder = (item: any) => {
     }
   }
 
+  if (item.isRejectedDelivery) {
+    if (item.legType === 'pickup') {
+      // Returned back to Seller: Transporter -> Seller
+      return `Transporter > ${item.sourceAddress || item.address}`;
+    } else {
+      // Returned back to Transporter: Buyer -> Transporter
+      return `${item.address} > Transporter`;
+    }
+  }
+
   if (item.legType === 'pickup') {
     // Seller Address -> Transporter
     return `${item.address} > Transporter`;
@@ -41,7 +51,7 @@ export const getModalAddresses = (item: any, t: any) => {
   const routeParts = routeStr.split('>');
   const pickup = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
   const delivery = translateRoutePart(routeParts[1]?.trim() || 'Transporter', t);
-  
+
   return { pickup, delivery };
 };
 
@@ -56,11 +66,11 @@ export const getInfoForOrder = (item: any) => {
 
 export const formatOrderNumber = (orderNumber: string | any) => {
   if (!orderNumber) return '';
-  
-  let rawId = typeof orderNumber === 'string' 
-    ? orderNumber 
+
+  let rawId = typeof orderNumber === 'string'
+    ? orderNumber
     : (orderNumber.orderId || orderNumber.id || '');
-  
+
   rawId = rawId.replace('inc-', '');
 
   let formatted = rawId
@@ -68,7 +78,7 @@ export const formatOrderNumber = (orderNumber: string | any) => {
     .replace(/-drop-/gi, '-')
     .replace(/-pickup$/gi, '')
     .replace(/-drop$/gi, '');
-    
+
   return formatted.replace(/^#/, '');
 };
 
