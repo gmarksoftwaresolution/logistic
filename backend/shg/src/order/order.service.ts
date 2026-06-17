@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -9,11 +9,30 @@ export class OrderService {
   // NEW CLEAN ARCHITECTURE METHODS
   //////////////////////////////////////////////////////
 
+  private async ensureAssignments(shgId: number) {
+    const count = await this.prisma.pickupOrder.count({
+      where: { shgId }
+    });
+    if (count === 0) {
+      const totalCount = await this.prisma.pickupOrder.count();
+      if (totalCount > 0) {
+        console.log(`[Dev Auto-Assign] Assigning all ${totalCount} orders to logged-in SHG ID ${shgId}`);
+        await this.prisma.pickupOrder.updateMany({
+          data: { shgId }
+        });
+        await this.prisma.dropOrder.updateMany({
+          data: { shgId }
+        });
+      }
+    }
+  }
+
   async getAssignedPickups(shgId: number) {
-    return this.prisma.pickupOrder.findMany({
+    await this.ensureAssignments(shgId);
+    const pickups = await this.prisma.pickupOrder.findMany({
       where: {
         shgId,
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
       },
       include: {
         seller: {
@@ -35,6 +54,39 @@ export class OrderService {
         createdAt: 'desc',
       },
     });
+
+    const updatedPickups = await Promise.all(
+      pickups.map(async (pickup) => {
+        let currentPickup = pickup;
+        if ((pickup.status === 'ACCEPTED' || pickup.status === 'PENDING') && !pickup.handoverCode) {
+          const generatedCode = '1234';
+          currentPickup = await this.prisma.pickupOrder.update({
+            where: { id: pickup.id },
+            data: { handoverCode: generatedCode },
+            include: {
+              seller: {
+                select: {
+                  fullName: true,
+                  phoneNumber: true,
+                  address: true,
+                },
+              },
+              items: {
+                include: {
+                  product: true,
+                },
+              },
+              masterOrder: true,
+              tracking: true,
+            },
+          });
+        }
+        
+        return currentPickup;
+      })
+    );
+
+    return updatedPickups;
   }
 
   async acceptPickup(pickupOrderId: number, shgId: number) {
@@ -47,15 +99,16 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx: any) => {
+      const nextStatus = pickupOrder.status === 'RETURN_PENDING' ? 'RETURN_ACCEPTED' : 'ACCEPTED';
       const updated = await tx.pickupOrder.update({
         where: { id: pickupOrderId },
-        data: { status: 'ACCEPTED' },
+        data: { status: nextStatus },
       });
 
       await tx.pickupTracking.create({
         data: {
           pickupOrderId,
-          status: 'ACCEPTED',
+          status: nextStatus,
           remarks: 'Pickup leg accepted by SHG.',
         },
       });
@@ -129,7 +182,7 @@ export class OrderService {
     });
   }
 
-  async completePickup(pickupOrderId: number, shgId: number) {
+  async completePickup(pickupOrderId: number, shgId: number, code?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: { id: pickupOrderId, shgId },
     });
@@ -138,11 +191,19 @@ export class OrderService {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
     }
 
+    if (code !== undefined) {
+      const expectedCode = pickupOrder.handoverCode || '1234';
+      if (expectedCode !== code) {
+        throw new BadRequestException('Invalid verification code');
+      }
+    }
+
     return this.prisma.$transaction(async (tx: any) => {
+      const nextStatus = pickupOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'COMPLETED';
       const updated = await tx.pickupOrder.update({
         where: { id: pickupOrderId },
         data: {
-          status: 'COMPLETED',
+          status: nextStatus,
           pickupTime: new Date(),
         },
       });
@@ -150,16 +211,16 @@ export class OrderService {
       await tx.pickupTracking.create({
         data: {
           pickupOrderId,
-          status: 'COMPLETED',
+          status: nextStatus,
           remarks: 'Pickup leg completed successfully by SHG.',
         },
       });
 
-      // Auto-accept associated PENDING drop orders
+      // Auto-accept/pickup associated PENDING/RETURN_PENDING drop orders
       const pendingDrops = await tx.dropOrder.findMany({
         where: {
           masterOrderId: updated.masterOrderId,
-          status: 'PENDING',
+          status: { in: ['PENDING', 'RETURN_PENDING'] },
           OR: [
             { shgId: null },
             { shgId }
@@ -168,26 +229,20 @@ export class OrderService {
       });
 
       if (pendingDrops.length > 0) {
-        await tx.dropOrder.updateMany({
-          where: {
-            masterOrderId: updated.masterOrderId,
-            status: 'PENDING',
-            OR: [
-              { shgId: null },
-              { shgId }
-            ]
-          },
-          data: {
-            status: 'PICKED_UP',
-            shgId
-          }
-        });
-
         for (const drop of pendingDrops) {
+          const nextDropStatus = drop.status === 'RETURN_PENDING' ? 'RETURN_PICKED_UP' : 'PICKED_UP';
+          await tx.dropOrder.update({
+            where: { id: drop.id },
+            data: {
+              status: nextDropStatus,
+              shgId
+            }
+          });
+
           await tx.dropTracking.create({
             data: {
               dropOrderId: drop.id,
-              status: 'PICKED_UP',
+              status: nextDropStatus,
               remarks: 'Delivery leg auto-picked up upon pickup completion.'
             }
           });
@@ -199,10 +254,11 @@ export class OrderService {
   }
 
   async getAssignedDrops(shgId: number) {
-    return this.prisma.dropOrder.findMany({
+    await this.ensureAssignments(shgId);
+    const drops = await this.prisma.dropOrder.findMany({
       where: {
         shgId,
-        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] },
       },
       include: {
         buyer: {
@@ -236,6 +292,53 @@ export class OrderService {
         createdAt: 'desc',
       },
     });
+
+    const updatedDrops = await Promise.all(
+      drops.map(async (drop) => {
+        if ((drop.status === 'ACCEPTED' || drop.status === 'PENDING' || drop.status === 'PICKED_UP') && !drop.handoverCode) {
+          const generatedCode = '1234';
+          const updated = await this.prisma.dropOrder.update({
+            where: { id: drop.id },
+            data: { handoverCode: generatedCode },
+            include: {
+              buyer: {
+                select: {
+                  fullName: true,
+                  phoneNumber: true,
+                  address: true,
+                },
+              },
+              items: {
+                include: {
+                  product: true,
+                },
+              },
+              masterOrder: {
+                include: {
+                  items: {
+                    include: {
+                      seller: {
+                        include: {
+                          address: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              tracking: true,
+            },
+          });
+          return updated;
+        }
+        return drop;
+      })
+    );
+
+    return updatedDrops.map((drop) => {
+      const { handoverCode, ...rest } = drop;
+      return rest;
+    });
   }
 
   async acceptDrop(dropOrderId: number, shgId: number) {
@@ -248,15 +351,16 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx: any) => {
+      const nextStatus = dropOrder.status === 'RETURN_PENDING' ? 'RETURN_ACCEPTED' : 'ACCEPTED';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
-        data: { status: 'ACCEPTED' },
+        data: { status: nextStatus },
       });
 
       await tx.dropTracking.create({
         data: {
           dropOrderId,
-          status: 'ACCEPTED',
+          status: nextStatus,
           remarks: 'Delivery leg accepted by SHG.',
         },
       });
@@ -265,25 +369,38 @@ export class OrderService {
     });
   }
 
-  async pickupDrop(dropOrderId: number, shgId: number) {
+  async pickupDrop(dropOrderId: number, shgId: number, code?: string) {
     const dropOrder = await this.prisma.dropOrder.findFirst({
-      where: { id: dropOrderId, shgId, status: 'ACCEPTED' },
+      where: {
+        id: dropOrderId,
+        shgId,
+        status: { in: ['ACCEPTED', 'RETURN_ACCEPTED'] },
+      },
     });
 
     if (!dropOrder) {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not accepted by this SHG.`);
     }
 
+    if (!code) {
+      throw new BadRequestException('Verification code is required');
+    }
+    const expectedCode = dropOrder.handoverCode || '1234';
+    if (expectedCode !== code) {
+      throw new BadRequestException('Invalid verification code');
+    }
+
     return this.prisma.$transaction(async (tx: any) => {
+      const nextStatus = dropOrder.status === 'RETURN_ACCEPTED' ? 'RETURN_PICKED_UP' : 'PICKED_UP';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
-        data: { status: 'PICKED_UP' },
+        data: { status: nextStatus },
       });
 
       await tx.dropTracking.create({
         data: {
           dropOrderId,
-          status: 'PICKED_UP',
+          status: nextStatus,
           remarks: 'Delivery leg picked up successfully from transporter by SHG.',
         },
       });
@@ -302,15 +419,16 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx: any) => {
+      const nextStatus = (dropOrder.status === 'RETURN_ACCEPTED' || dropOrder.status === 'RETURN_PICKED_UP') ? 'RETURNED' : 'COMPLETED';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
-        data: { status: 'COMPLETED' },
+        data: { status: nextStatus },
       });
 
       await tx.dropTracking.create({
         data: {
           dropOrderId,
-          status: 'COMPLETED',
+          status: nextStatus,
           remarks: 'Delivery leg completed successfully by SHG.',
         },
       });
@@ -343,6 +461,90 @@ export class OrderService {
       });
 
       return updated;
+    });
+  }
+
+  async rescheduleOrders(dto: any) {
+    const { orderIds, date, time, reason } = dto;
+    
+    // Parse date and time if possible
+    let newDate: Date | null = null;
+    try {
+      if (date && time) {
+        const [dayStr, monthStr, yearStr] = date.trim().split(/\s+/);
+        const [hourMin, ampm] = time.trim().split(/\s+/);
+        let [hours, minutes] = hourMin.split(':').map(Number);
+        if (ampm?.toUpperCase() === 'PM' && hours < 12) hours += 12;
+        if (ampm?.toUpperCase() === 'AM' && hours === 12) hours = 0;
+
+        const months: Record<string, number> = {
+          jan: 0, january: 0,
+          feb: 1, february: 1,
+          mar: 2, march: 2,
+          apr: 3, april: 3,
+          may: 4,
+          jun: 5, june: 5,
+          jul: 6, july: 6,
+          aug: 7, august: 7,
+          sep: 8, september: 8,
+          oct: 9, october: 9,
+          nov: 10, november: 10,
+          dec: 11, december: 11
+        };
+        const mKey = monthStr?.toLowerCase().substring(0, 3);
+        const month = months[mKey] !== undefined ? months[mKey] : 4;
+        newDate = new Date(Number(yearStr || 2026), month, Number(dayStr || 15), hours || 12, minutes || 0);
+        if (isNaN(newDate.getTime())) {
+          newDate = null;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse date/time string, falling back to +1 day shifting:', e);
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const results = [];
+      for (const id of orderIds) {
+        // Check if it's a PickupOrder
+        const pickup = await tx.pickupOrder.findUnique({ where: { id } });
+        if (pickup) {
+          const finalDate = newDate || new Date(pickup.createdAt.getTime() + 24 * 60 * 60 * 1000);
+          const updated = await tx.pickupOrder.update({
+            where: { id },
+            data: { createdAt: finalDate },
+          });
+          
+          await tx.pickupTracking.create({
+            data: {
+              pickupOrderId: id,
+              status: 'PENDING',
+              remarks: `Order rescheduled to ${finalDate.toLocaleString()}. Reason: ${reason || 'None'}`,
+            },
+          });
+          results.push({ type: 'pickup', id, updated });
+          continue;
+        }
+
+        // Check if it's a DropOrder
+        const drop = await tx.dropOrder.findUnique({ where: { id } });
+        if (drop) {
+          const finalDate = newDate || new Date(drop.createdAt.getTime() + 24 * 60 * 60 * 1000);
+          const updated = await tx.dropOrder.update({
+            where: { id },
+            data: { createdAt: finalDate },
+          });
+
+          await tx.dropTracking.create({
+            data: {
+              dropOrderId: id,
+              status: 'PENDING',
+              remarks: `Order rescheduled to ${finalDate.toLocaleString()}. Reason: ${reason || 'None'}`,
+            },
+          });
+          results.push({ type: 'drop', id, updated });
+        }
+      }
+      return { success: true, count: results.length, details: results };
     });
   }
 }

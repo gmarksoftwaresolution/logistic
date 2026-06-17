@@ -6,6 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { GetUser } from '../common/decorators/user.decorator';
 import { User, UserRole } from '@prisma/client';
 import { OrderService } from './order.service';
+import { RescheduleOrdersDto } from './dto/order.dto';
 
 @ApiTags('SHG Order Management')
 @ApiBearerAuth()
@@ -43,8 +44,12 @@ export class OrderController {
 
   @Post('pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a pickup order as complete' })
-  async completePickup(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
-    return this.orderService.completePickup(id, user.id);
+  async completePickup(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completePickup(id, user.id, code);
   }
 
   @Get('drop/assigned')
@@ -61,8 +66,12 @@ export class OrderController {
 
   @Post('drop/:id/pickup')
   @ApiOperation({ summary: 'Mark a delivery order as picked up from transporter' })
-  async pickupDrop(@Param('id', ParseIntPipe) id: number, @GetUser() user: User) {
-    return this.orderService.pickupDrop(id, user.id);
+  async pickupDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.pickupDrop(id, user.id, code);
   }
 
   @Post('drop/:id/complete')
@@ -79,5 +88,11 @@ export class OrderController {
     @Body('reason') reason?: string
   ) {
     return this.orderService.rejectDrop(id, user.id, reason);
+  }
+
+  @Post('reschedule')
+  @ApiOperation({ summary: 'Reschedule one or more pickup/drop orders' })
+  async reschedule(@Body() dto: RescheduleOrdersDto) {
+    return this.orderService.rescheduleOrders(dto);
   }
 }
