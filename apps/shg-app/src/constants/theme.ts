@@ -14,9 +14,9 @@ export const Colors = {
 };
 
 export const Fonts = {
-  regular: 'PlusJakartaSans-Regular',
-  medium: 'PlusJakartaSans-Medium',
-  semiBold: 'PlusJakartaSans-SemiBold',
-  bold: 'PlusJakartaSans-Bold',
-  extraBold: 'PlusJakartaSans-ExtraBold',
+  regular: 'Poppins-Regular',
+  medium: 'Poppins-Medium',
+  semiBold: 'Poppins-SemiBold',
+  bold: 'Poppins-Bold',
+  extraBold: 'Poppins-ExtraBold',
 };

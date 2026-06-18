@@ -1,4 +1,4 @@
-export type FilterType = 'Today' | '1 Week' | '15 Days' | '1 Month' | 'Custom Date Range';
+export type FilterType = 'all' | 'today' | '1_week' | '15_days' | '1_month' | 'custom_date_range';
 
 export interface FilterState {
   type: FilterType;
@@ -31,30 +31,32 @@ export const isOrderInDateRange = (dateString: string, filterState: FilterState)
   const orderTime = orderDate.getTime();
   
   switch (filterState.type) {
-    case 'Today': {
+    case 'all':
+      return true;
+    case 'today': {
       const startOfToday = new Date(today);
       startOfToday.setHours(0, 0, 0, 0);
       return orderTime >= startOfToday.getTime() && orderTime <= today.getTime();
     }
-    case '1 Week': {
+    case '1_week': {
       const start = new Date(today);
       start.setDate(today.getDate() - 7);
       start.setHours(0, 0, 0, 0);
       return orderTime >= start.getTime() && orderTime <= today.getTime();
     }
-    case '15 Days': {
+    case '15_days': {
       const start = new Date(today);
       start.setDate(today.getDate() - 15);
       start.setHours(0, 0, 0, 0);
       return orderTime >= start.getTime() && orderTime <= today.getTime();
     }
-    case '1 Month': {
+    case '1_month': {
       const start = new Date(today);
       start.setDate(today.getDate() - 30);
       start.setHours(0, 0, 0, 0);
       return orderTime >= start.getTime() && orderTime <= today.getTime();
     }
-    case 'Custom Date Range': {
+    case 'custom_date_range': {
       if (!filterState.startDate || !filterState.endDate) return true;
       const start = new Date(filterState.startDate);
       start.setHours(0, 0, 0, 0);

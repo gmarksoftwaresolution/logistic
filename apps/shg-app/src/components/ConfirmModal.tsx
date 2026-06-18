@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useContext } from 'react';
+import { View, Text, TouchableOpacity, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import { LanguageContext } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import WalkthroughElement from './WalkthroughElement';
 import { StepId } from '../context/OnboardingContext';
@@ -10,23 +11,33 @@ interface ConfirmModalProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   isDestructive?: boolean;
-  confirmStepId?: StepId;
+  isLoading?: boolean;
+  loadingText?: string;
+  isInfoOnly?: boolean;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   visible,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   onConfirm,
   onCancel,
   isDestructive = false,
-  confirmStepId,
+  isLoading = false,
+  loadingText,
+  isInfoOnly = false,
 }) => {
+  const context = useContext(LanguageContext);
+  const t = context ? context.t : (k: string) => k;
+  
+  const finalConfirmText = confirmText || t('su_confirm_358') || 'Confirm';
+  const finalCancelText = cancelText || t('su_cancel_357') || 'Cancel';
+
   if (!visible) return null;
 
   return (
@@ -67,35 +78,28 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           {message}
         </Text>
 
-        {/* Actions */}
-        <View className="flex-row items-center justify-end gap-3">
-          <TouchableOpacity 
-            onPress={onCancel}
-            activeOpacity={0.7}
-            className="py-3 px-6 rounded-[16px] bg-[#F1F5F9]"
-          >
-            <Text className="text-[14px] font-bold text-[#475569]">{cancelText}</Text>
-          </TouchableOpacity>
-          
-          {confirmStepId ? (
-            <WalkthroughElement stepId={confirmStepId} autoAdvance={true}>
+          {/* Actions */}
+          <View className="flex-row items-center justify-end gap-3">
+            {!isInfoOnly && (
               <TouchableOpacity 
-                onPress={onConfirm}
+                onPress={onCancel}
                 activeOpacity={0.7}
-                className={`py-3 px-6 rounded-[16px] shadow-sm ${isDestructive ? 'bg-[#DC2626]' : 'bg-[#073318]'}`}
+                disabled={isLoading}
+                className={`py-3 px-6 rounded-[16px] ${isLoading ? 'bg-[#F8FAFC]' : 'bg-[#F1F5F9]'}`}
               >
-                <Text className="text-[14px] font-bold text-white">{confirmText}</Text>
+                <Text className={`text-[14px] font-bold ${isLoading ? 'text-[#94A3B8]' : 'text-[#475569]'}`}>{finalCancelText}</Text>
               </TouchableOpacity>
-            </WalkthroughElement>
-          ) : (
+            )}
+            
             <TouchableOpacity 
               onPress={onConfirm}
               activeOpacity={0.7}
-              className={`py-3 px-6 rounded-[16px] shadow-sm ${isDestructive ? 'bg-[#DC2626]' : 'bg-[#073318]'}`}
+              disabled={isLoading}
+              className={`py-3 px-6 rounded-[16px] shadow-sm flex-row items-center justify-center ${isDestructive ? (isLoading ? 'bg-[#FCA5A5]' : 'bg-[#DC2626]') : (isLoading ? 'bg-[#86A691]' : 'bg-[#073318]')}`}
             >
-              <Text className="text-[14px] font-bold text-white">{confirmText}</Text>
+              {isLoading && <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />}
+              <Text className="text-[14px] font-bold text-white">{isLoading ? (loadingText || 'Processing...') : finalConfirmText}</Text>
             </TouchableOpacity>
-          )}
         </View>
       </View>
     </View>

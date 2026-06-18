@@ -1,9 +1,10 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput } from 'react-native';
+import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { CompositeScreenProps } from '@react-navigation/native';
+import TextTicker from 'react-native-text-ticker';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -13,14 +14,20 @@ import { useOrders } from '../context/OrderContext';
 import { Colors, Fonts } from '../constants/theme';
 import { Typography } from '../constants/typography';
 import { Spacing, Grid } from '../constants/spacing';
+import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
+import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RejectReasonModal } from '../components/RejectReasonModal';
-import { getRouteForOrder, getInfoForOrder } from '../utils/orderHelpers';
+import { ViewMoreButton } from '../components/ViewMoreButton';
+import { OrderDistance } from '../components/OrderDistance';
+import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
+import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
+
 type Props = CompositeScreenProps<NativeStackScreenProps<OrdersStackParamList, 'IncomingOrders'>, CompositeScreenProps<BottomTabScreenProps<MainTabParamList>, NativeStackScreenProps<RootStackParamList>>>;
 const IncomingOrdersScreen: React.FC<Props> = ({
   navigation
@@ -32,8 +39,12 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const {
     incomingOrders,
     acceptOrder,
+    acceptOrders,
     acceptAllOrders,
-    rejectOrder
+    rejectOrder,
+    highlightedOrders,
+    incomingReturnOrders,
+    acceptReturnOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -41,11 +52,25 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const {
     t
   } = context;
+  const { refreshOrdersList } = useOrders();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrdersList();
+    }, [refreshOrdersList])
+  );
 
   // Selection and Animation states
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const PAGE_SIZE = 5;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleReturnCount, setVisibleReturnCount] = useState(PAGE_SIZE);
+  const [activeTab, setActiveTab] = useState<'new' | 'returns'>('new');
+  const [selectedReturnIds, setSelectedReturnIds] = useState<string[]>([]);
 
   // Confirm Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -53,6 +78,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     title: '',
     message: '',
     isDestructive: false,
+    isInfoOnly: false,
     confirmText: 'Confirm',
     onConfirm: () => {}
   });
@@ -72,17 +98,30 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     reason?: string;
   }>>({});
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [rescheduledCount, setRescheduledCount] = useState(0);
   const [rescheduleReasonModalVisible, setRescheduleReasonModalVisible] = useState(false);
   const [selectedRescheduleReason, setSelectedRescheduleReason] = useState<string | null>(null);
   const [customRescheduleReason, setCustomRescheduleReason] = useState('');
-  const rescheduleReasons = ['Vehicle Issue', 'Driver Not Available', 'Traffic Problem', 'Customer Requested Later', 'Weather Issue', 'Route Problem', 'Other'];
-  const isAllSelected = incomingOrders.length > 0 && selectedIds.length === incomingOrders.length;
+  const rescheduleReasons = [
+    { key: 'orders_vehicle_issue', default: 'Vehicle Issue' },
+    { key: 'orders_driver_not_available', default: 'Driver Not Available' },
+    { key: 'orders_traffic_problem', default: 'Traffic Problem' },
+    { key: 'orders_customer_requested_later', default: 'Customer Requested Later' },
+    { key: 'orders_weather_issue', default: 'Weather Issue' },
+    { key: 'orders_route_problem', default: 'Route Problem' },
+    { key: 'orders_other', default: 'Other' }
+  ];
+  const currentTabData = activeTab === 'new' ? incomingOrders : incomingReturnOrders;
+  const currentSelectedIds = activeTab === 'new' ? selectedIds : selectedReturnIds;
+  const setCurrentSelectedIds = activeTab === 'new' ? setSelectedIds : setSelectedReturnIds;
+
+  const isAllSelected = currentTabData.length > 0 && currentSelectedIds.length === currentTabData.length;
 
   const handleSelectAllToggle = () => {
     if (isAllSelected) {
-      setSelectedIds([]);
+      setCurrentSelectedIds([]);
     } else {
-      setSelectedIds(incomingOrders.map(o => o.id));
+      setCurrentSelectedIds(currentTabData.map((o: any) => o.id));
     }
   };
   const animatedY = useRef(new Animated.Value(100)).current;
@@ -90,7 +129,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
 
   // Animate bottom action bar visibility based on selection count
   useEffect(() => {
-    if (selectedIds.length > 0) {
+    if (currentSelectedIds.length > 0) {
       setShouldRender(true);
       Animated.parallel([Animated.timing(animatedY, {
         toValue: 0,
@@ -114,31 +153,55 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         setShouldRender(false);
       });
     }
-  }, [selectedIds.length]);
+  }, [currentSelectedIds.length]);
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    setCurrentSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
+  
+  const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
+
   const handleAcceptSelected = () => {
+    if (activeTab === 'returns') {
+      acceptReturnOrders(selectedReturnIds);
+      setSelectedReturnIds([]);
+      setModalConfig(prev => ({ ...prev, visible: false }));
+      setShowSuccessBanner(true);
+      return;
+    }
     const ordersToAccept = incomingOrders.filter(o => selectedIds.includes(o.id));
     if (ordersToAccept.length === 0) return;
     setModalConfig({
       visible: true,
-      title: "Confirm Action",
-      message: `Are you sure you want to accept all ${ordersToAccept.length} selected order(s)?`,
+      title: t('su_confirm_action') || "Confirm Action",
+      message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
-      confirmText: 'Accept',
-      onConfirm: () => {
+      isInfoOnly: false,
+      confirmText: t('su_accept') || 'Accept',
+      onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        ordersToAccept.forEach(order => acceptOrder(order));
-        setSelectedIds([]);
-        Toast.show({
-          type: 'success',
-          text1: t("su_success_388"),
-          text2: t("su_orders_have_been_suc_389")
-        });
-        setTimeout(() => {
-          navigation.navigate('OrdersOverview');
-        }, 500);
+        
+        try {
+          await acceptOrders(ordersToAccept);
+          setSelectedIds([]);
+          Toast.show({
+            type: 'success',
+            text1: t("su_success_388"),
+            text2: t("su_orders_have_been_suc_389")
+          });
+          
+          setModalConfig({ ...modalConfig, visible: false });
+          // Redirect directly to AcceptedOrders (pickup tab)
+          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to accept orders.'
+          });
+        } finally {
+          setIsProcessing(false);
+        }
       }
     });
   };
@@ -149,24 +212,32 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     setCurrentRejectIndex(0);
     setRejectModalVisible(true);
   };
-  const handleRejectModalSubmit = (order: Order, reason: string) => {
-    rejectOrder({
-      ...order,
-      rejectReason: reason
-    });
-    const nextIndex = currentRejectIndex + 1;
-    if (nextIndex < ordersToRejectBatch.length) {
-      setCurrentRejectIndex(nextIndex);
-    } else {
-      setRejectModalVisible(false);
-      setSelectedIds([]);
-      import('react-native-toast-message').then(({
-        default: Toast
-      }) => Toast.show({
-        type: 'success',
-        text1: t("su_done_359"),
-        text2: t("su_selected_orders_have_391")
-      }));
+  const handleRejectModalSubmit = async (order: Order, reason: string) => {
+    try {
+      await rejectOrder({
+        ...order,
+        rejectReason: reason
+      });
+      const nextIndex = currentRejectIndex + 1;
+      if (nextIndex < ordersToRejectBatch.length) {
+        setCurrentRejectIndex(nextIndex);
+      } else {
+        setRejectModalVisible(false);
+        setSelectedIds([]);
+        import('react-native-toast-message').then(({
+          default: Toast
+        }) => Toast.show({
+          type: 'success',
+          text1: t("su_done_359"),
+          text2: t("su_selected_orders_have_391")
+        }));
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to reject order.'
+      });
     }
   };
   const handleAcceptAll = () => {
@@ -181,23 +252,40 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     }
     setModalConfig({
       visible: true,
-      title: "Confirm Action",
-      message: `Are you sure you want to accept all ${ordersToAccept.length} order(s)?`,
+      title: t('su_confirm_action') || "Confirm Action",
+      message: (t('su_are_you_sure_accept_all') || "Are you sure you want to accept all {count} order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
-      confirmText: 'Accept',
-      onConfirm: () => {
+      isInfoOnly: false,
+      confirmText: t('su_accept') || 'Accept',
+      onConfirm: async () => {
+        setIsProcessing(true);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        if (selectedIds.length > 0) {
-          ordersToAccept.forEach(order => acceptOrder(order));
-          setSelectedIds([]);
-        } else {
-          acceptAllOrders();
+        
+        try {
+          if (selectedIds.length > 0) {
+            await acceptOrders(ordersToAccept);
+            setSelectedIds([]);
+          } else {
+            await acceptAllOrders();
+          }
+          Toast.show({
+            type: 'success',
+            text1: t("su_success_388"),
+            text2: t("su_orders_have_been_suc_389")
+          });
+          
+          setModalConfig({ ...modalConfig, visible: false });
+          // Redirect directly to AcceptedOrders (pickup tab)
+          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to accept orders.'
+          });
+        } finally {
+          setIsProcessing(false);
         }
-        Toast.show({
-          type: 'success',
-          text1: t("su_success_388"),
-          text2: t("su_orders_have_been_suc_389")
-        });
       }
     });
   };
@@ -215,229 +303,310 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   return <SafeAreaView className="flex-1" style={{
     backgroundColor: Colors.background
   }}>
-      <SharedHeader title={t("su_new_orders_398")} subtitle={t('New Orders Sub') || 'Verify & accept incoming requests'} navigation={navigation} />
+      <SharedHeader title="Incoming Orders" subtitle="Review and manage newly received orders" navigation={navigation} />
 
-      <ScrollView style={{
-      paddingHorizontal: Spacing.lg
-    }} className="flex-1 pt-2" showsVerticalScrollIndicator={false}>
-        {/* Top Action Buttons Row */}
-        {incomingOrders.length > 0 && <>
-          <View className="flex-row justify-between px-1" style={{
-          marginBottom: Spacing.sm,
-          marginTop: Spacing.xs
-        }}>
-            {/* Left Button: Reschedule */}
-            <TouchableOpacity onPress={() => {
-            if (selectedIds.length === 0) {
-              Toast.show({
-                type: 'error',
-                text1: t("su_validation_error_83"),
-                text2: t("su_please_select_at_lea_400")
-              });
-            } else {
-              setRescheduleReasonModalVisible(true);
-            }
-          }} activeOpacity={0.75} className="flex-1 h-[50px] bg-white border border-[#CBD5E1] rounded-[25px] flex-row items-center justify-center mr-2 shadow-sm" style={{
+      <FlatList 
+        contentContainerStyle={{ paddingBottom: 120 }}
+        style={{ paddingHorizontal: Spacing.lg }} 
+        className="flex-1 pt-2" 
+        showsVerticalScrollIndicator={false}
+        data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : incomingReturnOrders.slice(0, visibleReturnCount)}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={<>
+        {/* Segment Tab Switcher */}
+        <View
+          className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mb-4 gap-2 mx-1"
+          style={{
             shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2
-            },
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 2
-          }}>
-              <Ionicons name="calendar-outline" size={18} color="#073318" />
-              <Text style={{
-              fontFamily: Fonts.bold,
-              fontSize: normalize(13.5),
-              color: '#073318',
-              marginLeft: Spacing.xs + 1
-            }}>{t("su_reschedule_401")}</Text>
-            </TouchableOpacity>
-
-            {/* Right Button: Accept All */}
-            <TouchableOpacity onPress={handleAcceptAll} activeOpacity={0.75} className="flex-1 h-[50px] bg-[#073318] rounded-[25px] flex-row items-center justify-center shadow-md" style={{
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.04,
+            shadowRadius: 10,
+            elevation: 3,
+            marginTop: 4,
+          }}
+        >
+          {/* New Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('new')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'new' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'new' ? {
               shadowColor: '#073318',
-              shadowOffset: {
-                width: 0,
-                height: 3
-              },
-              shadowOpacity: 0.2,
-              shadowRadius: 5,
-              elevation: 4,
-              marginLeft: 8
-            }}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="white" />
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'new' ? 'text-white' : 'text-slate-500'
+            }`}>
+              New
+            </Text>
+            <View 
+              className="px-2.5 py-0.5 rounded-full ml-2"
+              style={activeTab === 'new' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            >
+              <Text className={`text-[10px] font-extrabold ${
+                activeTab === 'new' ? 'text-white' : 'text-slate-500'
+              }`}>
+                {incomingOrders.length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Returns Tab Button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab('returns')}
+            activeOpacity={0.8}
+            className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+              activeTab === 'returns' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+            style={activeTab === 'returns' ? {
+              shadowColor: '#073318',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 3,
+            } : undefined}
+          >
+            <Text className={`font-bold text-[13px] ${
+              activeTab === 'returns' ? 'text-white' : 'text-slate-500'
+            }`}>
+              Returns
+            </Text>
+            <View 
+              className="px-2.5 py-0.5 rounded-full ml-2"
+              style={activeTab === 'returns' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            >
+              <Text className={`text-[10px] font-extrabold ${
+                activeTab === 'returns' ? 'text-white' : 'text-slate-500'
+              }`}>
+                {incomingReturnOrders.length}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+          
+        {currentTabData.length > 0 && (
+          <View className="flex-row justify-between items-center px-1 mb-4 mt-2">
+            <Text style={{ fontFamily: Fonts.bold, fontSize: normalize(14.5), color: '#1E293B' }}>
+              {activeTab === 'new' ? (t('su_incoming_requests') || 'Incoming Requests') : 'Return Requests'} ({currentTabData.length})
+            </Text>
+            <TouchableOpacity 
+              onPress={handleSelectAllToggle} 
+              activeOpacity={0.75} 
+              className="flex-row items-center bg-white border border-[#E2E8F0] px-3 py-1.5 rounded-full shadow-sm"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.03,
+                shadowRadius: 2,
+                elevation: 1
+              }}
+            >
+              <Ionicons name={isAllSelected ? "checkmark-circle" : "ellipse-outline"} size={15} color="#073318" />
               <Text style={{
                 fontFamily: Fonts.bold,
-                fontSize: normalize(13.5),
-                color: 'white',
-                marginLeft: Spacing.xs + 1
+                fontSize: normalize(11),
+                color: '#073318',
+                marginLeft: Spacing.xs - 2
               }}>
-                {`Accept All (${incomingOrders.length})`}
+                {isAllSelected ? (t('su_deselect_all') || 'Deselect All') : (t('su_select_all') || 'Select All')}
               </Text>
             </TouchableOpacity>
           </View>
-          
-          <View className="px-1" style={{
-          marginBottom: Spacing.md
-        }}>
-            <TouchableOpacity onPress={handleSelectAllToggle} activeOpacity={0.75} className="h-[50px] bg-white border border-[#CBD5E1] rounded-[25px] flex-row items-center justify-center shadow-sm" style={{
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2
-            },
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 2
-          }}>
-              <Ionicons name={isAllSelected ? "checkmark-circle" : "ellipse-outline"} size={18} color="#073318" />
-              <Text style={{
-              fontFamily: Fonts.bold,
-              fontSize: normalize(13.5),
-              color: '#073318',
-              marginLeft: Spacing.xs + 1
-            }}>
-                {isAllSelected ? 'Deselect All' : 'Select All'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          </>}
+        )}
 
         {/* Success Banner */}
         {showSuccessBanner && <View className="p-4 rounded-[16px] bg-[#ECFDF5] border border-[#D1FAE5] flex-row items-center justify-between mb-6 shadow-sm">
             <View className="flex-row items-center flex-1 pr-4">
               <Ionicons name="checkmark-circle" size={24} color="#10B981" />
               <View className="ml-3">
-                <Text className="text-[#065F46] font-bold text-[14px]">{t("su_all_orders_reschedul_402")}</Text>
-                <Text className="text-[#047857] text-[11px] mt-0.5">{t("su_all_orders_have_been_403")}</Text>
+                <Text className="text-[#065F46] font-bold text-[14px]">
+                  {activeTab === 'returns' 
+                    ? t("su_return_order_accepted") || "Return Order Accepted Successfully"
+                    : rescheduledCount === 1 
+                      ? t("su_order_rescheduled_success") || "1 order rescheduled successfully"
+                      : rescheduledCount === incomingOrders.length 
+                        ? t("su_all_orders_reschedul_402") || "All orders rescheduled successfully"
+                        : (t("su_orders_rescheduled_success") || "{count} orders rescheduled successfully").replace('{count}', rescheduledCount.toString())}
+                </Text>
+                <Text className="text-[#047857] text-[11px] mt-0.5">
+                  {activeTab === 'returns'
+                    ? t("su_pickup_return_created") || "Pickup return order has been created"
+                    : rescheduledCount === 1 
+                      ? t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+                      : rescheduledCount === incomingOrders.length 
+                        ? t("su_all_orders_have_been_403") || "All orders have been updated with the new date and time."
+                        : (t("su_orders_have_been_updated") || "Selected orders have been updated with the new date and time.")}
+                </Text>
               </View>
             </View>
             <TouchableOpacity onPress={() => setShowSuccessBanner(false)}>
               <Ionicons name="close" size={20} color="#10B981" />
             </TouchableOpacity>
           </View>}
-
-        {/* Vertical Order Card List */}
-        {incomingOrders.length === 0 ? <View className="flex-1 items-center justify-center py-20">
-            <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
-              <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+        </>}
+        ListEmptyComponent={
+          activeTab === 'returns' ? (
+            <View className="flex-1 items-center justify-center py-20 mt-4">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4 border border-slate-100 shadow-sm">
+                <Ionicons name="refresh" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-[17px] font-black text-slate-800 text-center mb-1.5">No Return Orders</Text>
+              <Text className="text-[13px] font-medium text-slate-500 text-center px-4">Return orders will appear here when available.</Text>
             </View>
-            <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
-          </View> : incomingOrders.map((item, index) => {
-        const isSelected = selectedIds.includes(item.id);
+          ) : incomingOrders.length === 0 ? (
+            <View className="flex-1 items-center justify-center py-20">
+              <View className="w-20 h-20 bg-gray-50 rounded-full items-center justify-center mb-4">
+                <Ionicons name="cube-outline" size={32} color="#94A3B8" />
+              </View>
+              <Text className="text-textSecondary font-bold text-center">{t("su_no_incoming_orders_a_404")}</Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item, index }) => {
+        const isSelected = currentSelectedIds.includes(item.id);
         const routeText = getRouteForOrder(item);
         const info = getInfoForOrder(item);
-        const orderIdText = `ORD-1769749895005-${item.id.replace('inc-', '')}`;
+        const orderIdText = getFormattedOrderId(item);
 
         // Parse Route Text Visual Flow
         const routeParts = routeText.split('>');
-        const source = routeParts[0]?.trim() || 'Transporter';
-        const destination = routeParts[1]?.trim() || 'Buyer';
+        const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+        const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
         const orderReschedule = rescheduledOrders[item.id];
         const isOrderRescheduled = !!orderReschedule;
-        
-        const cardView = (
-          <TouchableOpacity onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 4
-            },
-            shadowOpacity: 0.03,
-            shadowRadius: 8,
-            elevation: 2,
-            padding: 14,
-            marginBottom: 12,
-            borderRadius: 20,
-            borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
-            borderWidth: 1.5,
-            backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
-          }} className="flex-row items-center justify-between">
-                  {/* Left Content Side */}
-                  <View className="flex-1 pr-2">
-                    {/* Order ID Badge / Highlight */}
-                    <View className="flex-row items-center">
-                      <Text className="text-[11px] font-semibold text-slate-700 tracking-wider">
-                        #{orderIdText}
-                      </Text>
-                    </View>
-
-                    {/* Route Visual Section (Horizontal) */}
-                    <View className="flex-row items-center mt-2.5 mb-1 flex-wrap">
-                      <Text className="text-[13px] font-bold text-[#073318]">{source}</Text>
-                      <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
-                  marginHorizontal: 6
-                }} />
-                      <Text className="text-[12.5px] font-bold text-[#073318]" numberOfLines={1}>{destination}</Text>
-                    </View>
-
-                    {/* Bottom Info Badges Row (All in one line) */}
-                    <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
-                      {/* Qty Badge */}
-                      <View className="bg-[#EEF2FF] px-2 py-0.5 rounded-[6px] flex-row items-center">
-                        <Feather name="package" size={9} color="#4F46E5" />
-                        <Text className="text-[10px] font-black text-[#4F46E5] ml-1">{t("su_qty_405")}{item.remainingQty || 1}
-                        </Text>
-                      </View>
-
-                      {/* Delivery Date Badge */}
-                      <View className="bg-[#F0FDF4] px-2 py-0.5 rounded-[6px] flex-row items-center">
-                        <Feather name="calendar" size={9} color="#16A34A" />
-                        <Text className="text-[10px] font-black text-[#16A34A] ml-1">{info.date}</Text>
-                      </View>
-
-                      {/* Delivery Time Badge */}
-                      <View className="bg-[#FFF7ED] px-2 py-0.5 rounded-[6px] flex-row items-center">
-                        <Feather name="clock" size={9} color="#EA580C" />
-                        <Text className="text-[10px] font-black text-[#EA580C] ml-1">{info.time}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Right Selection Circular Checkbox */}
-                  <View style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              borderWidth: 2,
-              borderColor: isSelected ? '#073318' : '#CBD5E1',
-              backgroundColor: isSelected ? '#073318' : 'white',
+        return (
+          <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
+            <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
               shadowColor: '#000',
               shadowOffset: {
                 width: 0,
-                height: 2
+                height: 4
               },
-              shadowOpacity: isSelected ? 0.2 : 0,
-              shadowRadius: 3,
-              elevation: isSelected ? 3 : 0
-            }} className="items-center justify-center ml-1">
-                    {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
+              shadowOpacity: 0.03,
+              shadowRadius: 8,
+              elevation: 2,
+              padding: 14,
+              marginBottom: 12,
+              borderRadius: 20,
+              borderColor: isSelected ? '#CEEAD6' : isOrderRescheduled ? '#FEF08A' : '#F1F5F9',
+              borderWidth: 1.5,
+              backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
+            }} className="flex-row items-center">
+                {/* Left Selection Circular Checkbox */}
+                <View style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  borderWidth: 2,
+                  borderColor: isSelected ? '#073318' : '#CBD5E1',
+                  backgroundColor: isSelected ? '#073318' : 'white',
+                  shadowColor: '#000',
+                  shadowOffset: {
+                    width: 0,
+                    height: 1
+                  },
+                  shadowOpacity: isSelected ? 0.1 : 0,
+                  shadowRadius: 2,
+                  elevation: isSelected ? 2 : 0,
+                  marginRight: 12
+                }} className="items-center justify-center">
+                  {isSelected && <Ionicons name="checkmark" size={12} color="white" />}
+                </View>
+
+                {/* Center Content Side */}
+                <View className="flex-1 pr-2">
+                  {/* Order ID Badge / Highlight */}
+                  <View className="flex-row items-center">
+                    <Text className="text-[11px] font-semibold text-slate-700 tracking-wider">
+                      #{orderIdText}
+                    </Text>
                   </View>
-                </TouchableOpacity>
-        );
 
-        if (index === 0) {
-          return (
-            <WalkthroughElement key={item.id} stepId="select_order_card">
-              {cardView}
-            </WalkthroughElement>
+                  {/* Route Visual Section (Horizontal) */}
+                  <View className="flex-row items-center mt-2.5 pr-2">
+                    <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                    <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
+                  </View>
+
+                  {/* View Address Button */}
+                  <TouchableOpacity 
+                    onPress={() => setSelectedAddressOrder(item)} 
+                    activeOpacity={0.7}
+                    className="mt-2 mb-1 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                  >
+                    <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
+                    <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
+                      {t("view_address") || "View Address"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Bottom Info Badges Row */}
+                  <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
+                    {/* Qty Badge */}
+                    <View className="bg-[#EEF2FF] px-2 py-0.5 rounded-[6px] flex-row items-center">
+                      <Feather name="package" size={9} color="#4F46E5" />
+                      <Text className="text-[10px] font-black text-[#4F46E5] ml-1">{t("su_qty_405")}{item.remainingQty || 1}</Text>
+                    </View>
+
+                    <Text className="text-slate-300 text-[10px] font-bold">•</Text>
+
+                    {/* Date Badge */}
+                    <View className="flex-row items-center">
+                      <Feather name="calendar" size={9} color="#64748B" />
+                      <Text className="text-[10px] font-medium text-slate-600 ml-1">
+                        {isOrderRescheduled ? orderReschedule.date : ((item as any).date || info.date)}
+                      </Text>
+                    </View>
+
+                    <Text className="text-slate-300 text-[10px] font-bold">•</Text>
+
+                    {/* Time Badge */}
+                    <View className="flex-row items-center">
+                      <Feather name="clock" size={9} color="#64748B" />
+                      <Text className="text-[10px] font-medium text-slate-600 ml-1">
+                        {isOrderRescheduled ? orderReschedule.time : ((item as any).time || info.time)}
+                      </Text>
+                    </View>
+
+                    {isOrderRescheduled && <>
+                      <Text className="text-slate-300 text-[10px] font-bold">•</Text>
+                      <View className="bg-amber-100 px-2 py-0.5 rounded-[6px] flex-row items-center">
+                        <Text className="text-[10px] font-bold text-amber-700">{t("su_rescheduled_406")}</Text>
+                      </View>
+                    </>}
+                  </View>
+                </View>
+
+
+              </TouchableOpacity>
+            </HighlightCardWrapper>
           );
-        }
-        return React.cloneElement(cardView, { key: item.id });
-      })}
-
+        }}
+        ListFooterComponent={<>
+        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && (
+          <ViewMoreButton 
+            totalCount={activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length}
+            visibleCount={activeTab === 'new' ? visibleCount : visibleReturnCount}
+            onPress={() => activeTab === 'new' ? setVisibleCount(prev => prev + PAGE_SIZE) : setVisibleReturnCount(prev => prev + PAGE_SIZE)}
+          />
+        )}
         {/* Refresh Orders Button */}
-        {incomingOrders.length > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
+        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
             {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
                 <Ionicons name="refresh-outline" size={16} color="#073318" />
                 <Text className="text-[#073318] font-bold text-sm ml-2">{t("su_refresh_orders_407")}</Text>
               </>}
           </TouchableOpacity>}
         <View className="h-28" />
-      </ScrollView>
+        </>}
+      />
 
       {/* Floating Animated Selection Action Bar */}
       {shouldRender && <Animated.View style={{
@@ -452,9 +621,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       },
       shadowOpacity: 0.15,
       shadowRadius: 16,
-      elevation: 10,
-      bottom: Math.max(insets.bottom, 16) + 76
-    }} className="absolute left-6 right-6 bg-white border border-[#F1F5F9] rounded-[30px] p-4 flex-row gap-3">
+      elevation: 10
+    }} className="absolute bottom-[110px] left-6 right-6 bg-white border border-[#F1F5F9] rounded-[30px] p-4 flex-row gap-3">
           {/* Reject Button */}
           <TouchableOpacity onPress={handleRejectSelected} activeOpacity={0.8} className="flex-1 flex-row items-center justify-center bg-[#DC2626] py-3.5 rounded-[22px] shadow-sm" style={{
         shadowColor: '#DC2626',
@@ -467,7 +635,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         elevation: 3
       }}>
             <Ionicons name="close-circle" size={18} color="white" />
-            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_reject_408")}{selectedIds.length})
+            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_reject_408")}{currentSelectedIds.length})
             </Text>
           </TouchableOpacity>
 
@@ -485,7 +653,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                 elevation: 4
               }}>
                 <Ionicons name="checkmark-circle" size={18} color="white" />
-                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{currentSelectedIds.length})</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -505,7 +673,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                 elevation: 4
               }}>
                 <Ionicons name="checkmark-circle" size={18} color="white" />
-                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{selectedIds.length})</Text>
+                <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_accept_409")}{currentSelectedIds.length})</Text>
               </TouchableOpacity>
             </WalkthroughElement>
           )}
@@ -628,6 +796,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   reason: finalReason || undefined
                 };
               });
+              setRescheduledCount(selectedIds.length);
               setRescheduledOrders(newRescheduled);
               setShowSuccessBanner(true);
               setShowBottomSheet(false);
@@ -661,17 +830,38 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             <Text className="text-[20px] font-bold text-textPrimary text-center mb-6">{t("su_select_reschedule_re_417")}</Text>
 
             <ScrollView className="max-h-[300px] mb-4" showsVerticalScrollIndicator={false}>
-              {rescheduleReasons.map(reason => {
-              const isSelected = selectedRescheduleReason === reason;
-              return <TouchableOpacity key={reason} onPress={() => setSelectedRescheduleReason(reason)} activeOpacity={0.7} className={`flex-row items-center p-4 mb-3 border rounded-[16px] ${isSelected ? 'border-[#073318] bg-[#F0FDF4]' : 'border-slate-200 bg-white'}`}>
-                    <View className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${isSelected ? 'border-[#073318]' : 'border-slate-300'}`}>
-                      {isSelected && <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />}
-                    </View>
-                    <Text className={`text-[15px] ${isSelected ? 'font-bold text-[#073318]' : 'font-medium text-textPrimary'}`}>
-                      {reason}
-                    </Text>
-                  </TouchableOpacity>;
-            })}
+              {rescheduleReasons.map(reason => (
+                    <TouchableOpacity
+                      key={reason.key}
+                      onPress={() => setSelectedRescheduleReason(reason.default)}
+                      className={`flex-row items-center p-4 rounded-xl border ${
+                        selectedRescheduleReason === reason.default
+                          ? 'border-[#073318] bg-[#F2FDF5]'
+                          : 'border-slate-200 bg-white'
+                      } mb-3`}
+                    >
+                      <View
+                        className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
+                          selectedRescheduleReason === reason.default
+                            ? 'border-[#073318]'
+                            : 'border-slate-300'
+                        }`}
+                      >
+                        {selectedRescheduleReason === reason.default && (
+                          <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />
+                        )}
+                      </View>
+                      <Text
+                        className={`text-[15px] ${
+                          selectedRescheduleReason === reason.default
+                            ? 'text-[#073318] font-bold'
+                            : 'text-slate-700 font-medium'
+                        }`}
+                      >
+                        {t(reason.key) || reason.default}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
             </ScrollView>
 
             {selectedRescheduleReason === 'Other' && <TextInput value={customRescheduleReason} onChangeText={setCustomRescheduleReason} placeholder={t("su_enter_custom_reason_418")} placeholderTextColor="#94A3B8" className="border border-slate-200 rounded-[16px] p-4 text-[15px] text-textPrimary mb-4 bg-slate-50" multiline />}
@@ -691,22 +881,31 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         </View>
       </Modal>
 
-      <ConfirmModal visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} onCancel={() => setModalConfig({
+      <ConfirmModal isLoading={isProcessing} loadingText={t("su_processing") || "Processing..."} visible={modalConfig.visible} title={modalConfig.title} message={modalConfig.message} isDestructive={modalConfig.isDestructive} confirmText={modalConfig.confirmText} isInfoOnly={modalConfig.isInfoOnly} onCancel={() => setModalConfig({
       ...modalConfig,
       visible: false
     })} onConfirm={() => {
       modalConfig.onConfirm();
-      setModalConfig({
-        ...modalConfig,
-        visible: false
-      });
-    }} confirmStepId="accept_selected_button" />
+    }} />
 
       {/* Reject Reason Modal */}
       <RejectReasonModal visible={rejectModalVisible} order={ordersToRejectBatch[currentRejectIndex] || null} onClose={() => {
       setRejectModalVisible(false);
       setSelectedIds([]);
     }} onSubmit={handleRejectModalSubmit} />
+      {selectedAddressOrder && (() => {
+        const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
+        return (
+          <AddressDetailsModal
+            visible={!!selectedAddressOrder}
+            onClose={() => setSelectedAddressOrder(null)}
+            orderIdText={getFormattedOrderId(selectedAddressOrder)}
+            pickupAddress={pickup}
+            deliveryAddress={delivery}
+            distance={selectedAddressOrder.distance || '0'}
+          />
+        );
+      })()}
     </SafeAreaView>;
 };
 export default IncomingOrdersScreen;

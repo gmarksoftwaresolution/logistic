@@ -1,19 +1,20 @@
 import 'react-native-gesture-handler';
 import 'react-native-reanimated'; 
 import React, { useCallback, useEffect } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { 
   useFonts,
-  Mukta_400Regular,
-  Mukta_500Medium,
-  Mukta_600SemiBold,
-  Mukta_700Bold,
-  Mukta_800ExtraBold 
-} from '@expo-google-fonts/mukta';
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+  Poppins_900Black
+} from '@expo-google-fonts/poppins';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { LanguageProvider } from './src/context/LanguageContext';
@@ -25,8 +26,12 @@ import { OnboardingProvider } from './src/context/OnboardingContext';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
 import "./global.css";
 
-const toastConfig = {
-  success: ({ text1, text2 }: any) => (
+const SuccessToast = ({ text1, text2 }: any) => {
+  useEffect(() => {
+    Keyboard.dismiss();
+  }, []);
+
+  return (
     <View
       style={{
         flexDirection: 'row',
@@ -46,15 +51,22 @@ const toastConfig = {
       }}
     >
       <View style={{ flex: 1, paddingRight: 10, justifyContent: 'center' }}>
-        {text1 ? <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFFFFF' }}>{text1}</Text> : null}
-        {text2 ? <Text style={{ fontSize: 12, color: '#E5E7EB', marginTop: 2 }}>{text2}</Text> : null}
+        {text1 ? <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFFFFF', fontFamily: 'Poppins-Bold' }}>{text1}</Text> : null}
+        {text2 ? <Text style={{ fontSize: 12, color: '#E5E7EB', marginTop: 2, fontFamily: 'Poppins-Regular' }}>{text2}</Text> : null}
       </View>
       <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name="checkmark" size={18} color="#FFFFFF" />
       </View>
     </View>
-  ),
-  error: ({ text1, text2 }: any) => (
+  );
+};
+
+const ErrorToastComponent = ({ text1, text2 }: any) => {
+  useEffect(() => {
+    Keyboard.dismiss();
+  }, []);
+
+  return (
     <View
       style={{
         flexDirection: 'row',
@@ -74,25 +86,46 @@ const toastConfig = {
       }}
     >
       <View style={{ flex: 1, paddingRight: 10, justifyContent: 'center' }}>
-        {text1 ? <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFFFFF' }}>{text1}</Text> : null}
-        {text2 ? <Text style={{ fontSize: 12, color: '#FECACA', marginTop: 2 }}>{text2}</Text> : null}
+        {text1 ? <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFFFFF', fontFamily: 'Poppins-Bold' }}>{text1}</Text> : null}
+        {text2 ? <Text style={{ fontSize: 12, color: '#FECACA', marginTop: 2, fontFamily: 'Poppins-Regular' }}>{text2}</Text> : null}
       </View>
       <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name="close" size={18} color="#FFFFFF" />
       </View>
     </View>
-  ),
+  );
+};
+
+const toastConfig = {
+  success: (props: any) => <SuccessToast {...props} />,
+  error: (props: any) => <ErrorToastComponent {...props} />,
 };
 
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    'Mukta-Regular': Mukta_400Regular,
-    'Mukta-Medium': Mukta_500Medium,
-    'Mukta-SemiBold': Mukta_600SemiBold,
-    'Mukta-Bold': Mukta_700Bold,
-    'Mukta-ExtraBold': Mukta_800ExtraBold,
+    // Poppins Font Family
+    'Poppins-Regular': Poppins_400Regular,
+    'Poppins-Medium': Poppins_500Medium,
+    'Poppins-SemiBold': Poppins_600SemiBold,
+    'Poppins-Bold': Poppins_700Bold,
+    'Poppins-ExtraBold': Poppins_800ExtraBold,
+    'Poppins-Black': Poppins_900Black,
+
+    // Mukta Fallbacks
+    'Mukta-Regular': Poppins_400Regular,
+    'Mukta-Medium': Poppins_500Medium,
+    'Mukta-SemiBold': Poppins_600SemiBold,
+    'Mukta-Bold': Poppins_700Bold,
+    'Mukta-ExtraBold': Poppins_800ExtraBold,
+
+    // PlusJakartaSans Fallbacks
+    'PlusJakartaSans-Regular': Poppins_400Regular,
+    'PlusJakartaSans-Medium': Poppins_500Medium,
+    'PlusJakartaSans-SemiBold': Poppins_600SemiBold,
+    'PlusJakartaSans-Bold': Poppins_700Bold,
+    'PlusJakartaSans-ExtraBold': Poppins_800ExtraBold,
   });
 
   const onLayoutRootView = useCallback(async () => {
@@ -108,15 +141,14 @@ export default function App() {
       <LanguageProvider>
         <UserProvider>
           <OrderProvider>
-            <SafeAreaProvider onLayout={onLayoutRootView}>
-              <OnboardingProvider>
+            <OnboardingProvider>
+              <SafeAreaProvider onLayout={onLayoutRootView}>
                 <NavigationContainer>
                   <AppNavigator />
                 </NavigationContainer>
-                <OnboardingOverlay />
-              </OnboardingProvider>
-              <Toast config={toastConfig} topOffset={110} />
-            </SafeAreaProvider>
+                <Toast config={toastConfig} position="bottom" bottomOffset={110} />
+              </SafeAreaProvider>
+            </OnboardingProvider>
           </OrderProvider>
         </UserProvider>
       </LanguageProvider>

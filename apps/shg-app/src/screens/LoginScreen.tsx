@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
-import { Image, View, Text, TouchableOpacity, TextInput, Platform, ActivityIndicator } from 'react-native';
+import { Image, View, Text, TouchableOpacity, TextInput, Platform, ActivityIndicator, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -21,27 +21,63 @@ export default function LoginScreen({ navigation }: Props) {
   const { login } = useUser();
   if (!context) return null;
   const { locale, t } = context;
-  
+
   const [step, setStep] = useState(1);
   const [mobile, setMobile] = useState('');
   const [mobileError, setMobileError] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
   const [timer, setTimer] = useState(60);
   const [loading, setLoading] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const mobileInputRef = useRef<TextInput | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isMobileFocused, setIsMobileFocused] = useState(false);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
       setStep(1);
       setMobile('');
       setMobileError('');
+      setOtpError('');
       setOtp(['', '', '', '', '', '']);
       setTimer(60);
       setLoading(false);
       setFocusedIndex(null);
+      setTimeout(() => {
+        mobileInputRef.current?.focus();
+      }, 150);
     }, [])
   );
+
+  useEffect(() => {
+    if (step === 2) {
+      setTimeout(() => {
+        inputRefs.current[0]?.focus();
+      }, 150);
+    } else if (step === 1) {
+      setTimeout(() => {
+        mobileInputRef.current?.focus();
+      }, 150);
+    }
+  }, [step]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
@@ -56,6 +92,7 @@ export default function LoginScreen({ navigation }: Props) {
   }, [step, timer]);
 
   const handleOtpChange = (val: string, index: number) => {
+    setOtpError('');
     let newOtp = [...otp];
     newOtp[index] = val;
     setOtp(newOtp);
@@ -72,21 +109,28 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleResendOtp = async () => {
     setLoading(true);
+    setOtpError('');
     try {
       await authService.sendLoginOtp(mobile);
       setTimer(60);
       setOtp(['', '', '', '', '', '']);
       Toast.show({ type: 'success', text1: 'OTP Resent Successfully' });
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Failed to resend OTP', text2: error.message });
+      const serverMessage = error.response?.data?.message;
+      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
+      setOtpError(displayMessage || 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSendOtp = async () => {
+    if (!mobile) {
+      setMobileError(t('val_mobile_number_required') || 'Mobile number is required');
+      return;
+    }
     if (mobile.length !== 10) {
-      setMobileError(t('enter_10_digit'));
+      setMobileError(t('su_enter_valid_10_digit_100') || 'Enter a valid 10 digit mobile number');
       return;
     }
     if (!/^[6-9]/.test(mobile)) {
@@ -101,7 +145,9 @@ export default function LoginScreen({ navigation }: Props) {
       setStep(2);
       Toast.show({ type: 'success', text1: 'OTP Sent Successfully' });
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.message });
+      const serverMessage = error.response?.data?.message;
+      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
+      setMobileError(displayMessage || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -110,11 +156,12 @@ export default function LoginScreen({ navigation }: Props) {
   const handleVerifyOtp = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
-      Toast.show({ type: 'error', text1: 'Invalid OTP', text2: 'Please enter 6-digit OTP' });
+      setOtpError('Please enter 6-digit OTP');
       return;
     }
 
     setLoading(true);
+    setOtpError('');
     try {
       const languageMap: Record<string, string> = {
         'en': 'English',
@@ -150,125 +197,147 @@ export default function LoginScreen({ navigation }: Props) {
             console.error('Failed to fetch signup progress on login:', err);
           }
         }
-        
+
         // Navigate based on application status
         if (response.userDetails.applicationStatus === 'APPROVED') {
           navigation.navigate('Main');
         } else {
           navigation.navigate('ApplicationStatus');
         }
-        
+
         Toast.show({ type: 'success', text1: 'Login Successful' });
       } else {
-        Toast.show({ 
-          type: 'error', 
-          text1: 'Account Not Found', 
-          text2: 'User not registered. Please sign up first.' 
-        });
+        setOtpError('User not registered. Please sign up first.');
         setTimeout(() => navigation.navigate('Signup'), 2000);
       }
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Verification Failed', text2: error.message });
+      const serverMessage = error.response?.data?.message;
+      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
+      setOtpError(displayMessage || 'Verification Failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F5F7FA]">
+    <SafeAreaView className="flex-1 bg-[#F5F7FA]" edges={['top']}>
       <KeyboardAwareScrollView
-        style={{ flex: 1 }}
+        className="flex-1"
         contentContainerStyle={{ flexGrow: 1 }}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
-        extraScrollHeight={50}
-        bounces={false}
+        extraScrollHeight={40}
+        extraHeight={40}
+        enableAutomaticScroll={true}
       >
-        {/* Header / Back Button */}
-        <View className="px-6 pt-6 pb-4 bg-transparent flex-row items-center">
+        {/* Modern Back Header */}
+        <View className="px-6 pt-6 pb-2 flex-row items-center">
           <TouchableOpacity 
             onPress={() => {
               if (step === 2) {
                 setStep(1);
                 setOtp(['', '', '', '', '', '']);
+              } else {
+                navigation.goBack();
               }
-              else navigation.goBack();
             }} 
-            className="bg-white p-3 rounded-full shadow-sm mr-3" 
-            style={{ 
-              shadowColor: "#000", 
-              shadowOffset: { width: 0, height: 2 }, 
-              shadowOpacity: 0.1, 
-              shadowRadius: 4, 
-              elevation: 4 
+            className="bg-white p-3 rounded-full shadow-sm mr-4"
+            style={{
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 4
             }}
           >
             <Ionicons name="chevron-back" size={24} color="#073318" />
           </TouchableOpacity>
-          <Text className="text-[20px] font-bold text-[#111827]">{t('login')}</Text>
+          <Text className="text-[24px] font-extrabold text-[#111827]">
+            {step === 2 ? (t('verify_otp') || "Verify OTP") : (t('login') || "Sign In")}
+          </Text>
         </View>
 
-        <View className={`px-6 justify-center pb-10 ${step === 2 ? 'pb-20' : ''}`}>
-          {/* Massive Branding Section */}
-          <View className="mb-8 items-center justify-center mt-4">
-            <Image source={require('../../assets/images/GMU Logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" className="mb-2" />
-            <Text className="font-extrabold text-[36px] tracking-tight text-center">
+        <View className="flex-grow px-6 justify-center pb-8">
+          {/* Logo & Brand Header */}
+          <View className={`${isKeyboardVisible ? 'mb-4 mt-2' : 'mb-10 mt-4'} items-center justify-center text-center`}>
+            <Image
+              source={require('../../assets/images/GMU Logo.png')}
+              style={isKeyboardVisible ? { width: 50, height: 50 } : { width: 80, height: 80 }}
+              resizeMode="contain"
+              className={isKeyboardVisible ? 'mb-1' : 'mb-2'}
+            />
+            <Text className={`font-extrabold tracking-tight text-center px-4 ${isKeyboardVisible ? 'text-[24px]' : 'text-[36px]'}`} adjustsFontSizeToFit numberOfLines={1}>
               <Text style={{ color: '#073318' }}>{t('gram')}</Text>
               <Text style={{ color: '#84B827' }}>{t('unnati')}</Text>
             </Text>
-            <Text className="font-black text-[#073318] text-[18px] tracking-widest uppercase text-center mt-1">{t('delivery_partner')}</Text>
+            <Text className={`font-black text-[#073318] tracking-widest uppercase text-center mt-1 ${isKeyboardVisible ? 'text-[12px]' : 'text-[18px]'}`} adjustsFontSizeToFit numberOfLines={1}>{t('delivery_partner')}</Text>
           </View>
 
-          {/* Big Container Card for Actions */}
+          {/* Form Content Container */}
           <View 
             className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
             style={{
               shadowColor: "#000",
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.15,
-              shadowRadius: 20,
-              elevation: 10,
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.05,
+              shadowRadius: 16,
+              elevation: 10
             }}
           >
-            {/* Step 1: Mobile Input */}
             {step === 1 && (
               <View>
-                <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">{t('login')}</Text>
-                <Text className="text-[#6B7280] text-[13px] font-medium mb-8 text-center">
-                  {t('enter_mobile')}
+                <Text className="text-2xl font-extrabold text-[#111827] mb-2 text-center">
+                  {t('welcome_back') || 'Welcome Back!'}
+                </Text>
+                <Text className="text-[#6B7280] text-[13px] font-medium mb-6 text-center">
+                  {t('login_desc') || 'Enter your mobile number to sign in'}
                 </Text>
 
-                <Text numberOfLines={1} className="text-[12px] font-bold text-[#6B7280] uppercase tracking-wider mb-2 ml-1">{t('mobile_number')}</Text>
-                <View className={`flex-row items-center bg-[#F9FAFB] py-4 px-4 rounded-[20px] shadow-sm border ${mobileError ? 'border-red-500' : 'border-gray-200'} mb-2`}>
-                  <Text className="text-[#073318] font-bold mr-3">+91</Text>
-                  <View className="w-[1px] h-6 bg-gray-300 mr-3" />
-                  <TextInput 
-                    className="flex-1 text-[#111827] text-[16px] font-bold"
-                    placeholder={t('enter_10_digit')}
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="number-pad"
-                    maxLength={10}
-                    value={mobile}
-                    onChangeText={(val) => { 
-                      const cleaned = val.replace(/[^0-9]/g, '');
-                      setMobile(cleaned); 
-                      setMobileError(""); 
-                      setOtp(['', '', '', '', '', '']);
-                    }}
-                  />
+                <View className="mb-5">
+                  <Text className="text-[10px] font-bold text-[#414651] uppercase tracking-wider mb-2 ml-1">
+                    {t('mobile_number')}
+                  </Text>
+                  <View
+                    className={`bg-[#F9FAFB] h-[50px] px-4 rounded-[16px] border flex-row items-center ${
+                      mobileError ? 'border-[#EF4444]' : isMobileFocused ? 'border-[#073318]' : 'border-gray-200'
+                    }`}
+                  >
+                    <Text className="text-[#073318] text-[15px] font-bold mr-3">+91</Text>
+                    <View className="h-5 w-[1px] bg-gray-200 mr-3" />
+                    <TextInput
+                      ref={mobileInputRef}
+                      className="flex-1 text-[#111827] text-[15px] font-medium p-0"
+                      style={{ padding: 0, height: '100%', textAlignVertical: 'center' }}
+                      placeholder="Enter your mobile number"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="numeric"
+                      maxLength={10}
+                      value={mobile}
+                      onChangeText={(val) => {
+                        setMobile(val);
+                        if (val.length === 10) setMobileError('');
+                      }}
+                      onFocus={() => setIsMobileFocused(true)}
+                      onBlur={() => setIsMobileFocused(false)}
+                    />
+                  </View>
+                  {mobileError ? (
+                    <Text className="text-red-500 text-xs mt-1.5 ml-2 font-medium">{mobileError}</Text>
+                  ) : null}
                 </View>
-                {mobileError ? <Text className="text-red-500 text-xs mb-4 ml-1">{mobileError}</Text> : <View className="mb-6" />}
 
-                <TouchableOpacity
+                 <TouchableOpacity
                   onPress={handleSendOtp}
-                  disabled={mobile.length !== 10 || loading}
-                  className={`${mobile.length !== 10 ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`}
+                  disabled={loading}
+                  className={`${loading ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-2xl items-center justify-center flex-row mb-5`}
                   style={{
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
+                    shadowOpacity: loading ? 0 : 0.3,
                     shadowRadius: 5,
-                    elevation: 8,
+                    elevation: loading ? 0 : 8,
                   }}
                 >
                   {loading ? <ActivityIndicator color="white" /> : (
@@ -296,12 +365,12 @@ export default function LoginScreen({ navigation }: Props) {
                   {t('enter_otp_sent')} <Text className="text-[#073318] font-bold">+91 {mobile || "XXXXXXXXXX"}</Text>
                 </Text>
                 
-                <View className="flex-row justify-between w-full mb-6">
+                <View className="flex-row justify-between w-full mb-4">
                   {[0, 1, 2, 3, 4, 5].map((i) => (
                     <View 
                       key={i} 
                       className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${
-                        focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'
+                        otpError ? 'border-red-500' : focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'
                       }`}
                     >
                       <Text 
@@ -336,9 +405,12 @@ export default function LoginScreen({ navigation }: Props) {
                     </View>
                   ))}
                 </View>
+                {otpError ? (
+                  <Text className="text-red-500 text-xs mt-1.5 mb-3 text-center font-medium">{otpError}</Text>
+                ) : null}
 
                 <View className="flex-row items-center justify-center mb-8">
-                  <Feather name="clock" size={14} color="#6B7280" className="mr-1.5" />
+                  <Feather name="clock" size={14} color="#6B7280" style={{ marginRight: 6 }} />
                   <Text numberOfLines={1} className="text-[#6B7280] text-[13px] font-medium">
                     {timer > 0 ? (
                       <>{t('resend_otp_in')} <Text className="text-[#073318] font-bold">{Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}</Text></>
@@ -353,13 +425,13 @@ export default function LoginScreen({ navigation }: Props) {
                 <TouchableOpacity
                   onPress={handleVerifyOtp}
                   disabled={!otp.every(d => d !== '') || loading}
-                  className={`${!otp.every(d => d !== '') ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-full items-center justify-center flex-row mb-5`}
+                  className={`${!otp.every(d => d !== '') ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-2xl items-center justify-center flex-row mb-5`}
                   style={{
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
+                    shadowOpacity: (!otp.every(d => d !== '') || loading) ? 0 : 0.3,
                     shadowRadius: 5,
-                    elevation: 8,
+                    elevation: (!otp.every(d => d !== '') || loading) ? 0 : 8,
                   }}
                 >
                   {loading ? <ActivityIndicator color="white" /> : (
@@ -372,7 +444,7 @@ export default function LoginScreen({ navigation }: Props) {
 
                 <View className="items-center mt-2">
                   <TouchableOpacity onPress={() => { setStep(1); setOtp(['', '', '', '', '', '']); }} className="flex-row items-center">
-                    <Ionicons name="pencil" size={16} color="#6B7280" className="mr-2" />
+                    <Ionicons name="pencil" size={16} color="#6B7280" style={{ marginRight: 8 }} />
                     <Text numberOfLines={1} className="font-semibold text-[#6B7280] text-[14px] px-1">{t('edit_mobile')}</Text>
                   </TouchableOpacity>
                 </View>

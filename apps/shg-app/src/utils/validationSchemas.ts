@@ -48,15 +48,15 @@ export const otherDetailsSchema = yup.object().shape({
   availability: yup.string().required('val_availability_required'),
   hasVehicle: yup.string().required('val_select_yes_no'),
   vehicleType: yup.string().when('hasVehicle', {
-    is: 'Yes',
+    is: 'yes',
     then: (schema) => schema.required('val_vehicle_type_required'),
   }),
   vehicleRegNo: yup.string().when('hasVehicle', {
-    is: 'Yes',
+    is: 'yes',
     then: (schema) => schema.required('val_reg_number_required'),
   }),
   dlNumber: yup.string().when('hasVehicle', {
-    is: 'Yes',
+    is: 'yes',
     then: (schema) => schema.required('val_dl_number_required'),
   }),
 });

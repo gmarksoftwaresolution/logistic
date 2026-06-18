@@ -189,11 +189,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const resolvedDropPickups = storedDropPickups ? JSON.parse(storedDropPickups) : [];
 
       // 1. Fetch live pickups
-      const pickupResponse = await api.get('/api/orders/pickup/assigned');
+      const pickupResponse = await api.get('/orders/pickup/assigned');
       const rawPickups = pickupResponse.data || [];
 
       // 2. Fetch live drops
-      const dropResponse = await api.get('/api/orders/drop/assigned');
+      const dropResponse = await api.get('/orders/drop/assigned');
       const rawDrops = dropResponse.data || [];
 
       const mappedPickups = rawPickups.map((o: any) => ({
@@ -593,7 +593,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const batchToLog = batchesRef.current.find(b => b.id === batchId);
       // No activity log on accept — activity only updates on Confirm Pickup / Confirm Delivery
 
-      await api.post(`/api/orders/${type}/${rawId}/accept`);
+      await api.post(`/orders/${type}/${rawId}/accept`);
       if (!skipToast) {
         showToast(`Accepted`, 'success');
       }
@@ -778,7 +778,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         )
       );
 
-      await api.post(`/api/orders/pickup/${rawPickupId}/complete`);
+      await api.post(`/orders/pickup/${rawPickupId}/complete`);
       showToast('Pickup Confirmed', 'success');
       
       // Confirm with fresh server data
@@ -848,7 +848,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       }
 
       console.log('Completing drop with ID:', dropOrderId);
-      await api.post(`/api/orders/drop/${dropOrderId}/complete`);
+      await api.post(`/orders/drop/${dropOrderId}/complete`);
       showToast('Package delivered successfully!', 'success');
 
       // Confirm with fresh server data

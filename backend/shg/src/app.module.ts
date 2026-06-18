@@ -15,6 +15,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
 import { LocationModule } from './location/location.module';
 import { OrderModule } from './order/order.module';
+import { OrderHistoryModule } from './modules/order-history/order-history.module';
 
 @Module({
   imports: [
@@ -37,8 +38,10 @@ import { OrderModule } from './order/order.module';
     AdminModule,
     LocationModule,
     OrderModule,
+    OrderHistoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

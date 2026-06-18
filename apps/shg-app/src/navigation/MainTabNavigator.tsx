@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { View, Text, Pressable, Platform, Animated } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LanguageContext } from '../context/LanguageContext';
@@ -14,13 +14,15 @@ import DashboardScreen from '../screens/DashboardScreen';
 import OrderManagementScreen from '../screens/OrderManagementScreen';
 import OrdersOverviewScreen from '../screens/OrdersOverviewScreen';
 import StockManagementScreen from '../screens/StockManagementScreen';
-import OrderHistoryScreen from '../screens/OrderHistoryScreen';
+import CompletedOrdersScreen from '../screens/CompletedOrdersScreen';
+import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
 import DeliveryScreen from '../screens/DeliveryScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
+import ReturnOrdersScreen from '../screens/ReturnOrdersScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -33,11 +35,61 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
   if (!context) return null;
   const { t } = context;
 
+  const [containerWidth, setContainerWidth] = React.useState(0);
+  const translateX = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (containerWidth > 0) {
+      const tabWidth = containerWidth / 5;
+      const targetValue = state.index * tabWidth;
+      Animated.spring(translateX, {
+        toValue: targetValue,
+        stiffness: 120,
+        damping: 18,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [state.index, containerWidth]);
+
+  const indicatorWidth = 32;
+  const tabWidth = containerWidth > 0 ? containerWidth / 5 : 0;
+  // Center the horizontal pill indicator inside the first tab space initially
+  const indicatorLeft = tabWidth > 0 ? (tabWidth / 2 - indicatorWidth / 2) : 0;
+
   return (
     <View 
-      style={{ bottom: Math.max(insets.bottom, 16) }}
-      className="absolute left-5 right-5 bg-white py-3 border border-gray-100 flex-row justify-around rounded-[32px] shadow-2xl elevation-8"
+      onLayout={(e) => {
+        const { width } = e.nativeEvent.layout;
+        setContainerWidth(width);
+      }}
+      className="absolute bottom-6 left-5 right-5 h-[72px] bg-white border border-[#E2F0E7] flex-row justify-around items-center rounded-[32px] shadow-lg"
+      style={{
+        elevation: 8,
+        shadowColor: '#073318',
+        shadowOffset: {
+          width: 0,
+          height: 6
+        },
+        shadowOpacity: 0.12,
+        shadowRadius: 10
+      }}
     >
+      {containerWidth > 0 && (
+        <Animated.View 
+          style={{
+            position: 'absolute',
+            top: 0,
+            width: indicatorWidth,
+            height: 4,
+            backgroundColor: '#073318',
+            borderRadius: 2,
+            left: indicatorLeft,
+            transform: [{ translateX }],
+          }}
+        />
+      )}
+
       {state.routes.map((route: any, index: number) => {
         const { options } = descriptors[route.key];
         const label = options.tabBarLabel !== undefined ? options.tabBarLabel : options.title !== undefined ? options.title : route.name;
@@ -58,45 +110,66 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         let iconName: any;
         let displayLabel: string;
         let IconComponent: any = Ionicons;
+        let stepId: StepId = 'dashboard_tab';
 
         if (route.name === 'Dashboard') {
           iconName = isFocused ? 'grid' : 'grid-outline';
-          displayLabel = t('dashboard');
+          displayLabel = t('home') || 'Home';
+          stepId = 'dashboard_tab';
         } else if (route.name === 'Orders') {
-          iconName = isFocused ? 'cube' : 'cube-outline';
-          displayLabel = t('orders');
+          IconComponent = MaterialCommunityIcons;
+          iconName = isFocused ? 'truck' : 'truck-outline';
+          displayLabel = t('title_order_management') || 'Order Management';
+        } else if (route.name === 'OrderHistory') {
+          IconComponent = Ionicons;
+          iconName = isFocused ? 'document-text' : 'document-text-outline';
+          displayLabel = t('order_history') || 'Order History';
         } else if (route.name === 'Earning') {
+          IconComponent = Ionicons;
           iconName = isFocused ? 'wallet' : 'wallet-outline';
-          displayLabel = t('earning');
+          displayLabel = t('earning') || 'Earnings';
+          stepId = 'earning_tab';
         } else {
           iconName = isFocused ? 'person' : 'person-outline';
-          displayLabel = t('profile');
+          displayLabel = t('profile') || 'Profile';
+          stepId = 'profile_tab';
         }
 
         return (
-          <WalkthroughElement
+          <Pressable
             key={index}
-            stepId={`${route.name.toLowerCase()}_tab` as StepId}
-            style={{ flex: 1 }}
+            onPress={onPress}
+            className="items-center justify-center flex-1 h-full relative"
           >
-            <Pressable
-              onPress={onPress}
-              className="items-center justify-center flex-1 relative"
-            >
-              <IconComponent name={iconName} size={22} color={isFocused ? "#5E5CE6" : "#94A3B8"} />
+            <View className="items-center justify-center pt-2">
+              <View className={`${isFocused && route.name === 'OrderHistory' ? 'bg-[#F0FDF4] w-[46px] h-[46px] rounded-full items-center justify-center mb-0.5' : 'mb-0.5'}`}>
+                <IconComponent 
+                  name={iconName} 
+                  size={22} 
+                  color={isFocused ? "#073318" : "#94A3B8"} 
+                />
+              </View>
               <Text 
                 numberOfLines={1}
-                className={`text-[10px] mt-1 text-center font-bold ${isFocused ? "text-[#5E5CE6]" : "text-slate-400"}`}
+                className={`text-[10px] text-center tracking-tight ${
+                  isFocused ? 'font-black text-[#073318]' : 'font-bold text-slate-400'
+                }`}
               >
                 {displayLabel}
               </Text>
-              <View className={`w-8 h-[3px] bg-[#5E5CE6] rounded-full mt-1 ${isFocused ? "opacity-100" : "opacity-0"}`} />
-            </Pressable>
-          </WalkthroughElement>
+            </View>
+          </Pressable>
         );
       })}
     </View>
   );
+};
+
+const DeliveryRedirectScreen = ({ navigation }: any) => {
+  React.useEffect(() => {
+    navigation.replace('AcceptedOrders', { initialTab: 'delivery' });
+  }, [navigation]);
+  return null;
 };
 
 const OrdersStack = createNativeStackNavigator<OrdersStackParamList>();
@@ -105,11 +178,12 @@ function OrdersStackNavigator() {
   return (
     <OrdersStack.Navigator screenOptions={{ headerShown: false }}>
       <OrdersStack.Screen name="OrdersOverview" component={OrdersOverviewScreen} />
-      <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} />
-      <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} />
+      <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} options={{ gestureEnabled: false }} />
+      <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
-      <OrdersStack.Screen name="Delivery" component={DeliveryScreen} />
-      <OrdersStack.Screen name="OrderHistory" component={OrderHistoryScreen} />
+      <OrdersStack.Screen name="Delivery" component={DeliveryRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
+      <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
+      <OrdersStack.Screen name="ReturnOrders" component={ReturnOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
     </OrdersStack.Navigator>
@@ -127,6 +201,7 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Orders" component={OrdersStackNavigator} />
+      <Tab.Screen name="OrderHistory" component={OrderHistoryScreen} />
       <Tab.Screen name="Earning" component={PlaceholderScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

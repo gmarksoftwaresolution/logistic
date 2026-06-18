@@ -1,12 +1,12 @@
-import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
 
 @ApiTags('Transporter Order Management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/orders')
+@Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
@@ -24,8 +24,35 @@ export class OrderController {
 
   @Post('pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a pickup order as complete' })
-  async completePickup(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.completePickup(id, req.user.id);
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Verification code (e.g. 1234)',
+          example: '1234',
+        },
+      },
+      required: ['code'],
+    },
+  })
+  async completePickup(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completePickup(id, req.user.id, code);
+  }
+
+  @Post('pickup/:id/reject')
+  @ApiOperation({ summary: 'Reject a pickup order' })
+  async rejectPickup(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.rejectPickup(id, req.user.id, remarks);
   }
 
   @Get('drop/assigned')
@@ -34,15 +61,38 @@ export class OrderController {
     return this.orderService.getAssignedDrops(req.user.id);
   }
 
-  @Post('drop/:id/accept')
-  @ApiOperation({ summary: 'Accept a delivery order' })
-  async acceptDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.acceptDrop(id, req.user.id);
-  }
+
 
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
-  async completeDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.orderService.completeDrop(id, req.user.id);
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Verification code (e.g. 5678)',
+          example: '5678',
+        },
+      },
+    },
+  })
+  async completeDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completeDrop(id, req.user.id, code);
+  }
+
+  @Post('drop/:id/reject')
+  @ApiOperation({ summary: 'Reject a drop order' })
+  async rejectDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.rejectDrop(id, req.user.id, remarks);
   }
 }
+

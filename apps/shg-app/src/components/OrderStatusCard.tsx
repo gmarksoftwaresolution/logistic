@@ -103,13 +103,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
     color: '#181D27',
     marginBottom: 2,
   },
   description: {
     fontSize: 12,
-    fontFamily: 'PlusJakartaSans-Medium',
+    fontFamily: 'Poppins-Medium',
     color: '#6C737F',
   },
   badge: {
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#FFF',
     fontSize: 14,
-    fontFamily: 'PlusJakartaSans-Bold',
+    fontFamily: 'Poppins-Bold',
   },
   chevron: {
     marginLeft: 4,

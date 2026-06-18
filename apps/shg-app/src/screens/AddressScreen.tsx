@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
@@ -71,49 +72,59 @@ export default function AddressScreen({
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        <View className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-50 mb-10">
-          <InputField label={t('pincode')} value={formData.pincode} onChangeText={(val: string) => setFormData({
-          ...formData,
-          pincode: val
-        })} placeholder={t("su_enter_pincode_337")} keyboardType="numeric" />
-          <InputField label={t('state')} value={formData.stateName} onChangeText={(val: string) => setFormData({
-          ...formData,
-          stateName: val
-        })} placeholder={t("su_enter_state_338")} />
-          <InputField label={t('district')} value={formData.district} onChangeText={(val: string) => setFormData({
-          ...formData,
-          district: val
-        })} placeholder={t("su_enter_district_339")} />
-          <InputField label={t('taluka')} value={formData.taluka} onChangeText={(val: string) => setFormData({
-          ...formData,
-          taluka: val
-        })} placeholder={t("su_enter_taluka_340")} />
-          <InputField label={t('village')} value={formData.village} onChangeText={(val: string) => setFormData({
-          ...formData,
-          village: val
-        })} placeholder={t("su_enter_village_341")} />
-          <InputField label={t('home_address')} value={formData.homeAddress} onChangeText={(val: string) => setFormData({
-          ...formData,
-          homeAddress: val
-        })} placeholder={t("su_enter_home_address_342")} />
+      <KeyboardAwareScrollView
+        className="flex-1"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        extraScrollHeight={80}
+        extraHeight={80}
+        enableAutomaticScroll={true}
+      >
+        <View className="px-6 pt-6">
+          <View className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-50 mb-10">
+            <InputField label={t('pincode')} value={formData.pincode} onChangeText={(val: string) => setFormData({
+            ...formData,
+            pincode: val
+          })} placeholder={t("su_enter_pincode_337")} keyboardType="numeric" />
+            <InputField label={t('state')} value={formData.stateName} onChangeText={(val: string) => setFormData({
+            ...formData,
+            stateName: val
+          })} placeholder={t("su_enter_state_338")} />
+            <InputField label={t('district')} value={formData.district} onChangeText={(val: string) => setFormData({
+            ...formData,
+            district: val
+          })} placeholder={t("su_enter_district_339")} />
+            <InputField label={t('taluka')} value={formData.taluka} onChangeText={(val: string) => setFormData({
+            ...formData,
+            taluka: val
+          })} placeholder={t("su_enter_taluka_340")} />
+            <InputField label={t('village')} value={formData.village} onChangeText={(val: string) => setFormData({
+            ...formData,
+            village: val
+          })} placeholder={t("su_enter_village_341")} />
+            <InputField label={t('home_address')} value={formData.homeAddress} onChangeText={(val: string) => setFormData({
+            ...formData,
+            homeAddress: val
+          })} placeholder={t("su_enter_home_address_342")} />
 
-          {generalError ? <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
-              <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
-              <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
-            </View> : null}
+            {generalError ? <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
+                <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
+                <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
+              </View> : null}
 
-          <View className="flex-row gap-4 w-full">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
-              <Text className="text-textPrimary font-bold text-base">{t("cancel")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
-              <Text className="text-white font-bold text-base">{t("save_changes")}</Text>
-            </TouchableOpacity>
+            <View className="flex-row gap-4 w-full">
+              <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
+                <Text className="text-textPrimary font-bold text-base">{t("cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
+                <Text className="text-white font-bold text-base">{t("save_changes")}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+          <View className="mb-20" />
         </View>
-        <View className="mb-20" />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal visible={showSuccess} transparent={true} animationType="fade">
         <View className="flex-1 justify-center items-center bg-black/60 px-10">

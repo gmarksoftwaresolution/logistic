@@ -37,7 +37,7 @@ axiosInstance.interceptors.response.use(
     } else {
       // Network error (no response received)
       const apiUrl = process.env.EXPO_PUBLIC_API_URL;
-      console.error(`Network Error: Cannot reach ${apiUrl}. Ensure backend is running and IP is correct.`);
+      console.warn(`Network Error: Cannot reach ${apiUrl}. Ensure backend is running and IP is correct.`);
       error.message = `Network Error: Cannot reach server. Please ensure your backend is running and your .env API URL is correct. Current URL: ${apiUrl}`;
     }
 

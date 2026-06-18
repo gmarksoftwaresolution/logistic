@@ -3,12 +3,13 @@ import { LanguageContext } from '../context/LanguageContext';
 import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Animated, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Order } from '../context/OrderContext';
-export const REJECTION_REASONS = ['Customer not available', 'Wrong address', 'Product damaged', 'Transport issue', 'Payment issue', 'Duplicate order', 'Other'];
+import { ActivityIndicator } from 'react-native';
+export const REJECTION_REASONS = ['customer_not_available', 'wrong_address', 'product_damaged', 'transport_issue', 'payment_issue', 'duplicate_order', 'other'];
 interface RejectReasonModalProps {
   visible: boolean;
   order: Order | null;
   onClose: () => void;
-  onSubmit: (order: Order, reason: string) => void;
+  onSubmit: (order: Order, reason: string) => void | Promise<void>;
 }
 export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
   visible,
@@ -22,6 +23,7 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [otherText, setOtherText] = useState('');
   const [validationError, setValidationError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const slideAnim = useRef(new Animated.Value(600)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -51,24 +53,33 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
       })]).start();
     }
   }, [visible]);
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
     if (!selectedReason) {
-      setValidationError('Please select a rejection reason');
+      setValidationError(t('su_please_select_a_reas_468') || 'Please select a rejection reason');
       return;
     }
-    if (selectedReason === 'Other' && otherText.trim().length === 0) {
-      setValidationError('Please enter rejection reason');
+    if (selectedReason === 'other' && otherText.trim().length === 0) {
+      setValidationError(t('su_enter_rejection_reas_469') || 'Please enter rejection reason');
       return;
     }
     if (!order) return;
-    const finalReason = selectedReason === 'Other' ? otherText.trim() : selectedReason;
+    const finalReason = selectedReason === 'other' ? otherText.trim() : selectedReason;
     setValidationError('');
-    onSubmit(order, finalReason);
+    
+    try {
+      setIsSubmitting(true);
+      await onSubmit(order, finalReason);
+    } catch (e) {
+      // error handled by parent
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   const handleSelectReason = (reason: string) => {
     setSelectedReason(reason);
     setValidationError('');
-    if (reason !== 'Other') setOtherText('');
+    if (reason !== 'other') setOtherText('');
   };
   if (!visible && !order) return null;
   return <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
@@ -158,13 +169,14 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                   marginLeft: 14
                 }}>{t("su_please_select_a_reas_468")}</Text>
                 </View>
-                <TouchableOpacity onPress={onClose} style={{
+                <TouchableOpacity onPress={onClose} disabled={isSubmitting} style={{
                 width: 34,
                 height: 34,
                 borderRadius: 17,
                 backgroundColor: '#F1F5F9',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                opacity: isSubmitting ? 0.5 : 1
               }}>
                   <Ionicons name="close" size={18} color="#64748B" />
                 </TouchableOpacity>
@@ -185,9 +197,9 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
               {/* Reason Options */}
               {REJECTION_REASONS.map(reason => {
               const isSelected = selectedReason === reason;
-              const isOtherSelected = reason === 'Other' && isSelected;
+              const isOtherSelected = reason === 'other' && isSelected;
               return <View key={reason}>
-                    <TouchableOpacity onPress={() => handleSelectReason(reason)} activeOpacity={0.7} style={{
+                    <TouchableOpacity onPress={() => handleSelectReason(reason)} activeOpacity={0.7} disabled={isSubmitting} style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   paddingVertical: 13,
@@ -223,9 +235,9 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                     color: isSelected ? '#DC2626' : '#334155',
                     flex: 1
                   }}>
-                        {reason}
+                        {t("reason_" + reason)}
                       </Text>
-                      {isSelected && reason !== 'Other' && <Ionicons name="checkmark-circle" size={18} color="#DC2626" />}
+                      {isSelected && reason !== 'other' && <Ionicons name="checkmark-circle" size={18} color="#DC2626" />}
                     </TouchableOpacity>
 
                     {/* "Other" expanded text input */}
@@ -238,7 +250,7 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                   backgroundColor: '#FFF5F5',
                   padding: 12
                 }}>
-                        <TextInput value={otherText} onChangeText={text => {
+                        <TextInput editable={!isSubmitting} value={otherText} onChangeText={text => {
                     if (text.length <= 200) {
                       setOtherText(text);
                       setValidationError('');
@@ -299,12 +311,12 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
             gap: 12
           }}>
               {/* Cancel Button */}
-              <TouchableOpacity onPress={onClose} activeOpacity={0.75} style={{
+              <TouchableOpacity onPress={onClose} activeOpacity={0.75} disabled={isSubmitting} style={{
               flex: 1,
               height: 52,
-              backgroundColor: 'white',
+              backgroundColor: isSubmitting ? '#F8FAFC' : 'white',
               borderWidth: 1.5,
-              borderColor: '#CBD5E1',
+              borderColor: isSubmitting ? '#E2E8F0' : '#CBD5E1',
               borderRadius: 26,
               alignItems: 'center',
               justifyContent: 'center'
@@ -312,15 +324,15 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                 <Text style={{
                 fontSize: 14,
                 fontWeight: '700',
-                color: '#475569'
+                color: isSubmitting ? '#94A3B8' : '#475569'
               }}>{t("cancel")}</Text>
               </TouchableOpacity>
 
               {/* Submit Button */}
-              <TouchableOpacity onPress={handleSubmit} activeOpacity={0.8} style={{
+              <TouchableOpacity onPress={handleSubmit} activeOpacity={0.8} disabled={isSubmitting} style={{
               flex: 2,
               height: 52,
-              backgroundColor: '#DC2626',
+              backgroundColor: isSubmitting ? '#FCA5A5' : '#DC2626',
               borderRadius: 26,
               flexDirection: 'row',
               alignItems: 'center',
@@ -330,19 +342,19 @@ export const RejectReasonModal: React.FC<RejectReasonModalProps> = ({
                 width: 0,
                 height: 4
               },
-              shadowOpacity: 0.3,
+              shadowOpacity: isSubmitting ? 0.1 : 0.3,
               shadowRadius: 8,
-              elevation: 6
+              elevation: isSubmitting ? 0 : 6
             }}>
-                <Ionicons name="close-circle" size={18} color="white" style={{
+                {isSubmitting ? <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} /> : <Ionicons name="close-circle" size={18} color="white" style={{
                 marginRight: 8
-              }} />
+              }} />}
                 <Text style={{
                 fontSize: 14,
                 fontWeight: '800',
                 color: 'white',
                 letterSpacing: 0.2
-              }}>{t("su_submit_rejection_471")}</Text>
+              }}>{isSubmitting ? (t('su_processing') || 'Processing...') : t("su_submit_rejection_471")}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>

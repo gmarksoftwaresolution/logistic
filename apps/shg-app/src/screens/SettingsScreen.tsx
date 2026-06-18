@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { LanguageContext } from '../context/LanguageContext';
-import { View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -12,13 +12,22 @@ export default function SettingsScreen({
   navigation
 }: Props) {
   const context = useContext(LanguageContext);
-  const { t } = context!;
-  const { startOnboarding } = useOnboarding();
+  const { t, locale, changeLanguage } = context!;
+  const [isLanguageModalVisible, setLanguageModalVisible] = useState(false);
+
+  const languages = [
+    { id: 'en', title: 'English', icon: 'A' },
+    { id: 'hi', title: 'हिंदी (Hindi)', icon: 'अ' },
+    { id: 'mr', title: 'मराठी (Marathi)', icon: 'म' },
+  ];
+
+  const currentLanguageTitle = languages.find(l => l.id === locale)?.title || 'English';
 
   const {
     user,
     logout
   } = useUser();
+  const { startOnboarding } = useOnboarding();
 
   const handleLogout = async () => {
     try {
@@ -78,8 +87,8 @@ export default function SettingsScreen({
         <SectionHeader title={t("su_preferences_435")} />
         {renderCard(<>
             <SettingRow icon={<Ionicons name="calendar-outline" size={20} color="#16A34A" />} title={t("su_notification_436")} subtitle={t("su_manage_notification__437")} />
-            <SettingRow icon={<Ionicons name="globe-outline" size={20} color="#16A34A" />} title={t("su_language_438")} rightElement={<View className="flex-row items-center">
-                  <Text className="text-xs text-[#64748B] mr-2">{t("english")}</Text>
+            <SettingRow icon={<Ionicons name="globe-outline" size={20} color="#16A34A" />} title={t("su_language_438")} onPress={() => setLanguageModalVisible(true)} rightElement={<View className="flex-row items-center">
+                  <Text className="text-xs text-[#64748B] mr-2">{currentLanguageTitle}</Text>
                   <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
                 </View>} />
             <SettingRow icon={<Ionicons name="sunny-outline" size={20} color="#16A34A" />} title={t("su_app_theme_440")} rightElement={<View className="flex-row items-center">
@@ -136,5 +145,38 @@ export default function SettingsScreen({
         </View>
 
       </ScrollView>
+
+      {/* Language Selection Modal */}
+      <Modal visible={isLanguageModalVisible} animationType="slide" transparent={true} onRequestClose={() => setLanguageModalVisible(false)}>
+        <View className="flex-1 justify-end bg-black/50">
+          <View className="bg-white rounded-t-[32px] p-6 pb-10">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-[#1E293B]">{t("choose_language")}</Text>
+              <TouchableOpacity onPress={() => setLanguageModalVisible(false)} className="w-8 h-8 items-center justify-center bg-gray-100 rounded-full">
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {languages.map(lang => {
+              const isSelected = locale === lang.id;
+              return (
+                <TouchableOpacity key={lang.id} onPress={() => {
+                  changeLanguage(lang.id);
+                  setLanguageModalVisible(false);
+                }} className={`w-full py-4 px-4 rounded-[20px] border-2 flex-row items-center mb-3 ${isSelected ? 'bg-[#F2F8F4] border-[#073318]' : 'bg-[#F8FAFC] border-transparent'}`}>
+                  <View className={`w-10 h-10 rounded-full items-center justify-center mr-4 border ${isSelected ? 'bg-white border-[#073318]' : 'bg-white border-gray-200'}`}>
+                    <Text className={`text-lg font-bold ${isSelected ? 'text-[#073318]' : 'text-gray-400'}`}>{lang.icon}</Text>
+                  </View>
+                  <Text className={`flex-1 text-base font-semibold ${isSelected ? 'text-[#073318]' : 'text-[#1E293B]'}`}>{lang.title}</Text>
+                  <View className={`w-6 h-6 rounded-full border-2 items-center justify-center ${isSelected ? 'bg-[#073318] border-[#073318]' : 'border-gray-300 bg-white'}`}>
+                    {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>;
 }

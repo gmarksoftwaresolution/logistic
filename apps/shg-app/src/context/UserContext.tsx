@@ -80,6 +80,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_SHG);
     await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL);
     await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL);
+    await AsyncStorage.removeItem('orders');
+    await AsyncStorage.removeItem('orders_cache');
   };
 
   const updateUser = async (data: Partial<UserProfile>) => {

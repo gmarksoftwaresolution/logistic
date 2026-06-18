@@ -19,18 +19,19 @@ export default function ProfileScreen({
     logout
   } = useUser();
 
+  const [isOnline, setIsOnline] = useState(true);
+
   const handleLogout = async () => {
     try {
       await logout();
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Landing' }],
+        routes: [{ name: 'AuthSelection' }],
       });
-    } catch (e) {
-      console.warn('Logout error:', e);
+    } catch (error) {
+      console.error("Failed to logout:", error);
     }
   };
-  const [isOnline, setIsOnline] = useState(true);
   const ActionRow = ({
     icon,
     title,
@@ -55,41 +56,54 @@ export default function ProfileScreen({
       <SharedHeader title={t("profile")} subtitle={t("su_manage_your_account__302")} navigation={navigation} />
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* Subtle curved background decoration behind the card */}
+        <View 
+          className="absolute top-0 left-0 right-0 h-48 bg-[#EEF5F0] rounded-b-[120px]" 
+          style={{
+            transform: [{ scaleX: 1.5 }],
+            top: -20
+          }} 
+        />
+
         {/* Profile Card Section */}
-        <View className="bg-white px-6 pt-6 pb-6 rounded-b-[40px] shadow-sm relative overflow-hidden mb-6">
-          {/* Subtle curved background decoration */}
-          <View className="absolute top-0 left-0 right-0 h-32 bg-[#EEF5F0] rounded-b-[100px]" style={{
-          transform: [{
-            scaleX: 1.5
-          }]
-        }} />
-          
-          <View className="items-center z-10 pt-4">
+        <View 
+          className="bg-white mx-6 p-6 rounded-[32px] shadow-sm border border-slate-100/50 mt-6 mb-6"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.04,
+            shadowRadius: 16,
+            elevation: 4,
+          }}
+        >
+          <View className="items-center">
             <View className="relative">
-              <View className="w-24 h-24 bg-white rounded-full items-center justify-center border-4 border-white shadow-sm overflow-hidden">
-                {user?.profileImage ? <Image source={{
-                uri: user.profileImage
-              }} className="w-full h-full" /> : <Text className="text-[#073318] font-bold text-3xl">{user?.name?.charAt(0) || 'U'}</Text>}
+              <View className="w-24 h-24 bg-white rounded-full items-center justify-center border-4 border-white shadow-md overflow-hidden">
+                {user?.profileImage ? (
+                  <Image source={{ uri: user.profileImage }} className="w-full h-full" />
+                ) : (
+                  <Text className="text-[#073318] font-bold text-3xl">{user?.name?.charAt(0) || 'M'}</Text>
+                )}
               </View>
               <TouchableOpacity className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-100 items-center justify-center shadow-sm">
                 <Feather name="camera" size={14} color="#073318" />
               </TouchableOpacity>
             </View>
 
-            <View className="flex-row items-center mt-3">
-              <Text className="text-xl font-bold text-[#1E293B]">{user?.name || 'User'}</Text>
+            <View className="flex-row items-center mt-4">
+              <Text className="text-xl font-bold text-[#1E293B]">{user?.name || 'Mahadev'}</Text>
               <View className="flex-row items-center bg-[#EEF5F0] px-2 py-0.5 rounded-full ml-2">
                 <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
                 <Text className="text-[10px] text-[#16A34A] font-bold ml-1">{t("su_verified_303")}</Text>
               </View>
             </View>
             
-            <Text className="text-sm text-[#64748B] mt-1">+91 {user?.mobile || '----------'}</Text>
-            <Text className="text-sm text-[#64748B]">{user?.name?.toLowerCase().replace(' ', '.')}{t("su_gmail_com_304")}</Text>
+            <Text className="text-sm text-[#64748B] mt-1.5">+91 {user?.mobile || '7777777777'}</Text>
+            <Text className="text-sm text-[#64748B] mt-0.5">{user?.name?.toLowerCase().replace(' ', '.') || 'mahadev'}{t("su_gmail_com_304")}</Text>
 
             <View className="bg-[#F8FAFC] w-full rounded-2xl p-4 mt-6 flex-row items-center border border-gray-100">
-              <MaterialCommunityIcons name="moped-electric" size={24} color="#073318" className="mr-3" />
-              <Text className="flex-1 text-sm text-[#475569] font-medium leading-5 ml-3">{t("su_delivering_to_make_l_305")}</Text>
+              <MaterialCommunityIcons name="moped-electric" size={24} color="#073318" />
+              <Text className="flex-1 text-xs text-[#475569] font-medium leading-5 ml-3">{t("su_delivering_to_make_l_305")}</Text>
             </View>
           </View>
         </View>
@@ -156,8 +170,11 @@ export default function ProfileScreen({
         </View>
 
         {/* Logout */}
-        <View className="px-6 mb-6">
-          <TouchableOpacity onPress={handleLogout} className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
+        <View className="px-6 mb-[110px]">
+          <TouchableOpacity 
+            onPress={handleLogout}
+            className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center"
+          >
             <Ionicons name="log-out-outline" size={20} color="#EF4444" className="mr-2" />
             <Text className="text-[#EF4444] font-bold text-base ml-2">{t("logout")}</Text>
           </TouchableOpacity>
