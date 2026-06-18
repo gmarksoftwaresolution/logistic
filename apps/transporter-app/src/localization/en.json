@@ -164,7 +164,9 @@
     "profile_photo_required": "Profile Photo is Required *",
     "license_photo_required": "License photo is required",
     "license_expiry_required": "License expiry date is required",
-    "license_length": "Driving License must be exactly 15 characters"
+    "license_length": "Driving License must be exactly 15 characters",
+    "account_number_length": "Account number must be at least 9 digits",
+    "account_number_max": "Account number cannot exceed 20 digits"
   },
   "common": {
     "continue": "Continue",

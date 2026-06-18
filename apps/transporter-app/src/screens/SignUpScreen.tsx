@@ -503,6 +503,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         return !validateVehicleNumber(val as string) ? t('errors.vehicle_format') : null;
       case 'accountNumber':
         if (!val) return t('errors.required_field');
+        if ((val as string).length < 9) return t('errors.account_number_length', 'Account number must be at least 9 digits');
+        if ((val as string).length > 20) return t('errors.account_number_max', 'Account number cannot exceed 20 digits');
         return null;
       case 'ifscCode':
         if (!validateIFSC(val as string)) return t('errors.invalid_ifsc');
@@ -1452,6 +1454,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         });
       } catch (error: any) {
         console.error(`Final step save failed:`, error);
+        if (error.response) {
+          console.error(`Final step save failure details:`, JSON.stringify(error.response.data));
+        }
         const errorData = error.response?.data;
         const message = errorData?.message || 'Something went wrong. Please try again.';
         const field = errorData?.field;

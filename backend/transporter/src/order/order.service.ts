@@ -195,6 +195,71 @@ export class OrderService {
     });
   }
 
+  async acceptDrop(dropOrderId: number, transporterId: number) {
+    const dropOrder = await this.prisma.dropOrder.findUnique({
+      where: { id: dropOrderId },
+    });
+
+    if (!dropOrder) {
+      throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const generatedCode = '1234';
+      const nextStatus = dropOrder.status === 'RETURN_PENDING' ? 'RETURN_ACCEPTED' : 'ACCEPTED';
+      const updated = await tx.dropOrder.update({
+        where: { id: dropOrderId },
+        data: { 
+          status: nextStatus,
+          transporterId,
+          handoverCode: generatedCode,
+        },
+      });
+
+      await tx.dropTracking.create({
+        data: {
+          dropOrderId,
+          status: nextStatus,
+          remarks: 'Delivery leg accepted by transporter.',
+        },
+      });
+
+      // Automatically accept and assign the associated pickup leg (PickupOrder) if it exists and is PENDING
+      const associatedPickups = await tx.pickupOrder.findMany({
+        where: {
+          masterOrderId: dropOrder.masterOrderId,
+          status: 'PENDING',
+        },
+      });
+
+      if (associatedPickups.length > 0) {
+        await tx.pickupOrder.updateMany({
+          where: {
+            masterOrderId: dropOrder.masterOrderId,
+            status: 'PENDING',
+          },
+          data: {
+            status: nextStatus === 'RETURN_ACCEPTED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+            transporterId,
+            handoverCode: generatedCode,
+          },
+        });
+
+        for (const pickup of associatedPickups) {
+          await tx.pickupTracking.create({
+            data: {
+              pickupOrderId: pickup.id,
+              status: nextStatus === 'RETURN_ACCEPTED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+              remarks: 'Pickup leg accepted automatically via drop acceptance.',
+            },
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
   async completePickup(pickupOrderId: number, transporterId: number, code?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findUnique({
       where: { id: pickupOrderId },

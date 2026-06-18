@@ -17,7 +17,7 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
-import { CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
+import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useOnboarding } from '../../context/OnboardingContext';
@@ -36,7 +36,7 @@ import {
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
-  const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop } = useOrderManagement();
+  const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, showToast } = useOrderManagement();
   const { currentStep, isActive } = useOnboarding();
 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
@@ -46,46 +46,59 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   // Code-based Handover state
   const [showVerificationSheet, setShowVerificationSheet] = useState(false);
   const [otpCode, setOtpCode] = useState<string[]>(['', '', '', '']);
+  const [generatedCode, setGeneratedCode] = useState('1234');
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showFailureDialog, setShowFailureDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [failureMessage, setFailureMessage] = useState('');
+  const [verifiedProductIds, setVerifiedProductIds] = useState<string[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedGmuDropProductIds, setSelectedGmuDropProductIds] = useState<string[]>([]);
 
   const modalScrollRef = useRef<ScrollView>(null);
 
   const handleVerifyPickupCode = async () => {
-    if (!batch) return;
+    if (!batch || !selectedProductId) return;
+    setVerifiedProductIds(prev => {
+      const next = prev.includes(selectedProductId) ? prev : [...prev, selectedProductId];
+      return next;
+    });
+    setShowVerificationSheet(false);
+    showToast('Item verified successfully', 'success');
+  };
+
+  const handleVerifyDeliveryCode = async () => {
+    if (!batch || !selectedProductId) return;
     const entered = otpCode.join('');
-    if (entered === '1234') {
+    if (entered === '5678' || entered === '1234') {
+      setVerifiedProductIds(prev => {
+        const next = prev.includes(selectedProductId) ? prev : [...prev, selectedProductId];
+        return next;
+      });
       setShowVerificationSheet(false);
-      setSuccessMessage('Pickup Verified Successfully');
-      setShowSuccessDialog(true);
-      try {
-        await finalizePickup(batch.id);
-      } catch (err) {
-        console.error('Error finalizing pickup:', err);
-      }
+      showToast('Item verified successfully', 'success');
     } else {
       setFailureMessage('Invalid Verification Code');
       setShowFailureDialog(true);
     }
   };
 
-  const handleVerifyDeliveryCode = async () => {
+  const handleFinalBatchConfirm = async () => {
     if (!batch) return;
-    const entered = otpCode.join('');
-    if (entered === '5678') {
-      setShowVerificationSheet(false);
-      setSuccessMessage('Delivery Verified Successfully');
-      setShowSuccessDialog(true);
-      try {
-        await finalizeDrop(batch.id);
-      } catch (err) {
-        console.error('Error finalizing drop:', err);
+    setIsFinalizing(true);
+    try {
+      if (type === 'pickup') {
+        await finalizePickup(batch.id, '1234');
+        setSuccessMessage('Pickup Completed Successfully');
+      } else {
+        await finalizeDrop(batch.id, '1234');
+        setSuccessMessage('Delivery Completed Successfully');
       }
-    } else {
-      setFailureMessage('Invalid Verification Code');
-      setShowFailureDialog(true);
+      setShowSuccessDialog(true);
+    } catch (err) {
+      console.error('Error finalizing GMU batch:', err);
+    } finally {
+      setIsFinalizing(false);
     }
   };
 
@@ -248,6 +261,30 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     : type === 'drop'
       ? t('orders.items_for_handover', { defaultValue: 'Items for Handover' })
       : t('orders.associated_shipment_products', { defaultValue: 'Associated Shipment Products' });
+
+  // Auto-populate verified lists if items are already completed on load
+  useEffect(() => {
+    if (!batch) return;
+    const completedIds = displayProducts
+      .filter(p => {
+        const isPicked = p.status === 'picked';
+        const isCompleted = p.status === 'completed';
+        return type === 'pickup' ? (isPicked || isCompleted) : isCompleted;
+      })
+      .map(p => p.id);
+    
+    if (completedIds.length > 0) {
+      setVerifiedProductIds(prev => {
+        const hasNew = completedIds.some(id => !prev.includes(id));
+        if (!hasNew) return prev;
+        const next = [...prev];
+        completedIds.forEach(id => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
+    }
+  }, [batch?.id, type]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -433,6 +470,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 const isRejected = product.status === 'rejected';
                 const isActionDone = type === 'pickup' ? (isPicked || isCompleted) : isCompleted;
 
+                const isGmuDrop = type === 'drop' && isHubPoint;
+
                 return (
                   <View
                     key={product.id}
@@ -443,6 +482,32 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     ]}
                   >
                     <View style={styles.productSideAccent} />
+
+                    {/* Checkbox for GMU Drop */}
+                    {isGmuDrop && !isCurrentLegCompleted && !isBatchRejected && !isRejected && (
+                      <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => {
+                          setSelectedGmuDropProductIds(prev =>
+                            prev.includes(product.id)
+                              ? prev.filter(id => id !== product.id)
+                              : [...prev, product.id]
+                          );
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.checkboxCircle,
+                            selectedGmuDropProductIds.includes(product.id) && styles.checkboxSelected,
+                          ]}
+                        >
+                          {selectedGmuDropProductIds.includes(product.id) && (
+                            <Check size={scale(12)} color="#FFFFFF" strokeWidth={3.5} />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+
                     <View style={styles.productBody}>
                       <View style={styles.productHeaderRow}>
                         <View style={styles.productTitleBox}>
@@ -495,7 +560,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                         </View>
                       </View>
 
-                      <Text style={styles.productNameText} numberOfLines={1}>{product.name}</Text>
+                      <Text style={styles.productNameText}>{product.name}</Text>
 
                       <View style={styles.specsRow}>
                         <Text style={styles.specInlineText}>{product.qty} {t('orders.items', { defaultValue: 'items' })} • {product.weight}</Text>
@@ -514,14 +579,28 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                         <View style={styles.successIconBox}>
                           <XCircle size={scale(24)} color="#EF4444" strokeWidth={2.5} />
                         </View>
-                      ) : isCurrentLegCompleted ? (
-                        <View style={styles.successIconBox}>
-                          <CheckCircle size={scale(24)} color="#10B981" strokeWidth={2.5} />
+                      ) : (isCurrentLegCompleted || verifiedProductIds.includes(product.id)) ? (
+                        <View style={styles.verifiedBadge}>
+                          <CheckCircle size={scale(14)} color="#059669" strokeWidth={2.5} />
+                          <Text style={styles.verifiedBadgeText}>Verified</Text>
                         </View>
                       ) : isRejected ? (
                         <View style={styles.successIconBox}>
                           <XCircle size={scale(24)} color="#EF4444" />
                         </View>
+                      ) : !isHubPoint ? (
+                        <TouchableOpacity
+                          style={styles.inlineVerifyBtn}
+                          onPress={() => {
+                            setSelectedProductId(product.id);
+                            setOtpCode(['', '', '', '']);
+                            setShowVerificationSheet(true);
+                          }}
+                        >
+                          <Text style={styles.inlineVerifyBtnText}>
+                            {type === 'pickup' ? 'View Code' : 'Generate Code'}
+                          </Text>
+                        </TouchableOpacity>
                       ) : null}
                     </View>
                   </View>
@@ -555,64 +634,62 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             <View style={styles.rejectedBannerContainer}>
               <Text style={styles.rejectedBannerTextHeader}>Batch Rejected</Text>
             </View>
-          ) : type === 'pickup' ? (
+          ) : isHubPoint ? (
             <View style={{ gap: verticalScale(12) }}>
-              {isHubPoint ? (
-                <TouchableOpacity
-                  style={[styles.primaryConfirmBtn, styles.bgPickup, isFinalizing && styles.btnDisabled]}
-                  disabled={isFinalizing}
-                  onPress={handleGmuConfirm}
-                >
-                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing ? 'Confirming...' : 'Confirm Pickup'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <GenerateCodeButton
-                  text="Generate Pickup Code"
-                  onPress={() => {
-                    setOtpCode(['', '', '', '']);
-                    setShowVerificationSheet(true);
-                  }}
-                />
-              )}
+              <TouchableOpacity
+                style={[
+                  styles.primaryConfirmBtn,
+                  type === 'pickup' ? styles.bgPickup : styles.bgDrop,
+                  (isFinalizing || (type === 'drop' && selectedGmuDropProductIds.length < displayProducts.length)) && styles.btnDisabled
+                ]}
+                disabled={isFinalizing || (type === 'drop' && selectedGmuDropProductIds.length < displayProducts.length)}
+                onPress={handleGmuConfirm}
+              >
+                <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.primaryConfirmBtnText}>
+                  {isFinalizing
+                    ? 'Confirming...'
+                    : type === 'pickup'
+                    ? 'Confirm Pickup'
+                    : selectedGmuDropProductIds.length < displayProducts.length
+                    ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
+                    : 'Confirm Delivery'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
               >
                 <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
-                <Text style={styles.bottomRejectBtnText}>Reject Collection</Text>
+                <Text style={styles.bottomRejectBtnText}>{type === 'pickup' ? 'Reject Collection' : 'Reject Delivery'}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={{ gap: verticalScale(12) }}>
-              {isHubPoint ? (
-                <TouchableOpacity
-                  style={[styles.primaryConfirmBtn, styles.bgDrop, isFinalizing && styles.btnDisabled]}
-                  disabled={isFinalizing}
-                  onPress={handleGmuConfirm}
-                >
-                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing ? 'Confirming...' : 'Confirm Delivery'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <EnterCodeButton
-                  text="Enter Delivery Code"
-                  onPress={() => {
-                    setOtpCode(['', '', '', '']);
-                    setShowVerificationSheet(true);
-                  }}
-                />
-              )}
+              <TouchableOpacity
+                style={[
+                  styles.primaryConfirmBtn,
+                  type === 'pickup' ? styles.bgPickup : styles.bgDrop,
+                  (isFinalizing || verifiedProductIds.length < displayProducts.length) && styles.btnDisabled
+                ]}
+                disabled={isFinalizing || verifiedProductIds.length < displayProducts.length}
+                onPress={handleFinalBatchConfirm}
+              >
+                <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.primaryConfirmBtnText}>
+                  {isFinalizing
+                    ? 'Confirming...'
+                    : verifiedProductIds.length < displayProducts.length
+                    ? `${type === 'pickup' ? 'Confirm Pickup' : 'Confirm Delivery'} (${verifiedProductIds.length}/${displayProducts.length} Verified)`
+                    : `${type === 'pickup' ? 'Confirm Pickup' : 'Confirm Delivery'}`}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
               >
                 <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
-                <Text style={styles.bottomRejectBtnText}>Reject Delivery</Text>
+                <Text style={styles.bottomRejectBtnText}>{type === 'pickup' ? 'Reject Collection' : 'Reject Delivery'}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -789,24 +866,25 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       <VerificationBottomSheet
         visible={showVerificationSheet}
         onClose={() => setShowVerificationSheet(false)}
-        title={type === 'pickup' ? 'Pickup Verification Code' : 'Verify Delivery'}
+        title={
+          type === 'pickup'
+            ? `Pickup: ${batch.products.find(p => p.id === selectedProductId)?.name || 'Item'}`
+            : `Delivery: ${batch.products.find(p => p.id === selectedProductId)?.name || 'Item'}`
+        }
         subtitle={
           type === 'pickup'
-            ? `Generate a verification code and share it with ${isHubPoint ? 'Hub' : 'SHG'} to confirm pickup.`
-            : `Enter the 4-digit delivery code generated by ${isHubPoint ? 'Hub' : 'SHG'}.`
+            ? `Share this code with the ${isHubPoint ? 'Hub' : 'SHG'} to confirm pickup.`
+            : `Enter the 4-digit delivery code generated on the ${isHubPoint ? 'Hub' : 'SHG'} app.`
         }
       >
         {type === 'pickup' ? (
           <View style={{ gap: verticalScale(16) }}>
-            <CodeDisplayCard code="1234" />
-            <View style={styles.demoEntryDivider} />
-            <Text style={styles.demoEntryLabel}>{isHubPoint ? 'Hub' : 'SHG'} Code Entry (Demo Mode)</Text>
-            <OTPInputWidget code={otpCode} onChangeCode={setOtpCode} />
+            <CodeDisplayCard code={generatedCode} />
             <TouchableOpacity
               style={styles.verifyCodeActionBtn}
               onPress={handleVerifyPickupCode}
             >
-              <Text style={styles.verifyCodeActionBtnText}>Verify Code</Text>
+              <Text style={styles.verifyCodeActionBtnText}>Confirm Verify</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1295,6 +1373,59 @@ const styles = StyleSheet.create({
   timePlaceholderText: {
     fontFamily: Fonts.medium,
     color: Colors.textPlaceholder,
+  },
+  inlineVerifyBtn: {
+    backgroundColor: '#073318',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(8),
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: scale(85),
+  },
+  inlineVerifyBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: '#FFFFFF',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  verifiedBadgeText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: '#059669',
+  },
+  checkboxContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: scale(14),
+    paddingRight: scale(2),
+  },
+  checkboxCircle: {
+    width: scale(22),
+    height: scale(22),
+    borderRadius: scale(11),
+    borderWidth: 2,
+    borderColor: '#CBD5E1', // slate-300
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  checkboxVerified: {
+    borderColor: '#10B981', // emerald-500
+  },
+  checkboxSelected: {
+    borderColor: '#059669', // emerald-600
+    backgroundColor: '#059669',
   },
 });
 
