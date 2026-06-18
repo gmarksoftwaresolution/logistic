@@ -19,6 +19,7 @@ interface OrderCardProps {
   onViewAddress?: () => void;
   isHighlighted?: 'new' | 'updated';
   isRejectedDelivery?: boolean;
+  isRescheduled?: boolean;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -34,7 +35,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   distance,
   onViewAddress,
   isHighlighted,
-  isRejectedDelivery
+  isRejectedDelivery,
+  isRescheduled
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -53,10 +55,18 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         padding: 14,
         marginBottom: 12,
         borderRadius: 20,
-        borderColor: '#F1F5F9',
+        borderColor: isRescheduled ? '#FEF08A' : '#F1F5F9',
         borderWidth: 1.5,
-        backgroundColor: 'white'
-      }} className="flex-row items-center justify-between">
+        backgroundColor: isRescheduled ? '#FFFBEB' : 'white'
+      }} className="flex-row items-center justify-between overflow-hidden">
+        
+        {/* RESCHEDULED Badge */}
+        {isRescheduled && (
+          <View className="absolute top-0 right-0 bg-[#FEF08A] px-2 py-0.5 rounded-bl-[12px] rounded-tr-[18px] border-b border-l border-[#FDE047]/50" style={{ zIndex: 10 }}>
+            <Text className="text-[9px] font-black text-[#854D0E] tracking-wider uppercase">{t('su_rescheduled') || 'RESCHEDULED'}</Text>
+          </View>
+        )}
+
         {/* Left Content Side */}
         <View className="flex-1 pr-2">
           {/* Order ID Badge / Highlight */}

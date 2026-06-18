@@ -227,6 +227,7 @@ const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
+                isRescheduled={!!item.rescheduledDate}
               />
             );
           }}
@@ -293,6 +294,7 @@ const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
                 isRejectedDelivery={item.isRejectedDelivery}
+                isRescheduled={!!item.rescheduledDate}
               />
             );
           }}

@@ -274,6 +274,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
+                isRescheduled={!!item.rescheduledDate}
               />
             );
           }}
@@ -338,6 +339,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
                 isRejectedDelivery={item.isRejectedDelivery}
+                isRescheduled={!!item.rescheduledDate}
               />
             );
           }}

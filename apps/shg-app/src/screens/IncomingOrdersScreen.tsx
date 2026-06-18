@@ -44,7 +44,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     rejectOrder,
     highlightedOrders,
     incomingReturnOrders,
-    acceptReturnOrders
+    acceptReturnOrders,
+    rejectReturnOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -206,7 +207,11 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     });
   };
   const handleRejectSelected = () => {
-    const batch = incomingOrders.filter(o => selectedIds.includes(o.id));
+    const isReturnsTab = activeTab === 'returns';
+    const sourceArray = isReturnsTab ? incomingReturnOrders : incomingOrders;
+    const currentSelected = isReturnsTab ? selectedReturnIds : selectedIds;
+    
+    const batch = sourceArray.filter(o => currentSelected.includes(o.id));
     if (batch.length === 0) return;
     setOrdersToRejectBatch(batch);
     setCurrentRejectIndex(0);
@@ -214,16 +219,24 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   };
   const handleRejectModalSubmit = async (order: Order, reason: string) => {
     try {
-      await rejectOrder({
-        ...order,
-        rejectReason: reason
-      });
+      if (activeTab === 'returns') {
+        rejectReturnOrders([order.id], reason);
+      } else {
+        await rejectOrder({
+          ...order,
+          rejectReason: reason
+        });
+      }
       const nextIndex = currentRejectIndex + 1;
       if (nextIndex < ordersToRejectBatch.length) {
         setCurrentRejectIndex(nextIndex);
       } else {
         setRejectModalVisible(false);
-        setSelectedIds([]);
+        if (activeTab === 'returns') {
+          setSelectedReturnIds([]);
+        } else {
+          setSelectedIds([]);
+        }
         import('react-native-toast-message').then(({
           default: Toast
         }) => Toast.show({

@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Linking, Alert, Modal, Image, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Linking, Alert, Modal, Image, Animated, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -47,7 +47,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
     receiveOrder,
     rejectOrder,
     deliverOrder,
-    orders
+    orders,
+    rescheduleOrder
   } = useOrders();
 
   const order = orders.find(o => o.id === routeOrder.id) || routeOrder;
@@ -61,23 +62,30 @@ const OrderDetailsScreen: React.FC<Props> = ({
   // 1. Determine if we are in Pickup or Delivery phase
   const isDeliveryPhase = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
-  // 2. Helper to get entity type
-  const getEntityType = (name: string): 'transporter' | 'seller' | 'buyer' => {
-    const lowerName = name.toLowerCase();
-    if (lowerName.includes('transporter')) {
-      return 'transporter';
-    }
-    if (lowerName.includes('bank') || lowerName.includes('bekari') || lowerName.includes('buyer') || lowerName.includes('destination')) {
-      return 'buyer';
-    }
-    return 'seller';
-  };
-
-  // 3. Resolve active side details
+  // 2. Resolve active side details
   const activeRawName = isDeliveryPhase ? rawDestination : rawSource;
-  const activeType = getEntityType(activeRawName);
+  let activeType: 'transporter' | 'seller' | 'buyer';
 
-  // 4. Set details values dynamically
+  if (isDeliveryPhase) {
+    if (rawDestination.toLowerCase() === 'transporter') {
+      activeType = 'transporter';
+    } else {
+      activeType = 'buyer';
+    }
+  } else {
+    // Pickup phase logic
+    if (rawSource.toLowerCase() === 'transporter') {
+      activeType = 'transporter';
+    } else {
+      activeType = 'seller';
+    }
+  }
+
+  if (order.isRejectedDelivery) {
+    activeType = 'transporter';
+  }
+
+  // 3. Set details values dynamically
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
   let nameLabel = t('su_person_name') || "Person Name";
@@ -92,38 +100,46 @@ const OrderDetailsScreen: React.FC<Props> = ({
     addressOrVehicleLabel = "Return Hub Address";
     addressOrVehicleIcon = "location-outline";
     addressOrVehicleValue = "Kolhapur Transporter Hub, Main Road, Kolhapur";
+  } else if (isDeliveryPhase && activeType === 'transporter') {
+    nameLabel = "Transporter Name";
+    mobileLabel = "Transporter Mobile Number";
+    addressOrVehicleLabel = "Transporter Address";
+    addressOrVehicleIcon = "location-outline";
+    addressOrVehicleValue = order.address || "Kolhapur Transporter Hub, Main Road, Kolhapur";
   }
 
   if (activeType === 'seller') {
     detailsTitle = t('su_seller_details') || "Seller Details";
     headerIcon = "storefront-outline";
     nameLabel = t('su_seller_name') || "Seller Name";
-    nameValue = order.transporterName || "Sanjay Desai";
+    nameValue = order.sellerName || source;
     mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
-    mobileValue = order.transporterMobile || "9654782390";
+    
+    // Validate mobile number to avoid showing seller IDs
+    const isValidPhone = order.mobile && /^[+]?[0-9\s-]{10,15}$/.test(order.mobile);
+    mobileValue = isValidPhone ? order.mobile : "9876543210";
+    
     addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
     addressOrVehicleIcon = "location-outline";
 
     // Dynamic detailed address logic
-    let resolvedAddress = order.isRejectedDelivery ? destination : source;
+    let resolvedAddress = order.address || source;
     if (resolvedAddress.toLowerCase().includes('hifi')) {
       resolvedAddress = "Hifi Shop, Bramhan galli, Chandgad, kolhapur, Maharastra";
     } else if (resolvedAddress.toLowerCase().includes('home no')) {
       resolvedAddress = "Home No. 23, Market Road, Kowad, kolhapur, Maharastra";
-    } else {
-      resolvedAddress = `${resolvedAddress}, Chandgad, kolhapur, Maharastra`;
     }
     addressOrVehicleValue = resolvedAddress;
   } else if (activeType === 'buyer') {
     detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
     nameLabel = t('su_buyer_name') || "Buyer Name";
-    nameValue = destination;
+    nameValue = order.buyerName || destination;
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
     mobileValue = order.mobile || "+91 9876543210";
     addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
     addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = `${destination}, Chandgad, kolhapur, Maharastra`;
+    addressOrVehicleValue = order.address || `${destination}, Chandgad, kolhapur, Maharastra`;
   }
 
   // Dynamic products list matching the remainingQty length
@@ -132,39 +148,47 @@ const OrderDetailsScreen: React.FC<Props> = ({
     code: '#P101',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Raw Organic Turmeric Packs',
-    details: `2 ${t('su_items') || 'items'} • 10 ${t('su_kg') || 'kg'}`
+    details: `2 ${t('su_items') || 'items'}`,
+    weightValue: 10
   }, {
     code: '#P102',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Cold Pressed Groundnut Oil',
-    details: `1 ${t('su_item') || 'item'} • 5 ${t('su_kg') || 'kg'}`
+    details: `1 ${t('su_item') || 'item'}`,
+    weightValue: 5
   }, {
     code: '#P103',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Premium Basmati Rice Bag',
-    details: `3 ${t('su_items') || 'items'} • 25 ${t('su_kg') || 'kg'}`
+    details: `3 ${t('su_items') || 'items'}`,
+    weightValue: 25
   }, {
     code: '#P104',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Organic Jaggery Block',
-    details: `2 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
+    details: `2 ${t('su_items') || 'items'}`,
+    weightValue: 2
   }, {
     code: '#P105',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Fresh Pure Desi Ghee',
-    details: `1 ${t('su_item') || 'item'} • 1 ${t('su_kg') || 'kg'}`
+    details: `1 ${t('su_item') || 'item'}`,
+    weightValue: 1
   }, {
     code: '#P106',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Whole Wheat Atta Bag',
-    details: `1 ${t('su_item') || 'item'} • 10 ${t('su_kg') || 'kg'}`
+    details: `1 ${t('su_item') || 'item'}`,
+    weightValue: 10
   }, {
     code: '#P107',
     tag: t('su_pickup_order') || 'Pickup Order',
     name: 'Natural Honey Bottle',
-    details: `4 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
+    details: `4 ${t('su_items') || 'items'}`,
+    weightValue: 2
   }];
   const products = AVAILABLE_PRODUCTS.slice(0, productCount);
+  const totalWeight = products.reduce((sum, p) => sum + p.weightValue, 0);
   const formattedOrderId = getFormattedOrderId(order);
   const headerTitle = isDeliveryPhase ? (t('su_delivery_details') || "Delivery Details") : (t('su_collection_details') || "Collection Details");
   const headerSubtitle = `${t('su_batch_hash') || 'Batch #'} ${formattedOrderId} • ${source}`;
@@ -175,6 +199,54 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // OTP states
+  const [otpSent, setOtpSent] = useState<boolean>(false);
+  const [otpVerified, setOtpVerified] = useState<boolean>(false);
+  const [otp, setOtp] = useState<string[]>(['', '', '', '']);
+  const inputRefs = [useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null)];
+
+  const handleOtpChange = (text: string, index: number) => {
+    if (!/^\d*$/.test(text)) return;
+    const newOtp = [...otp];
+    newOtp[index] = text;
+    setOtp(newOtp);
+    if (text && index < 3) {
+      inputRefs[index + 1].current?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs[index - 1].current?.focus();
+    }
+  };
+
+  // Delivery Code states (for Transporter delivery)
+  const [deliveryCodeGenerated, setDeliveryCodeGenerated] = useState<boolean>(false);
+  const [deliveryCodeVerified, setDeliveryCodeVerified] = useState<boolean>(false);
+  const [deliveryCode, setDeliveryCode] = useState<string[]>(['', '', '', '']);
+  const deliveryCodeRefs = [useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null)];
+
+  // Pickup Code states (for Transporter pickup)
+  const [pickupCodeVisible, setPickupCodeVisible] = useState<boolean>(false);
+  const [pickupCodeVerified, setPickupCodeVerified] = useState<boolean>(false);
+
+  const handleDeliveryCodeChange = (text: string, index: number) => {
+    if (!/^\d*$/.test(text)) return;
+    const newCode = [...deliveryCode];
+    newCode[index] = text;
+    setDeliveryCode(newCode);
+    if (text && index < 3) {
+      deliveryCodeRefs[index + 1].current?.focus();
+    }
+  };
+
+  const handleDeliveryCodeKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !deliveryCode[index] && index > 0) {
+      deliveryCodeRefs[index - 1].current?.focus();
+    }
+  };
 
   // Delivery Scanner states
   const [isScanned, setIsScanned] = useState<boolean>(false);
@@ -309,8 +381,24 @@ const OrderDetailsScreen: React.FC<Props> = ({
     if (isSubmitting) return;
     try {
       setIsSubmitting(true);
-      if (!capturedPhotoUri) {
-        Alert.alert("Photo Required", "Please capture product photos first.");
+
+      // OTP Verification Rule
+      if ((activeType === 'seller' || activeType === 'buyer') && !otpVerified) {
+        Alert.alert("Verification Required", "Please verify OTP before submitting.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Delivery Code Verification Rule (for transporter delivery)
+      if (activeType === 'transporter' && isDeliveryPhase && !deliveryCodeVerified) {
+        Alert.alert("Verification Required", "Please verify delivery code before submitting.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Pickup Code Verification Rule (for transporter pickup)
+      if (activeType === 'transporter' && !isDeliveryPhase && !pickupCodeVerified) {
+        Alert.alert("Verification Required", "Please verify pickup code before submitting.");
         setIsSubmitting(false);
         return;
       }
@@ -338,6 +426,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
           ...order,
           image: capturedPhotoUri
         });
+        if (order.id.startsWith('RTO-')) {
+          Toast.show({
+            type: 'success',
+            text1: "Return delivery completed successfully."
+          });
+        }
       } else {
         await receiveOrder({
           ...order,
@@ -474,14 +568,14 @@ const OrderDetailsScreen: React.FC<Props> = ({
           <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
             <View className="flex-row items-center">
               <Ionicons name="bag-handle-outline" size={14} color="white" />
-              <Text className="text-[14px] font-black text-white ml-1">{order.weight || '0'} {t("su_kg") || "kg"}</Text>
+              <Text className="text-[14px] font-black text-white ml-1">{totalWeight} {t("su_kg") || "kg"}</Text>
             </View>
             <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_weight") || "Total Weight"}</Text>
           </View>
           <View className="flex-1 bg-white/10 py-3 rounded-[12px] items-center justify-center border border-white/5">
-            <View className="flex-row items-center">
+            <View className="flex-row items-center px-1">
               <Text className="text-[14px] font-black text-white">₹</Text>
-              <Text className="text-[14px] font-black text-white ml-1">{order.amount || '0'}</Text>
+              <Text className="text-[14px] font-black text-white ml-1" numberOfLines={1} adjustsFontSizeToFit>{Number(order.amount || 0).toFixed(2)}</Text>
             </View>
             <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_amount") || "Total Amount"}</Text>
           </View>
@@ -496,27 +590,45 @@ const OrderDetailsScreen: React.FC<Props> = ({
       </View>
 
       {/* Info Strip */}
-      <View className="bg-white rounded-[16px] py-3 px-4 border border-[#F1F5F9] mb-6 flex-row items-center justify-between" style={{
+      <View className="bg-white rounded-[16px] p-4 border border-[#F1F5F9] mb-6 flex-col gap-3" style={{
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2
       }}>
-        <View className="flex-row items-center">
-          <Ionicons name="time-outline" size={14} color="#059669" />
-          <Text className="text-[11px] font-bold text-[#059669] ml-1.5">{isDeliveryPhase ? (t("su_expected_delivery") || "Expected Delivery") : (t("su_expected_collection") || "Expected Collection")}</Text>
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <Ionicons name="time-outline" size={14} color="#059669" />
+            <Text className="text-[11.5px] font-bold text-[#059669] ml-1.5">{isDeliveryPhase ? (t("su_expected_delivery") || "Expected Delivery") : (t("su_expected_collection") || "Expected Collection")}</Text>
+          </View>
+          <View className="flex-row items-center">
+            <Ionicons name="calendar-outline" size={14} color="#64748B" />
+            <Text className="text-[11.5px] font-bold text-[#475569]" numberOfLines={1}>{(order as any).date || '18 May 2024'}</Text>
+            {!(order as any).rescheduledTime && (
+              <>
+                <Text className="text-[11px] font-bold text-[#94A3B8] mx-1.5">•</Text>
+                <Text className="text-[11.5px] font-bold text-[#475569]" numberOfLines={1}>{(order as any).time || '11:00 AM'}</Text>
+              </>
+            )}
+          </View>
         </View>
-        <View className="w-[1px] h-4 bg-slate-200 mx-2" />
-        <View className="flex-row items-center flex-1 justify-center">
-          <Ionicons name="calendar-outline" size={14} color="#059669" />
-          <Text className="text-[11px] font-bold text-[#111827] ml-1.5" numberOfLines={1}>{(order as any).date || order.deliveryDay || (order.acceptedAt ? order.acceptedAt.split(',')[0] : '')}</Text>
-        </View>
-        <View className="w-[1px] h-4 bg-slate-200 mx-2" />
-        <View className="flex-row items-center">
-          <Ionicons name="time-outline" size={14} color="#059669" />
-          <Text className="text-[11px] font-bold text-[#111827] ml-1.5" numberOfLines={1}>{order.pickupTime || order.time || ''}</Text>
-        </View>
+
+        {order.rescheduledDate && order.rescheduledTime && (
+          <>
+            <View className="h-[1px] bg-slate-100" />
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <Ionicons name="refresh-circle-outline" size={16} color="#EAB308" />
+                <Text className="text-[11.5px] font-black text-[#CA8A04] ml-1.5">Rescheduled To</Text>
+              </View>
+              <View className="flex-row items-center">
+                <Ionicons name="calendar-outline" size={14} color="#EAB308" />
+                <Text className="text-[11.5px] font-black text-[#CA8A04] ml-1.5">{order.rescheduledDate}, {order.rescheduledTime}</Text>
+              </View>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Dynamic Contact Details Card (Seller vs Transporter vs Buyer) */}
@@ -653,25 +765,177 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>;
         })}
 
-        {/* Verification Section: Capture Photos for both Pickup and Delivery flow */}
-        <TouchableOpacity onPress={openCamera} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 mx-2 my-2 flex-row items-center justify-between shadow-sm">
-          <View className="flex-row items-center flex-1 pr-2">
-            {capturedPhotoUri ? <Image source={{
-              uri: capturedPhotoUri
-            }} className="w-10 h-10 rounded-[8px] mr-3 border border-slate-200" /> : <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center mr-3">
-              <Ionicons name="camera-outline" size={18} color="#073318" />
-            </View>}
-            <View className="flex-1">
-              <Text className="text-[14px] font-bold text-[#111827]">
-                {capturedPhotoUri ? (t('su_photos_captured') || "Photos Captured") : (t('su_capture_photos') || "Capture Photos")}
-              </Text>
-              <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                {capturedPhotoUri ? (t('su_photos_saved_success') || "Photos successfully saved for verification") : (t('su_take_photos_of_all_pro_467') || "Take photos of all products for verification")}
-              </Text>
+        {/* Verification Section */}
+        {activeType === 'transporter' ? (
+          isDeliveryPhase ? (
+            <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
+              <View className="flex-row items-center mb-4">
+                <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+                  <Ionicons name="keypad-outline" size={16} color="#073318" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[15px] font-black text-[#111827]">Generate Delivery Code</Text>
+                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">Generate a 4-digit delivery verification code before submitting the order.</Text>
+                </View>
+              </View>
+
+              {deliveryCodeVerified ? (
+                <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
+                  <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                  <Text className="text-[14px] font-bold text-[#059669] ml-2">Delivery code verified successfully</Text>
+                </View>
+              ) : !deliveryCodeGenerated ? (
+                <TouchableOpacity onPress={() => {
+                  setDeliveryCodeGenerated(true);
+                  Toast.show({
+                    type: 'success',
+                    text1: 'Code Generated',
+                    text2: 'Delivery code generated successfully'
+                  });
+                }} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
+                  <Text className="text-[14px] font-bold text-white">Generate Delivery Code</Text>
+                </TouchableOpacity>
+              ) : (
+                <View>
+                  <View className="flex-row justify-center gap-3 mb-5 mt-2">
+                    {[0, 1, 2, 3].map((index) => (
+                      <TextInput
+                        key={index}
+                        ref={deliveryCodeRefs[index]}
+                        value={deliveryCode[index]}
+                        onChangeText={(text) => handleDeliveryCodeChange(text, index)}
+                        onKeyPress={(e) => handleDeliveryCodeKeyPress(e, index)}
+                        keyboardType="numeric"
+                        maxLength={1}
+                        className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-[#111827]"
+                      />
+                    ))}
+                  </View>
+
+                  <TouchableOpacity 
+                    onPress={() => {
+                      if (deliveryCode.join('') === '5678') {
+                        setDeliveryCodeVerified(true);
+                        Toast.show({
+                          type: 'success',
+                          text1: 'Code Verified',
+                          text2: 'Delivery code verified successfully'
+                        });
+                      } else {
+                        Alert.alert("Error", "Invalid delivery code");
+                      }
+                    }} 
+                    className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+                  >
+                    <Text className="text-[14px] font-bold text-white">Verify Code</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
+          ) : (
+            <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
+              <View className="flex-row items-center mb-4">
+                <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+                  <Ionicons name="eye-outline" size={16} color="#073318" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[15px] font-black text-[#111827]">View Code</Text>
+                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">Pickup verification code generated by transporter.</Text>
+                </View>
+              </View>
+
+              {pickupCodeVerified ? (
+                <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
+                  <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                  <Text className="text-[14px] font-bold text-[#059669] ml-2">Pickup verified successfully</Text>
+                </View>
+              ) : !pickupCodeVisible ? (
+                <TouchableOpacity onPress={() => setPickupCodeVisible(true)} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
+                  <Text className="text-[14px] font-bold text-white">View Code</Text>
+                </TouchableOpacity>
+              ) : (
+                <View>
+                  <View className="flex-row justify-center gap-3 mb-5 mt-2">
+                    {['5', '6', '7', '8'].map((digit, index) => (
+                      <View key={index} className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] items-center justify-center">
+                        <Text className="text-[18px] font-black text-[#111827]">{digit}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setPickupCodeVerified(true);
+                      Toast.show({
+                        type: 'success',
+                        text1: 'Verification Successful',
+                        text2: 'Pickup verified successfully'
+                      });
+                    }} 
+                    className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+                  >
+                    <Text className="text-[14px] font-bold text-white">Verify Code</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )
+        ) : (
+          <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
+            <View className="flex-row items-center mb-4">
+              <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+                <Ionicons name="shield-checkmark-outline" size={16} color="#073318" />
+              </View>
+              <Text className="text-[15px] font-black text-[#111827]">OTP Verification</Text>
+            </View>
+
+            {otpVerified ? (
+              <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
+                <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                <Text className="text-[14px] font-bold text-[#059669] ml-2">OTP Verified Successfully</Text>
+              </View>
+            ) : !otpSent ? (
+              <TouchableOpacity onPress={() => setOtpSent(true)} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
+                <Text className="text-[14px] font-bold text-white">Send OTP</Text>
+              </TouchableOpacity>
+            ) : (
+              <View>
+                <Text className="text-[12px] font-medium text-slate-500 mb-3 text-center">
+                  OTP sent to:{'\n'}
+                  <Text className="font-bold text-[#111827] mt-1">{mobileValue}</Text>
+                </Text>
+                
+                <View className="flex-row justify-center gap-3 mb-5">
+                  {[0, 1, 2, 3].map((index) => (
+                    <TextInput
+                      key={index}
+                      ref={inputRefs[index]}
+                      value={otp[index]}
+                      onChangeText={(text) => handleOtpChange(text, index)}
+                      onKeyPress={(e) => handleOtpKeyPress(e, index)}
+                      keyboardType="numeric"
+                      maxLength={1}
+                      className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-[#111827]"
+                    />
+                  ))}
+                </View>
+
+                <TouchableOpacity 
+                  onPress={() => {
+                    if (otp.join('') === '1234') {
+                      setOtpVerified(true);
+                    } else {
+                      Alert.alert("Error", "Invalid OTP");
+                    }
+                  }} 
+                  className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+                >
+                  <Text className="text-[14px] font-bold text-white">Verify OTP</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-          {capturedPhotoUri ? <Ionicons name="checkmark-circle" size={20} color="#059669" /> : null}
-        </TouchableOpacity>
+        )}
       </View>
 
       {/* Action Buttons Row */}
@@ -728,7 +992,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
         )}
 
         {/* Submit Order full-width button */}
-        <TouchableOpacity onPress={handleSubmitOrder} disabled={isSubmitting} className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitting ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
+        <TouchableOpacity 
+          onPress={handleSubmitOrder} 
+          disabled={isSubmitting || (activeType === 'transporter' ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified) : !otpVerified)} 
+          className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${(isSubmitting || (activeType === 'transporter' ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified) : !otpVerified)) ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
           {isSubmitting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="checkmark-circle-outline" size={16} color="white" />}
           <Text className="text-[14px] font-bold text-white ml-2">
             {isSubmitting
@@ -858,7 +1125,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
           setShowBottomSheet={setShowRescheduleBottomSheet}
           rescheduleReasonModalVisible={rescheduleReasonModalVisible}
           setRescheduleReasonModalVisible={setRescheduleReasonModalVisible}
-          onConfirm={(date, time, reason) => {
+          expectedDate={(order as any).date || ''}
+          onConfirm={async (date, time, reason) => {
+            await rescheduleOrder(order.id, date, time, reason);
             Toast.show({
               type: 'success',
               text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
