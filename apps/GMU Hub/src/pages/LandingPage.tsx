@@ -107,83 +107,41 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
   };
 
   // Handlers for Login
-  const handleGetLoginOtp = async () => {
+  const handleGetLoginOtp = () => {
     setErrorMsg('');
     setSuccessMsg('');
-    if (!mobileNum || mobileNum.length < 10) {
-      setErrorMsg('Please enter a valid 10-digit mobile number.');
+    if (!mobileNum.trim()) {
+      setErrorMsg('Please enter your mobile number.');
       return;
     }
 
-    try {
-      const response = await fetch("http://localhost:5000/api/auth/check-mobile", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          mobile: mobileNum,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setErrorMsg(data.message || "This mobile number is not registered. Please sign up first.");
-        return;
-      }
-
-      setSuccessMsg('OTP sent successfully to ' + mobileNum);
-      setResendTimer(90); // Start 90s timer
-      setOtpDigits(['', '', '', '', '', '']);
-      setOtpVal('');
-      setTimeout(() => {
-        setLoginStep('otp');
-        setSuccessMsg('');
-      }, 500);
-    } catch (err) {
-      setErrorMsg("Something went wrong. Please try again.");
-    }
+    setSuccessMsg('OTP sent successfully to ' + mobileNum);
+    setResendTimer(90); // Start 90s timer
+    setOtpDigits(['', '', '', '', '', '']);
+    setOtpVal('');
+    setTimeout(() => {
+      setLoginStep('otp');
+      setSuccessMsg('');
+    }, 500);
   };
 
-  const handleVerifyLoginOtp = async () => {
+  const handleVerifyLoginOtp = () => {
     setErrorMsg('');
     setSuccessMsg('');
-    if (otpVal.length < 6) {
-      setErrorMsg('Please enter the 6-digit OTP code.');
-      return;
-    }
     
-    try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          mobile: mobileNum,
-          otp: otpVal,
-        }),
-      });
+    // Save credentials for subsequent API calls
+    localStorage.setItem("gmu_token", "mock-token-xyz");
+    localStorage.setItem("gmu_user", JSON.stringify({
+      id: "MOCK-USR-001",
+      name: "Admin User",
+      mobile: mobileNum,
+      role: "Warehouse Head"
+    }));
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setErrorMsg(data.message || "Invalid Mobile Number or OTP");
-        return;
-      }
-
-      // Save credentials for subsequent API calls
-      localStorage.setItem("gmu_token", data.token);
-      localStorage.setItem("gmu_user", JSON.stringify(data.user));
-
-      setSuccessMsg('Login Successful! Redirecting...');
-      setTimeout(() => {
-        onNavigate('dashboard');
-      }, 1200);
-    } catch (err) {
-      setErrorMsg("Unable to connect to backend on http://localhost:5000. Ensure server is running.");
-    }
+    setSuccessMsg('Login Successful! Redirecting...');
+    setTimeout(() => {
+      onNavigate('dashboard');
+    }, 1200);
   };
 
   // Handlers for Signup

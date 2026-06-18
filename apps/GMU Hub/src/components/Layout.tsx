@@ -29,8 +29,10 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'order-management', label: 'Order Management', icon: ShoppingCart },
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
-    { id: 'shg-management', label: 'SHG Management', icon: Users },
+    { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },
+    { id: 'shg-demo-portal', label: 'SHG Demo Portal (Temporary)', icon: Users },
+    { id: 'transporter-demo-portal', label: 'Transporter Demo Portal (Temporary)', icon: Truck },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -39,7 +41,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
       {/* Premium Dark Sidebar (Desktop) */}
-      <aside className="hidden md:flex w-[260px] bg-[#073318] border-r border-[#073318] flex-col min-h-screen shadow-xl shrink-0 z-50 relative">
+      <aside className="hidden md:flex w-[300px] bg-[#073318] border-r border-[#073318] flex-col min-h-screen shadow-xl shrink-0 z-50 relative">
         {/* Glow effect */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
           <div className="absolute -top-[20%] -left-[20%] w-[140%] h-[40%] rounded-full bg-[#B2D534]/5 blur-[80px]" />
@@ -67,7 +69,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
                     : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                 }`}
               >
-                <item.icon className={`h-4.5 w-4.5 transition-colors ${isActive ? 'text-[#073318]' : 'text-slate-400 group-hover:text-white'}`} />
+                <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-[#073318]' : 'text-slate-400 group-hover:text-white'}`} />
                 <span className="text-[13px] tracking-wide text-left whitespace-nowrap">{item.label}</span>
               </button>
             );
@@ -79,7 +81,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
             onClick={() => onNavigate('landing')}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-300 hover:bg-red-400/10 hover:text-red-200 transition-all font-semibold text-[13px] tracking-wide cursor-pointer"
           >
-            <LogOut className="h-4.5 w-4.5" />
+            <LogOut className="h-5 w-5 shrink-0" />
             <span>Secure Logout</span>
           </button>
         </div>
@@ -126,7 +128,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
                         : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
                     }`}
                   >
-                    <item.icon className="h-4.5 w-4.5" />
+                    <item.icon className="h-5 w-5 shrink-0" />
                     <span className="text-[13px] tracking-wide text-left">{item.label}</span>
                   </button>
                 );
@@ -138,7 +140,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
                 onClick={() => onNavigate('landing')}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-350 hover:bg-red-400/10 font-semibold text-[13px] tracking-wide cursor-pointer"
               >
-                <LogOut className="h-4.5 w-4.5" />
+                <LogOut className="h-5 w-5 shrink-0" />
                 <span>Secure Logout</span>
               </button>
             </div>
@@ -156,7 +158,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
               onClick={() => setMobileMenuOpen(true)}
               className="p-2 -ml-2 text-slate-600 hover:bg-slate-50 rounded-lg md:hidden cursor-pointer"
             >
-              <Menu className="h-5.5 w-5.5" />
+              <Menu className="h-5 w-5" />
             </button>
             <h1 className="text-lg md:text-xl font-bold text-[#073318] capitalize">
               {currentLabel}
@@ -181,7 +183,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="p-2 hover:bg-slate-50 rounded-full text-slate-600 relative transition-colors cursor-pointer"
               >
-                <Bell className="h-4.5 w-4.5" />
+                <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
               </button>
 

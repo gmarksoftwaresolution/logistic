@@ -36,11 +36,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     returnDropNewOrders,
     returnDropCompletedOrders,
     readyToStore,
+    intakePickupOrders,
+    intakeReturnOrder,
     generateOTP,
     generateBarcode,
     shgList,
     transporterList,
     assignPickupOrder,
+    requestBuyerReturn,
   } = useAppContext();
 
   // Top level tabs: Pickup | Drop | Return
@@ -49,7 +52,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   // Sub-tabs configurations
   const [activePickupSubTab, setActivePickupSubTab] = useState('new');
   const [activeDropSubTab, setActiveDropSubTab] = useState('new');
-  const [activeReturnType, setActiveReturnType] = useState<'pickup' | 'drop'>('pickup');
+  const [activeReturnType, setActiveReturnType] = useState<'pickup' | 'drop'>('drop');
   const [activeReturnSubTab, setActiveReturnSubTab] = useState<'new' | 'completed'>('new');
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
@@ -62,7 +65,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any>(null);
 
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
-  const [intakeOrder, setIntakeOrder] = useState<{ id: string; qty: number; weight: number } | null>(null);
+  const [intakeOrder, setIntakeOrder] = useState<any | null>(null);
+  const [intakeType, setIntakeType] = useState<'pickup' | 'return-pickup' | 'return-drop' | null>(null);
   const [generatedOTP, setGeneratedOTP] = useState<string | null>(null);
 
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
@@ -82,22 +86,37 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   };
 
   // Handle Intake Action
-  const handleIntakeClick = (order: any) => {
+  const handleIntakeClick = (order: any, type: 'pickup' | 'return-pickup' | 'return-drop') => {
     setIntakeOrder({
       id: order.id,
-      qty: order.totalQty,
-      weight: order.totalWeight,
+      qty: order.totalQty || order.quantity || 0,
+      weight: order.totalWeight || order.weight || 0,
+      sellerName: order.sellerName || 'N/A',
+      buyerName: order.buyerName || 'N/A',
+      shgName: order.shgDetails?.name || 'N/A',
+      transporterName: order.transporterDetails?.name || 'N/A',
+      fullOrder: order,
     });
+    setIntakeType(type);
     setGeneratedOTP(null);
     setIsIntakeModalOpen(true);
   };
 
-  // Handle OTP Generation
-  const handleGenerateOTP = () => {
-    if (intakeOrder) {
-      const otp = generateOTP(intakeOrder.id);
-      setGeneratedOTP(otp);
+  const handleConfirmIntake = () => {
+    if (!intakeOrder || !intakeType) return;
+
+    if (intakeType === 'pickup') {
+      const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
+      intakePickupOrders(orderIds);
+    } else if (intakeType === 'return-pickup') {
+      intakeReturnOrder(intakeOrder.id, 'pickup');
+    } else if (intakeType === 'return-drop') {
+      intakeReturnOrder(intakeOrder.id, 'drop');
     }
+
+    setIsIntakeModalOpen(false);
+    setIntakeOrder(null);
+    setIntakeType(null);
   };
 
   // Handle Barcode Action
@@ -111,7 +130,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Render Table Action Button Helper
   const getActionButtons = (row: any, type: 'pickup' | 'drop' | 'return', subTab: string) => {
-    const hasIntake = (type === 'pickup' && subTab === 'assigned') || (type === 'return' && subTab === 'assigned');
+    const hasIntake = (type === 'pickup' && subTab === 'assigned') || (type === 'return' && subTab === 'completed');
     const hasWarehouse = type === 'pickup' && subTab === 'warehouse';
 
     return (
@@ -121,7 +140,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             e.stopPropagation();
             setActiveActionMenu(activeActionMenu === row.id ? null : row.id);
           }}
-          className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-lg transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
+          className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-xl transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
           title="Actions"
         >
           <MoreVertical className="h-4 w-4" />
@@ -154,7 +173,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   onClick={(e) => {
                     e.stopPropagation();
                     setActiveActionMenu(null);
-                    handleIntakeClick(row);
+                    const intakeKind = type === 'pickup' ? 'pickup' : (activeReturnType === 'pickup' ? 'return-pickup' : 'return-drop');
+                    handleIntakeClick(row, intakeKind);
                   }}
                   className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
                 >
@@ -164,30 +184,31 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               )}
 
               {hasWarehouse && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      handleBarcodeClick(row.id);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <Barcode className="h-4 w-4 text-blue-500/70" />
-                    <span>Generate Barcode</span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      readyToStore(row.id);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500/70" />
-                    <span>Ready to Store</span>
-                  </button>
-                </>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    handleBarcodeClick(row.id);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <Barcode className="h-4 w-4 text-blue-500/70" />
+                  <span>Generate Barcode</span>
+                </button>
+              )}
+
+              {type === 'drop' && subTab === 'completed' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    requestBuyerReturn(row.id);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <ShieldAlert className="h-4 w-4 text-rose-500/70" />
+                  <span>Request Buyer Return</span>
+                </button>
               )}
             </div>
           </>
@@ -259,6 +280,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   // Pickup: Warehouse
   const pickupWarehouseColumns = [
     { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
+    { header: 'Barcode Number', accessor: (row: PickupOrder) => row.barcode || 'N/A' },
     { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
     { header: 'Seller Mobile', accessor: 'sellerMobile' as keyof PickupOrder },
     { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
@@ -306,6 +328,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
     { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
     { header: 'Rejected Date', accessor: (row: PickupOrder) => row.rejectedDate || (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
+    { header: 'Reason', accessor: 'rejectionReason' as keyof PickupOrder },
+    { header: 'Rejected By', accessor: 'rejectedBy' as keyof PickupOrder },
     { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
     { header: 'Transporter Status', accessor: (row: PickupOrder) => <StatusBadge status={row.transporterStatus} /> },
     { header: 'Main Status', accessor: (row: PickupOrder) => <StatusBadge status={row.mainStatus} /> },
@@ -366,6 +390,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
     { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
     { header: 'Rejected Date', accessor: (row: DropOrder) => row.rejectedDate || (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
+    { header: 'Reason', accessor: 'rejectionReason' as keyof DropOrder },
+    { header: 'Rejected By', accessor: 'rejectedBy' as keyof DropOrder },
     { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
     { header: 'Transporter Status', accessor: (row: DropOrder) => <StatusBadge status={row.transporterStatus} /> },
     { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
@@ -388,6 +414,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof DropOrder },
     { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
     { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
+    { header: 'Rescheduled By', accessor: 'rescheduledBy' as keyof DropOrder },
     { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
     { header: 'Transporter Status', accessor: (row: DropOrder) => <StatusBadge status={row.transporterStatus} /> },
     { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
@@ -429,6 +456,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof PickupOrder },
     { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
     { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
+    { header: 'Rescheduled By', accessor: 'rescheduledBy' as keyof PickupOrder },
     { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
     { header: 'Transporter Status', accessor: (row: PickupOrder) => <StatusBadge status={row.transporterStatus} /> },
     { header: 'Main Status', accessor: (row: PickupOrder) => <StatusBadge status={row.mainStatus} /> },
@@ -572,7 +600,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               ]}
             />
             {activePickupSubTab === 'new' && (
-              <DataTable columns={pickupNewColumns} data={pickupNewOrders} statusFilterField="status" />
+              <DataTable columns={pickupNewColumns} data={pickupNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activePickupSubTab === 'assigned' && (
               <div className="space-y-3">
@@ -587,7 +615,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           id: selectedAssignedOrderIds.join(', '),
                           qty: totalQty,
                           weight: totalWeight,
+                          isBulk: true,
+                          selectedIds: selectedAssignedOrderIds,
                         });
+                        setIntakeType('pickup');
                         setGeneratedOTP(null);
                         setIsIntakeModalOpen(true);
                         setSelectedAssignedOrderIds([]);
@@ -599,33 +630,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     </button>
                   </div>
                 )}
-                <DataTable columns={pickupAssignedColumnsWithSelection} data={pickupAssignedOrders} statusFilterField="status" />
+                <DataTable columns={pickupAssignedColumnsWithSelection} data={pickupAssignedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
               </div>
             )}
             {activePickupSubTab === 'warehouse' && (
-              <div className="space-y-3">
-                {selectedWarehouseOrderIds.length > 0 && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        selectedWarehouseOrderIds.forEach((id) => readyToStore(id));
-                        setSelectedWarehouseOrderIds([]);
-                      }}
-                      className="px-4 py-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-2"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Ready to Store Selected ({selectedWarehouseOrderIds.length})
-                    </button>
-                  </div>
-                )}
-                <DataTable columns={pickupWarehouseColumnsWithSelection} data={pickupWarehouseOrders} statusFilterField="status" />
-              </div>
+              <DataTable columns={pickupWarehouseColumns} data={pickupWarehouseOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activePickupSubTab === 'rejected' && (
-              <DataTable columns={pickupRejectedColumns} data={pickupRejectedOrders} statusFilterField="status" />
+              <DataTable columns={pickupRejectedColumns} data={pickupRejectedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activePickupSubTab === 'reschedule' && (
-              <DataTable columns={pickupRescheduledColumns} data={pickupRescheduledOrders} statusFilterField="status" />
+              <DataTable columns={pickupRescheduledColumns} data={pickupRescheduledOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
           </div>
         )}
@@ -646,19 +661,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               ]}
             />
             {activeDropSubTab === 'new' && (
-              <DataTable columns={dropNewColumns} data={dropNewOrders} />
+              <DataTable columns={dropNewColumns} data={dropNewOrders} onRowDoubleClick={handleViewOrder} />
             )}
             {activeDropSubTab === 'assigned' && (
-              <DataTable columns={dropAssignedColumns} data={dropAssignedOrders} />
+              <DataTable columns={dropAssignedColumns} data={dropAssignedOrders} onRowDoubleClick={handleViewOrder} />
             )}
             {activeDropSubTab === 'rejected' && (
-              <DataTable columns={dropRejectedColumns} data={dropRejectedOrders} />
+              <DataTable columns={dropRejectedColumns} data={dropRejectedOrders} onRowDoubleClick={handleViewOrder} />
             )}
             {activeDropSubTab === 'reschedule' && (
-              <DataTable columns={dropRescheduledColumns} data={dropRescheduledOrders} />
+              <DataTable columns={dropRescheduledColumns} data={dropRescheduledOrders} onRowDoubleClick={handleViewOrder} />
             )}
             {activeDropSubTab === 'completed' && (
-              <DataTable columns={dropCompletedColumns} data={dropCompletedOrders} />
+              <DataTable columns={dropCompletedColumns} data={dropCompletedOrders} onRowDoubleClick={handleViewOrder} />
             )}
           </div>
         )}
@@ -673,8 +688,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 setActiveReturnSubTab('new');
               }}
               tabs={[
-                { id: 'pickup', label: 'Return Pickup', count: returnPickupNewOrders.length + returnPickupCompletedOrders.length },
-                { id: 'drop', label: 'Return Drop', count: returnDropNewOrders.length + returnDropCompletedOrders.length },
+                { id: 'drop', label: 'Traspoter return orders', count: returnDropNewOrders.length + returnDropCompletedOrders.length },
+                { id: 'pickup', label: 'Buyer return orders', count: returnPickupNewOrders.length + returnPickupCompletedOrders.length },
               ]}
             />
             <Tabs
@@ -694,16 +709,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               }
             />
             {activeReturnType === 'pickup' && activeReturnSubTab === 'new' && (
-              <DataTable columns={returnPickupNewColumns} data={returnPickupNewOrders} statusFilterField="status" />
+              <DataTable columns={returnPickupNewColumns} data={returnPickupNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activeReturnType === 'pickup' && activeReturnSubTab === 'completed' && (
-              <DataTable columns={returnPickupCompletedColumns} data={returnPickupCompletedOrders} statusFilterField="status" />
+              <DataTable columns={returnPickupCompletedColumns} data={returnPickupCompletedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'new' && (
-              <DataTable columns={returnDropNewColumns} data={returnDropNewOrders} statusFilterField="status" />
+              <DataTable columns={returnDropNewColumns} data={returnDropNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'completed' && (
-              <DataTable columns={returnDropCompletedColumns} data={returnDropCompletedOrders} statusFilterField="status" />
+              <DataTable columns={returnDropCompletedColumns} data={returnDropCompletedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
             )}
           </div>
         )}
@@ -717,58 +732,72 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         >
           {intakeOrder && (
             <div className="space-y-5">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-150 space-y-2.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400 font-semibold uppercase">Order ID</span>
-                  <span className="font-bold text-[#073318]">{intakeOrder.id}</span>
+              <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-2xl p-5 space-y-4 text-left">
+                <div className="flex items-center gap-2 text-[#073318] border-b border-[#073318]/10 pb-2">
+                  <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Information</span>
                 </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400 font-semibold uppercase">Total Quantity</span>
-                  <span className="font-bold text-slate-800">{intakeOrder.qty} units</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400 font-semibold uppercase">Total Weight</span>
-                  <span className="font-bold text-slate-800">{intakeOrder.weight} kg</span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
+                  <div className="col-span-2 bg-white p-3 rounded-xl border border-slate-150">
+                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Order ID(s)</p>
+                    <p className="font-extrabold text-[#073318] text-sm font-mono mt-0.5">{intakeOrder.id}</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-150">
+                    <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider">Total Quantity</p>
+                    <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.qty} units</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-150">
+                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Total Weight</p>
+                    <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.weight} kg</p>
+                  </div>
+
+                  {!intakeOrder.isBulk && (
+                    <>
+                      <div className="bg-white p-3 rounded-xl border border-slate-150">
+                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Seller / Origin</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.sellerName || 'N/A'}</p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-150">
+                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Buyer / Destination</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.buyerName || 'N/A'}</p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-150">
+                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Assigned SHG</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.shgName || 'N/A'}</p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-150">
+                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned Transporter</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.transporterName || 'N/A'}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {!generatedOTP ? (
-                <div className="space-y-4 text-center">
-                  <p className="text-xs text-slate-500">
-                    Press the button below to generate a secure One-Time PIN for verification handover.
-                  </p>
-                  <button
-                    onClick={handleGenerateOTP}
-                    className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-sm shadow-md transition-all cursor-pointer"
-                  >
-                    Generate OTP
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-5 bg-[#B2D534]/10 border border-[#B2D534]/50 rounded-2xl text-center space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-[#073318] font-extrabold">Generated Passcode</p>
-                    <p className="text-4xl font-extrabold text-[#073318] tracking-widest">{generatedOTP}</p>
-                  </div>
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(generatedOTP || '');
-                      }}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy OTP
-                    </button>
-                    <button
-                      onClick={() => setIsIntakeModalOpen(false)}
-                      className="px-4 py-2 bg-[#073318] text-white hover:bg-[#073318]/95 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Complete Handover
-                    </button>
-                  </div>
-                </div>
-              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setIsIntakeModalOpen(false);
+                    setIntakeOrder(null);
+                    setIntakeType(null);
+                  }}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmIntake}
+                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <ClipboardCheck className="h-4 w-4" />
+                  Intake Order
+                </button>
+              </div>
             </div>
           )}
         </Modal>

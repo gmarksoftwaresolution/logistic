@@ -46,9 +46,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     normalized.includes('returned') ||
     normalized.includes('active') ||
     normalized.includes('approved') ||
-    normalized.includes('available') ||
+    (normalized.includes('available') && !normalized.includes('not available')) ||
     normalized.includes('barcode') ||
-    normalized.includes('ready')
+    normalized.includes('ready') ||
+    normalized.includes('return drop inventory')
   ) {
     // Green
     colorClasses = 'bg-emerald-50 text-emerald-800 border-emerald-200';
@@ -59,7 +60,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     normalized.includes('declined') ||
     normalized.includes('inactive') ||
     normalized.includes('busy') ||
-    normalized.includes('unavailable')
+    normalized.includes('unavailable') ||
+    normalized.includes('not available')
   ) {
     // Red
     colorClasses = 'bg-red-50 text-red-800 border-red-200';

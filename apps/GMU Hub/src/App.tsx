@@ -4,9 +4,11 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { OrderManagementPage } from './pages/OrderManagementPage';
 import { InventoryManagementPage } from './pages/InventoryManagementPage';
-import { SHGManagementPage } from './pages/SHGManagementPage';
+import { CommunityManagementPage } from './pages/CommunityManagementPage';
 import { TransporterManagementPage } from './pages/TransporterManagementPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SHGDemoPortalPage } from './pages/SHGDemoPortalPage';
+import { TransporterDemoPortalPage } from './pages/TransporterDemoPortalPage';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<string>(() => {
@@ -37,10 +39,16 @@ function App() {
         <InventoryManagementPage onNavigate={handleNavigate} />
       )}
       {currentPage === 'shg-management' && (
-        <SHGManagementPage onNavigate={handleNavigate} />
+        <CommunityManagementPage onNavigate={handleNavigate} />
       )}
       {currentPage === 'transporter-management' && (
         <TransporterManagementPage onNavigate={handleNavigate} />
+      )}
+      {currentPage === 'shg-demo-portal' && (
+        <SHGDemoPortalPage onNavigate={handleNavigate} />
+      )}
+      {currentPage === 'transporter-demo-portal' && (
+        <TransporterDemoPortalPage onNavigate={handleNavigate} />
       )}
       {currentPage === 'settings' && (
         <SettingsPage onNavigate={handleNavigate} />

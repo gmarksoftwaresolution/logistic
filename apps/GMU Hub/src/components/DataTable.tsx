@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { TimeAgo } from './TimeAgo';
 
 export interface Column<T> {
   header: string;
@@ -12,6 +13,7 @@ interface DataTableProps<T> {
   data: T[];
   searchPlaceholder?: string;
   statusFilterField?: keyof T;
+  onRowDoubleClick?: (row: T) => void;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -19,12 +21,42 @@ export function DataTable<T extends Record<string, any>>({
   data,
   searchPlaceholder = 'Search...',
   statusFilterField,
+  onRowDoubleClick,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Dynamically enrich columns to include a "Duration" column
+  const enrichedColumns = useMemo(() => {
+    if (columns.some((col) => col.header === 'Duration')) {
+      return columns;
+    }
+
+    const durationColumn: Column<T> = {
+      header: 'Duration',
+      accessor: (row: T) => {
+        return (
+          <TimeAgo
+            sectionEnteredAt={row.sectionEnteredAt}
+          />
+        );
+      }
+    };
+
+    // Position Duration column before Order ID (or after checkbox if checkbox is present)
+    const hasCheckbox = columns.length > 0 && columns[0].header === '';
+    
+    const newCols = [...columns];
+    if (hasCheckbox) {
+      newCols.splice(1, 0, durationColumn);
+    } else {
+      newCols.unshift(durationColumn);
+    }
+    return newCols;
+  }, [columns]);
 
   // Extract unique statuses for filtering
   const uniqueStatuses = useMemo(() => {
@@ -113,7 +145,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSearchTerm('');
                 setCurrentPage(1);
               }}
-              className="px-4 py-2.5 text-xs font-extrabold text-red-650 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Search
             </button>
@@ -141,7 +173,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSelectedDate('');
                 setCurrentPage(1);
               }}
-              className="px-3.5 py-2 text-xs font-extrabold text-red-650 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              className="px-3.5 py-2 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Date
             </button>
@@ -175,7 +207,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSelectedStatus('all');
                 setCurrentPage(1);
               }}
-              className="px-4 py-2.5 text-xs font-extrabold text-red-650 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200/80 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200/80 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Filter
             </button>
@@ -189,7 +221,7 @@ export function DataTable<T extends Record<string, any>>({
           <table className="w-full text-left text-sm border-collapse">
             <thead className="bg-slate-50 text-[#073318] border-b border-slate-200 uppercase tracking-wider text-[10px]">
               <tr>
-                {columns.map((col, index) => (
+                {enrichedColumns.map((col, index) => (
                   <th
                     key={index}
                     className="px-6 py-4 select-none whitespace-nowrap font-extrabold text-[#073318]/80 tracking-wider"
@@ -204,8 +236,24 @@ export function DataTable<T extends Record<string, any>>({
             <tbody className="divide-y divide-slate-100 text-slate-750 font-medium">
               {currentItems.length > 0 ? (
                 currentItems.map((row, rowIndex) => (
-                  <tr key={rowIndex} className="hover:bg-slate-50/50 transition-colors duration-150">
-                    {columns.map((col, colIndex) => {
+                  <tr
+                    key={rowIndex}
+                    className={`hover:bg-slate-50/50 transition-colors duration-150 ${onRowDoubleClick ? 'cursor-pointer select-none' : ''}`}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (
+                        target.tagName === 'INPUT' ||
+                        target.closest('input') ||
+                        target.closest('button') ||
+                        target.closest('select') ||
+                        target.closest('a')
+                      ) {
+                        return;
+                      }
+                      onRowDoubleClick?.(row);
+                    }}
+                  >
+                    {enrichedColumns.map((col, colIndex) => {
                       let cellContent: React.ReactNode;
                       if (typeof col.accessor === 'function') {
                         cellContent = col.accessor(row);
@@ -224,7 +272,7 @@ export function DataTable<T extends Record<string, any>>({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-12 text-center text-slate-400 font-semibold text-sm">
+                  <td colSpan={enrichedColumns.length} className="px-6 py-12 text-center text-slate-400 font-semibold text-sm">
                     No matching records found.
                   </td>
                 </tr>

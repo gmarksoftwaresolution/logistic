@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { InventoryItem } from '../context/AppContext';
-import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, Barcode } from 'lucide-react';
+import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, Barcode, QrCode } from 'lucide-react';
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
   if (!startDate) return '-';
@@ -39,13 +39,44 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
 
+  // QR Scan Modal State
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrItem, setQrItem] = useState<InventoryItem | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [qrScanSuccess, setQrScanSuccess] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
+
+  const handleOpenQrModal = (item: InventoryItem) => {
+    setQrItem(item);
+    setIsQrModalOpen(true);
+    setQrScanSuccess(false);
+    setIsScanning(false);
+    setScanMessage('');
+  };
+
+  const handleSimulateScan = () => {
+    setIsScanning(true);
+    setScanMessage('Scanning QR Code...');
+    setTimeout(() => {
+      if (qrItem) {
+        dispatchInventory(qrItem.id);
+        setQrScanSuccess(true);
+        setScanMessage('Order dispatched successfully.');
+      }
+      setIsScanning(false);
+      setTimeout(() => {
+        setIsQrModalOpen(false);
+      }, 1500);
+    }, 1200);
+  };
+
   const handleViewItem = (item: InventoryItem) => {
     setSelectedItem(item);
     setIsViewModalOpen(true);
   };
 
   const getActionButtons = (row: InventoryItem, tab: string) => {
-    const canDispatch = (tab === 'incoming' || tab === 'returnDrop') && (row.status === 'stored' || row.status === 'pending acceptance');
+    const canDispatch = (tab === 'incoming' || tab === 'returnDrop') && (row.status?.toLowerCase() === 'stored' || row.status?.toLowerCase() === 'pending acceptance' || row.status?.toLowerCase() === 'return drop inventory');
 
     return (
       <div className="relative inline-block text-left">
@@ -87,12 +118,12 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                   onClick={(e) => {
                     e.stopPropagation();
                     setActiveActionMenu(null);
-                    dispatchInventory(row.id);
+                    handleOpenQrModal(row);
                   }}
                   className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
                 >
-                  <Truck className="h-4 w-4 text-[#073318]/70" />
-                  <span>Dispatch Item</span>
+                  <QrCode className="h-4 w-4 text-[#073318]/70" />
+                  <span>Scan QR</span>
                 </button>
               )}
             </div>
@@ -151,6 +182,8 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     { header: 'Status', accessor: (row: InventoryItem) => <StatusBadge status={row.status} /> },
     { header: 'Action', accessor: (row: InventoryItem) => getActionButtons(row, 'returnDrop') },
   ];
+
+
 
   // Incoming with Selection
   const incomingColumnsWithSelection = [
@@ -215,53 +248,21 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
           activeTab={activeSubTab}
           onChange={setActiveSubTab}
           tabs={[
-            { id: 'incoming', label: 'Incoming orders', count: incomingInventory.length },
-            { id: 'returnDrop', label: 'return drop orders', count: returnDropInventory.length },
-            { id: 'returnPickup', label: 'return pickup orders', count: returnPickupInventory.length },
+            { id: 'incoming', label: 'Stored Orders', count: incomingInventory.length },
+            { id: 'returnDrop', label: 'Transpoter return orders', count: returnDropInventory.length },
+            { id: 'returnPickup', label: 'Buyer return Orders', count: returnPickupInventory.length },
           ]}
         />
 
         {/* Main Data Tables */}
         {activeSubTab === 'incoming' && (
-          <div className="space-y-3">
-            {selectedIncomingItemIds.length > 0 && (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    selectedIncomingItemIds.forEach((id) => dispatchInventory(id));
-                    setSelectedIncomingItemIds([]);
-                  }}
-                  className="px-4 py-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Truck className="h-4 w-4" />
-                  Dispatch Selected ({selectedIncomingItemIds.length})
-                </button>
-              </div>
-            )}
-            <DataTable columns={incomingColumnsWithSelection} data={incomingInventory} statusFilterField="status" />
-          </div>
+          <DataTable columns={incomingColumns} data={incomingInventory} statusFilterField="status" onRowDoubleClick={handleViewItem} />
         )}
         {activeSubTab === 'returnPickup' && (
-          <DataTable columns={returnPickupColumns} data={returnPickupInventory} />
+          <DataTable columns={returnPickupColumns} data={returnPickupInventory} onRowDoubleClick={handleViewItem} />
         )}
         {activeSubTab === 'returnDrop' && (
-          <div className="space-y-3">
-            {selectedReturnDropItemIds.length > 0 && (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    selectedReturnDropItemIds.forEach((id) => dispatchInventory(id));
-                    setSelectedReturnDropItemIds([]);
-                  }}
-                  className="px-4 py-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Truck className="h-4 w-4" />
-                  Dispatch Selected ({selectedReturnDropItemIds.length})
-                </button>
-              </div>
-            )}
-            <DataTable columns={returnDropColumnsWithSelection} data={returnDropInventory} statusFilterField="status" />
-          </div>
+          <DataTable columns={returnDropColumns} data={returnDropInventory} statusFilterField="status" onRowDoubleClick={handleViewItem} />
         )}
 
         {/* --- VIEW MODAL --- */}
@@ -303,11 +304,11 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
                 {/* Right Side: Status Stepper */}
                 <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
-                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedItem.status !== 'dispatch' ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>STORED</span>
+                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedItem.status?.toLowerCase() !== 'dispatch' ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>STORED</span>
                   {activeSubTab !== 'returnPickup' && (
                     <>
                       <span className="text-slate-300 px-1 font-bold">➔</span>
-                      <span className={`px-4 py-2 rounded-xl font-bold ${selectedItem.status === 'dispatch' ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>DISPATCHED</span>
+                      <span className={`px-4 py-2 rounded-xl font-bold ${selectedItem.status?.toLowerCase() === 'dispatch' ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>DISPATCHED</span>
                     </>
                   )}
                 </div>
@@ -530,7 +531,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                           <p className="text-slate-300 mt-0.5">Zone B placement assigned</p>
                         </div>
 
-                        {selectedItem.status === 'dispatch' && (
+                        {selectedItem.status?.toLowerCase() === 'dispatch' && (
                           <div className="relative">
                             <div className="absolute -left-[31px] top-0 h-3.5 w-3.5 rounded-full border-2 border-[#B2D534] bg-[#B2D534]" />
                             <span className="text-[10px] text-[#B2D534] font-bold font-mono">02:00 PM</span>
@@ -590,6 +591,86 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+        </Modal>
+
+        {/* --- QR SCAN MODAL --- */}
+        <Modal
+          isOpen={isQrModalOpen}
+          onClose={() => !isScanning && setIsQrModalOpen(false)}
+          title="Scan QR Code for Dispatch"
+          variant="modal"
+        >
+          {qrItem && (
+            <div className="space-y-6 text-center">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs font-semibold text-slate-700">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase">Order ID</span>
+                    <span className="font-mono text-sm text-[#073318] font-bold">{qrItem.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase">Barcode</span>
+                    <span className="font-mono text-slate-800">{qrItem.barcode || 'N/A'}</span>
+                  </div>
+                  <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
+                    <span className="text-slate-400 block text-[9px] uppercase">Buyer / Destination</span>
+                    <span className="text-slate-800">{qrItem.buyerName || 'N/A'} - {qrItem.buyerAddress || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Simulated Camera Viewfinder */}
+              <div className="relative w-64 h-64 mx-auto border-2 border-slate-300 rounded-3xl overflow-hidden bg-slate-950 flex items-center justify-center shadow-inner">
+                {/* Scanner corners */}
+                <div className="absolute top-4 left-4 w-6 h-6 border-t-4 border-l-4 border-[#B2D534] rounded-tl-md" />
+                <div className="absolute top-4 right-4 w-6 h-6 border-t-4 border-r-4 border-[#B2D534] rounded-tr-md" />
+                <div className="absolute bottom-4 left-4 w-6 h-6 border-b-4 border-l-4 border-[#B2D534] rounded-bl-md" />
+                <div className="absolute bottom-4 right-4 w-6 h-6 border-b-4 border-r-4 border-[#B2D534] rounded-br-md" />
+
+                {/* Red scanning line */}
+                {isScanning && (
+                  <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce" />
+                )}
+
+                {/* QR Code graphic */}
+                <div className="opacity-80 p-6 bg-white rounded-2xl shadow-md">
+                  <QrCode className={`h-24 w-24 text-slate-800 ${isScanning ? 'animate-pulse' : ''}`} />
+                </div>
+
+                {/* Success Overlay */}
+                {qrScanSuccess && (
+                  <div className="absolute inset-0 bg-[#073318]/90 backdrop-blur-xs flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+                    <div className="h-16 w-16 bg-[#B2D534] rounded-full flex items-center justify-center shadow-lg mb-2">
+                      <span className="text-3xl">✓</span>
+                    </div>
+                    <p className="text-sm font-bold">Scan Complete</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Message */}
+              <div className="h-6 flex items-center justify-center">
+                {scanMessage ? (
+                  <p className={`text-xs font-bold ${qrScanSuccess ? 'text-emerald-600' : 'text-[#073318]'}`}>
+                    {scanMessage}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400">Position the QR code within the viewfinder frame to scan.</p>
+                )}
+              </div>
+
+              {/* Action Button */}
+              {!qrScanSuccess && (
+                <button
+                  onClick={handleSimulateScan}
+                  disabled={isScanning}
+                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isScanning ? 'Processing...' : 'Simulate Successful QR Scan'}
+                </button>
+              )}
             </div>
           )}
         </Modal>

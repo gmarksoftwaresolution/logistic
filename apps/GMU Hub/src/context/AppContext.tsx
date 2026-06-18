@@ -35,6 +35,10 @@ export interface PickupOrder {
   currentDate?: string;
   warehouseReceivedDate?: string;
   rejectedDate?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rescheduledBy?: string;
+  sectionEnteredAt?: string;
 }
 
 export interface DropOrder {
@@ -60,6 +64,9 @@ export interface DropOrder {
   sellerPincode?: string;
   warehouseReceivedDate?: string;
   rejectedDate?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rescheduledBy?: string;
   deliveredDate?: string;
   barcode?: string;
   shgDetails?: PersonDetails;
@@ -67,6 +74,8 @@ export interface DropOrder {
   transporterDetails?: PersonDetails;
   transporterPickupSchedule?: string;
   status?: string;
+  pickupStatus?: string;
+  sectionEnteredAt?: string;
 }
 
 export interface ReturnOrder {
@@ -101,6 +110,10 @@ export interface ReturnOrder {
   // Completed specifics
   completionDate?: string;
   barcode?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rescheduledBy?: string;
+  sectionEnteredAt?: string;
 }
 
 export interface InventoryItem {
@@ -126,6 +139,7 @@ export interface InventoryItem {
   orderDate?: string;
   barcode?: string;
   storeDate?: string;
+  sectionEnteredAt?: string;
 }
 
 export interface SHGProfile {
@@ -191,6 +205,9 @@ export interface AppContextType {
   // Actions
   readyToStore: (orderId: string) => void;
   dispatchInventory: (orderId: string) => void;
+  intakePickupOrders: (orderIds: string[]) => void;
+  intakeReturnOrder: (orderId: string, returnType: 'pickup' | 'drop') => void;
+  requestBuyerReturn: (dropOrderId: string) => void;
   generateOTP: (orderId: string) => string;
   generateBarcode: (orderId: string) => string;
   approveSHG: (id: string) => void;
@@ -198,15 +215,60 @@ export interface AppContextType {
   addNewSHG: (shg: Omit<SHGProfile, 'id' | 'assignedOrders'>) => void;
   addNewTransporter: (transporter: Omit<TransporterProfile, 'id' | 'assignedOrders'>) => void;
   assignPickupOrder: (orderId: string, shgId: string, transporterId: string) => void;
+  simulateSHGAction: (orderId: string, type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop', action: 'accept' | 'reject' | 'reschedule' | 'pick' | 'deliver' | 'return-delivered', payload?: any) => void;
+  simulateTransporterAction: (orderId: string, type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop', action: 'accept' | 'reject' | 'reschedule' | 'transit' | 'delivered-shg' | 'pickup-from-gmu' | 'shg-not-available' | 'return-to-gmu' | 'deliver-to-gmu' | 'drop-to-gmu', payload?: any) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const appLoadTime = new Date().toISOString();
+
+const initializeMock = <T extends { sectionEnteredAt?: string }>(items: T[]): T[] => {
+  const nowStr = new Date().toISOString();
+  return items.map((item) => ({
+    ...item,
+    sectionEnteredAt: item.sectionEnteredAt || nowStr,
+  }));
+};
+
+const wrapSetter = <T extends { id: string; status?: string; mainStatus?: string; shgStatus?: string; transporterStatus?: string; pickupStatus?: string; sectionEnteredAt?: string }>(
+  setStateRaw: React.Dispatch<React.SetStateAction<T[]>>
+) => {
+  return (value: React.SetStateAction<T[]>) => {
+    setStateRaw((prev) => {
+      const next = typeof value === 'function' ? (value as Function)(prev) : value;
+      return next.map((newObj: T) => {
+        const oldObj = prev.find((o) => o.id === newObj.id);
+        if (!oldObj) {
+          return {
+            ...newObj,
+            sectionEnteredAt: newObj.sectionEnteredAt || new Date().toISOString(),
+          };
+        }
+        const statusChanged =
+          oldObj.status !== newObj.status ||
+          oldObj.mainStatus !== newObj.mainStatus ||
+          oldObj.shgStatus !== newObj.shgStatus ||
+          oldObj.transporterStatus !== newObj.transporterStatus ||
+          oldObj.pickupStatus !== newObj.pickupStatus;
+
+        if (statusChanged) {
+          return {
+            ...newObj,
+            sectionEnteredAt: new Date().toISOString(),
+          };
+        }
+        return newObj;
+      });
+    });
+  };
+};
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // --- MOCK DATA ---
 
   // 1. Pickup Orders
-  const [pickupNewOrders, setPickupNewOrders] = useState<PickupOrder[]>([
+  const [pickupNewOrders, setPickupNewOrdersRaw] = useState<PickupOrder[]>([
     {
       id: 'ORD-PICK-101',
       sellerName: 'Ramesh Agro Farms',
@@ -245,7 +307,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [pickupAssignedOrders, setPickupAssignedOrders] = useState<PickupOrder[]>([
+  const [pickupAssignedOrders, setPickupAssignedOrdersRaw] = useState<PickupOrder[]>([
     {
       id: 'ORD-PICK-201',
       sellerName: 'Baliraja Rice Mill',
@@ -292,7 +354,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [pickupWarehouseOrders, setPickupWarehouseOrders] = useState<PickupOrder[]>([
+  const [pickupWarehouseOrders, setPickupWarehouseOrdersRaw] = useState<PickupOrder[]>([
     {
       id: 'ORD-PICK-301',
       sellerName: 'Anita Millet Farms',
@@ -343,7 +405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [pickupRejectedOrders, setPickupRejectedOrders] = useState<PickupOrder[]>([
+  const [pickupRejectedOrders, setPickupRejectedOrdersRaw] = useState<PickupOrder[]>([
     {
       id: 'ORD-PICK-REJ-01',
       sellerName: 'Hari Wood Crafts',
@@ -362,10 +424,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: '2026-06-09 10:00',
       updated_at: '2026-06-09 12:00',
       rejectedDate: '2026-06-10',
+      rejectionReason: 'Invalid seller license',
+      rejectedBy: 'Transporter',
     },
   ]);
 
-  const [pickupRescheduledOrders, setPickupRescheduledOrders] = useState<PickupOrder[]>([
+  const [pickupRescheduledOrders, setPickupRescheduledOrdersRaw] = useState<PickupOrder[]>([
     {
       id: 'ORD-PICK-RES-01',
       sellerName: 'Baliraja Rice Mill',
@@ -387,11 +451,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shgPickupSchedule: '2026-06-16 10:00 AM (Rescheduled)',
       transporterDetails: { name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area' },
       transporterPickupSchedule: '2026-06-16 11:30 AM (Rescheduled)',
+      rescheduledBy: 'SHG',
     }
   ]);
 
   // 2. Drop Orders
-  const [dropNewOrders, setDropNewOrders] = useState<DropOrder[]>([
+  const [dropNewOrders, setDropNewOrdersRaw] = useState<DropOrder[]>([
     {
       id: 'ORD-DROP-101',
       buyerName: 'Urban Supermart Pune',
@@ -436,7 +501,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [dropAssignedOrders, setDropAssignedOrders] = useState<DropOrder[]>([
+  const [dropAssignedOrders, setDropAssignedOrdersRaw] = useState<DropOrder[]>([
     {
       id: 'ORD-DROP-201',
       buyerName: 'Gramin Mandi Mumbai',
@@ -464,7 +529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [dropRejectedOrders, setDropRejectedOrders] = useState<DropOrder[]>([
+  const [dropRejectedOrders, setDropRejectedOrdersRaw] = useState<DropOrder[]>([
     {
       id: 'ORD-DROP-REJ-01',
       buyerName: 'Green Foods Outlet',
@@ -488,10 +553,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       barcode: 'BAR-ORD-DROP-REJ-01-9582',
       shgDetails: { name: 'Savitri Co-op', mobile: '9876543213', address: 'Village D, Junnar' },
       transporterDetails: { name: 'Ravi Logistics', mobile: '9876543222', address: 'Industrial Estate, Phase 1' },
+      rejectionReason: 'Damaged packaging detected',
+      rejectedBy: 'SHG',
     },
   ]);
 
-  const [dropRescheduledOrders, setDropRescheduledOrders] = useState<DropOrder[]>([
+  const [dropRescheduledOrders, setDropRescheduledOrdersRaw] = useState<DropOrder[]>([
     {
       id: 'ORD-DROP-RES-01',
       buyerName: 'Gramin Mandi Mumbai',
@@ -516,10 +583,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shgPickupSchedule: '2026-06-15 10:00 AM (Rescheduled)',
       transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
       transporterPickupSchedule: '2026-06-15 11:30 AM (Rescheduled)',
+      rescheduledBy: 'Transporter',
     },
   ]);
 
-  const [dropCompletedOrders, setDropCompletedOrders] = useState<DropOrder[]>([
+  const [dropCompletedOrders, setDropCompletedOrdersRaw] = useState<DropOrder[]>([
     {
       id: 'ORD-DROP-CMP-01',
       buyerName: 'Urban Supermart Pune',
@@ -549,7 +617,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ]);
 
   // 3. Return Orders
-  const [returnNewOrders, setReturnNewOrders] = useState<ReturnOrder[]>([
+  const [returnNewOrders, setReturnNewOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-101',
       buyerName: 'Green Grocers Pune',
@@ -575,7 +643,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnAssignedOrders, setReturnAssignedOrders] = useState<ReturnOrder[]>([
+  const [returnAssignedOrders, setReturnAssignedOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-201',
       buyerName: 'Health Foods Mumbai',
@@ -607,7 +675,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnPickupNewOrders, setReturnPickupNewOrders] = useState<ReturnOrder[]>([
+  const [returnPickupNewOrders, setReturnPickupNewOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-201',
       buyerName: 'Health Foods Mumbai',
@@ -639,7 +707,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnPickupCompletedOrders, setReturnPickupCompletedOrders] = useState<ReturnOrder[]>([
+  const [returnPickupCompletedOrders, setReturnPickupCompletedOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-COMP-01',
       buyerName: 'Organic Store Karjat',
@@ -671,7 +739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnDropNewOrders, setReturnDropNewOrders] = useState<ReturnOrder[]>([
+  const [returnDropNewOrders, setReturnDropNewOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-DROP-101',
       buyerName: 'Organic Store Karjat',
@@ -702,7 +770,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnDropCompletedOrders, setReturnDropCompletedOrders] = useState<ReturnOrder[]>([
+  const [returnDropCompletedOrders, setReturnDropCompletedOrdersRaw] = useState<ReturnOrder[]>([
     {
       id: 'ORD-RET-DROP-CMP-01',
       buyerName: 'Fresh Mandi Mumbai',
@@ -740,7 +808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ];
 
   // 4. Inventory items
-  const [incomingInventory, setIncomingInventory] = useState<InventoryItem[]>([
+  const [incomingInventory, setIncomingInventoryRaw] = useState<InventoryItem[]>([
     {
       id: 'ORD-INV-001',
       sellerName: 'Anita Farms',
@@ -789,7 +857,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnPickupInventory, setReturnPickupInventory] = useState<InventoryItem[]>([
+  const [returnPickupInventory, setReturnPickupInventoryRaw] = useState<InventoryItem[]>([
     {
       id: 'ORD-INV-003',
       sellerName: 'Kalyani SHG Products',
@@ -813,7 +881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [dropInventory, setDropInventory] = useState<InventoryItem[]>([
+  const [dropInventory, setDropInventoryRaw] = useState<InventoryItem[]>([
     {
       id: 'ORD-INV-004',
       sellerName: 'Eco Weavers',
@@ -828,7 +896,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  const [returnDropInventory, setReturnDropInventory] = useState<InventoryItem[]>([
+  const [returnDropInventory, setReturnDropInventoryRaw] = useState<InventoryItem[]>([
     {
       id: 'ORD-INV-005',
       sellerName: 'Nutty Farms Cashews',
@@ -847,6 +915,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       storeDate: '2026-06-13',
     },
   ]);
+
+  const setPickupNewOrders = wrapSetter(setPickupNewOrdersRaw);
+  const setPickupAssignedOrders = wrapSetter(setPickupAssignedOrdersRaw);
+  const setPickupWarehouseOrders = wrapSetter(setPickupWarehouseOrdersRaw);
+  const setPickupRejectedOrders = wrapSetter(setPickupRejectedOrdersRaw);
+  const setPickupRescheduledOrders = wrapSetter(setPickupRescheduledOrdersRaw);
+
+  const setDropNewOrders = wrapSetter(setDropNewOrdersRaw);
+  const setDropAssignedOrders = wrapSetter(setDropAssignedOrdersRaw);
+  const setDropRejectedOrders = wrapSetter(setDropRejectedOrdersRaw);
+  const setDropRescheduledOrders = wrapSetter(setDropRescheduledOrdersRaw);
+  const setDropCompletedOrders = wrapSetter(setDropCompletedOrdersRaw);
+
+  const setReturnNewOrders = wrapSetter(setReturnNewOrdersRaw);
+  const setReturnAssignedOrders = wrapSetter(setReturnAssignedOrdersRaw);
+  const setReturnPickupNewOrders = wrapSetter(setReturnPickupNewOrdersRaw);
+  const setReturnPickupCompletedOrders = wrapSetter(setReturnPickupCompletedOrdersRaw);
+  const setReturnDropNewOrders = wrapSetter(setReturnDropNewOrdersRaw);
+  const setReturnDropCompletedOrders = wrapSetter(setReturnDropCompletedOrdersRaw);
+
+  const setIncomingInventory = wrapSetter(setIncomingInventoryRaw);
+  const setReturnPickupInventory = wrapSetter(setReturnPickupInventoryRaw);
+  const setDropInventory = wrapSetter(setDropInventoryRaw);
+  const setReturnDropInventory = wrapSetter(setReturnDropInventoryRaw);
 
   // 5. Partner Profiles
   const [shgList, setShgList] = useState<SHGProfile[]>([
@@ -896,20 +988,184 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transporterMobile: order.transporterDetails?.mobile,
       transporterAddress: order.transporterDetails?.address,
       orderDate: order.orderDate,
-      barcode: generateBarcode(order.id),
+      barcode: order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`,
       storeDate: new Date().toISOString().split('T')[0],
     };
     setIncomingInventory((prev) => [...prev, newItem]);
+
+    // Update status in rejected orders list
+    setPickupRejectedOrders((prev) =>
+      prev.map((r) =>
+        r.id === orderId
+          ? {
+              ...r,
+              status: 'stored',
+              mainStatus: 'stored',
+              barcode: order.barcode || r.barcode || newItem.barcode,
+            }
+          : r
+      )
+    );
   };
 
-  // Dispatches item from incoming inventory
+  // Dispatches item from incoming inventory or return drop inventory
   const dispatchInventory = (orderId: string) => {
-    setIncomingInventory((prev) =>
-      prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
+    const returnDropItem = returnDropInventory.find((item) => item.id === orderId);
+    if (returnDropItem) {
+      // Update status in returnDropInventory instead of removing
+      setReturnDropInventory((prev) =>
+        prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
+      );
+      
+      // Add to dropNewOrders
+      const newDrop: DropOrder = {
+        id: returnDropItem.id,
+        buyerName: returnDropItem.buyerName,
+        buyerMobile: returnDropItem.buyerMobile,
+        buyerAddress: returnDropItem.buyerAddress,
+        buyerVillage: returnDropItem.buyerVillage || 'Pune',
+        buyerPincode: '411001',
+        productCount: returnDropItem.productCount,
+        totalQty: returnDropItem.totalQty,
+        totalWeight: returnDropItem.totalWeight,
+        shgStatus: 'pending',
+        transporterStatus: 'pending',
+        mainStatus: 'shg_pending_acceptance',
+        status: 'pending',
+        orderDate: returnDropItem.orderDate || new Date().toISOString().split('T')[0],
+        barcode: returnDropItem.barcode,
+        sellerName: returnDropItem.sellerName,
+        sellerMobile: returnDropItem.sellerMobile || 'N/A',
+        sellerAddress: returnDropItem.sellerAddress || 'Gram Mandi Hub Store',
+        sellerVillage: returnDropItem.sellerVillage || 'Indapur',
+        sellerPincode: '413106',
+      };
+      setDropNewOrders((prev) => [...prev, newDrop]);
+    } else {
+      setIncomingInventory((prev) =>
+        prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
+      );
+    }
+  };
+
+  const intakePickupOrders = (orderIds: string[]) => {
+    const ordersToMove = pickupAssignedOrders.filter((o) => orderIds.includes(o.id));
+    if (ordersToMove.length === 0) return;
+
+    setPickupAssignedOrders((prev) => prev.filter((o) => !orderIds.includes(o.id)));
+
+    const warehouseItems: PickupOrder[] = ordersToMove.map((order) => ({
+      ...order,
+      mainStatus: 'at hub',
+      status: 'hub received',
+      barcode: undefined,
+      warehouseReceivedDate: new Date().toISOString().split('T')[0],
+    }));
+
+    setPickupWarehouseOrders((prev) => [...prev, ...warehouseItems]);
+
+    // Update status in rejected orders as well
+    setPickupRejectedOrders((prev) =>
+      prev.map((r) =>
+        orderIds.includes(r.id)
+          ? { ...r, mainStatus: 'at hub', status: 'hub received', barcode: undefined }
+          : r
+      )
     );
-    setReturnDropInventory((prev) =>
-      prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
-    );
+  };
+
+  const intakeReturnOrder = (orderId: string, returnType: 'pickup' | 'drop') => {
+    if (returnType === 'drop') {
+      const order = returnDropCompletedOrders.find((o) => o.id === orderId);
+      if (!order) return;
+
+      setReturnDropCompletedOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+      const code = order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const newItem: InventoryItem = {
+        id: order.id,
+        sellerName: order.sellerName || 'N/A',
+        sellerMobile: order.sellerMobile,
+        sellerVillage: order.sellerVillage,
+        buyerName: order.buyerName,
+        buyerMobile: order.buyerMobile,
+        buyerAddress: order.buyerAddress,
+        buyerVillage: order.buyerVillage,
+        productCount: order.productCount,
+        totalQty: order.totalQty,
+        totalWeight: order.totalWeight,
+        status: 'STORED',
+        shgName: order.shgDetails?.name,
+        shgMobile: order.shgDetails?.mobile,
+        shgAddress: order.shgDetails?.address,
+        transporterName: order.transporterDetails?.name,
+        transporterMobile: order.transporterDetails?.mobile,
+        transporterAddress: order.transporterDetails?.address,
+        orderDate: order.orderDate,
+        barcode: code,
+        storeDate: new Date().toISOString().split('T')[0],
+      };
+      setReturnDropInventory((prev) => [...prev, newItem]);
+
+      // Create copy in Drop -> New Orders, Status: PENDING
+      const newDrop: DropOrder = {
+        id: order.id,
+        buyerName: order.buyerName,
+        buyerMobile: order.buyerMobile,
+        buyerAddress: order.buyerAddress,
+        buyerVillage: order.buyerVillage || 'Pune',
+        buyerPincode: order.buyerPincode || '411001',
+        productCount: order.productCount,
+        totalQty: order.totalQty,
+        totalWeight: order.totalWeight,
+        shgStatus: 'pending',
+        transporterStatus: 'pending',
+        mainStatus: 'PENDING',
+        status: 'PENDING',
+        orderDate: order.orderDate || new Date().toISOString().split('T')[0],
+        barcode: code,
+        sellerName: order.sellerName,
+        sellerMobile: order.sellerMobile || 'N/A',
+        sellerAddress: order.sellerAddress || 'Gram Mandi Hub Store',
+        sellerVillage: order.sellerVillage || 'Indapur',
+        sellerPincode: order.sellerPincode || '413106',
+        pickupStatus: 'PENDING',
+      };
+      setDropNewOrders((prev) => [...prev, newDrop]);
+    } else {
+      const order = returnPickupCompletedOrders.find((o) => o.id === orderId);
+      if (!order) return;
+
+      setReturnPickupCompletedOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+      const code = order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const newItem: InventoryItem = {
+        id: order.id,
+        sellerName: order.sellerName || 'N/A',
+        sellerMobile: order.sellerMobile,
+        sellerVillage: order.sellerVillage,
+        buyerName: order.buyerName,
+        buyerMobile: order.buyerMobile,
+        buyerAddress: order.buyerAddress,
+        buyerVillage: order.buyerVillage,
+        productCount: order.productCount,
+        totalQty: order.totalQty,
+        totalWeight: order.totalWeight,
+        status: 'STORED',
+        shgName: order.shgDetails?.name,
+        shgMobile: order.shgDetails?.mobile,
+        shgAddress: order.shgDetails?.address,
+        transporterName: order.transporterDetails?.name,
+        transporterMobile: order.transporterDetails?.mobile,
+        transporterAddress: order.transporterDetails?.address,
+        orderDate: order.orderDate,
+        barcode: code,
+        storeDate: new Date().toISOString().split('T')[0],
+      };
+      setReturnPickupInventory((prev) => [...prev, newItem]);
+    }
   };
 
   const generateOTP = (orderId: string) => {
@@ -919,8 +1175,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const generateBarcode = (orderId: string) => {
-    // Return standard dummy code or string format
-    return `BAR-${orderId}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const code = `BAR-${orderId}-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    const order = pickupWarehouseOrders.find((o) => o.id === orderId);
+    if (order) {
+      setPickupWarehouseOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+      const newItem: InventoryItem = {
+        id: order.id,
+        sellerName: order.sellerName,
+        sellerMobile: order.sellerMobile,
+        sellerVillage: order.sellerVillage,
+        buyerName: 'Mandi Wholesale',
+        buyerMobile: '9900112233',
+        buyerAddress: 'Gram Mandi Hub Store',
+        buyerVillage: 'Pune',
+        productCount: order.productCount,
+        totalQty: order.totalQty,
+        totalWeight: order.totalWeight,
+        status: 'STORED',
+        shgName: order.shgDetails?.name,
+        shgMobile: order.shgDetails?.mobile,
+        shgAddress: order.shgDetails?.address,
+        transporterName: order.transporterDetails?.name,
+        transporterMobile: order.transporterDetails?.mobile,
+        transporterAddress: order.transporterDetails?.address,
+        orderDate: order.orderDate,
+        barcode: code,
+        storeDate: new Date().toISOString().split('T')[0],
+      };
+      setIncomingInventory((prev) => [...prev, newItem]);
+
+      const newDrop: DropOrder = {
+        id: order.id,
+        buyerName: 'Mandi Wholesale',
+        buyerMobile: '9900112233',
+        buyerAddress: 'Gram Mandi Hub Store',
+        buyerVillage: 'Pune',
+        buyerPincode: '411001',
+        productCount: order.productCount,
+        totalQty: order.totalQty,
+        totalWeight: order.totalWeight,
+        shgStatus: 'pending',
+        transporterStatus: 'pending',
+        mainStatus: 'shg_pending_acceptance',
+        status: 'pending',
+        sellerName: order.sellerName,
+        sellerMobile: order.sellerMobile,
+        sellerAddress: order.sellerAddress,
+        sellerVillage: order.sellerVillage,
+        sellerPincode: order.sellerPincode,
+        orderDate: order.orderDate,
+        barcode: code,
+      };
+      setDropNewOrders((prev) => [...prev, newDrop]);
+
+      setPickupRejectedOrders((prev) =>
+        prev.map((r) =>
+          r.id === orderId
+            ? {
+                ...r,
+                status: 'BARCODE_GENERATED',
+                mainStatus: 'BARCODE_GENERATED',
+                barcode: code,
+              }
+            : r
+        )
+      );
+    }
+    
+    return code;
   };
 
   const approveSHG = (id: string) => {
@@ -986,37 +1310,532 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // increment assigned count
       setShgList(prev => prev.map(s => s.id === shgId ? { ...s, assignedOrders: s.assignedOrders + 1 } : s));
       setTransporterList(prev => prev.map(t => t.id === transporterId ? { ...t, assignedOrders: t.assignedOrders + 1 } : t));
+
+      // Update status in rejected orders list
+      setPickupRejectedOrders((prev) =>
+        prev.map((r) =>
+          r.id === orderId
+            ? {
+                ...r,
+                shgStatus: 'Accepted',
+                transporterStatus: 'Accepted',
+                mainStatus: 'pickup assigned',
+                status: 'pickup assigned',
+              }
+            : r
+        )
+      );
     }
+  };
+
+  const simulateSHGAction = (
+    orderId: string,
+    type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop',
+    action: 'accept' | 'reject' | 'reschedule' | 'pick' | 'deliver' | 'return-delivered',
+    payload?: any
+  ) => {
+    if (type === 'pickup') {
+      if (action === 'accept') {
+        const order = pickupNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setPickupNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const updated: PickupOrder = {
+            ...order,
+            shgStatus: 'Accepted',
+            mainStatus: 'pickup shg accepted',
+            shgDetails: payload?.shgDetails || { name: 'Demo SHG', mobile: '9876543210', address: 'Village Center' },
+            shgPickupSchedule: payload?.shgPickupSchedule || 'Tomorrow, 10:00 AM',
+          };
+          setPickupAssignedOrders(prev => [...prev, updated]);
+          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'Accepted', mainStatus: 'pickup shg accepted' } : r));
+        }
+      } else if (action === 'reject') {
+        const order = pickupNewOrders.find(o => o.id === orderId);
+        if (order) {
+          const rejected: PickupOrder = {
+            ...order,
+            shgStatus: 'rejected',
+            mainStatus: 'pending',
+            rejectedDate: new Date().toISOString().split('T')[0],
+            rejectionReason: payload?.rejectionReason || 'SHG rejected the request',
+            rejectedBy: 'SHG',
+          };
+          setPickupRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
+          setPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+        }
+      } else if (action === 'reschedule') {
+        const order = pickupNewOrders.find(o => o.id === orderId) || pickupAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          const rescheduled: PickupOrder = {
+            ...order,
+            mainStatus: 'rescheduled',
+            shgPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
+            rescheduledBy: 'SHG',
+          };
+          setPickupRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
+          setPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
+          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
+          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : r));
+        }
+      } else if (action === 'pick') {
+        setPickupAssignedOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              shgStatus: 'picked',
+              mainStatus: 'parcel at shg',
+              transporterStatus: 'pending',
+            };
+          }
+          return o;
+        }));
+        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'picked', mainStatus: 'parcel at shg', transporterStatus: 'pending' } : r));
+      }
+    } else if (type === 'drop') {
+      if (action === 'accept') {
+        const order = dropNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setDropNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const updated: DropOrder = {
+            ...order,
+            shgStatus: 'ACCEPTED',
+            transporterStatus: 'DROP_ASSIGNED',
+            mainStatus: 'DROP_SHG_ACCEPTED',
+            pickupStatus: 'PENDING',
+            shgDetails: payload?.shgDetails || { name: 'Demo SHG', mobile: '9876543210', address: 'Village Center' },
+            shgPickupSchedule: payload?.shgPickupSchedule || 'Tomorrow, 10:00 AM',
+          };
+          setDropAssignedOrders(prev => [...prev, updated]);
+          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'ACCEPTED', transporterStatus: 'DROP_ASSIGNED', mainStatus: 'DROP_SHG_ACCEPTED', pickupStatus: 'PENDING' } : r));
+        }
+      } else if (action === 'reject') {
+        const order = dropNewOrders.find(o => o.id === orderId);
+        if (order) {
+          const rejected: DropOrder = {
+            ...order,
+            shgStatus: 'rejected',
+            mainStatus: 'pending',
+            rejectedDate: new Date().toISOString().split('T')[0],
+            rejectionReason: payload?.rejectionReason || 'SHG rejected request',
+            rejectedBy: 'SHG',
+          };
+          setDropRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
+          setDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+        }
+      } else if (action === 'reschedule') {
+        const order = dropNewOrders.find(o => o.id === orderId) || dropAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          const rescheduled: DropOrder = {
+            ...order,
+            mainStatus: 'rescheduled',
+            shgPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
+            rescheduledBy: 'SHG',
+          };
+          setDropRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
+          setDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
+          setDropAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
+          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : r));
+        }
+      } else if (action === 'deliver') {
+        const order = dropAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
+          const updated: DropOrder = {
+            ...order,
+            shgStatus: 'drop shg delivered',
+            mainStatus: 'completed',
+            deliveredDate: new Date().toISOString().split('T')[0],
+          };
+          setDropCompletedOrders(prev => [...prev, updated]);
+          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'drop shg delivered', mainStatus: 'completed' } : r));
+        }
+      }
+    } else if (type === 'return-pickup') {
+      if (action === 'accept') {
+        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'SHG_ACCEPTED', mainStatus: 'SHG_ACCEPTED', status: 'SHG_ACCEPTED' } : o));
+      } else if (action === 'reject') {
+        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+      } else if (action === 'pick') {
+        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'RETURN_PICKED_BY_SHG', mainStatus: 'RETURN_PICKED_BY_SHG', status: 'RETURN_PICKED_BY_SHG', transporterStatus: 'pending' } : o));
+      }
+    } else if (type === 'return-drop') {
+      if (action === 'accept') {
+        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'Accepted', mainStatus: 'shg accepted' } : o));
+      } else if (action === 'reject') {
+        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+      } else if (action === 'return-delivered') {
+        const order = returnDropNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const updated: ReturnOrder = {
+            ...order,
+            shgStatus: 'completed',
+            mainStatus: 'completed',
+            status: 'completed',
+            completionDate: new Date().toISOString().split('T')[0],
+          };
+          setReturnDropCompletedOrders(prev => [...prev, updated]);
+        }
+      }
+    }
+  };
+
+  const simulateTransporterAction = (
+    orderId: string,
+    type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop',
+    action: 'accept' | 'reject' | 'reschedule' | 'transit' | 'delivered-shg' | 'pickup-from-gmu' | 'shg-not-available' | 'return-to-gmu' | 'deliver-to-gmu' | 'drop-to-gmu',
+    payload?: any
+  ) => {
+    if (type === 'pickup') {
+      if (action === 'accept') {
+        setPickupAssignedOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              transporterStatus: 'transporter accepted',
+              transporterDetails: payload?.transporterDetails || { name: 'Demo Transporter', mobile: '9900088776', address: 'Logistics Hub' },
+              transporterPickupSchedule: payload?.transporterPickupSchedule || 'Tomorrow, 12:00 PM',
+            };
+          }
+          return o;
+        }));
+        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'transporter accepted' } : r));
+      } else if (action === 'reject') {
+        const order = pickupAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          const rejected: PickupOrder = {
+            ...order,
+            transporterStatus: 'rejected',
+            mainStatus: 'pending',
+            rejectedDate: new Date().toISOString().split('T')[0],
+            rejectionReason: payload?.rejectionReason || 'Transporter rejected request',
+            rejectedBy: 'Transporter',
+          };
+          setPickupRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
+          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'rejected', mainStatus: 'pending' } : o));
+        }
+      } else if (action === 'reschedule') {
+        const order = pickupAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          const rescheduled: PickupOrder = {
+            ...order,
+            mainStatus: 'rescheduled',
+            transporterPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
+            rescheduledBy: 'Transporter',
+          };
+          setPickupRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
+          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : o));
+          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : r));
+        }
+      } else if (action === 'transit') {
+        setPickupAssignedOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              transporterStatus: 'in transit to hub',
+              mainStatus: 'in transit to hub',
+            };
+          }
+          return o;
+        }));
+        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'in transit to hub', mainStatus: 'in transit to hub' } : r));
+      }
+    } else if (type === 'drop') {
+      if (action === 'accept') {
+        setDropAssignedOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              transporterStatus: 'TRANSPORTER_ACCEPTED',
+              pickupStatus: 'PENDING',
+              transporterDetails: payload?.transporterDetails || { name: 'Demo Transporter', mobile: '9900088776', address: 'Logistics Hub' },
+              transporterPickupSchedule: payload?.transporterPickupSchedule || 'Tomorrow, 12:00 PM',
+            };
+          }
+          return o;
+        }));
+        setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'TRANSPORTER_ACCEPTED', pickupStatus: 'PENDING' } : r));
+
+      } else if (action === 'reject') {
+        const order = dropAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          if (order.transporterStatus === 'pending') {
+            const rejected: DropOrder = {
+              ...order,
+              transporterStatus: 'rejected',
+              mainStatus: 'pending',
+              rejectedDate: new Date().toISOString().split('T')[0],
+              rejectionReason: payload?.rejectionReason || 'Transporter rejected request',
+              rejectedBy: 'Transporter',
+            };
+            setDropRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
+            setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
+            
+            const newRequest: DropOrder = {
+              ...order,
+              shgStatus: 'pending',
+              transporterStatus: 'pending',
+              mainStatus: 'shg_pending_acceptance',
+            };
+            setDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), newRequest]);
+          } else {
+            setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
+            const returnOrder: ReturnOrder = {
+              id: order.id,
+              buyerName: order.buyerName,
+              buyerMobile: order.buyerMobile,
+              buyerAddress: order.buyerAddress,
+              buyerVillage: order.buyerVillage,
+              buyerPincode: order.buyerPincode,
+              productCount: order.productCount,
+              totalQty: order.totalQty,
+              totalWeight: order.totalWeight,
+              orderDate: order.orderDate || new Date().toISOString().split('T')[0],
+              shgStatus: 'Return Drop Initiated',
+              transporterStatus: 'Return Drop Initiated',
+              mainStatus: 'Return Drop Initiated',
+              status: 'Return Drop Initiated',
+              created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+              updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+              sellerName: order.sellerName,
+              sellerMobile: order.sellerMobile,
+              sellerAddress: order.sellerAddress,
+              sellerVillage: order.sellerVillage,
+              sellerPincode: order.sellerPincode,
+              barcode: order.barcode,
+              shgDetails: order.shgDetails,
+              transporterDetails: order.transporterDetails,
+            };
+            setReturnDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), returnOrder]);
+          }
+        }
+      } else if (action === 'reschedule') {
+        const order = dropAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          const rescheduled: DropOrder = {
+            ...order,
+            mainStatus: 'rescheduled',
+            transporterPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
+            rescheduledBy: 'Transporter',
+          };
+          setDropRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
+          setDropAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : o));
+          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : r));
+        }
+      } else if (action === 'delivered-shg') {
+        setDropAssignedOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              transporterStatus: 'parcel at drop shg',
+              mainStatus: 'parcel at drop shg',
+            };
+          }
+          return o;
+        }));
+        setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'parcel at drop shg', mainStatus: 'parcel at drop shg' } : r));
+      } else if (action === 'shg-not-available') {
+        const order = dropAssignedOrders.find(o => o.id === orderId);
+        if (order) {
+          setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
+          const returnOrder: ReturnOrder = {
+            id: order.id,
+            buyerName: order.buyerName,
+            buyerMobile: order.buyerMobile,
+            buyerAddress: order.buyerAddress,
+            buyerVillage: order.buyerVillage,
+            buyerPincode: order.buyerPincode,
+            productCount: order.productCount,
+            totalQty: order.totalQty,
+            totalWeight: order.totalWeight,
+            orderDate: order.orderDate || new Date().toISOString().split('T')[0],
+            shgStatus: 'SHG NOT AVAILABLE',
+            transporterStatus: 'pending',
+            mainStatus: 'SHG NOT AVAILABLE',
+            status: 'SHG NOT AVAILABLE',
+            created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            sellerName: order.sellerName,
+            sellerMobile: order.sellerMobile,
+            sellerAddress: order.sellerAddress,
+            sellerVillage: order.sellerVillage,
+            sellerPincode: order.sellerPincode,
+            barcode: order.barcode,
+            shgDetails: order.shgDetails,
+            transporterDetails: order.transporterDetails,
+          };
+          setReturnDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), returnOrder]);
+        }
+      }
+    } else if (type === 'return-pickup') {
+      if (action === 'accept') {
+        setReturnPickupNewOrders(prev => prev.map(o => {
+          if (o.id === orderId) {
+            const matchingTrans = transporterList.find(t =>
+              t.route.toLowerCase().includes(o.buyerVillage.toLowerCase()) ||
+              t.route.toLowerCase().includes(o.buyerPincode.toLowerCase())
+            ) || transporterList[0];
+            return {
+              ...o,
+              transporterStatus: 'TRANSPORTER_ACCEPTED',
+              mainStatus: 'TRANSPORTER_ACCEPTED',
+              status: 'TRANSPORTER_ACCEPTED',
+              transporterDetails: {
+                name: matchingTrans.name,
+                mobile: matchingTrans.mobile,
+                address: matchingTrans.address,
+              },
+              transporterPickupSchedule: 'Tomorrow, 12:00 PM',
+            };
+          }
+          return o;
+        }));
+      } else if (action === 'transit') {
+        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? {
+          ...o,
+          transporterStatus: 'IN_TRANSIT_TO_GMU',
+          mainStatus: 'IN_TRANSIT_TO_GMU',
+          status: 'IN_TRANSIT_TO_GMU',
+        } : o));
+      } else if (action === 'deliver-to-gmu') {
+        const order = returnPickupNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setReturnPickupNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const updated: ReturnOrder = {
+            ...order,
+            transporterStatus: 'RETURN_RECEIVED_AT_GMU',
+            mainStatus: 'RETURN_RECEIVED_AT_GMU',
+            status: 'RETURN_RECEIVED_AT_GMU',
+            completionDate: new Date().toISOString().split('T')[0],
+          };
+          setReturnPickupCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), updated]);
+        }
+      }
+    } else if (type === 'return-drop') {
+      if (action === 'accept') {
+        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'Accepted' } : o));
+
+      } else if (action === 'return-to-gmu') {
+        const order = returnDropNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const completedOrder: ReturnOrder = {
+            ...order,
+            shgStatus: 'RETURNED_TO_GMU',
+            transporterStatus: 'RETURNED_TO_GMU',
+            mainStatus: 'RETURNED_TO_GMU',
+            status: 'RETURNED_TO_GMU',
+            completionDate: new Date().toISOString().split('T')[0],
+          };
+          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
+        }
+      } else if (action === 'drop-to-gmu') {
+        const order = returnDropNewOrders.find(o => o.id === orderId);
+        if (order) {
+          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const completedOrder: ReturnOrder = {
+            ...order,
+            shgStatus: 'Completed',
+            transporterStatus: 'Completed',
+            mainStatus: 'Completed',
+            status: 'Completed',
+            completionDate: new Date().toISOString().split('T')[0],
+          };
+          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
+        }
+      } else if (action === 'delivered-shg') {
+        const order = returnDropNewOrders.find(o => o.id === orderId);
+        if (order && (order.shgStatus === 'SHG Not Available' || order.shgStatus === 'SHG NOT AVAILABLE')) {
+          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
+          const completedOrder: ReturnOrder = {
+            ...order,
+            shgStatus: 'completed',
+            transporterStatus: 'completed',
+            mainStatus: 'completed',
+            status: 'completed',
+            completionDate: new Date().toISOString().split('T')[0],
+          };
+          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
+        } else {
+          setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'parcel at drop shg', mainStatus: 'parcel at drop shg' } : o));
+        }
+      }
+    }
+  };
+
+  const requestBuyerReturn = (dropOrderId: string) => {
+    const dropOrder = dropCompletedOrders.find((o) => o.id === dropOrderId);
+    if (!dropOrder) return;
+
+    const originalSHG = dropOrder.shgDetails;
+
+    const newReturn: ReturnOrder = {
+      id: dropOrder.id,
+      buyerName: dropOrder.buyerName,
+      buyerMobile: dropOrder.buyerMobile,
+      buyerAddress: dropOrder.buyerAddress,
+      buyerVillage: dropOrder.buyerVillage,
+      buyerPincode: dropOrder.buyerPincode,
+      productCount: dropOrder.productCount,
+      totalQty: dropOrder.totalQty,
+      totalWeight: dropOrder.totalWeight,
+      orderDate: new Date().toISOString().split('T')[0],
+      shgStatus: 'pending',
+      transporterStatus: 'pending',
+      mainStatus: 'pending',
+      status: 'pending',
+      created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      shgDetails: originalSHG,
+      sellerName: dropOrder.sellerName,
+      sellerMobile: dropOrder.sellerMobile,
+      sellerAddress: dropOrder.sellerAddress,
+      sellerVillage: dropOrder.sellerVillage,
+      sellerPincode: dropOrder.sellerPincode,
+      barcode: dropOrder.barcode,
+    };
+
+    setReturnPickupNewOrders((prev) => [...prev.filter((o) => o.id !== dropOrderId), newReturn]);
+  };
+
+  const enrich = <T extends { sectionEnteredAt?: string }>(items: T[]): T[] => {
+    return items.map(item => ({
+      ...item,
+      sectionEnteredAt: item.sectionEnteredAt || appLoadTime
+    }));
   };
 
   return (
     <AppContext.Provider
       value={{
-        pickupNewOrders,
-        pickupAssignedOrders,
-        pickupWarehouseOrders,
-        pickupRejectedOrders,
-        pickupRescheduledOrders,
-        dropNewOrders,
-        dropAssignedOrders,
-        dropRejectedOrders,
-        dropRescheduledOrders,
-        dropCompletedOrders,
-        returnNewOrders,
-        returnAssignedOrders,
-        returnCompletedOrders,
-        returnPickupNewOrders,
-        returnPickupCompletedOrders,
-        returnDropNewOrders,
-        returnDropCompletedOrders,
-        incomingInventory,
-        returnPickupInventory,
-        dropInventory,
-        returnDropInventory,
+        pickupNewOrders: enrich(pickupNewOrders),
+        pickupAssignedOrders: enrich(pickupAssignedOrders),
+        pickupWarehouseOrders: enrich(pickupWarehouseOrders),
+        pickupRejectedOrders: enrich(pickupRejectedOrders),
+        pickupRescheduledOrders: enrich(pickupRescheduledOrders),
+        dropNewOrders: enrich(dropNewOrders),
+        dropAssignedOrders: enrich(dropAssignedOrders),
+        dropRejectedOrders: enrich(dropRejectedOrders),
+        dropRescheduledOrders: enrich(dropRescheduledOrders),
+        dropCompletedOrders: enrich(dropCompletedOrders),
+        returnNewOrders: enrich(returnNewOrders),
+        returnAssignedOrders: enrich(returnAssignedOrders),
+        returnCompletedOrders: enrich(returnCompletedOrders),
+        returnPickupNewOrders: enrich(returnPickupNewOrders),
+        returnPickupCompletedOrders: enrich(returnPickupCompletedOrders),
+        returnDropNewOrders: enrich(returnDropNewOrders),
+        returnDropCompletedOrders: enrich(returnDropCompletedOrders),
+        incomingInventory: enrich(incomingInventory),
+        returnPickupInventory: enrich(returnPickupInventory),
+        dropInventory: enrich(dropInventory),
+        returnDropInventory: enrich(returnDropInventory),
         shgList,
         transporterList,
         readyToStore,
         dispatchInventory,
+        intakePickupOrders,
+        intakeReturnOrder,
+        requestBuyerReturn,
         generateOTP,
         generateBarcode,
         approveSHG,
@@ -1024,6 +1843,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addNewSHG,
         addNewTransporter,
         assignPickupOrder,
+        simulateSHGAction,
+        simulateTransporterAction,
       }}
     >
       {children}
