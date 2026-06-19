@@ -128,6 +128,14 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
       />
 
       {selectedAddressOrder && (() => {
+        const formatAddress = (addr: any) => {
+          if (!addr) return '';
+          if (typeof addr === 'string') return addr;
+          return [addr.addressLine1, addr.addressLine2, addr.city, addr.state, addr.pincode]
+            .filter(Boolean)
+            .join(', ');
+        };
+
         let pickup = selectedAddressOrder.seller?.address;
         let delivery = selectedAddressOrder.buyer?.address;
         
@@ -142,8 +150,8 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
             visible={!!selectedAddressOrder}
             onClose={() => setSelectedAddressOrder(null)}
             orderIdText={selectedAddressOrder.pickupOrderNumber || selectedAddressOrder.dropOrderNumber || selectedAddressOrder.masterOrder?.orderNumber || `ORD-${selectedAddressOrder.id}`}
-            pickupAddress={pickup}
-            deliveryAddress={delivery}
+            pickupAddress={formatAddress(pickup)}
+            deliveryAddress={formatAddress(delivery)}
             distance={'0'}
           />
         );
