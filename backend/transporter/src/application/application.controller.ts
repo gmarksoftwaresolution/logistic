@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @ApiTags('Application')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/application')
+@Controller('application')
 export class ApplicationController {
   constructor(private readonly applicationService: ApplicationService) {}
 
@@ -14,6 +14,6 @@ export class ApplicationController {
   @ApiOperation({ summary: 'Track application approval status' })
   @ApiResponse({ status: 200, description: 'Application status retrieved' })
   getStatus(@Request() req: any) {
-    return this.applicationService.getStatus(req.user.sub);
+    return this.applicationService.getStatus(req.user.id);
   }
 }

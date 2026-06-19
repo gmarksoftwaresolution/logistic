@@ -12,9 +12,26 @@ async function main() {
   const buyer = await prisma.user.findFirst({ where: { phoneNumber: '9999999991' } });
   const shg = await prisma.user.findFirst({ where: { phoneNumber: '7777777777' } });
   const transporter = await prisma.user.findFirst({ where: { phoneNumber: '9999999999' } });
-  const product = await prisma.product.findFirst();
 
-  if (!seller || !buyer || !shg || !transporter || !product) {
+  if (!seller) {
+    console.error('Missing seller in DB!');
+    return;
+  }
+
+  const product = await prisma.product.findFirst({
+    where: { name: 'chai' }
+  }) || await prisma.product.create({
+    data: {
+      name: 'chai',
+      sellerId: seller.id,
+      price: 20.0,
+      stock: 100,
+      weight: 1.0,
+      category: 'OTHER',
+    }
+  });
+
+  if (!buyer || !shg || !transporter || !product) {
     console.error('Missing required users/products in DB!', { seller: !!seller, buyer: !!buyer, shg: !!shg, transporter: !!transporter, product: !!product });
     return;
   }
@@ -46,11 +63,20 @@ async function main() {
       sellerId: seller.id,
       shgId: shg.id,
       transporterId: transporter.id,
-      status: 'PENDING',
+      status: 'COMPLETED',
+      pickupTime: new Date(),
       items: {
         create: {
           productId: product.id,
           quantity: 1,
+        }
+      },
+      tracking: {
+        createMany: {
+          data: [
+            { status: 'ACCEPTED', remarks: 'Pickup leg accepted by transporter.' },
+            { status: 'COMPLETED', remarks: 'Pickup leg completed successfully by transporter.' }
+          ]
         }
       }
     }

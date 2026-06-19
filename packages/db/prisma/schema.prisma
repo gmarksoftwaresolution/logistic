@@ -501,6 +501,7 @@ model PickupOrder {
   transporter        User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
   status             String            @default("PENDING")
   pickupTime         DateTime?         @map("pickup_time")
+  handoverCode       String?           @map("handover_code")
   createdAt          DateTime          @default(now()) @map("created_at")
 
   items              PickupOrderItem[]
@@ -565,6 +566,7 @@ model DropOrder {
   transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
   status          String          @default("PENDING")
   deliveryAddress String?         @map("delivery_address")
+  handoverCode    String?         @map("handover_code")
   createdAt       DateTime        @default(now()) @map("created_at")
 
   items           DropOrderItem[]
