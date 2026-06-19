@@ -139,6 +139,10 @@ export class OrderService {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
     }
 
+    if (pickupOrder.status !== 'PENDING' && pickupOrder.status !== 'RETURN_PENDING') {
+      throw new BadRequestException(`Cannot accept pickup order in its current status (${pickupOrder.status}). It must be PENDING or RETURN_PENDING.`);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const generatedCode = '1234';
       const nextStatus = pickupOrder.status === 'RETURN_PENDING' ? 'RETURN_ACCEPTED' : 'ACCEPTED';
@@ -202,6 +206,10 @@ export class OrderService {
 
     if (!dropOrder) {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    if (dropOrder.status !== 'PENDING' && dropOrder.status !== 'RETURN_PENDING') {
+      throw new BadRequestException(`Cannot accept drop order in its current status (${dropOrder.status}). It must be PENDING or RETURN_PENDING.`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -268,6 +276,10 @@ export class OrderService {
 
     if (!pickupOrder) {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
+    }
+
+    if (pickupOrder.status !== 'ACCEPTED' && pickupOrder.status !== 'RETURN_ACCEPTED') {
+      throw new BadRequestException(`Cannot complete pickup order in its current status (${pickupOrder.status}). It must be ACCEPTED or RETURN_ACCEPTED.`);
     }
 
     const isFromGmuHub = pickupOrder.seller?.fullName?.toLowerCase().includes('gmu') || 
@@ -341,7 +353,21 @@ export class OrderService {
             product: true,
           },
         },
-        masterOrder: true,
+        masterOrder: {
+          include: {
+            pickupOrders: {
+              include: {
+                seller: {
+                  select: {
+                    fullName: true,
+                    phoneNumber: true,
+                    address: true,
+                  }
+                }
+              }
+            }
+          }
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -379,7 +405,21 @@ export class OrderService {
                   product: true,
                 },
               },
-              masterOrder: true,
+              masterOrder: {
+                include: {
+                  pickupOrders: {
+                    include: {
+                      seller: {
+                        select: {
+                          fullName: true,
+                          phoneNumber: true,
+                          address: true,
+                        }
+                      }
+                    }
+                  }
+                }
+              },
             },
           });
         }
@@ -390,24 +430,65 @@ export class OrderService {
 
     const mappedDrops = updatedDrops.map((drop) => {
       let finalDrop = drop;
-      if (drop.status === 'REJECTED' || drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP') {
+      if (drop.status === 'REJECTED' || drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
+        const nextStatus = drop.status === 'RETURNED' ? 'COMPLETED' : 'ACCEPTED';
+        
+        // Find the pickup seller (source hub) dynamically
+        const associatedPickup = drop.masterOrder?.pickupOrders?.[0];
+        const pickupSeller = associatedPickup?.seller;
+        
+        let dynamicAddress = 'Gadhinglaj Hub';
+        let dynamicFullName = 'Gadhinglaj Hub Contact';
+        let dynamicPhoneNumber = '+91 99999 88888';
+        let dynamicVillage = 'Gadhinglaj';
+        let dynamicPincode = '416502';
+
+        // Check if the pickup point is a Hub (meaning name includes gmu/hub, or has specific phone)
+        const isPickupFromHub = pickupSeller?.fullName?.toLowerCase().includes('gmu') || 
+                               pickupSeller?.fullName?.toLowerCase().includes('hub') ||
+                               pickupSeller?.phoneNumber === '9999999992';
+
+        if (pickupSeller && isPickupFromHub) {
+          // If picked up from a Hub, return it back to that specific picked hub address
+          dynamicFullName = pickupSeller.fullName || dynamicFullName;
+          dynamicPhoneNumber = pickupSeller.phoneNumber || dynamicPhoneNumber;
+          
+          if (pickupSeller.address) {
+            const addr = pickupSeller.address;
+            const addressParts = [addr.addressLine1, addr.village, addr.taluka, addr.pincode].filter(Boolean);
+            dynamicAddress = addressParts.length > 0 ? addressParts.join(', ') : dynamicAddress;
+            dynamicVillage = addr.village || dynamicVillage;
+            dynamicPincode = addr.pincode || dynamicPincode;
+          }
+        } else {
+          // If picked up from SHG, return it back to the original destination hub
+          const isDropToHub = drop.deliveryAddress?.toLowerCase().includes('gmu') || 
+                              drop.deliveryAddress?.toLowerCase().includes('hub') ||
+                              drop.buyer?.fullName?.toLowerCase().includes('gmu') ||
+                              drop.buyer?.fullName?.toLowerCase().includes('hub') ||
+                              drop.buyer?.phoneNumber === '9999999992';
+          
+          if (isDropToHub && drop.buyer) {
+            dynamicFullName = drop.buyer.fullName || dynamicFullName;
+            dynamicPhoneNumber = drop.buyer.phoneNumber || dynamicPhoneNumber;
+            dynamicAddress = drop.deliveryAddress || dynamicAddress;
+            dynamicVillage = drop.buyer.address?.village || dynamicVillage;
+            dynamicPincode = drop.buyer.address?.pincode || dynamicPincode;
+          }
+        }
+
         finalDrop = {
           ...drop,
-          status: 'ACCEPTED',
-          deliveryAddress: 'Gadhinglaj Hub',
+          status: nextStatus,
+          deliveryAddress: dynamicAddress,
           buyer: {
-            fullName: 'Gadhinglaj Hub Contact',
-            phoneNumber: '+91 99999 88888',
+            fullName: dynamicFullName,
+            phoneNumber: dynamicPhoneNumber,
             address: {
-              village: 'Gadhinglaj',
-              pincode: '416502',
+              village: dynamicVillage,
+              pincode: dynamicPincode,
             } as any
           }
-        };
-      } else if (drop.status === 'RETURNED') {
-        finalDrop = {
-          ...drop,
-          status: 'COMPLETED',
         };
       } else if (drop.status === 'PICKED_UP') {
         finalDrop = {
@@ -435,6 +516,11 @@ export class OrderService {
 
     if (!dropOrder) {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    const allowedStatuses = ['ACCEPTED', 'PICKED_UP', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'REJECTED'];
+    if (!allowedStatuses.includes(dropOrder.status)) {
+      throw new BadRequestException(`Cannot complete drop order in its current status (${dropOrder.status}).`);
     }
 
     const isReturnDrop = ['REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP'].includes(dropOrder.status);
