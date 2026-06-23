@@ -111,65 +111,75 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      const userPhone = await AsyncStorage.getItem('user_phone_number');
-      if (userPhone && isDev && !originalRequest._retryLogin) {
-        originalRequest._retryLogin = true;
-        console.log(`[API Auto-Login] Received 401. Attempting background re-login for: ${userPhone}`);
-        try {
-          let accessToken = null;
-          // Try /auth/verify-otp first
+      const requestUrl = originalRequest?.url || '';
+      const isAuthEndpoint = requestUrl.toLowerCase().includes('auth') || requestUrl.toLowerCase().includes('registration');
+
+      if (!isAuthEndpoint) {
+        const userPhone = await AsyncStorage.getItem('user_phone_number');
+        if (userPhone && isDev && !originalRequest._retryLogin) {
+          originalRequest._retryLogin = true;
+          console.log(`[API Auto-Login] Received 401. Attempting background re-login for: ${userPhone}`);
           try {
-            const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/auth/verify-otp`, {
-              mobileNumber: userPhone,
-              otp: '123456',
-            });
-            accessToken = res.data?.accessToken;
-          } catch (authErr) {
-            console.log('[API Auto-Login] /auth/verify-otp failed, trying /registration/verify-otp...');
-            // Fall back to /registration/verify-otp
-            const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/registration/verify-otp`, {
-              mobileNumber: userPhone,
-              otp: '123456',
-            });
-            accessToken = res.data?.accessToken;
-          }
+            let accessToken = null;
+            // Try /auth/verify-otp first
+            try {
+              const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/auth/verify-otp`, {
+                mobileNumber: userPhone,
+                otp: '123456',
+              });
+              accessToken = res.data?.accessToken;
+            } catch (authErr) {
+              console.log('[API Auto-Login] /auth/verify-otp failed, trying /registration/verify-otp...');
+              // Fall back to /registration/verify-otp
+              const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/registration/verify-otp`, {
+                mobileNumber: userPhone,
+                otp: '123456',
+              });
+              accessToken = res.data?.accessToken;
+            }
 
-          if (accessToken) {
-            console.log('[API Auto-Login] Background re-login successful! Updating token and retrying request...');
-            await AsyncStorage.setItem('access_token', accessToken);
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-            return api(originalRequest);
+            if (accessToken) {
+              console.log('[API Auto-Login] Background re-login successful! Updating token and retrying request...');
+              await AsyncStorage.setItem('access_token', accessToken);
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+              return api(originalRequest);
+            }
+          } catch (loginErr: any) {
+            console.error('[API Auto-Login] Background re-login failed:', loginErr.message);
           }
-        } catch (loginErr: any) {
-          console.error('[API Auto-Login] Background re-login failed:', loginErr.message);
         }
-      }
 
-      // Handle unauthorized (e.g., clear token and redirect to login)
-      await AsyncStorage.removeItem('access_token');
-      const { navigationRef } = require('../navigation/AppNavigator');
-      
-      const navigateToLogin = () => {
-        if (navigationRef.isReady()) {
-          navigationRef.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
-          return true;
-        }
-        return false;
-      };
-
-      if (!navigateToLogin()) {
-        // If navigation container is not ready yet, retry periodically
-        const intervalId = setInterval(() => {
-          if (navigateToLogin()) {
-            clearInterval(intervalId);
-          }
-        }, 100);
+        // Handle unauthorized (e.g., clear token and redirect to login)
+        await AsyncStorage.removeItem('access_token');
+        const { navigationRef } = require('../navigation/AppNavigator');
         
-        // Safety timeout to clear interval after 5 seconds if navigation never becomes ready
-        setTimeout(() => clearInterval(intervalId), 5000);
+        const navigateToLogin = () => {
+          if (navigationRef.isReady()) {
+            const currentRouteName = navigationRef.getCurrentRoute()?.name;
+            if (currentRouteName === 'Login' || currentRouteName === 'SignUp') {
+              // Already on Login or SignUp, do not reset stack to prevent infinite loops/flickering
+              return true;
+            }
+            navigationRef.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
+            return true;
+          }
+          return false;
+        };
+
+        if (!navigateToLogin()) {
+          // If navigation container is not ready yet, retry periodically
+          const intervalId = setInterval(() => {
+            if (navigateToLogin()) {
+              clearInterval(intervalId);
+            }
+          }, 100);
+          
+          // Safety timeout to clear interval after 5 seconds if navigation never becomes ready
+          setTimeout(() => clearInterval(intervalId), 5000);
+        }
       }
     }
 

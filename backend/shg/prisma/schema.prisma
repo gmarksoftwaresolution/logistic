@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 //////////////////////////////////////////////////////
@@ -613,6 +614,28 @@ model DropTracking {
 
   @@index([dropOrderId])
   @@map("drop_tracking")
+}
+
+model Pincode {
+  id             Int      @id @default(autoincrement())
+  name           String
+  description    String?
+  branchType     String?
+  deliveryStatus String?
+  circle         String?
+  district       String?
+  division       String?
+  region         String?
+  block          String?
+  state          String?
+  country        String?
+  pincode        String
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([pincode, name])
+  @@index([pincode])
+  @@map("pincodes")
 }
 
 

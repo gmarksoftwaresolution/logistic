@@ -29,10 +29,10 @@ const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const UPI_REGEX = /^[\w.-]+@[a-zA-Z]{2,}$/;
 const TIME_REGEX = /^([1-9]|0[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/;
 const DL_REGEX = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11}$/;
-const VEHICLE_REGEX = /^[A-Z]{2}\s?\d{1,2}\s?[A-Z]{0,2}\s?\d{4}$/;
+const VEHICLE_REGEX = /^[A-Z]{2}\s?\d{2}\s?[A-Z]{1,2}\s?\d{4}$/;
 const ORG_REGEX = /^[a-zA-Z0-9\s,.\-\/()]+$/;
 const ALPHA_ONLY_REGEX = /^[a-zA-Z]+$/;
-const CITY_REGEX = /^[a-zA-Z\s,]+$/;
+const CITY_REGEX = /^[a-zA-Z0-9\s,.\-\/()]+$/;
 
 
 
@@ -158,6 +158,15 @@ export class Step1PersonalDetailsDto {
   @Matches(NAME_REGEX, { message: 'Taluka must contain only alphabets and spaces' })
   @Transform(({ value }) => value?.trim())
   taluka: string;
+
+  @ApiProperty({ example: 'Badyachiwadi' })
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  @Matches(CITY_REGEX, { message: 'Village contains invalid characters' })
+  @Transform(({ value }) => value?.trim())
+  village: string;
 
   @ApiProperty({ example: '123 Main St, Pune' })
   @IsNotEmpty()

@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -34,6 +35,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingArea, setAcceptingArea] = useState<string | null>(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -64,13 +66,16 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   };
 
-  const handleAcceptBulk = async (ids: string[]) => {
+  const handleAcceptBulk = async (ids: string[], areaName: string) => {
+    setAcceptingArea(areaName);
     try {
       await acceptBatchIds(ids);
       setShowSuccessModal(false);
       navigation.navigate('AcceptedOrders');
     } catch (err) {
       console.error('Failed to accept bulk batches:', err);
+    } finally {
+      setAcceptingArea(null);
     }
   };
 
@@ -149,15 +154,15 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     
     if (isHubRoute) {
       if (type === 'pickup') {
-        return `GMU > ${batch.dropPointName}`;
+        return `From - GMU To ${batch.dropPointName}`;
       } else {
-        return `${batch.pickupPointName} > Gadhinglaj Hub`;
+        return `From - ${batch.pickupPointName} To Gadhinglaj Hub`;
       }
     } else {
       if (type === 'pickup') {
-        return `${batch.pickupPointName} > Gadhinglaj Hub`;
+        return `From - ${batch.pickupPointName} To Gadhinglaj Hub`;
       } else {
-        return `Gadhinglaj Hub > ${batch.dropPointName}`;
+        return `From - Gadhinglaj Hub To ${batch.dropPointName}`;
       }
     }
   };
@@ -262,7 +267,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                   <View style={styles.widgetTopRow}>
                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
                                   </View>
-                                  <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
+                                  <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
                                     <Text style={styles.widgetTotalsText}>{batch.pickupCount} {t('orders.items')} • {batch.totalWeight}</Text>
                                     <View style={[styles.legTagBox, { backgroundColor: '#EFF6FF' }]}>
@@ -322,7 +327,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                    <View style={styles.widgetTopRow}>
                                      <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
                                    </View>
-                                   <Text style={styles.widgetRouteText} numberOfLines={1}>{routeText}</Text>
+                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
                                      <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
                                      <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
@@ -365,14 +370,22 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
                     {/* Area bulk dispatch footer button */}
                     <TouchableOpacity
-                      style={styles.bulkAreaAcceptBtn}
+                      style={[
+                        styles.bulkAreaAcceptBtn,
+                        acceptingArea !== null && { opacity: 0.6 }
+                      ]}
                       activeOpacity={0.85}
+                      disabled={acceptingArea !== null}
                       onPress={() => {
                         const idsToAccept = Array.from(new Set(areaEntries.map(e => e.batch.id)));
-                        handleAcceptBulk(idsToAccept);
+                        handleAcceptBulk(idsToAccept, areaName);
                       }}
                     >
-                      <Text style={styles.bulkAreaAcceptText}>{t('orders.accept_all_for', { areaName, defaultValue: `Accept All for ${areaName}` })}</Text>
+                      {acceptingArea === areaName ? (
+                        <ActivityIndicator size="small" color="#059669" />
+                      ) : (
+                        <Text style={styles.bulkAreaAcceptText}>{t('orders.accept_all_for', { areaName, defaultValue: `Accept All for ${areaName}` })}</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )}

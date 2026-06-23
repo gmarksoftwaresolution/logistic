@@ -137,6 +137,7 @@ interface FormData {
   state: string;
   district: string;
   taluka: string;
+  village: string;
   address: string;
   pincode: string;
   profilePhoto: string | null;
@@ -170,14 +171,14 @@ interface FormData {
 }
 
 const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const validateVehicleNumber = (val: string) => /^[A-Z]{2}\s?\d{1,2}\s?[A-Z]{0,2}\s?\d{4}$/.test(val);
+const validateVehicleNumber = (val: string) => /^[A-Z]{2}\s?\d{2}\s?[A-Z]{1,2}\s?\d{4}$/.test(val);
 const validateLicenseNumber = (val: string) => /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11}$/.test(val);
 const validateIFSC = (val: string) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(val);
 const validatePincode = (val: string) => /^\d{6}$/.test(val);
 const validateMobile = (val: string) => /^[6789]\d{9}$/.test(val);
 const validateOrganization = (val: string) => /^[a-zA-Z0-9\s,.\-\/()]+$/.test(val);
 const validateName = (val: string) => /^[a-zA-Z]+$/.test(val);
-const validateCity = (val: string) => /^[a-zA-Z\s,]+$/.test(val);
+const validateCity = (val: string) => /^[a-zA-Z0-9\s,.\-\/()]+$/.test(val);
 const validateAddress = (val: string) => {
   if (!val) return false;
   const len = val.trim().length;
@@ -221,7 +222,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timeMode, setTimeMode] = useState<'morning' | 'evening'>('morning');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | null>(null);
+  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | 'village' | 'residential_village' | null>(null);
   const [areaInput, setAreaInput] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -232,6 +233,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [sangathans, setSangathans] = useState<string[]>([]);
   const [centers, setCenters] = useState<string[]>([]);
+  const [villagePincode, setVillagePincode] = useState('');
+  const [pincodeVillages, setPincodeVillages] = useState<string[]>([]);
+  const [residentialVillages, setResidentialVillages] = useState<Array<{ name: string; taluka: string }>>([]);
 
   const otpInputs = useRef<Array<TextInput | null>>([]);
   const [dayTimings, setDayTimings] = useState<Record<string, { morning: string; evening: string; workingTime?: string }>>({});
@@ -275,6 +279,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     state: '',
     district: '',
     taluka: '',
+    village: '',
     address: '',
     pincode: '',
     profilePhoto: null,
@@ -316,6 +321,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const talukaRef = useRef<TextInput>(null);
   const addressRef = useRef<TextInput>(null);
   const pincodeRef = useRef<TextInput>(null);
+  const lastFetchedPincodeRef = useRef<string>('');
 
   const licenseRef = useRef<TextInput>(null);
   const licenseExpiryRef = useRef<TextInput>(null);
@@ -452,6 +458,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       lastName: 'last_name',
       address: 'residential_address',
       pincode: 'pincode',
+      village: 'village',
       mobile: 'login.mobile_label',
       licenseNumber: 'license_number',
       licenseExpiry: 'expiry_date',
@@ -898,6 +905,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleOtpChange = (value: string, index: number) => {
+    if (apiError) {
+      setApiError(null);
+    }
     const numericValue = value.replace(/[^0-9]/g, '');
     const newOtp = [...otp];
     newOtp[index] = numericValue;
@@ -923,9 +933,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         newFormData.state = data.personalDetails.state || '';
         newFormData.district = data.personalDetails.district || '';
         newFormData.taluka = data.personalDetails.taluka || '';
+        newFormData.village = data.personalDetails.village || '';
         newFormData.address = data.personalDetails.residentialAddress;
         newFormData.pincode = data.personalDetails.pinCode;
         newFormData.profilePhoto = data.personalDetails.profilePhoto;
+        lastFetchedPincodeRef.current = data.personalDetails.pinCode || '';
       }
 
       if (data.drivingDetails) {
@@ -1036,6 +1048,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleOtpKeyPress = (e: any, index: number) => {
+    if (apiError) {
+      setApiError(null);
+    }
     if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
       otpInputs.current[index - 1]?.focus();
     }
@@ -1100,6 +1115,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       const message = error.response?.data?.message || 'Invalid OTP. Please try again.';
       const displayMessage = Array.isArray(message) ? message[0] : message;
       setApiError(displayMessage);
+      setOtp(['', '', '', '', '', '']);
+      setTimeout(() => {
+        otpInputs.current[0]?.focus();
+      }, 100);
       Alert.alert('Error', displayMessage);
     } finally {
       setIsLoading(false);
@@ -1166,6 +1185,80 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [currentStep, formData.vehicleTypeSelection]);
 
+  useEffect(() => {
+    const fetchPincodeDetails = async () => {
+      const pin = formData.pincode;
+      if (pin && pin.length === 6) {
+        try {
+          setIsLoading(true);
+          const response = await api.get(`/registration/pincode/${pin}`);
+          if (response.data && response.data.success) {
+            const { state, district, taluka } = response.data;
+            const pincodeChanged = lastFetchedPincodeRef.current !== '' && lastFetchedPincodeRef.current !== pin;
+            setFormData(prev => ({
+              ...prev,
+              state: state || prev.state,
+              district: district || prev.district,
+              taluka: taluka || prev.taluka,
+              ...(pincodeChanged ? { village: '' } : {}),
+            }));
+            setTouchedFields(prev => ({
+              ...prev,
+              state: false,
+              district: false,
+              taluka: false,
+              village: false,
+            }));
+            lastFetchedPincodeRef.current = pin;
+          }
+          const villagesResponse = await api.get(`/registration/pincode/${pin}/villages`);
+          if (villagesResponse.data) {
+            setResidentialVillages(villagesResponse.data);
+            setFormData(prev => {
+              const villageNames = villagesResponse.data.map((v: any) => typeof v === 'string' ? v : v.name);
+              if (prev.village && !villageNames.includes(prev.village)) {
+                return { ...prev, village: '' };
+              }
+              return prev;
+            });
+          }
+        } catch (error) {
+          console.log('Pincode fetch error:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setResidentialVillages([]);
+        updateFormData('village', '');
+        lastFetchedPincodeRef.current = '';
+      }
+    };
+    fetchPincodeDetails();
+  }, [formData.pincode]);
+
+  useEffect(() => {
+    const fetchVillages = async () => {
+      const pin = villagePincode;
+      if (pin && pin.length === 6) {
+        try {
+          setIsLoading(true);
+          const response = await api.get(`/registration/pincode/${pin}/villages`);
+          if (response.data) {
+            setPincodeVillages(response.data.map((v: any) => typeof v === 'string' ? v : v.name));
+          }
+        } catch (error) {
+          console.log('Fetch villages error:', error);
+          setPincodeVillages([]);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setPincodeVillages([]);
+      }
+    };
+    fetchVillages();
+  }, [villagePincode]);
+
   const fetchSangathans = async () => {
     try {
       setIsLoading(true);
@@ -1207,6 +1300,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         state: data.state,
         district: data.district,
         taluka: data.taluka,
+        village: data.village,
         residentialAddress: data.address,
         pinCode: data.pincode,
         profilePhoto: photoUrl,
@@ -1361,7 +1455,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         }
         return;
       }
-      fieldsToValidate = ['firstName', 'lastName', 'state', 'district', 'taluka', 'address', 'pincode', 'profilePhoto'];
+      fieldsToValidate = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'address', 'pincode', 'profilePhoto'];
     } else if (currentStep === 2) {
       fieldsToValidate = ['licenseNumber', 'licensePhoto', 'licenseExpiry', 'experience'];
     } else if (currentStep === 3) {
@@ -1478,7 +1572,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     let fields: (keyof FormData)[] = [];
     if (currentStep === 1) {
       if (!isOtpVerified) return false;
-      fields = ['firstName', 'lastName', 'state', 'district', 'taluka', 'address', 'pincode', 'profilePhoto'];
+      fields = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'address', 'pincode', 'profilePhoto'];
     } else if (currentStep === 2) {
       fields = ['licenseNumber', 'licenseExpiry', 'experience'];
       if (!formData.licensePhoto) return false;
@@ -1564,6 +1658,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                     } else if (cleaned.length > 0 && !/^[6789]/.test(cleaned)) {
                       setTouchedFields(prev => ({ ...prev, mobile: true }));
                     }
+                    if (cleaned.length === 10) {
+                      Keyboard.dismiss();
+                    }
                   }}
                   onBlur={() => handleBlur('mobile')}
                 />
@@ -1573,12 +1670,15 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           ) : (
             <View style={styles.inputContainer}>
               <Text style={styles.label}>{t('login.enter_otp_label')}</Text>
-              <View style={styles.otpRow}>
+              <View style={[styles.otpRow, apiError ? { marginBottom: verticalScale(16) } : null]}>
                 {otp.map((digit, index) => (
                   <TextInput
                     key={index}
                     ref={(ref) => { otpInputs.current[index] = ref; }}
-                    style={styles.otpBox}
+                    style={[
+                      styles.otpBox,
+                      apiError ? styles.otpBoxError : null
+                    ]}
                     keyboardType="number-pad"
                     maxLength={1}
                     value={digit}
@@ -1587,6 +1687,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                   />
                 ))}
               </View>
+              {apiError && (
+                <Text style={[styles.errorText, { marginBottom: verticalScale(16), textAlign: 'center' }]}>
+                  {apiError}
+                </Text>
+              )}
             </View>
           )}
 
@@ -1868,6 +1973,53 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             />
           </View>
           {getError('taluka') && <Text style={styles.errorText}>{getError('taluka')}</Text>}
+        </View>
+
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['village'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.village')} *</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!formData.pincode || formData.pincode.length < 6 || residentialVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 },
+              getError('village') && styles.inputError
+            ]}
+            onPress={() => {
+              if (formData.pincode && formData.pincode.length === 6) {
+                if (residentialVillages.length > 0) {
+                  setDropdownType('residential_village');
+                  setShowDropdown(true);
+                } else {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                }
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(formData.pincode && formData.pincode.length === 6 && residentialVillages.length > 0) ? 0.7 : 1}
+          >
+            <MapIcon size={scale(20)} color={(formData.pincode && formData.pincode.length === 6 && residentialVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: formData.village ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {formData.village || (
+                formData.pincode.length < 6
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
+                  : residentialVillages.length === 0
+                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
+                    : t('signup.select_village', { defaultValue: 'Select Village' })
+              )}
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+          {getError('village') && <Text style={styles.errorText}>{getError('village')}</Text>}
         </View>
 
         <View 
@@ -2344,7 +2496,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const renderDropdownModal = () => {
     let options: string[] = [];
     let title = '';
-    let key: keyof FormData = 'vehicleWheeler';
+    let key: keyof FormData | 'selectedVillage' = 'vehicleWheeler';
 
     if (dropdownType === 'wheeler') {
       options = ['2 Wheeler', '3 Wheeler', '4 Wheeler', '6 Wheeler', '8 Wheeler', '10 Wheeler', '12 Wheeler', '14 Wheeler', '16 Wheeler', '18 Wheeler', '22 Wheeler'];
@@ -2386,6 +2538,14 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       options = centers;
       title = t('signup.milk_center_name');
       key = 'milkCenterName';
+    } else if (dropdownType === 'village') {
+      options = pincodeVillages;
+      title = t('signup.select_village', { defaultValue: 'Select Village' });
+      key = 'selectedVillage';
+    } else if (dropdownType === 'residential_village') {
+      options = residentialVillages.map(v => v.name);
+      title = t('signup.select_village', { defaultValue: 'Select Village' });
+      key = 'village';
     }
 
     return (
@@ -2416,46 +2576,79 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={{ color: Colors.textPlaceholder }}>No options available</Text>
                   )}
                 </View>
-              ) : options.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.dropdownOption,
-                    formData[key] === option && styles.dropdownOptionActive,
-                    index === options.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                  onPress={() => {
-                    if (key === 'vehicleWheeler') {
-                      setFormData(prev => ({
-                        ...prev,
-                        vehicleWheeler: option,
-                        vehicleType: '',
-                        vehicleMake: ''
-                      }));
-                    } else if (key === 'milkSangathanName') {
-                      setFormData(prev => ({
-                        ...prev,
-                        milkSangathanName: option,
-                        milkCenterName: ''
-                      }));
-                      fetchCenters(option);
-                    } else {
-                      updateFormData(key, option);
-                    }
-                    setShowDropdown(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.dropdownOptionText,
-                    formData[key] === option && styles.dropdownOptionTextActive
-                  ]}>
-                    {option}
-                  </Text>
-                  {formData[key] === option && (
-                    <CheckCircle2 size={18} color={Colors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
+              ) : options.map((option, index) => {
+                const isOptionActive = key === 'selectedVillage'
+                  ? (formData.vehicleTypeSelection === 'Milk'
+                    ? formData.assignedVillages.includes(option)
+                    : (formData.operatingArea ? formData.operatingArea.split(', ').map(s => s.trim()).includes(option.trim()) : false))
+                  : formData[key as keyof FormData] === option;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.dropdownOption,
+                      isOptionActive && styles.dropdownOptionActive,
+                      index === options.length - 1 && { borderBottomWidth: 0 }
+                    ]}
+                    onPress={() => {
+                      if (key === 'vehicleWheeler') {
+                        setFormData(prev => ({
+                          ...prev,
+                          vehicleWheeler: option,
+                          vehicleType: '',
+                          vehicleMake: ''
+                        }));
+                      } else if (key === 'milkSangathanName') {
+                        setFormData(prev => ({
+                          ...prev,
+                          milkSangathanName: option,
+                          milkCenterName: ''
+                        }));
+                        fetchCenters(option);
+                      } else if (key === 'selectedVillage') {
+                        if (formData.vehicleTypeSelection === 'Milk') {
+                          if (formData.assignedVillages.includes(option)) {
+                            updateFormData('assignedVillages', formData.assignedVillages.filter(v => v !== option));
+                          } else {
+                            updateFormData('assignedVillages', [...formData.assignedVillages, option]);
+                          }
+                        } else {
+                          toggleArea(option);
+                        }
+                        setApiError(null);
+                      } else {
+                        if (key === 'village') {
+                          const selectedObj = residentialVillages.find(v => v.name === option);
+                          if (selectedObj) {
+                            setFormData(prev => ({
+                              ...prev,
+                              village: option,
+                              taluka: selectedObj.taluka || prev.taluka,
+                            }));
+                          } else {
+                            updateFormData(key as keyof FormData, option);
+                          }
+                        } else {
+                          updateFormData(key as keyof FormData, option);
+                        }
+                      }
+                      if (key !== 'selectedVillage') {
+                        setShowDropdown(false);
+                      }
+                    }}
+                  >
+                    <Text style={[
+                      styles.dropdownOptionText,
+                      isOptionActive && styles.dropdownOptionTextActive
+                    ]}>
+                      {option}
+                    </Text>
+                    {isOptionActive && (
+                      <CheckCircle2 size={18} color={Colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -2727,64 +2920,116 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.title}>{t('signup.route_details')}</Text>
           <Text style={styles.subtitle}>{t('signup.route_desc')}</Text>
         </View>
+        {/* Pincode Input for Villages Search */}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['villagePincode'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.village_pincode', { defaultValue: 'Village Pincode' })}</Text>
+          <View style={styles.inputWrapper}>
+            <Hash size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              placeholder={t('signup.enter_pincode_villages', { defaultValue: 'Enter Pincode to search Villages' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="number-pad"
+              maxLength={6}
+              value={villagePincode}
+              onChangeText={(val) => {
+                setVillagePincode(val.replace(/[^0-9]/g, ''));
+              }}
+            />
+            {isLoading && (
+              <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: scale(10) }} />
+            )}
+          </View>
+        </View>
 
+        {/* Dropdown for Villages fetched from Pincode */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>{t('signup.select_village', { defaultValue: 'Select Village' })}</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!villagePincode || villagePincode.length < 6 || pincodeVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+            ]}
+            onPress={() => {
+              if (villagePincode && villagePincode.length === 6) {
+                if (pincodeVillages.length > 0) {
+                  setDropdownType('village');
+                  setShowDropdown(true);
+                } else {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                }
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? 0.7 : 1}
+          >
+            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: (villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {isLoading 
+                ? t('common.loading', { defaultValue: 'Loading villages...' }) 
+                : villagePincode.length < 6 
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
+                  : pincodeVillages.length === 0 
+                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
+                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village ({{count}} available)', count: pincodeVillages.length })
+              }
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Operating Area display box (showing selected villages) */}
         <View 
           style={styles.inputContainer}
           onLayout={(e) => { fieldPositions.current['operatingArea'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.label}>{t('signup.operating_area_city')} *</Text>
-          <View style={[styles.inputWrapper, getError('operatingArea') && styles.inputError]}>
+          <View style={[
+            styles.inputWrapper,
+            {
+              height: undefined,
+              minHeight: verticalScale(56),
+              paddingVertical: verticalScale(8),
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: scale(6)
+            },
+            getError('operatingArea') && styles.inputError
+          ]}>
             <Navigation size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <AnimatedPlaceholderInput
-              ref={operatingAreaRef}
-              style={[styles.input, { flex: 1, marginRight: scale(8) }]}
-              basePlaceholder={t('signup.enter_city_area_placeholder')}
-              placeholderTextColor={Colors.textPlaceholder}
-              value={areaInput}
-              onChangeText={(val: string) => setAreaInput(val.replace(/[^a-zA-Z\s]/g, ''))}
-              onFocus={() => {
-                setIsAreaFocused(true);
-                autoScroll(150);
-              }}
-              onBlur={() => {
-                setIsAreaFocused(false);
-                handleBlur('operatingArea');
-              }}
-              onSubmitEditing={() => {
-                if (areaInput.trim()) {
-                  toggleArea(areaInput.trim());
-                  setAreaInput('');
-                }
-              }}
-              returnKeyType="done"
-            />
-            {(isAreaFocused || areaInput.trim().length > 0) && (
-              <TouchableOpacity
-                onPress={() => {
-                  if (areaInput.trim()) {
-                    toggleArea(areaInput.trim());
-                    setAreaInput('');
-                  }
-                }}
-                style={{ paddingVertical: scale(4), paddingHorizontal: scale(10), flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, borderRadius: moderateScale(6) }}
-              >
-                <Plus size={scale(14)} color="#FFFFFF" />
-                <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(12), color: '#FFFFFF', marginLeft: scale(4) }}>{t('common.add')}</Text>
-              </TouchableOpacity>
+            {!formData.operatingArea ? (
+              <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
+                {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
+              </Text>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), flex: 1, paddingVertical: verticalScale(2) }}>
+                {formData.operatingArea.split(', ').filter(a => a).map((area, index) => (
+                  <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary + '15', paddingVertical: verticalScale(4), paddingHorizontal: scale(10), borderRadius: moderateScale(16) }}>
+                    <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.primary, marginRight: scale(4), includeFontPadding: false, textAlignVertical: 'center' }}>{area}</Text>
+                    <TouchableOpacity 
+                      style={{ justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => toggleArea(area)}
+                    >
+                      <X size={scale(14)} color={Colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
             )}
           </View>
-
-          <View style={styles.chipContainer}>
-            {formData.operatingArea.split(', ').filter(a => a).map((area, index) => (
-              <View key={index} style={styles.areaChip}>
-                <Text style={styles.areaChipText}>{area}</Text>
-                <TouchableOpacity onPress={() => toggleArea(area)} style={styles.removeChip}>
-                  <X size={14} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-
+          {getError('operatingArea') && <Text style={styles.errorText}>{getError('operatingArea')}</Text>}
         </View>
 
         <View 
@@ -2935,76 +3180,117 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.subtitle}>{t('signup.route_desc')}</Text>
         </View>
 
+        {/* Pincode Input for Villages Search */}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['villagePincode'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.village_pincode', { defaultValue: 'Village Pincode' })}</Text>
+          <View style={styles.inputWrapper}>
+            <Hash size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              placeholder={t('signup.enter_pincode_villages', { defaultValue: 'Enter Pincode to search Villages' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="number-pad"
+              maxLength={6}
+              value={villagePincode}
+              onChangeText={(val) => {
+                setVillagePincode(val.replace(/[^0-9]/g, ''));
+              }}
+            />
+            {isLoading && (
+              <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: scale(10) }} />
+            )}
+          </View>
+        </View>
+
+        {/* Dropdown for Villages fetched from Pincode */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>{t('signup.select_village', { defaultValue: 'Select Village' })}</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!villagePincode || villagePincode.length < 6 || pincodeVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+            ]}
+            onPress={() => {
+              if (villagePincode && villagePincode.length === 6) {
+                if (pincodeVillages.length > 0) {
+                  setDropdownType('village');
+                  setShowDropdown(true);
+                } else {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                }
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? 0.7 : 1}
+          >
+            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: (villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {isLoading 
+                ? t('common.loading', { defaultValue: 'Loading villages...' }) 
+                : villagePincode.length < 6 
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
+                  : pincodeVillages.length === 0 
+                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
+                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village ({{count}} available)', count: pincodeVillages.length })
+              }
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+        </View>
+
         <View 
           style={styles.inputContainer}
           onLayout={(e) => { fieldPositions.current['assignedVillages'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.label}>{t('signup.assigned_villages')} *</Text>
-          <View style={[styles.inputWrapper, getError('assignedVillages') && styles.inputError]}>
+          <View style={[
+            styles.inputWrapper,
+            {
+              height: undefined,
+              minHeight: verticalScale(56),
+              paddingVertical: verticalScale(8),
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: scale(6)
+            },
+            getError('assignedVillages') && styles.inputError
+          ]}>
             <MapIcon size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <AnimatedPlaceholderInput
-              style={[styles.input, { flex: 1 }]}
-              basePlaceholder={t('signup.village_placeholder')}
-              placeholderTextColor={Colors.textPlaceholder}
-              value={villageInput}
-              onChangeText={(val: string) => {
-                setVillageInput(val.replace(/[^a-zA-Z\s]/g, ''));
-              }}
-              onFocus={() => {
-                setIsVillageFocused(true);
-              }}
-              onSubmitEditing={() => {
-                if (villageInput.trim()) {
-                  updateFormData('assignedVillages', [...formData.assignedVillages, villageInput.trim()]);
-                  setVillageInput('');
-                  setApiError(null);
-                }
-              }}
-              onBlur={() => {
-                setIsVillageFocused(false);
-                if (villageInput.trim()) {
-                  updateFormData('assignedVillages', [...formData.assignedVillages, villageInput.trim()]);
-                  setVillageInput('');
-                  setApiError(null);
-                }
-                handleBlur('assignedVillages');
-              }}
-              returnKeyType="done"
-            />
-            {(isVillageFocused || villageInput.trim().length > 0) && (
-              <TouchableOpacity
-                onPress={() => {
-                  if (villageInput.trim()) {
-                    updateFormData('assignedVillages', [...formData.assignedVillages, villageInput.trim()]);
-                    setVillageInput('');
-                    setApiError(null);
-                  }
-                }}
-                style={{ paddingVertical: scale(4), paddingHorizontal: scale(10), flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, borderRadius: moderateScale(6) }}
-              >
-                <Plus size={scale(14)} color="#FFFFFF" />
-                <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(12), color: '#FFFFFF', marginLeft: scale(4) }}>{t('common.add')}</Text>
-              </TouchableOpacity>
+            {formData.assignedVillages.length === 0 ? (
+              <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
+                {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
+              </Text>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), flex: 1, paddingVertical: verticalScale(2) }}>
+                {formData.assignedVillages.map((village, index) => (
+                  <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary + '15', paddingVertical: verticalScale(4), paddingHorizontal: scale(10), borderRadius: moderateScale(16) }}>
+                    <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.primary, marginRight: scale(4), includeFontPadding: false, textAlignVertical: 'center' }}>{village}</Text>
+                    <TouchableOpacity 
+                      style={{ justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => {
+                        const newVillages = formData.assignedVillages.filter((_, i) => i !== index);
+                        updateFormData('assignedVillages', newVillages);
+                      }}
+                    >
+                      <X size={scale(14)} color={Colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
             )}
           </View>
-          {formData.assignedVillages.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: verticalScale(12), gap: scale(8) }}>
-              {formData.assignedVillages.map((village, index) => (
-                <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary + '15', paddingVertical: verticalScale(6), paddingHorizontal: scale(12), borderRadius: moderateScale(16) }}>
-                  <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.primary, marginRight: scale(4), includeFontPadding: false, textAlignVertical: 'center' }}>{village}</Text>
-                  <TouchableOpacity 
-                    style={{ justifyContent: 'center', alignItems: 'center' }}
-                    onPress={() => {
-                      const newVillages = formData.assignedVillages.filter((_, i) => i !== index);
-                      updateFormData('assignedVillages', newVillages);
-                    }}
-                  >
-                    <X size={scale(14)} color={Colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
           {getError('assignedVillages') && <Text style={styles.errorText}>{getError('assignedVillages')}</Text>}
         </View>
 
@@ -3152,7 +3438,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
         style={{ flex: 1, backgroundColor: Colors.background }}
       >
@@ -3437,6 +3723,10 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(20),
     color: Colors.textPrimary,
+  },
+  otpBoxError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
   },
   row: {
     flexDirection: 'row',

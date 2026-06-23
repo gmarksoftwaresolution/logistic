@@ -80,7 +80,22 @@ export class OrderService {
             product: true,
           },
         },
-        masterOrder: true,
+        masterOrder: {
+          include: {
+            dropOrders: {
+              include: {
+                tracking: {
+                  orderBy: { updatedAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+        tracking: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -121,13 +136,7 @@ export class OrderService {
       })
     );
 
-    return updatedPickups.map((pickup) => {
-      if (pickup.status === 'COMPLETED') {
-        return pickup;
-      }
-      const { handoverCode, ...rest } = pickup;
-      return rest;
-    });
+    return updatedPickups;
   }
 
   async acceptPickup(pickupOrderId: number, transporterId: number) {
@@ -137,6 +146,11 @@ export class OrderService {
 
     if (!pickupOrder) {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
+    }
+
+    // Idempotent success if already accepted by the same transporter (prevents parallel/race condition errors)
+    if (pickupOrder.status === 'ACCEPTED' && pickupOrder.transporterId === transporterId) {
+      return pickupOrder;
     }
 
     if (pickupOrder.status !== 'PENDING' && pickupOrder.status !== 'RETURN_PENDING') {
@@ -206,6 +220,11 @@ export class OrderService {
 
     if (!dropOrder) {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    // Idempotent success if already accepted by the same transporter (prevents parallel/race condition errors)
+    if (dropOrder.status === 'ACCEPTED' && dropOrder.transporterId === transporterId) {
+      return dropOrder;
     }
 
     if (dropOrder.status !== 'PENDING' && dropOrder.status !== 'RETURN_PENDING') {
@@ -315,6 +334,37 @@ export class OrderService {
         },
       });
 
+      // Automatically transition any associated PENDING drop orders to ACCEPTED and assign to the transporter
+      const associatedDrops = await tx.dropOrder.findMany({
+        where: {
+          masterOrderId: pickupOrder.masterOrderId,
+          status: 'PENDING',
+        },
+      });
+
+      if (associatedDrops.length > 0) {
+        await tx.dropOrder.updateMany({
+          where: {
+            masterOrderId: pickupOrder.masterOrderId,
+            status: 'PENDING',
+          },
+          data: {
+            status: nextStatus === 'RETURNED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+            transporterId,
+          },
+        });
+
+        for (const drop of associatedDrops) {
+          await tx.dropTracking.create({
+            data: {
+              dropOrderId: drop.id,
+              status: nextStatus === 'RETURNED' ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+              remarks: 'Delivery leg accepted automatically via pickup completion.',
+            },
+          });
+        }
+      }
+
       return updated;
     });
   }
@@ -363,10 +413,18 @@ export class OrderService {
                     phoneNumber: true,
                     address: true,
                   }
+                },
+                tracking: {
+                  orderBy: { updatedAt: 'desc' },
+                  take: 1
                 }
               }
             }
           }
+        },
+        tracking: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1
         },
       },
       orderBy: {
@@ -415,10 +473,18 @@ export class OrderService {
                           phoneNumber: true,
                           address: true,
                         }
+                      },
+                      tracking: {
+                        orderBy: { updatedAt: 'desc' },
+                        take: 1
                       }
                     }
                   }
                 }
+              },
+              tracking: {
+                orderBy: { updatedAt: 'desc' },
+                take: 1
               },
             },
           });
@@ -429,8 +495,8 @@ export class OrderService {
     );
 
     const mappedDrops = updatedDrops.map((drop) => {
-      let finalDrop = drop;
-      if (drop.status === 'REJECTED' || drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
+      let finalDrop: any = drop;
+      if (drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
         const nextStatus = drop.status === 'RETURNED' ? 'COMPLETED' : 'ACCEPTED';
         
         // Find the pickup seller (source hub) dynamically
@@ -480,6 +546,7 @@ export class OrderService {
         finalDrop = {
           ...drop,
           status: nextStatus,
+          isRTO: true,
           deliveryAddress: dynamicAddress,
           buyer: {
             fullName: dynamicFullName,
@@ -499,8 +566,7 @@ export class OrderService {
         finalDrop = drop;
       }
 
-      const { handoverCode, ...rest } = finalDrop;
-      return rest;
+      return finalDrop;
     });
 
     return mappedDrops;
@@ -518,7 +584,7 @@ export class OrderService {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
     }
 
-    const allowedStatuses = ['ACCEPTED', 'PICKED_UP', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'REJECTED'];
+    const allowedStatuses = ['PENDING', 'ACCEPTED', 'PICKED_UP', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'REJECTED'];
     if (!allowedStatuses.includes(dropOrder.status)) {
       throw new BadRequestException(`Cannot complete drop order in its current status (${dropOrder.status}).`);
     }
@@ -543,7 +609,7 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const nextStatus = (dropOrder.status === 'RETURN_ACCEPTED' || dropOrder.status === 'RETURN_PICKED_UP' || dropOrder.status === 'REJECTED') ? 'RETURNED' : 'COMPLETED';
+      const nextStatus = (dropOrder.status === 'RETURN_PENDING' || dropOrder.status === 'RETURN_ACCEPTED' || dropOrder.status === 'RETURN_PICKED_UP' || dropOrder.status === 'REJECTED') ? 'RETURNED' : 'COMPLETED';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
         data: { 
@@ -571,6 +637,11 @@ export class OrderService {
 
     if (!pickupOrder) {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
+    }
+
+    // Idempotent success if already rejected/returned
+    if (pickupOrder.status === 'REJECTED' || pickupOrder.status === 'RETURN_PENDING') {
+      return pickupOrder;
     }
 
     if (pickupOrder.status !== 'PENDING' && pickupOrder.transporterId !== transporterId) {
@@ -648,6 +719,11 @@ export class OrderService {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
     }
 
+    // Idempotent success if already rejected/returned
+    if (dropOrder.status === 'REJECTED' || dropOrder.status === 'RETURN_PENDING') {
+      return dropOrder;
+    }
+
     if (dropOrder.status !== 'PENDING' && dropOrder.transporterId !== transporterId) {
       throw new BadRequestException('This order is not assigned to you.');
     }
@@ -657,12 +733,12 @@ export class OrderService {
       const associatedPickup = await tx.pickupOrder.findFirst({
         where: { masterOrderId: dropOrder.masterOrderId }
       });
-      const isPickupCompleted = associatedPickup?.status === 'COMPLETED';
+      const isPickupCompleted = associatedPickup?.status === 'COMPLETED' || dropOrder.status === 'PICKED_UP' || dropOrder.status === 'ACCEPTED';
 
       let nextStatus: string;
       if (dropOrder.status === 'PENDING') {
         nextStatus = 'REJECTED';
-      } else if (dropOrder.status === 'ACCEPTED') {
+      } else if (dropOrder.status === 'ACCEPTED' || dropOrder.status === 'PICKED_UP') {
         nextStatus = isPickupCompleted ? 'RETURN_PENDING' : 'REJECTED';
       } else {
         throw new BadRequestException(`Cannot reject drop order in its current status (${dropOrder.status})`);
@@ -702,6 +778,32 @@ export class OrderService {
 
       return updated;
     });
+  }
+
+  async bulkAccept(orders: { id: number; type: 'pickup' | 'drop' }[], transporterId: number) {
+    const results = [];
+    for (const order of orders) {
+      try {
+        if (order.type === 'pickup') {
+          const res = await this.acceptPickup(order.id, transporterId);
+          results.push({ id: order.id, type: 'pickup', status: 'success', data: res });
+        } else if (order.type === 'drop') {
+          const res = await this.acceptDrop(order.id, transporterId);
+          results.push({ id: order.id, type: 'drop', status: 'success', data: res });
+        }
+      } catch (error: any) {
+        console.error(`Failed to bulk accept order ${order.type}-${order.id}:`, error.message);
+        results.push({ id: order.id, type: order.type, status: 'error', message: error.message });
+      }
+    }
+
+    // If all requests failed, throw the first error to make it explicit to the client
+    const successes = results.filter(r => r.status === 'success');
+    if (successes.length === 0 && orders.length > 0) {
+      const firstError = results.find(r => r.status === 'error');
+      throw new BadRequestException(firstError?.message || 'Failed to accept orders');
+    }
+    return results;
   }
 }
 

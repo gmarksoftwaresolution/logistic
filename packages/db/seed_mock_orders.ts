@@ -10,14 +10,7 @@ async function main() {
 
   // 1. Clean up existing mock/test orders to start fresh
   console.log('Wiping old orders to start with a clean state...');
-  await prisma.pickupTracking.deleteMany();
-  await prisma.dropTracking.deleteMany();
-  await prisma.pickupOrderItem.deleteMany();
-  await prisma.pickupOrder.deleteMany();
-  await prisma.dropOrderItem.deleteMany();
-  await prisma.dropOrder.deleteMany();
-  await prisma.masterOrderItem.deleteMany();
-  await prisma.masterOrder.deleteMany();
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE pickup_tracking, drop_tracking, pickup_order_items, pickup_orders, drop_order_items, drop_orders, master_order_items, master_orders CASCADE;`);
   console.log('Database order tables cleaned successfully.');
 
   // 2. Create/Ensure Seller User (Independent/Seller role)

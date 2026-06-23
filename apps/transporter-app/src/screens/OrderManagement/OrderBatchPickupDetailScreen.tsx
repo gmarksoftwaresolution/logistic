@@ -47,6 +47,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [showVerificationSheet, setShowVerificationSheet] = useState(false);
   const [otpCode, setOtpCode] = useState<string[]>(['', '', '', '']);
   const [generatedCode, setGeneratedCode] = useState('1234');
+  const [verifiedCode, setVerifiedCode] = useState('');
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showFailureDialog, setShowFailureDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -70,7 +71,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const handleVerifyDeliveryCode = async () => {
     if (!batch || !selectedProductId) return;
     const entered = otpCode.join('');
-    if (entered === '5678' || entered === '1234') {
+    const expectedCode = batch.handoverCode || '1234';
+    if (entered === expectedCode) {
+      setVerifiedCode(entered);
       setVerifiedProductIds(prev => {
         const next = prev.includes(selectedProductId) ? prev : [...prev, selectedProductId];
         return next;
@@ -87,11 +90,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     if (!batch) return;
     setIsFinalizing(true);
     try {
+      const codeToSubmit = type === 'pickup' ? (batch.handoverCode || '1234') : (verifiedCode || '1234');
       if (type === 'pickup') {
-        await finalizePickup(batch.id, '1234');
+        await finalizePickup(batch.id, codeToSubmit);
         setSuccessMessage('Pickup Completed Successfully');
       } else {
-        await finalizeDrop(batch.id, '1234');
+        await finalizeDrop(batch.id, codeToSubmit);
         setSuccessMessage('Delivery Completed Successfully');
       }
       setShowSuccessDialog(true);
@@ -142,6 +146,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   useEffect(() => {
     if (foundBatch) {
       setLocalBatch(foundBatch);
+      if (foundBatch.handoverCode) {
+        setGeneratedCode(foundBatch.handoverCode);
+      }
     }
   }, [foundBatch]);
 
@@ -248,13 +255,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   // Contextual Contact Logic matching precisely with user requirements
   const isPickup = type === 'pickup';
+  const isRTOBatch = batch.products.some(p => (p as any).isRTO) || batch.isRTO || false;
   const isHubPoint = isPickup
     ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
-    : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU');
+    : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU' || isRTOBatch);
 
-  const displayContact = isHubPoint ? HUB_CONTACT : batch.shgContact;
+  const displayContact = isRTOBatch ? batch.shgContact : (isHubPoint ? HUB_CONTACT : batch.shgContact);
   const isSHG = !isHubPoint;
-  const isRTOBatch = batch.products.some(p => (p as any).isRTO);
 
   const sectionTitle = type === 'pickup'
     ? t('orders.items_for_collection', { defaultValue: 'Items for Collection' })
@@ -370,8 +377,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               const rtoProducts = batch.products.filter(p => (p as any).isRTO);
               const isPlural = rtoProducts.length > 1;
               const noteText = isPlural
-                ? t('orders.note_address_updated_plural', { defaultValue: 'Address updated. The products should be returned to the hub.' })
-                : t('orders.note_address_updated_singular', { defaultValue: 'Address updated. The product should be returned to the hub.' });
+                ? t('orders.note_address_updated_plural', { defaultValue: 'Address updated. The products should be returned to the updated address. The items should be delivered in 48 hours to the updated address.' })
+                : t('orders.note_address_updated_singular', { defaultValue: 'Address updated. The product should be returned to the updated address. The item should be delivered in 48 hours to the updated address.' });
               return (
                 <View style={styles.contactUpdateNote}>
                   <Info size={scale(14)} color="#D97706" />
@@ -598,7 +605,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                           }}
                         >
                           <Text style={styles.inlineVerifyBtnText}>
-                            {type === 'pickup' ? 'View Code' : 'Generate Code'}
+                            {type === 'pickup' ? 'View Code' : 'Verify Code'}
                           </Text>
                         </TouchableOpacity>
                       ) : null}

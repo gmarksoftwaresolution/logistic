@@ -181,6 +181,7 @@ export class RegistrationService {
         state: user.address.state,
         district: user.address.district,
         taluka: user.address.taluka,
+        village: user.address.village || '',
         residentialAddress: user.address.addressLine1,
         pinCode: user.address.pincode,
         profilePhoto: user.profilePhoto,
@@ -220,6 +221,7 @@ export class RegistrationService {
         state: dto.state,
         district: dto.district,
         taluka: dto.taluka,
+        village: dto.village,
         pincode: dto.pinCode,
       },
       create: {
@@ -228,6 +230,7 @@ export class RegistrationService {
         state: dto.state,
         district: dto.district,
         taluka: dto.taluka,
+        village: dto.village,
         pincode: dto.pinCode,
       },
     });
@@ -486,6 +489,34 @@ export class RegistrationService {
     }
 
     return this.completeRegistration(user.id);
+  }
+
+  async getPincodeInfo(pincode: string) {
+    const data = await this.prisma.pincode.findFirst({
+      where: { pincode },
+    });
+    if (!data) {
+      throw new NotFoundException('Pincode details not found');
+    }
+    return {
+      success: true,
+      state: data.state,
+      district: data.district,
+      taluka: data.block || data.district,
+    };
+  }
+
+  async getPincodeVillages(pincode: string) {
+    const records = await this.prisma.pincode.findMany({
+      where: { pincode },
+      select: { name: true, block: true, district: true },
+      distinct: ['name'],
+      orderBy: { name: 'asc' },
+    });
+    return records.map(r => ({
+      name: r.name,
+      taluka: r.block || r.district || '',
+    }));
   }
 
   private async validateStep(

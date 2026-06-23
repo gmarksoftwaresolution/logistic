@@ -12,7 +12,8 @@ import {
   Easing,
   LayoutAnimation,
   Dimensions,
-  PixelRatio
+  PixelRatio,
+  Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -138,6 +139,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleOtpChange = (value: string, index: number) => {
+    if (error) {
+      setError(null);
+    }
     const numericValue = value.replace(/[^0-9]/g, '');
     const newOtp = [...otp];
     newOtp[index] = numericValue;
@@ -149,6 +153,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleOtpKeyPress = (e: any, index: number) => {
+    if (error) {
+      setError(null);
+    }
     if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
       otpInputs.current[index - 1]?.focus();
     }
@@ -219,6 +226,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       const message = error.response?.data?.message || 'Invalid OTP. Please try again.';
       const displayMessage = Array.isArray(message) ? message[0] : message;
       setError(displayMessage);
+      setOtp(['', '', '', '', '', '']);
+      setTimeout(() => {
+        otpInputs.current[0]?.focus();
+      }, 100);
       Alert.alert('Error', displayMessage);
     } finally {
       setIsVerifying(false);
@@ -283,6 +294,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 } else {
                   setError(null);
                 }
+                if (cleaned.length === 10) {
+                  Keyboard.dismiss();
+                }
               }}
               onBlur={() => {
                 if (!mobileNumber || mobileNumber.length === 0) {
@@ -313,12 +327,15 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.title}>{t('login.verify_otp')}</Text>
         <Text style={styles.subtitle}>{t('signup.enter_otp_desc', { mobile: mobileNumber })}</Text>
 
-        <View style={styles.otpRow}>
+        <View style={[styles.otpRow, error ? { marginBottom: verticalScale(16) } : null]}>
           {otp.map((digit, index) => (
             <TextInput
               key={index}
               ref={(ref) => { otpInputs.current[index] = ref; }}
-              style={styles.otpBox}
+              style={[
+                styles.otpBox,
+                error ? styles.otpBoxError : null
+              ]}
               keyboardType="number-pad"
               maxLength={1}
               value={digit}
@@ -327,6 +344,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             />
           ))}
         </View>
+
+        {error && (
+          <Text style={[styles.errorText, { marginBottom: verticalScale(16), textAlign: 'center' }]}>
+            {error}
+          </Text>
+        )}
 
         <TouchableOpacity
           style={[styles.primaryButton, (otp.join('').length !== 6 || isVerifying) && styles.buttonDisabled]}
@@ -348,6 +371,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setCurrentStep(1);
             setOtp(['', '', '', '', '', '']);
+            setError(null);
           }}>
             <Text style={styles.linkText}>{t('login.change_mobile')}</Text>
           </TouchableOpacity>
@@ -380,7 +404,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -673,6 +697,10 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderBottomColor: '#EF4444',
+  },
+  otpBoxError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
   },
 });
 

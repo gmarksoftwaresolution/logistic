@@ -238,8 +238,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                   <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
                                 </View>
 
-                                <Text style={styles.widgetRouteText} numberOfLines={1}>
-                                  {`${batch.pickupPointName} > ${batch.dropPointName}`}
+                                <Text style={styles.widgetRouteText} numberOfLines={2}>
+                                  {`From - ${batch.pickupPointName} To ${batch.dropPointName}`}
                                 </Text>
 
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>

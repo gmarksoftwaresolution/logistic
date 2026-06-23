@@ -96,5 +96,11 @@ export class OrderController {
   ) {
     return this.orderService.rejectDrop(id, req.user.id, remarks);
   }
+
+  @Post('bulk-accept')
+  @ApiOperation({ summary: 'Bulk accept pickup and drop orders' })
+  async bulkAccept(@Request() req: any, @Body('orders') orders: { id: number; type: 'pickup' | 'drop' }[]) {
+    return this.orderService.bulkAccept(orders, req.user.id);
+  }
 }
 

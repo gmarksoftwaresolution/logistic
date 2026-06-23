@@ -138,8 +138,8 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                             <Text style={styles.shgNameText}>{batch.shgName}</Text>
                             
                             <View style={styles.routeRow}>
-                              <Text style={styles.routeText} numberOfLines={1}>
-                                {isPickup ? `${batch.pickupPointName} > Gadhinglaj Hub` : `Gadhinglaj Hub > ${batch.dropPointName}`}
+                              <Text style={styles.routeText} numberOfLines={2}>
+                                {isPickup ? `From - ${batch.pickupPointName} To Gadhinglaj Hub` : `From - Gadhinglaj Hub To ${batch.dropPointName}`}
                               </Text>
                             </View>
 

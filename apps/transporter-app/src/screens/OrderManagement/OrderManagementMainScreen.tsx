@@ -260,7 +260,7 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
 
                   {/* Route Handover Path */}
                   <View style={styles.activityRouteRow}>
-                    <Text style={styles.routeText} numberOfLines={1}>
+                    <Text style={styles.routeText} numberOfLines={2}>
                       {act.route}
                     </Text>
                   </View>
