@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id            String   @id @default(uuid())
+  mobileNumber  String   @unique
+  name          String
+  role          String
+  createdAt     DateTime @default(now())
+}
+
+model CommunityMember {
+  id            String   @id @default(uuid())
+  memberCode    String?  @unique
+  type          String   // SHG, INDIVIDUAL
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt     DateTime @default(now())
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+
+  // Personal Details
+  profilePhoto      String?
+  fullName          String
+  mobileNumber      String
+  age               Int?
+  occupation        String?
+
+  // SHG Details
+  roleInShg         String?
+  shgName           String?
+  crpName           String?
+  crpMobile         String?
+  crpEmail          String?
+  leaderName        String?
+  leaderMobile      String?
+  groupSize         Int?
+  activeSince       String?
+
+  // Business Details
+  producesProducts  Boolean? @default(false)
+  businessTeamSize  Int?
+  productName       String?
+  productCategory   String?
+  dailyProduction   Float?
+  weeklyProduction  Float?
+  productionUnit    String?
+  pricePerUnit      Float?
+
+  // Address Details
+  houseNo           String?
+  deliveryAddress   String?
+  village           String?
+  taluka            String?
+  district          String?
+  state             String?
+  pincode           String?
+
+  // Document Details
+  aadhaarNumber     String?
+  panNumber         String?
+  aadhaarFrontPhoto String?
+  aadhaarBackPhoto  String?
+  panCardPhoto      String?
+
+  // Bank Details
+  accountHolderName String?
+  accountNumber     String?
+  ifscCode          String?
+  bankName          String?
+  branchName        String?
+  upiId             String?
+
+  // Storage Details
+  storageSpace      String?
+  storageWidth      Float?
+  storageHeight     Float?
+  storageDescription String?
+
+  // Vehicle Details
+  vehicleAvailable          Boolean? @default(false)
+  vehicleType               String?
+  vehicleRegistrationNumber String?
+  drivingLicenseNumber      String?
+  drivingLicensePhoto       String?
+  vehiclePhoto              String?
+}
+
+model TransporterMember {
+  id              String   @id @default(uuid())
+  transporterCode String?  @unique
+  type            String   // ROUTE_PARTNER, PERSONAL
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+
+  // Personal Details
+  profilePhoto    String?
+  firstName       String
+  lastName        String
+  mobileNumber    String
+  email           String?
+
+  // Address Details
+  residentialAddress String?
+  village            String?
+  taluka             String?
+  district           String?
+  state              String?
+  pincode            String?
+
+  // Driving Details
+  licenseNumber      String?
+  licensePhoto       String?
+  licenseExpiryDate  DateTime?
+  experienceYears    Int?
+
+  // Bank Details
+  accountHolderName  String?
+  accountNumber      String?
+  ifscCode           String?
+  bankName           String?
+  branchName         String?
+  upiId              String?
+
+  // Vehicle Details
+  vehicleCategory       String?
+  vehicleType           String?
+  vehicleMake           String?
+  vehicleNumber         String?
+  vehicleRcPhoto        String?
+  vehicleInsurancePhoto String?
+
+  // Route Details
+  assignedPincodes   Json?
+  assignedVillages   Json?
+  morningShift       String?
+  eveningShift       String?
+  workingDays        Json?
+
+  // Milk Organization Details
+  milkOrganizationName String?
+  milkCenterName       String?
+}
+
+model Order {
+  id                      String            @id @default(uuid())
+  orderId                 String            @unique
+  barcode                 String?           @unique
+  
+  // Seller details
+  sellerName              String
+  sellerMobile            String
+  sellerVillage           String
+  sellerTaluka            String
+  sellerDistrict          String
+  sellerState             String
+  sellerPincode           String
+  
+  // Buyer details
+  buyerName               String
+  buyerMobile             String
+  buyerVillage            String
+  buyerTaluka            String
+  buyerDistrict           String
+  buyerState              String
+  buyerPincode            String
+  
+  // Package dimensions
+  productCount            Int               @default(1)
+  totalQty                Int               @default(1)
+  totalWeight             Float             @default(0.0)
+  
+  // SHG & Transporter assignments
+  pickupShgId             String?
+  pickupTransporterId     String?
+  dropShgId               String?
+  dropTransporterId       String?
+  pickupReturnShgId       String?
+  returnTransporterId     String?
+  
+  // Statuses
+  mainStatus              String            // Enum values like PENDING_PICKUP, HUB_RECEIVED, etc.
+  pickupShgStatus         String?           // PENDING, ACCEPTED, REJECTED, PICKED
+  pickupTransporterStatus String?           // PENDING, TRANSPORTER_ACCEPTED, IN_TRANSIT_TO_HUB
+  dropShgStatus           String?           // PENDING, ACCEPTED, REJECTED, DROP_SHG_DELIVERED
+  dropTransporterStatus   String?           // PENDING, TRANSPORTER_ACCEPTED, PARCEL_AT_DROP_SHG
+  
+  // Return & Reschedule indicators
+  returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
+  rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
+  rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
+  
+  // Timestamps
+  warehouseReceivedAt     DateTime?
+  barcodeGeneratedAt      DateTime?
+  storedAt                DateTime?
+  dispatchedAt            DateTime?
+  deliveredAt             DateTime?
+  rescheduledAt           DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  assignments             OrderAssignment[]
+}
+
+model OrderAssignment {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  assigneeId   String
+  assigneeType String   // SHG, TRANSPORTER
+  role         String   // PICKUP, DROP, RETURN
+  status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
