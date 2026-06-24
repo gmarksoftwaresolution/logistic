@@ -1,5 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import axios from 'axios';
+import { PrismaService } from '../prisma/prisma.service';
 
 // Local mock data for testing when APIs are unreachable
 const MOCK_PINCODES: Record<string, any> = {
@@ -31,13 +32,37 @@ const MOCK_PINCODES: Record<string, any> = {
 
 @Injectable()
 export class LocationService {
+  constructor(private readonly prisma: PrismaService) {}
+
   async getAddressFromPincode(pincode: string) {
     try {
       if (pincode.length !== 6) {
         throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
       }
 
-      // 1. Try Primary API (PostalPincode.in)
+      // 1. Try Local Database
+      try {
+        const records = await (this.prisma as any).pincodeDirectory.findMany({
+          where: { pincode },
+        });
+
+        if (records && records.length > 0) {
+          const first = records[0];
+          const villages = [...new Set(records.map((r: any) => r.village))].sort();
+
+          return {
+            state: first.state,
+            district: first.district,
+            taluka: first.taluka,
+            villages: villages,
+            source: 'local_db'
+          };
+        }
+      } catch (dbError) {
+        console.warn(`Local DB query failed for ${pincode}: ${dbError.message}`);
+      }
+
+      // 2. Try Primary API (PostalPincode.in)
       try {
         const response = await axios.get(`https://api.postalpincode.in/pincode/${pincode}`, { timeout: 3000 });
         const data = response.data;

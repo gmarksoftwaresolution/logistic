@@ -82,7 +82,7 @@ export default function ProfileScreen({
                 {user?.profileImage ? (
                   <Image source={{ uri: user.profileImage }} className="w-full h-full" />
                 ) : (
-                  <Text className="text-[#073318] font-bold text-3xl">{user?.name?.charAt(0) || 'M'}</Text>
+                  <Text className="text-[#073318] font-bold text-3xl">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'M'}</Text>
                 )}
               </View>
               <TouchableOpacity className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-100 items-center justify-center shadow-sm">
@@ -91,7 +91,7 @@ export default function ProfileScreen({
             </View>
 
             <View className="flex-row items-center mt-4">
-              <Text className="text-xl font-bold text-[#1E293B]">{user?.name || 'Mahadev'}</Text>
+              <Text className="text-xl font-bold text-[#1E293B]">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim() || 'Mahadev'}</Text>
               <View className="flex-row items-center bg-[#EEF5F0] px-2 py-0.5 rounded-full ml-2">
                 <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
                 <Text className="text-[10px] text-[#16A34A] font-bold ml-1">{t("su_verified_303")}</Text>
@@ -99,7 +99,7 @@ export default function ProfileScreen({
             </View>
             
             <Text className="text-sm text-[#64748B] mt-1.5">+91 {user?.mobile || '7777777777'}</Text>
-            <Text className="text-sm text-[#64748B] mt-0.5">{user?.name?.toLowerCase().replace(' ', '.') || 'mahadev'}{t("su_gmail_com_304")}</Text>
+            <Text className="text-sm text-[#64748B] mt-0.5">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().toLowerCase().replace(' ', '.') || 'mahadev'}{t("su_gmail_com_304")}</Text>
 
             <View className="bg-[#F8FAFC] w-full rounded-2xl p-4 mt-6 flex-row items-center border border-gray-100">
               <MaterialCommunityIcons name="moped-electric" size={24} color="#073318" />

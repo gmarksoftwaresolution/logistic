@@ -44,7 +44,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     rejectOrder,
     highlightedOrders,
     incomingReturnOrders,
-    acceptReturnOrders
+    acceptReturnOrders,
+    rejectReturnOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -161,19 +162,19 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleAcceptSelected = () => {
-    if (activeTab === 'returns') {
-      acceptReturnOrders(selectedReturnIds);
-      setSelectedReturnIds([]);
-      setModalConfig(prev => ({ ...prev, visible: false }));
-      setShowSuccessBanner(true);
-      return;
-    }
-    const ordersToAccept = incomingOrders.filter(o => selectedIds.includes(o.id));
+    const isReturns = activeTab === 'returns';
+    const ordersToAccept = isReturns 
+      ? incomingReturnOrders.filter(o => selectedReturnIds.includes(o.id))
+      : incomingOrders.filter(o => selectedIds.includes(o.id));
+      
     if (ordersToAccept.length === 0) return;
+    
     setModalConfig({
       visible: true,
-      title: t('su_confirm_action') || "Confirm Action",
-      message: (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
+      title: isReturns ? "Confirm Return Acceptance" : (t('su_confirm_action') || "Confirm Action"),
+      message: isReturns 
+        ? "Are you sure you want to accept the selected return order(s)?"
+        : (t('su_are_you_sure_accept_selected') || "Are you sure you want to accept all {count} selected order(s)?").replace('{count}', ordersToAccept.length.toString()),
       isDestructive: false,
       isInfoOnly: false,
       confirmText: t('su_accept') || 'Accept',
@@ -182,22 +183,33 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         try {
-          await acceptOrders(ordersToAccept);
-          setSelectedIds([]);
-          Toast.show({
-            type: 'success',
-            text1: t("su_success_388"),
-            text2: t("su_orders_have_been_suc_389")
-          });
+          if (isReturns) {
+            await acceptReturnOrders(selectedReturnIds);
+            setSelectedReturnIds([]);
+            Toast.show({
+              type: 'success',
+              text1: "Return Order Accepted",
+              text2: "Pickup Return Created"
+            });
+            navigation.navigate('ReturnOrders');
+          } else {
+            await acceptOrders(ordersToAccept);
+            setSelectedIds([]);
+            Toast.show({
+              type: 'success',
+              text1: t("su_success_388"),
+              text2: t("su_orders_have_been_suc_389")
+            });
+            // Redirect directly to AcceptedOrders (pickup tab)
+            navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+          }
           
-          setModalConfig({ ...modalConfig, visible: false });
-          // Redirect directly to AcceptedOrders (pickup tab)
-          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
+          setModalConfig(prev => ({ ...prev, visible: false }));
         } catch (error) {
           Toast.show({
             type: 'error',
             text1: 'Error',
-            text2: 'Failed to accept orders.'
+            text2: isReturns ? 'Failed to accept return orders.' : 'Failed to accept orders.'
           });
         } finally {
           setIsProcessing(false);
@@ -206,7 +218,11 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     });
   };
   const handleRejectSelected = () => {
-    const batch = incomingOrders.filter(o => selectedIds.includes(o.id));
+    const isReturnsTab = activeTab === 'returns';
+    const sourceArray = isReturnsTab ? incomingReturnOrders : incomingOrders;
+    const currentSelected = isReturnsTab ? selectedReturnIds : selectedIds;
+    
+    const batch = sourceArray.filter(o => currentSelected.includes(o.id));
     if (batch.length === 0) return;
     setOrdersToRejectBatch(batch);
     setCurrentRejectIndex(0);
@@ -214,24 +230,30 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   };
   const handleRejectModalSubmit = async (order: Order, reason: string) => {
     try {
-      await rejectOrder({
-        ...order,
-        rejectReason: reason
-      });
-      const nextIndex = currentRejectIndex + 1;
-      if (nextIndex < ordersToRejectBatch.length) {
-        setCurrentRejectIndex(nextIndex);
+      if (activeTab === 'returns') {
+        const idsToReject = ordersToRejectBatch.map(o => o.id);
+        await rejectReturnOrders(idsToReject, reason);
       } else {
-        setRejectModalVisible(false);
-        setSelectedIds([]);
-        import('react-native-toast-message').then(({
-          default: Toast
-        }) => Toast.show({
-          type: 'success',
-          text1: t("su_done_359"),
-          text2: t("su_selected_orders_have_391")
-        }));
+        await Promise.all(ordersToRejectBatch.map(o => 
+          rejectOrder({
+            ...o,
+            rejectReason: reason
+          })
+        ));
       }
+      setRejectModalVisible(false);
+      if (activeTab === 'returns') {
+        setSelectedReturnIds([]);
+      } else {
+        setSelectedIds([]);
+      }
+      import('react-native-toast-message').then(({
+        default: Toast
+      }) => Toast.show({
+        type: 'success',
+        text1: t("su_done_359"),
+        text2: t("su_selected_orders_have_391")
+      }));
     } catch (error) {
       Toast.show({
         type: 'error',
@@ -375,7 +397,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             <Text className={`font-bold text-[13px] ${
               activeTab === 'returns' ? 'text-white' : 'text-slate-500'
             }`}>
-              Returns
+              Return
             </Text>
             <View 
               className="px-2.5 py-0.5 rounded-full ml-2"
@@ -524,7 +546,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   {/* Order ID Badge / Highlight */}
                   <View className="flex-row items-center">
                     <Text className="text-[11px] font-semibold text-slate-700 tracking-wider">
-                      #{orderIdText}
+                      {activeTab === 'returns' ? orderIdText : `#${orderIdText}`}
                     </Text>
                   </View>
 

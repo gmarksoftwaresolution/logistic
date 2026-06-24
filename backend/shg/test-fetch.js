@@ -8,7 +8,7 @@ async function testFetch() {
     });
     const token = loginRes.data.token;
     
-    const res = await axios.get('http://localhost:3000/api/orders/pickup/assigned', {
+    const res = await axios.get('http://localhost:3000/api/orders/new/assigned', {
       headers: { Authorization: `Bearer ${token}` }
     });
     

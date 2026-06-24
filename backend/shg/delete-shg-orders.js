@@ -4,11 +4,11 @@ const prisma = new PrismaClient();
 
 async function main() {
   const shgUser = await prisma.user.findUnique({
-    where: { phoneNumber: '7777777777' }
+    where: { phoneNumber: '7575757575' }
   });
 
   if (!shgUser) {
-    console.log('SHG User with phone 7777777777 not found!');
+    console.log('SHG User with phone 7575757575 not found!');
     process.exit(1);
   }
 
@@ -67,7 +67,7 @@ async function main() {
     where: { id: { in: masterOrderIdsArray } }
   });
 
-  console.log('Successfully deleted all seeded orders for SHG user 7777777777.');
+  console.log('Successfully deleted all seeded orders for SHG user 7575757575.');
 }
 
 main()

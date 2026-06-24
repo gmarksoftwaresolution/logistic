@@ -34,7 +34,7 @@ export default function StockManagementScreen({ navigation }: Props) {
                <Image source={{ uri: user.profileImage }} className="w-10 h-10 rounded-full border-2 border-white" />
              ) : (
                 <View className="w-10 h-10 bg-primary rounded-full items-center justify-center border-2 border-white">
-                  <Text className="text-white font-bold">{user?.name?.charAt(0) || 'U'}</Text>
+                  <Text className="text-white font-bold">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'U'}</Text>
                 </View>
              )}
           </TouchableOpacity>

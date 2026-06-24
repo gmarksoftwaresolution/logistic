@@ -27,7 +27,7 @@ type Props = CompositeScreenProps<
 const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
-  const { incomingOrders, acceptedOrders, rejectedOrders, deliveredOrders, returnedOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
+  const { incomingOrders, incomingReturnOrders, acceptedOrders, rejectedOrders, deliveredOrders, returnedOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
 
   useFocusEffect(
     useCallback(() => {
@@ -50,7 +50,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       id: `#${getFormattedOrderId(order)}`,
       route: translateRoute(getRouteForOrder(order)),
       details: `${order.remainingQty || 1} ${t("su_products") || "products"} • ${order.weight || 2} ${t("su_kg") || "kg"}`,
-      time: order.acceptedAt || '',
+      time: `${order.date} • ${order.time}`,
       status: t('overview_accepted') || 'Accepted',
       _sortKey: order.acceptedAt || '',
       originalOrder: order,
@@ -59,7 +59,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       id: `#${getFormattedOrderId(order)}`,
       route: translateRoute(getRouteForOrder(order)),
       details: `${order.remainingQty || 1} ${t("su_products") || "products"} • ${order.weight || 2} ${t("su_kg") || "kg"}`,
-      time: order.rejectedAt || '',
+      time: `${order.date} • ${order.time}`,
       status: t('overview_rejected') || 'Rejected',
       _sortKey: order.rejectedAt || '',
       originalOrder: order,
@@ -68,7 +68,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
       id: `#${getFormattedOrderId(order)}`,
       route: translateRoute(getRouteForOrder(order)),
       details: `${order.remainingQty || 1} ${t("su_products") || "products"} • ${order.weight || 2} ${t("su_kg") || "kg"}`,
-      time: order.completedAt || '',
+      time: `${order.date} • ${order.time}`,
       status: t('overview_completed') || 'Completed',
       _sortKey: order.completedAt || '',
       originalOrder: order,
@@ -95,7 +95,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const isInitialLoad = isOrdersLoading && incomingOrders.length === 0 && acceptedOrders.length === 0 && rejectedOrders.length === 0 && deliveredOrders.length === 0;
+  const isInitialLoad = isOrdersLoading && incomingOrders.length === 0 && (incomingReturnOrders?.length || 0) === 0 && acceptedOrders.length === 0 && rejectedOrders.length === 0 && deliveredOrders.length === 0;
 
   return (
     <View className="flex-1 bg-white">
@@ -141,7 +141,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                   </View>
                   <View className="mt-6 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{(incomingOrders?.length || 0) + (incomingReturnOrders?.length || 0)}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>New orders received and awaiting review</Text>
                   </View>
                 </LinearGradient>
@@ -206,7 +206,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Returned </Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Return </Text>
                     <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
                       <Feather name="corner-up-left" size={16} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
@@ -324,21 +324,31 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
             ) : (
               recentActivities.map((activity, index) => {
                 const statusStyle = getStatusStyle(activity.status);
+                const isRescheduled = !!activity.originalOrder.rescheduledDate;
                 return (
                   <HighlightCardWrapper key={index} isHighlighted={highlightedOrders[activity.originalOrder.id]}>
                     <View
-                      className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
+                      className="rounded-[24px] mb-4 overflow-hidden relative"
                       style={{
                         elevation: 3,
                         shadowColor: '#000',
                         shadowOffset: { width: 0, height: 2 },
                         shadowOpacity: 0.05,
                         shadowRadius: 10,
-                        backgroundColor: 'rgba(255, 255, 255, 0.85)'
+                        backgroundColor: isRescheduled ? '#FFFBEB' : 'rgba(255, 255, 255, 0.85)',
+                        borderColor: isRescheduled ? '#FEF08A' : 'rgba(255, 255, 255, 0.6)',
+                        borderWidth: 1
                       }}
                     >
+                      {/* RESCHEDULED Badge */}
+                      {isRescheduled && (
+                        <View className="absolute top-0 right-0 bg-[#FEF08A] px-2 py-0.5 rounded-bl-[12px] border-b border-l border-[#FDE047]/50" style={{ zIndex: 10 }}>
+                          <Text className="text-[9px] font-black text-[#854D0E] tracking-wider uppercase">{t('su_rescheduled') || 'RESCHEDULED'}</Text>
+                        </View>
+                      )}
+
                       <BlurView intensity={50} tint="light">
-                        <View className="p-5 bg-white/70">
+                        <View className={`p-5 ${isRescheduled ? 'bg-transparent' : 'bg-white/70'}`}>
                           <View className="flex-row justify-between items-center mb-3">
                             <Text className="text-[14px] font-black text-[#073318] tracking-wide">{activity.id}</Text>
                             <View className={`px-3.5 py-1.5 rounded-full ${statusStyle.bg}`}>

@@ -9,6 +9,7 @@ interface RescheduleModalsProps {
   rescheduleReasonModalVisible: boolean;
   setRescheduleReasonModalVisible: (show: boolean) => void;
   onConfirm: (date: string, time: string, reason: string) => void;
+  expectedDate?: string;
 }
 
 export const RescheduleModals: React.FC<RescheduleModalsProps> = ({
@@ -17,11 +18,15 @@ export const RescheduleModals: React.FC<RescheduleModalsProps> = ({
   rescheduleReasonModalVisible,
   setRescheduleReasonModalVisible,
   onConfirm,
+  expectedDate,
 }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
 
-  const [tempSelectedDay, setTempSelectedDay] = useState(18);
+  // Extract day from expectedDate (e.g., "18 May 2024" -> 18). Default to 18 if not provided.
+  const expectedDay = expectedDate ? parseInt(expectedDate.split(' ')[0], 10) : 18;
+
+  const [tempSelectedDay, setTempSelectedDay] = useState(expectedDay);
   const [tempSelectedTime, setTempSelectedTime] = useState('11:00 AM');
   const [selectedRescheduleReason, setSelectedRescheduleReason] = useState<string | null>(null);
   const [customRescheduleReason, setCustomRescheduleReason] = useState('');
@@ -58,7 +63,7 @@ export const RescheduleModals: React.FC<RescheduleModalsProps> = ({
                 <TouchableOpacity className="p-1">
                   <Ionicons name="chevron-back" size={18} color="#6B7280" />
                 </TouchableOpacity>
-                <Text className="font-bold text-[15px] text-[#111827]">{t("su_may_2024_413") || "May 2024"}</Text>
+                <Text className="font-bold text-[15px] text-[#111827]">{expectedDate ? expectedDate.substring(expectedDate.indexOf(' ') + 1) : (t("su_may_2024_413") || "May 2024")}</Text>
                 <TouchableOpacity className="p-1">
                   <Ionicons name="chevron-forward" size={18} color="#6B7280" />
                 </TouchableOpacity>
@@ -82,15 +87,17 @@ export const RescheduleModals: React.FC<RescheduleModalsProps> = ({
                 ))}
                 {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
                   const isDaySelected = tempSelectedDay === day;
-                  const isPast = day < 18;
+                  // Only expectedDay and expectedDay + 1 are allowed
+                  const isAllowed = day === expectedDay || day === expectedDay + 1;
+                  
                   return (
                     <View key={`may-${day}`} style={{ width: '14.28%', alignItems: 'center' }}>
                       <TouchableOpacity 
-                        onPress={() => { if (!isPast) setTempSelectedDay(day); }} 
-                        activeOpacity={isPast ? 1 : 0.7} 
+                        onPress={() => { if (isAllowed) setTempSelectedDay(day); }} 
+                        activeOpacity={!isAllowed ? 1 : 0.7} 
                         className={`w-9 h-9 items-center justify-center rounded-full mb-1 ${isDaySelected ? 'bg-[#073318]' : ''}`}
                       >
-                        <Text className={`text-[13px] ${isDaySelected ? 'font-semibold text-white' : isPast ? 'font-medium text-gray-300' : 'font-semibold text-[#111827]'}`}>{day}</Text>
+                        <Text className={`text-[13px] ${isDaySelected ? 'font-semibold text-white' : !isAllowed ? 'font-medium text-gray-300' : 'font-semibold text-[#111827]'}`}>{day}</Text>
                       </TouchableOpacity>
                     </View>
                   );
@@ -134,7 +141,8 @@ export const RescheduleModals: React.FC<RescheduleModalsProps> = ({
               <TouchableOpacity 
                 onPress={() => {
                   const finalReason = selectedRescheduleReason === 'Other' ? customRescheduleReason : selectedRescheduleReason;
-                  onConfirm(`${tempSelectedDay} May 2024`, tempSelectedTime, finalReason || '');
+                  const monthYear = expectedDate ? expectedDate.substring(expectedDate.indexOf(' ') + 1) : "May 2024";
+                  onConfirm(`${tempSelectedDay} ${monthYear}`, tempSelectedTime, finalReason || '');
                   setShowBottomSheet(false);
                   setRescheduleReasonModalVisible(false);
                 }} 

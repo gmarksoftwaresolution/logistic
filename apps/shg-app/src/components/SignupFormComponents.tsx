@@ -105,29 +105,33 @@ export const InputField = React.forwardRef<TextInput, InputFieldProps>(({
     <View className="mb-4 w-full">
       <Label text={label} required={required} />
       <View 
-        className={`bg-[#F9FAFB] h-[58px] px-4 rounded-[20px] border flex-row items-center ${
+        className={`bg-[#F9FAFB] min-h-[58px] py-3 px-4 rounded-[20px] border flex-row items-center ${
           error ? 'border-[#EF4444]' : isFocused ? 'border-[#073318]' : (required && props.value && !error) ? 'border-[#22C55E]' : 'border-gray-200'
         } ${props.editable === false ? 'bg-[#F3F4F6]' : ''}`}
       >
-        {icon && <Ionicons name={icon} size={20} color="#073318" className="mr-3" />}
-        {prefix && <Text className="text-[#073318] font-bold mr-2">{prefix}</Text>}
+        {icon && (
+          <View className="w-[24px] items-center justify-center mr-3 flex-shrink-0">
+            <Ionicons name={icon} size={24} color="#073318" />
+          </View>
+        )}
+        {prefix && <Text className="text-[#073318] font-bold mr-2 flex-shrink-0">{prefix}</Text>}
         <TextInput
           ref={ref}
-          className="flex-1 text-[#111827] text-[16px] font-medium ml-1"
+          className="flex-1 text-[#111827] text-[16px] font-medium"
+          style={[{ padding: 0, textAlignVertical: 'center' }, style]}
           placeholderTextColor="#9CA3AF"
           onFocus={() => setIsFocused(true)}
           onBlur={(e) => {
             setIsFocused(false);
             if (props.onBlur) props.onBlur(e);
           }}
-          style={style}
           {...props}
         />
         {loading ? (
-          <ActivityIndicator size="small" color="#073318" className="ml-2" />
+          <ActivityIndicator size="small" color="#073318" className="ml-2 flex-shrink-0" />
         ) : suffixIcon ? (
-          <TouchableOpacity onPress={onSuffixPress} className="p-1">
-            <Ionicons name={suffixIcon} size={20} color="#073318" />
+          <TouchableOpacity onPress={onSuffixPress} className="p-1 ml-2 flex-shrink-0">
+            <Ionicons name={suffixIcon} size={24} color="#073318" />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -169,17 +173,26 @@ export const DropdownField: React.FC<DropdownFieldProps> = ({
       <Label text={label} required={required} />
       <TouchableOpacity
         onPress={onPress}
-        className={`bg-[#F9FAFB] h-[58px] px-4 rounded-[20px] border flex-row justify-between items-center ${
+        className={`bg-[#F9FAFB] min-h-[58px] py-3 px-4 rounded-[20px] border flex-row justify-between items-center ${
           error ? 'border-[#EF4444]' : (required && value && !error) ? 'border-[#22C55E]' : 'border-gray-200'
         }`}
       >
-        <View className="flex-row items-center">
-          {icon && <Ionicons name={icon} size={20} color="#073318" className="mr-3" />}
-          <Text className={`font-medium ml-1 text-[16px] ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}>
+        <View className="flex-row items-center flex-1 pr-2">
+          {icon && (
+            <View className="w-[24px] items-center justify-center mr-3 flex-shrink-0">
+              <Ionicons name={icon} size={24} color="#073318" />
+            </View>
+          )}
+          <Text 
+            className={`flex-1 font-medium text-[16px] ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}
+            style={{ textAlignVertical: 'center' }}
+          >
             {displayValue || placeholder}
           </Text>
         </View>
-        <Ionicons name="chevron-down" size={20} color="#073318" />
+        <View className="flex-shrink-0">
+          <Ionicons name="chevron-down" size={24} color="#073318" />
+        </View>
       </TouchableOpacity>
       {error ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4, fontWeight: '500' }}>{error}</Text> : null}
     </View>

@@ -44,6 +44,30 @@ export class UserService {
     return maskedUser;
   }
 
+  async updateProfile(userId: number, updateData: any) {
+    const dataToUpdate: any = {};
+    if (updateData.name !== undefined) {
+      dataToUpdate.fullName = updateData.name;
+    }
+    if (updateData.profileImage !== undefined) {
+      dataToUpdate.profilePhoto = updateData.profileImage;
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: dataToUpdate,
+    });
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        name: user.fullName,
+      }
+    };
+  }
+
   async getDashboard(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

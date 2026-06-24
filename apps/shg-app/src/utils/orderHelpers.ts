@@ -1,6 +1,6 @@
 export const getRouteForOrder = (item: any) => {
   // Use explicitly stored original route data for Return orders to prevent swapping
-  if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-')) {
+  if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-') || item.id?.includes('RET-') || item.orderId?.includes('RET-')) {
     if (item.fromLocation && item.toLocation) {
       return `${item.fromLocation} > ${item.toLocation}`;
     }
@@ -56,11 +56,8 @@ export const getModalAddresses = (item: any, t: any) => {
 };
 
 export const getInfoForOrder = (item: any) => {
-  const date = '18 May 2024';
-  let time = '11:00 AM';
-  if (item.id === 'inc-4') {
-    time = '01:00 PM';
-  }
+  const date = item.date || '18 May 2024';
+  const time = item.time || '11:00 AM';
   return { date, time };
 };
 
@@ -77,7 +74,8 @@ export const formatOrderNumber = (orderNumber: string | any) => {
     .replace(/-pickup-/gi, '-')
     .replace(/-drop-/gi, '-')
     .replace(/-pickup$/gi, '')
-    .replace(/-drop$/gi, '');
+    .replace(/-drop$/gi, '')
+    .replace(/^MO-/i, ''); // Strip MO- prefix
 
   return formatted.replace(/^#/, '');
 };
