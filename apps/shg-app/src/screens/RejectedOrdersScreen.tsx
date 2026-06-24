@@ -40,8 +40,8 @@ const RejectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { rejectedOrders, highlightedOrders } = useOrders();
   
-  const normalRejectedOrders = rejectedOrders.filter(o => !o.id.startsWith('RTO-'));
-  const returnRejectedOrders = rejectedOrders.filter(o => o.id.startsWith('RTO-'));
+  const normalRejectedOrders = rejectedOrders.filter(o => !o.id.startsWith('RTO-') && !o.isReturn);
+  const returnRejectedOrders = rejectedOrders.filter(o => o.id.startsWith('RTO-') || o.isReturn);
   
   const [activeTab, setActiveTab] = useState<'new' | 'return'>('new');
   

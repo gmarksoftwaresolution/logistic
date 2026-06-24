@@ -1,6 +1,6 @@
 export const getRouteForOrder = (item: any) => {
   // Use explicitly stored original route data for Return orders to prevent swapping
-  if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-')) {
+  if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-') || item.id?.includes('RET-') || item.orderId?.includes('RET-')) {
     if (item.fromLocation && item.toLocation) {
       return `${item.fromLocation} > ${item.toLocation}`;
     }
@@ -74,7 +74,8 @@ export const formatOrderNumber = (orderNumber: string | any) => {
     .replace(/-pickup-/gi, '-')
     .replace(/-drop-/gi, '-')
     .replace(/-pickup$/gi, '')
-    .replace(/-drop$/gi, '');
+    .replace(/-drop$/gi, '')
+    .replace(/^MO-/i, ''); // Strip MO- prefix
 
   return formatted.replace(/^#/, '');
 };

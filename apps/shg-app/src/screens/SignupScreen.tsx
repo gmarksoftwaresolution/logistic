@@ -468,6 +468,7 @@ export default function SignupScreen({
   const [talukaError, setTalukaError] = useState('');
   const [village, setVillage] = useState('');
   const [villageError, setVillageError] = useState('');
+  const [villageList, setVillageList] = useState<string[]>([]);
   const [streetArea, setStreetArea] = useState('');
   const [streetAreaError, setStreetAreaError] = useState('');
   const [houseNo, setHouseNo] = useState('');
@@ -2474,8 +2475,16 @@ export default function SignupScreen({
                       setStateName(data.state);
                       setDistrict(data.district);
                       setTaluka(data.taluka);
-                      if (data.villages && data.villages.length === 1) {
-                        setVillage(data.villages[0]);
+                      if (data.villages && data.villages.length > 0) {
+                        setVillageList(data.villages);
+                        if (data.villages.length === 1) {
+                          setVillage(data.villages[0]);
+                        } else {
+                          setVillage('');
+                        }
+                      } else {
+                        setVillageList([]);
+                        setVillage('');
                       }
                       setStateNameError('');
                       setDistrictError('');
@@ -2506,42 +2515,43 @@ export default function SignupScreen({
               if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
             }} onBlur={() => {
               if (!validateRequired(landmark)) setLandmarkError(t("su_address_is_required_195"));
-            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => villageRef.current?.focus()} />
+            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => talukaRef.current?.focus()} />
 
                 {/* Village & Taluka Row */}
                 <View className="flex-row w-full mt-4">
                   <View className="flex-1 mr-2">
-                    <InputField ref={villageRef} label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" error={villageError} required={true} value={village} onChangeText={val => {
-                  setVillage(val);
-                  if (villageError) setVillageError(validateRequired(val) ? '' : 'Village is required');
-                }} onBlur={() => {
-                  if (!validateRequired(village)) setVillageError(t("su_village_is_required_56"));
-                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => talukaRef.current?.focus()} />
+                    <DropdownField label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
+                      if (villageList.length > 0) {
+                        setShowVillageMenu(true);
+                      } else if (villageList.length === 0 && pincode.length === 6) {
+                        setVillageError('No villages found for this pincode');
+                      }
+                    }} />
                   </View>
 
                   <View className="flex-1 ml-2">
-                    <InputField ref={talukaRef} label={t("taluka")} placeholder={t("taluka")} icon="flag-outline" error={talukaError} required={true} value={taluka} onChangeText={val => {
+                    <InputField ref={talukaRef} label={t("taluka")} placeholder={t("taluka")} icon="flag-outline" error={talukaError} required={true} value={taluka} multiline={true} blurOnSubmit={true} onChangeText={val => {
                   setTaluka(val);
                   if (talukaError) setTalukaError(validateRequired(val) ? '' : 'Taluka is required');
                 }} onBlur={() => {
                   if (!validateRequired(taluka)) setTalukaError(t("val_taluka_required"));
-                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => districtRef.current?.focus()} />
+                }} returnKeyType="next" onSubmitEditing={() => districtRef.current?.focus()} />
                   </View>
                 </View>
 
                 {/* District & State Row */}
                 <View className="flex-row w-full mt-4">
                   <View className="flex-1 mr-2">
-                    <InputField ref={districtRef} label={t("district")} placeholder={t("district")} icon="flag-outline" error={districtError} required={true} value={district} onChangeText={val => {
+                    <InputField ref={districtRef} label={t("district")} placeholder={t("district")} icon="flag-outline" error={districtError} required={true} value={district} multiline={true} blurOnSubmit={true} onChangeText={val => {
                   setDistrict(val);
                   if (districtError) setDistrictError(validateRequired(val) ? '' : 'Please select district');
                 }} onBlur={() => {
                   if (!validateRequired(district)) setDistrictError(t("val_district_required"));
-                }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => stateNameRef.current?.focus()} />
+                }} returnKeyType="next" onSubmitEditing={() => stateNameRef.current?.focus()} />
                   </View>
 
                   <View className="flex-1 ml-2">
-                    <InputField ref={stateNameRef} label={t("state")} placeholder={t("state")} icon="flag-outline" error={stateNameError} required={true} value={stateName} onChangeText={val => {
+                    <InputField ref={stateNameRef} label={t("state")} placeholder={t("state")} icon="flag-outline" error={stateNameError} required={true} value={stateName} multiline={true} blurOnSubmit={true} onChangeText={val => {
                   setStateName(val);
                   if (stateNameError) setStateNameError(validateRequired(val) ? '' : 'Please select state');
                 }} onBlur={() => {
@@ -3187,17 +3197,21 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_village_297")}</Text>
-                {selectedData?.villages?.map((opt: string) => {
-                const isSelected = village === opt;
-                return <TouchableOpacity key={opt} onPress={() => {
-                  setVillage(opt);
-                  setVillageError('');
-                  setShowVillageMenu(false);
-                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
-                      {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>;
-              })}
+                <ScrollView style={{
+                maxHeight: 400
+              }} showsVerticalScrollIndicator={false}>
+                  {villageList.map(opt => {
+                  const isSelected = village === opt;
+                  return <TouchableOpacity key={opt} onPress={() => {
+                    setVillage(opt);
+                    setVillageError('');
+                    setShowVillageMenu(false);
+                  }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                        {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                      </TouchableOpacity>;
+                })}
+                </ScrollView>
               </View>
             </TouchableWithoutFeedback>
           </View>

@@ -56,6 +56,21 @@ export default function LandingScreen({ navigation }: Props) {
               console.log("Session expired or unauthorized on app launch, clearing token.");
               await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
               await AsyncStorage.removeItem('user_profile');
+            } else if (err.message?.includes('Network Error')) {
+              console.error("Network error on app launch:", err.message);
+              // Fallback to local profile if offline or server is unreachable
+              const profileStr = await AsyncStorage.getItem('user_profile');
+              if (profileStr) {
+                const profile = JSON.parse(profileStr);
+                if (profile.status === 'APPROVED' || profile.isVerified) {
+                  await SplashScreen.hideAsync();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Main' }],
+                  });
+                  return;
+                }
+              }
             } else {
               console.error("Failed to check signup progress on app launch:", err);
             }

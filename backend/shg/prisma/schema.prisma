@@ -501,6 +501,7 @@ model PickupOrder {
   transporter        User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
   status             String            @default("PENDING")
   pickupTime         DateTime?         @map("pickup_time")
+  handoverCode       String?           @map("handover_code")
   createdAt          DateTime          @default(now()) @map("created_at")
 
   items              PickupOrderItem[]
@@ -565,6 +566,7 @@ model DropOrder {
   transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
   status          String          @default("PENDING")
   deliveryAddress String?         @map("delivery_address")
+  handoverCode    String?         @map("handover_code")
   createdAt       DateTime        @default(now()) @map("created_at")
 
   items           DropOrderItem[]
@@ -615,4 +617,15 @@ model DropTracking {
   @@map("drop_tracking")
 }
 
+model PincodeDirectory {
+  id        Int      @id @default(autoincrement())
+  pincode   String
+  village   String
+  taluka    String
+  district  String
+  state     String
+  country   String   @default("India")
 
+  @@index([pincode])
+  @@map("pincode_directory")
+}

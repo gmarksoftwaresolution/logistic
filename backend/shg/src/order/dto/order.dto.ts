@@ -22,12 +22,11 @@ export class RejectOrdersDto {
   reason: string;
 }
 
-export class RescheduleOrdersDto {
-  @ApiProperty({ type: [Number], description: 'Array of Order integer IDs to reschedule' })
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsInt({ each: true })
-  orderIds: number[];
+export class RescheduleOrderDto {
+  @ApiProperty({ description: 'Order integer ID to reschedule' })
+  @IsInt()
+  @IsNotEmpty()
+  orderId: number;
 
   @ApiProperty({ description: 'New date for the order (e.g., 18 May 2024)' })
   @IsString()

@@ -191,18 +191,18 @@ async function main() {
   }
   console.log('Existing orders and test users deleted.');
 
-  // 2. Ensure SHG User exists (phone: 7777777777)
-  console.log('Ensuring SHG User exists (phone: 7777777777)...');
+  // 2. Ensure SHG User exists (phone: 7575757575)
+  console.log('Ensuring SHG User exists (phone: 7575757575)...');
   let shg = await prisma.user.findFirst({
-    where: { phoneNumber: '7777777777', role: UserRole.SHG }
+    where: { phoneNumber: '7575757575', role: UserRole.SHG }
   });
   if (!shg) {
     shg = await prisma.user.create({
       data: {
         authId: randomUUID(),
-        phoneNumber: '7777777777',
+        phoneNumber: '7575757575',
         role: UserRole.SHG,
-        fullName: 'Mahadev (SHG Leader)',
+        fullName: 'Mahadev',
         isVerified: true,
         address: {
           create: {
@@ -354,7 +354,6 @@ async function main() {
 
     await prisma.pickupOrder.create({
       data: {
-        id: isPickupStage ? item.dbId : undefined, // specific ID for sorting if pickup stage
         pickupOrderNumber: `PKP-${item.orderNumber}`,
         masterOrderId: masterOrder.id,
         sellerId: seller.id,
@@ -374,7 +373,6 @@ async function main() {
     const dropAddress = isPickupStage ? 'Transporter Hub Drop' : item.address;
     await prisma.dropOrder.create({
       data: {
-        id: !isPickupStage ? item.dbId : undefined, // specific ID for sorting if drop stage
         dropOrderNumber: `DRP-${item.orderNumber}`,
         masterOrderId: masterOrder.id,
         buyerId: buyer.id,

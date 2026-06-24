@@ -206,7 +206,7 @@ const OrdersOverviewScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Returned </Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Return </Text>
                     <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
                       <Feather name="corner-up-left" size={16} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />

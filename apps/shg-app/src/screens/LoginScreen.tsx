@@ -174,7 +174,7 @@ export default function LoginScreen({ navigation }: Props) {
         // Map backend fields to frontend UserProfile interface
         const mappedUser = {
           ...response.userDetails,
-          name: response.userDetails.fullName,
+          name: response.userDetails.fullName ? response.userDetails.fullName.replace(/\s*\(.*\)\s*/g, '').trim() : '',
           mobile: response.userDetails.mobileNumber,
         };
         

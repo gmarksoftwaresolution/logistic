@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/storage';
+import { userService } from '../services/userService';
 
 export interface UserProfile {
   name: string;
@@ -89,6 +90,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       const updatedUser = { ...user, ...data };
       setUser(updatedUser);
       await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
+      
+      try {
+        await userService.updateProfile({
+          name: updatedUser.name,
+          profileImage: updatedUser.profileImage,
+        });
+      } catch (err) {
+        console.error('Failed to sync profile update to backend', err);
+      }
     }
   };
 

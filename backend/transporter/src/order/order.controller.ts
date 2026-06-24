@@ -55,11 +55,6 @@ export class OrderController {
     return this.orderService.rejectPickup(id, req.user.id, remarks);
   }
 
-  @Get('drop/assigned')
-  @ApiOperation({ summary: 'Get all active drop-off delivery assignments for the transporter' })
-  async getAssignedDrops(@Request() req: any) {
-    return this.orderService.getAssignedDrops(req.user.id);
-  }
 
 
 
@@ -83,16 +78,6 @@ export class OrderController {
     @Body('code') code?: string,
   ) {
     return this.orderService.completeDrop(id, req.user.id, code);
-  }
-
-  @Post('drop/:id/reject')
-  @ApiOperation({ summary: 'Reject a drop order' })
-  async rejectDrop(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: any,
-    @Body('remarks') remarks?: string,
-  ) {
-    return this.orderService.rejectDrop(id, req.user.id, remarks);
   }
 }
 

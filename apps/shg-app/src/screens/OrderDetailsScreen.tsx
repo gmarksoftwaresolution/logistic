@@ -60,7 +60,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
-  const isDeliveryPhase = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop');
+  // Drop orders are always in the delivery phase (they go from Accepted → Complete, no pickup step)
+  const isDeliveryPhase = order.status === 'PickedUp' 
+    || (order.id.startsWith('RTO-') && order.legType === 'drop')
+    || (order.legType === 'drop' && !order.isReturn);
 
   // 2. Resolve active side details
   const activeRawName = isDeliveryPhase ? rawDestination : rawSource;
@@ -265,7 +268,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
   const isPickupAccepted = !isDeliveryPhase && order.status === 'Accepted' && !order.id.startsWith('RTO-');
   const isReturnPickup = !isDeliveryPhase && order.id.startsWith('RTO-') && order.legType === 'pickup';
-  const showRescheduleTimer = isPickupAccepted || isReturnPickup;
+  const showRescheduleTimer = isPickupAccepted || isReturnPickup || isDeliveryPhase;
 
   useEffect(() => {
     if (!showRescheduleTimer || !order.acceptedAt) return;
@@ -273,7 +276,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
     const acceptedDate = new Date(order.acceptedAt);
     if (isNaN(acceptedDate.getTime())) return;
 
-    const endTime = acceptedDate.getTime() + 2 * 60 * 60 * 1000;
+    const duration = isDeliveryPhase ? 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
+    const endTime = acceptedDate.getTime() + duration;
 
     const updateTimer = () => {
       const now = Date.now();
@@ -281,8 +285,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
       setRescheduleTimeLeft(left);
 
-      const totalDuration = 2 * 60 * 60 * 1000;
-      const prog = Math.max(0, Math.min(100, (left / totalDuration) * 100));
+      const prog = Math.max(0, Math.min(100, (left / duration) * 100));
       setRescheduleProgress(prog);
 
       if (left <= 0) {
@@ -295,7 +298,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [showRescheduleTimer, order.acceptedAt]);
+  }, [showRescheduleTimer, order.acceptedAt, isDeliveryPhase]);
 
   const formatTimeLeft = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -411,7 +414,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         Toast.show({
           type: 'success',
           text1: t("su_pickup_return_completed") || "Pickup Return Completed",
-          text2: t("su_order_moved_delivery_returns") || "Order moved to Delivery Returns successfully"
+          text2: t("su_order_moved_delivery_returns") || "Order moved to Delivery Return successfully"
         });
         if (navigation.canGoBack()) {
           navigation.goBack();
@@ -461,12 +464,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
     setRejectModalVisible(true);
   };
   const handleRejectModalSubmit = async (ord: Order, reason: string) => {
-    setRejectModalVisible(false);
     try {
       await rejectOrder({
         ...ord,
         rejectReason: reason
       });
+      setRejectModalVisible(false);
       if (isDeliveryPhase) {
         Toast.show({
           type: 'success',
@@ -939,10 +942,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
       </View>
 
       {/* Action Buttons Row */}
-        {!order.isRejectedDelivery && (
+        {(!order.isRejectedDelivery && order.status !== 'REJECTED') && (
           <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
             {/* Reschedule Button Area */}
-            <View className="flex-1 justify-end">
+            <View className="flex-1 justify-end" pointerEvents={(showRescheduleTimer && rescheduleExpired) ? 'none' : 'auto'}>
               {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
                 <View className="mb-2">
                   {rescheduleExpired ? (
@@ -968,7 +971,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 onPress={() => setRescheduleReasonModalVisible(true)}
                 disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)}
                 className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
-                style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.6 : 1 }}
+                style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.5 : 1 }}
               >
                 <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
                 <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
@@ -978,11 +981,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
 
             {/* Reject Order Button Area */}
-            <View className="flex-1 justify-end">
+            <View className="flex-1 justify-end" pointerEvents={isDeliveryPhase ? 'none' : 'auto'}>
               <TouchableOpacity
                 onPress={handleRejectOrder}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isDeliveryPhase}
                 className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
+                style={isDeliveryPhase ? { opacity: 0.5 } : {}}
               >
                 <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
                 <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
@@ -1127,17 +1131,26 @@ const OrderDetailsScreen: React.FC<Props> = ({
           setRescheduleReasonModalVisible={setRescheduleReasonModalVisible}
           expectedDate={(order as any).date || ''}
           onConfirm={async (date, time, reason) => {
-            await rescheduleOrder(order.id, date, time, reason);
-            Toast.show({
-              type: 'success',
-              text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
-              text2: t("su_order_has_been_updated") || "Order has been updated with the new date and time."
-            });
+            try {
+              await rescheduleOrder(order.id, date, time, reason);
+              Toast.show({
+                type: 'success',
+                text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
+                text2: t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+              });
 
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+              }
+            } catch (error: any) {
+              const errMsg = error.response?.data?.message || error.message || "Failed to reschedule order.";
+              Toast.show({
+                type: 'error',
+                text1: t("error") || "Error",
+                text2: errMsg
+              });
             }
           }}
         />

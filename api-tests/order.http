@@ -94,39 +94,8 @@ Authorization: Bearer {{transporterToken}}
 
 ###
 
-# @name getTransporterActiveDrops
-# Get all active drop-off delivery assignments for the transporter
-# Expected Response: 200 OK
-# Body: Array of assigned Drop Orders
-GET {{transporterHost}}/api/orders/drop/assigned
-Authorization: Bearer {{transporterToken}}
+# NOTE: getTransporterActiveDrops GET {{transporterHost}}/api/orders/drop/assigned is REMOVED
 
-# Expected Response Body Example:
-# [
-#   {
-#     "id": 60,
-#     "dropOrderNumber": "DRP-ORD-250859-645",
-#     "masterOrderId": 120,
-#     "buyerId": 53,
-#     "shgId": 9,
-#     "transporterId": 50,
-#     "status": "PENDING",
-#     "deliveryAddress": "Nesari Stand, Gadhinglaj",
-#     "createdAt": "2026-05-29T06:30:50.012Z",
-#     "buyer": {
-#       "fullName": "Raju Patil (Buyer)",
-#       "phoneNumber": "9999999991",
-#       "address": null
-#     },
-#     "items": [
-#       {
-#         "id": 60,
-#         "productId": 7,
-#         "quantity": 3
-#       }
-#     ]
-#   }
-# ]
 
 ###
 
@@ -200,26 +169,61 @@ Authorization: Bearer {{shgToken}}
 POST {{shgHost}}/orders/pickup/60/complete
 Authorization: Bearer {{shgToken}}
 
-###
+# NOTE: getShgActiveDrops GET {{shgHost}}/orders/drop/assigned is REMOVED
 
-# @name getShgActiveDrops
-# Get all active drop-off delivery assignments for the SHG
-# Expected Response: 200 OK
-GET {{shgHost}}/orders/drop/assigned
-Authorization: Bearer {{shgToken}}
-
-###
 
 # @name acceptShgDrop
 # Accept a delivery/drop order
 # Expected Response: 201 Created
-POST {{shgHost}}/orders/drop/60/accept
+POST {{shgHost}}/orders/new/60/accept
+Content-Type: application/json
 Authorization: Bearer {{shgToken}}
+
+{
+  "legType": "drop"
+}
 
 ###
 
 # @name completeShgDrop
 # Mark a delivery/drop order as complete
 # Expected Response: 201 Created
-POST {{shgHost}}/orders/drop/60/complete
+POST {{shgHost}}/orders/new/dilivery/60/complete
+Content-Type: application/json
 Authorization: Bearer {{shgToken}}
+
+{
+  "code": "1234"
+}
+
+###
+
+# @name rescheduleAcceptedShgOrder
+# Reschedule an accepted or pending order (2h window limit since acceptance)
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/reschedule
+Content-Type: application/json
+Authorization: Bearer {{shgToken}}
+
+{
+  "orderId": 2,
+  "date": "18 May 2024",
+  "time": "11:00 AM",
+  "reason": "Customer requested another time"
+}
+
+###
+
+# @name rescheduleDeliveryShgOrder
+# Reschedule a picked up/delivery order (24h window limit since pickup)
+# Expected Response: 201 Created
+POST {{shgHost}}/orders/reschedule/delivery
+Content-Type: application/json
+Authorization: Bearer {{shgToken}}
+
+{
+  "orderId": 2,
+  "date": "18 May 2024",
+  "time": "11:00 AM",
+  "reason": "Traffic issue during delivery"
+}

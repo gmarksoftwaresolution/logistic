@@ -39,8 +39,8 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { deliveredOrders, highlightedOrders } = useOrders();
   
-  const normalCompletedOrders = deliveredOrders.filter(o => !o.id.startsWith('RTO-'));
-  const returnCompletedOrders = deliveredOrders.filter(o => o.id.startsWith('RTO-'));
+  const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-'));
+  const returnCompletedOrders = deliveredOrders.filter(o => o.isReturn || o.id.startsWith('RTO-'));
   
   const [activeTab, setActiveTab] = useState<'new' | 'return'>('new');
   

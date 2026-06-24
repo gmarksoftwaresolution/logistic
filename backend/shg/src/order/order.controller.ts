@@ -6,7 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { GetUser } from '../common/decorators/user.decorator';
 import { User, UserRole } from '@prisma/client';
 import { OrderService } from './order.service';
-import { RescheduleOrdersDto } from './dto/order.dto';
+import { RescheduleOrderDto } from './dto/order.dto';
 
 @ApiTags('SHG Order Management')
 @ApiBearerAuth()
@@ -20,13 +20,13 @@ export class OrderController {
   // NEW CLEAN ARCHITECTURE ENDPOINTS
   //////////////////////////////////////////////////////
 
-  @Get('pickup/assigned')
+  @Get('new/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in SHG' })
   async getAssignedPickups(@GetUser() user: User) {
     return this.orderService.getAssignedPickups(user.id, user.phoneNumber);
   }
 
-  @Post('pickup/:id/accept')
+  @Post('new/:id/accept')
   @ApiOperation({ summary: 'Accept a pickup order (supports legType: drop to accept transporter deliveries)' })
   async acceptPickup(
     @Param('id', ParseIntPipe) id: number,
@@ -39,7 +39,7 @@ export class OrderController {
     return this.orderService.acceptPickup(id, user.id);
   }
 
-  @Post('pickup/:id/reject')
+  @Post('new/:id/reject')
   @ApiOperation({ summary: 'Reject a pickup order' })
   async rejectPickup(
     @Param('id', ParseIntPipe) id: number,
@@ -49,28 +49,16 @@ export class OrderController {
     return this.orderService.rejectPickup(id, user.id, reason);
   }
 
-  @Post('pickup/:id/complete')
-  @ApiOperation({ summary: 'Mark a pickup order as complete (supports legType: drop to receive transporter deliveries)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        code: { type: 'string', example: '1234' },
-        legType: { type: 'string', enum: ['pickup', 'drop'], example: 'pickup' }
-      }
-    }
-  })
-  async completePickup(
+  @Post('new/pickup/:id/reject')
+  @ApiOperation({ summary: 'Reject an accepted pickup order from the pickup tab' })
+  async rejectAcceptedPickup(
     @Param('id', ParseIntPipe) id: number,
     @GetUser() user: User,
-    @Body('code') code?: string,
-    @Body('legType') legType?: 'pickup' | 'drop',
+    @Body('reason') reason?: string
   ) {
-    if (legType === 'drop') {
-      return this.orderService.pickupDrop(id, user.id, code);
-    }
-    return this.orderService.completePickup(id, user.id, code);
+    return this.orderService.rejectAcceptedPickup(id, user.id, reason);
   }
+
 
   @Get('returns/assigned')
   @ApiOperation({ summary: 'Get all active return assignments (pickup/delivery) for the SHG' })
@@ -97,7 +85,17 @@ export class OrderController {
     return this.orderService.rejectDrop(id, user.id, reason);
   }
 
-  @Post('returns/:id/pickup')
+  @Post('returns/pickup/:id/reject')
+  @ApiOperation({ summary: 'Reject a return pickup order' })
+  async rejectReturnPickup(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('reason') reason?: string,
+  ) {
+    return this.orderService.rejectReturnPickup(id, user.id, reason);
+  }
+
+  @Post('returns/pickup/:id/complete')
   @ApiOperation({ summary: 'Mark a return pickup as received from transporter' })
   @ApiBody({
     schema: {
@@ -115,7 +113,7 @@ export class OrderController {
     return this.orderService.pickupDrop(id, user.id, code);
   }
 
-  @Post('returns/:id/complete')
+  @Post('returns/dilivery/:id/complete')
   @ApiOperation({ summary: 'Mark a return drop as complete (delivered to seller)' })
   @ApiBody({
     schema: {
@@ -133,31 +131,33 @@ export class OrderController {
     return this.orderService.completeDrop(id, user.id, code);
   }
 
-  @Get('drop/assigned')
-  @ApiOperation({ summary: 'Get all active drop-off delivery assignments for the SHG' })
-  async getAssignedDrops(@GetUser() user: User) {
-    return this.orderService.getAssignedDrops(user.id, user.phoneNumber);
-  }
 
-  @Post('drop/:id/pickup')
-  @ApiOperation({ summary: 'Mark a delivery order as picked up from transporter' })
+  @Post('new/pickup/:id/complete')
+  @ApiOperation({ summary: 'Mark a pickup order as complete (supports legType: drop to receive transporter deliveries)' })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        code: { type: 'string', example: '1234' }
+        code: { type: 'string', example: '1234' },
+        legType: { type: 'string', enum: ['pickup', 'drop'], example: 'pickup' }
       }
     }
   })
-  async pickupDrop(
+  async completePickup(
     @Param('id', ParseIntPipe) id: number,
     @GetUser() user: User,
     @Body('code') code?: string,
+    @Body('legType') legType?: 'pickup' | 'drop',
+    @Body() fullBody?: any,
   ) {
-    return this.orderService.pickupDrop(id, user.id, code);
+    console.log(`[completePickup] id=${id}, legType=${legType}, code=${code}, fullBody=`, fullBody);
+    if (legType === 'drop') {
+      return this.orderService.pickupDrop(id, user.id, code);
+    }
+    return this.orderService.completePickup(id, user.id, code);
   }
 
-  @Post('drop/:id/complete')
+  @Post('new/dilivery/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
   @ApiBody({
     schema: {
@@ -175,19 +175,18 @@ export class OrderController {
     return this.orderService.completeDrop(id, user.id, code);
   }
 
-  @Post('drop/:id/reject')
-  @ApiOperation({ summary: 'Reject a delivery order' })
-  async rejectDrop(
-    @Param('id', ParseIntPipe) id: number,
-    @GetUser() user: User,
-    @Body('reason') reason?: string
-  ) {
-    return this.orderService.rejectDrop(id, user.id, reason);
-  }
 
   @Post('reschedule')
-  @ApiOperation({ summary: 'Reschedule one or more pickup/drop orders' })
-  async reschedule(@Body() dto: RescheduleOrdersDto) {
-    return this.orderService.rescheduleOrders(dto);
+  @ApiOperation({ summary: 'Reschedule an accepted/pending pickup/drop order' })
+  async reschedule(@Body() dto: RescheduleOrderDto) {
+    return this.orderService.rescheduleAccepted(dto);
   }
+
+  @Post('reschedule/delivery')
+  @ApiOperation({ summary: 'Reschedule a delivery (picked up) order' })
+  async rescheduleDelivery(@Body() dto: RescheduleOrderDto) {
+    return this.orderService.rescheduleDelivery(dto);
+  }
+
+
 }

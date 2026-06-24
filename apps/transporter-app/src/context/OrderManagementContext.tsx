@@ -192,9 +192,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const pickupResponse = await api.get('/api/orders/pickup/assigned');
       const rawPickups = pickupResponse.data || [];
 
-      // 2. Fetch live drops
-      const dropResponse = await api.get('/api/orders/drop/assigned');
-      const rawDrops = dropResponse.data || [];
+      // 2. Fetch live drops (API removed, using unified endpoints)
+      const rawDrops: any[] = [];
 
       const mappedPickups = rawPickups.map((o: any) => ({
         id: `pickup-${o.id}`,
