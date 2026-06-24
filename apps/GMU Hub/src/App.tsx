@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { LandingPage } from './pages/LandingPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -9,11 +8,10 @@ import { TransporterManagementPage } from './pages/TransporterManagementPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SHGDemoPortalPage } from './pages/SHGDemoPortalPage';
 import { TransporterDemoPortalPage } from './pages/TransporterDemoPortalPage';
+import { useAppContext } from './context/AppContext';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<string>(() => {
-    return localStorage.getItem('gmu_hub_current_page') || 'landing';
-  });
+  const { currentPage, setCurrentPage } = useAppContext();
 
   const handleNavigate = (page: string) => {
     setCurrentPage(page);

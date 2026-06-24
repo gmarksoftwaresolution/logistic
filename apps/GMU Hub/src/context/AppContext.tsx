@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { api } from '../utils/api';
 
 // Common structures
 export interface PersonDetails {
@@ -11,6 +12,7 @@ export interface PersonDetails {
 
 export interface PickupOrder {
   id: string;
+  uuid: string;
   sellerName: string;
   sellerMobile: string;
   sellerAddress: string;
@@ -20,18 +22,17 @@ export interface PickupOrder {
   totalQty: number;
   totalWeight: number;
   orderDate: string;
-  shgStatus: string; // pending, pending-acceptance, Accepted, picked, assigned
-  transporterStatus: string; // pending, pending-acceptance, not assigned, Accepted, picked, assigned
-  mainStatus: string; // pending, pending-acceptance, pickup assigned, pickup shg accepted, parcel at shg, transporter accepted, in transit to hub, at hub
-  status: string; // active status identifier
+  shgStatus: string;
+  transporterStatus: string;
+  mainStatus: string;
+  status: string;
   created_at: string;
   updated_at: string;
-  // Assigned specifics
   shgDetails?: PersonDetails;
   shgPickupSchedule?: string;
   transporterDetails?: PersonDetails;
   transporterPickupSchedule?: string;
-  // Warehouse specifics
+  barcode?: string;
   currentDate?: string;
   warehouseReceivedDate?: string;
   rejectedDate?: string;
@@ -43,6 +44,7 @@ export interface PickupOrder {
 
 export interface DropOrder {
   id: string;
+  uuid: string;
   buyerName: string;
   buyerMobile: string;
   buyerAddress: string;
@@ -80,6 +82,7 @@ export interface DropOrder {
 
 export interface ReturnOrder {
   id: string;
+  uuid: string;
   buyerName: string;
   buyerMobile: string;
   buyerAddress: string;
@@ -95,19 +98,16 @@ export interface ReturnOrder {
   status: string;
   created_at: string;
   updated_at: string;
-  // Assigned specifics
   buyerDetails?: PersonDetails;
   shgDetails?: PersonDetails;
   shgPickupSchedule?: string;
   transporterDetails?: PersonDetails;
   transporterPickupSchedule?: string;
-  // Seller details
   sellerName?: string;
   sellerMobile?: string;
   sellerAddress?: string;
   sellerVillage?: string;
   sellerPincode?: string;
-  // Completed specifics
   completionDate?: string;
   barcode?: string;
   rejectionReason?: string;
@@ -118,8 +118,10 @@ export interface ReturnOrder {
 
 export interface InventoryItem {
   id: string; // Order ID
+  uuid: string;
   sellerName: string;
   sellerMobile?: string;
+  sellerAddress?: string;
   sellerVillage?: string;
   buyerName: string;
   buyerMobile: string;
@@ -128,8 +130,7 @@ export interface InventoryItem {
   productCount: number;
   totalQty: number;
   totalWeight: number;
-  status: string; // stored, dispatch, returned, pending, pending acceptance
-  // Return Pickup Specifics
+  status: string;
   shgName?: string;
   shgMobile?: string;
   shgAddress?: string;
@@ -149,7 +150,7 @@ export interface SHGProfile {
   mobile: string;
   address: string;
   members: number;
-  status: string; // Active / Inactive / Pending
+  status: string;
   assignedOrders: number;
 }
 
@@ -160,30 +161,54 @@ export interface TransporterProfile {
   address: string;
   vehicle: string;
   route: string;
-  status: string; // Available / Busy / Inactive
+  status: string;
   assignedOrders: number;
 }
 
+export interface Counts {
+  pickup: {
+    new: number;
+    assigned: number;
+    warehouse: number;
+    rejected: number;
+    rescheduled: number;
+  };
+  drop: {
+    new: number;
+    assigned: number;
+    completed: number;
+    rejected: number;
+    rescheduled: number;
+  };
+  return: {
+    transporter: number;
+    buyer: number;
+  };
+  inventory: {
+    stored: number;
+    transporterReturn: number;
+    buyerReturn: number;
+  };
+}
+
 export interface AppContextType {
-  // Navigation
   currentPage: string;
   setCurrentPage: (page: string) => void;
+  counts: Counts;
+  loadCounts: () => Promise<void>;
 
-  // Pickup Orders state
   pickupNewOrders: PickupOrder[];
   pickupAssignedOrders: PickupOrder[];
   pickupWarehouseOrders: PickupOrder[];
   pickupRejectedOrders: PickupOrder[];
   pickupRescheduledOrders: PickupOrder[];
 
-  // Drop Orders state
   dropNewOrders: DropOrder[];
   dropAssignedOrders: DropOrder[];
   dropRejectedOrders: DropOrder[];
   dropRescheduledOrders: DropOrder[];
   dropCompletedOrders: DropOrder[];
 
-  // Return Orders state
   returnNewOrders: ReturnOrder[];
   returnAssignedOrders: ReturnOrder[];
   returnCompletedOrders: ReturnOrder[];
@@ -192,24 +217,38 @@ export interface AppContextType {
   returnDropNewOrders: ReturnOrder[];
   returnDropCompletedOrders: ReturnOrder[];
 
-  // Inventory Management state
   incomingInventory: InventoryItem[];
   returnPickupInventory: InventoryItem[];
   dropInventory: InventoryItem[];
   returnDropInventory: InventoryItem[];
 
-  // Partners Profiles
   shgList: SHGProfile[];
   transporterList: TransporterProfile[];
 
-  // Actions
+  // Action methods
+  loadPickupNew: (status?: string, date?: string) => Promise<void>;
+  loadPickupAssigned: (status?: string, date?: string) => Promise<void>;
+  loadPickupWarehouse: (status?: string, date?: string) => Promise<void>;
+  loadPickupRejected: (status?: string, date?: string) => Promise<void>;
+  loadPickupRescheduled: (status?: string, date?: string) => Promise<void>;
+  loadDropNew: (status?: string, date?: string) => Promise<void>;
+  loadDropAssigned: (status?: string, date?: string) => Promise<void>;
+  loadDropRejected: (status?: string, date?: string) => Promise<void>;
+  loadDropRescheduled: (status?: string, date?: string) => Promise<void>;
+  loadDropCompleted: (status?: string, date?: string) => Promise<void>;
+  loadReturnsTransporter: (status?: string, date?: string) => Promise<void>;
+  loadReturnsBuyer: (status?: string, date?: string) => Promise<void>;
+  loadInventoryStored: (status?: string, date?: string) => Promise<void>;
+  loadInventoryTransporterReturn: (status?: string, date?: string) => Promise<void>;
+  loadInventoryBuyerReturn: (status?: string, date?: string) => Promise<void>;
+
   readyToStore: (orderId: string) => void;
   dispatchInventory: (orderId: string) => void;
   intakePickupOrders: (orderIds: string[]) => void;
   intakeReturnOrder: (orderId: string, returnType: 'pickup' | 'drop') => void;
   requestBuyerReturn: (dropOrderId: string) => void;
   generateOTP: (orderId: string) => string;
-  generateBarcode: (orderId: string) => string;
+  generateBarcode: (orderId: string) => Promise<string>;
   approveSHG: (id: string) => void;
   approveTransporter: (id: string) => void;
   addNewSHG: (shg: Omit<SHGProfile, 'id' | 'assignedOrders'>) => void;
@@ -221,1616 +260,621 @@ export interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const appLoadTime = new Date().toISOString();
-
-const initializeMock = <T extends { sectionEnteredAt?: string }>(items: T[]): T[] => {
-  const nowStr = new Date().toISOString();
-  return items.map((item) => ({
-    ...item,
-    sectionEnteredAt: item.sectionEnteredAt || nowStr,
-  }));
-};
-
-const wrapSetter = <T extends { id: string; status?: string; mainStatus?: string; shgStatus?: string; transporterStatus?: string; pickupStatus?: string; sectionEnteredAt?: string }>(
-  setStateRaw: React.Dispatch<React.SetStateAction<T[]>>
-) => {
-  return (value: React.SetStateAction<T[]>) => {
-    setStateRaw((prev) => {
-      const next = typeof value === 'function' ? (value as Function)(prev) : value;
-      return next.map((newObj: T) => {
-        const oldObj = prev.find((o) => o.id === newObj.id);
-        if (!oldObj) {
-          return {
-            ...newObj,
-            sectionEnteredAt: newObj.sectionEnteredAt || new Date().toISOString(),
-          };
-        }
-        const statusChanged =
-          oldObj.status !== newObj.status ||
-          oldObj.mainStatus !== newObj.mainStatus ||
-          oldObj.shgStatus !== newObj.shgStatus ||
-          oldObj.transporterStatus !== newObj.transporterStatus ||
-          oldObj.pickupStatus !== newObj.pickupStatus;
-
-        if (statusChanged) {
-          return {
-            ...newObj,
-            sectionEnteredAt: new Date().toISOString(),
-          };
-        }
-        return newObj;
-      });
-    });
-  };
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // --- MOCK DATA ---
-
-  // 1. Pickup Orders
-  const [pickupNewOrders, setPickupNewOrdersRaw] = useState<PickupOrder[]>([
-    {
-      id: 'ORD-PICK-101',
-      sellerName: 'Ramesh Agro Farms',
-      sellerMobile: '9876543201',
-      sellerAddress: 'Gat No. 12, Junnar Village',
-      sellerVillage: 'Junnar',
-      sellerPincode: '410502',
-      productCount: 3,
-      totalQty: 120,
-      totalWeight: 240,
-      orderDate: '2026-06-12',
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'pending',
-      status: 'pending',
-      created_at: '2026-06-12 10:00',
-      updated_at: '2026-06-12 10:00',
-    },
-    {
-      id: 'ORD-PICK-102',
-      sellerName: 'Savita Organic Honey',
-      sellerMobile: '9876543202',
-      sellerAddress: 'Ward 2, Shirur Block',
-      sellerVillage: 'Shirur',
-      sellerPincode: '412210',
-      productCount: 1,
-      totalQty: 50,
-      totalWeight: 75,
-      orderDate: '2026-06-13',
-      shgStatus: 'pending-acceptance',
-      transporterStatus: 'pending',
-      mainStatus: 'pending-acceptance',
-      status: 'pending-acceptance',
-      created_at: '2026-06-13 08:30',
-      updated_at: '2026-06-13 08:30',
-    },
-  ]);
-
-  const [pickupAssignedOrders, setPickupAssignedOrdersRaw] = useState<PickupOrder[]>([
-    {
-      id: 'ORD-PICK-201',
-      sellerName: 'Baliraja Rice Mill',
-      sellerMobile: '9876543203',
-      sellerAddress: 'Market Yard Road, Manchar',
-      sellerVillage: 'Manchar',
-      sellerPincode: '410503',
-      productCount: 2,
-      totalQty: 200,
-      totalWeight: 500,
-      orderDate: '2026-06-11',
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'transporter accepted',
-      status: 'pickup shg accepted',
-      created_at: '2026-06-11 09:00',
-      updated_at: '2026-06-11 14:00',
-      shgDetails: { name: 'Manchar Mahila SHG', mobile: '9158098765', address: 'Gram Panchayat Road, Manchar' },
-      shgPickupSchedule: '2026-06-14 10:00 AM',
-      transporterDetails: { name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area' },
-      transporterPickupSchedule: '2026-06-14 11:30 AM',
-    },
-    {
-      id: 'ORD-PICK-202',
-      sellerName: 'Kalyani SHG Crafts',
-      sellerMobile: '9876543204',
-      sellerAddress: 'Opposite Maruti Temple, Junnar',
-      sellerVillage: 'Junnar',
-      sellerPincode: '410502',
-      productCount: 4,
-      totalQty: 80,
-      totalWeight: 120,
-      orderDate: '2026-06-12',
-      shgStatus: 'picked',
-      transporterStatus: 'Accepted',
-      mainStatus: 'in transit to hub',
-      status: 'parcel at shg',
-      created_at: '2026-06-12 11:00',
-      updated_at: '2026-06-13 12:00',
-      shgDetails: { name: 'Savitri Co-op', mobile: '9876543213', address: 'Village D, Junnar' },
-      shgPickupSchedule: '2026-06-13 09:00 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
-      transporterPickupSchedule: '2026-06-13 10:30 AM',
-    },
-  ]);
-
-  const [pickupWarehouseOrders, setPickupWarehouseOrdersRaw] = useState<PickupOrder[]>([
-    {
-      id: 'ORD-PICK-301',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      productCount: 2,
-      totalQty: 150,
-      totalWeight: 300,
-      orderDate: '2026-06-10',
-      shgStatus: 'picked',
-      transporterStatus: 'picked',
-      mainStatus: 'at hub',
-      status: 'hub received',
-      created_at: '2026-06-10 14:00',
-      updated_at: '2026-06-11 16:30',
-      currentDate: '2026-06-13',
-      warehouseReceivedDate: '2026-06-12',
-      shgDetails: { name: 'Anita Mahila SHG', mobile: '9158098766', address: 'Gram Panchayat Road, Indapur' },
-      shgPickupSchedule: '2026-06-12 10:00 AM',
-      transporterDetails: { name: 'Sunil Transport', mobile: '9876543224', address: 'MIDC Road, Indapur' },
-      transporterPickupSchedule: '2026-06-12 11:30 AM',
-    },
-    {
-      id: 'ORD-PICK-302',
-      sellerName: 'Sita Weaving Center',
-      sellerMobile: '9876543206',
-      sellerAddress: 'Village B, Shirur Block',
-      sellerVillage: 'Shirur',
-      sellerPincode: '412210',
-      productCount: 1,
-      totalQty: 45,
-      totalWeight: 90,
-      orderDate: '2026-06-11',
-      shgStatus: 'picked',
-      transporterStatus: 'picked',
-      mainStatus: 'at hub',
-      status: 'Barcode Generated',
-      created_at: '2026-06-11 15:30',
-      updated_at: '2026-06-12 11:00',
-      currentDate: '2026-06-13',
-      warehouseReceivedDate: '2026-06-13',
-      shgDetails: { name: 'Sita Co-op SHG', mobile: '9158098767', address: 'Ward 2, Shirur Block' },
-      shgPickupSchedule: '2026-06-13 10:00 AM',
-      transporterDetails: { name: 'Fast Movers', mobile: '9876543223', address: 'Logistics Park, Karjat' },
-      transporterPickupSchedule: '2026-06-13 11:30 AM',
-    },
-  ]);
-
-  const [pickupRejectedOrders, setPickupRejectedOrdersRaw] = useState<PickupOrder[]>([
-    {
-      id: 'ORD-PICK-REJ-01',
-      sellerName: 'Hari Wood Crafts',
-      sellerMobile: '9876543207',
-      sellerAddress: 'Village A, Karjat Road',
-      sellerVillage: 'Karjat',
-      sellerPincode: '410201',
-      productCount: 5,
-      totalQty: 15,
-      totalWeight: 150,
-      orderDate: '2026-06-09',
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'pending',
-      status: 'pending',
-      created_at: '2026-06-09 10:00',
-      updated_at: '2026-06-09 12:00',
-      rejectedDate: '2026-06-10',
-      rejectionReason: 'Invalid seller license',
-      rejectedBy: 'Transporter',
-    },
-  ]);
-
-  const [pickupRescheduledOrders, setPickupRescheduledOrdersRaw] = useState<PickupOrder[]>([
-    {
-      id: 'ORD-PICK-RES-01',
-      sellerName: 'Baliraja Rice Mill',
-      sellerMobile: '9876543203',
-      sellerAddress: 'Market Yard Road, Manchar',
-      sellerVillage: 'Manchar',
-      sellerPincode: '410503',
-      productCount: 1,
-      totalQty: 90,
-      totalWeight: 180,
-      orderDate: '2026-06-11',
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'rescheduled',
-      status: 'rescheduled',
-      created_at: '2026-06-11 09:00',
-      updated_at: '2026-06-14 10:00',
-      shgDetails: { name: 'Manchar Mahila SHG', mobile: '9158098765', address: 'Gram Panchayat Road, Manchar' },
-      shgPickupSchedule: '2026-06-16 10:00 AM (Rescheduled)',
-      transporterDetails: { name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area' },
-      transporterPickupSchedule: '2026-06-16 11:30 AM (Rescheduled)',
-      rescheduledBy: 'SHG',
+  const [currentPage, setCurrentPage] = useState<string>(() => {
+    const token = localStorage.getItem('gmu_token');
+    const savedPage = localStorage.getItem('gmu_hub_current_page');
+    if (token) {
+      return savedPage && savedPage !== 'landing' ? savedPage : 'dashboard';
     }
-  ]);
+    return 'landing';
+  });
 
-  // 2. Drop Orders
-  const [dropNewOrders, setDropNewOrdersRaw] = useState<DropOrder[]>([
-    {
-      id: 'ORD-DROP-101',
-      buyerName: 'Urban Supermart Pune',
-      buyerMobile: '9988776651',
-      buyerAddress: 'FC Road, Shivajinagar, Pune',
-      buyerVillage: 'Pune',
-      buyerPincode: '411005',
-      productCount: 3,
-      totalQty: 120,
-      totalWeight: 240,
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'shg_pending_acceptance',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      orderDate: '2026-06-12',
-      barcode: 'BAR-ORD-DROP-101-3937',
-    },
-    {
-      id: 'ORD-DROP-102',
-      buyerName: 'Fresh Mandi Mumbai',
-      buyerMobile: '9988776652',
-      buyerAddress: 'Crawford Market, Mumbai',
-      buyerVillage: 'Mumbai',
-      buyerPincode: '400001',
-      productCount: 2,
-      totalQty: 90,
-      totalWeight: 180,
-      shgStatus: 'pending-acceptance',
-      transporterStatus: 'pending',
-      mainStatus: 'shg_pending_acceptance',
-      sellerName: 'Sita Weaving Center',
-      sellerMobile: '9876543206',
-      sellerAddress: 'Village B, Shirur Block',
-      sellerVillage: 'Shirur',
-      sellerPincode: '412210',
-      orderDate: '2026-06-13',
-      barcode: 'BAR-ORD-DROP-102-1829',
-    },
-  ]);
+  const defaultCounts: Counts = {
+    pickup: { new: 0, assigned: 0, warehouse: 0, rejected: 0, rescheduled: 0 },
+    drop: { new: 0, assigned: 0, completed: 0, rejected: 0, rescheduled: 0 },
+    return: { transporter: 0, buyer: 0 },
+    inventory: { stored: 0, transporterReturn: 0, buyerReturn: 0 }
+  };
 
-  const [dropAssignedOrders, setDropAssignedOrdersRaw] = useState<DropOrder[]>([
-    {
-      id: 'ORD-DROP-201',
-      buyerName: 'Gramin Mandi Mumbai',
-      buyerMobile: '9988776653',
-      buyerAddress: 'Shop 15, Vashi Market, Navi Mumbai',
-      buyerVillage: 'Navi Mumbai',
-      buyerPincode: '400703',
-      productCount: 1,
-      totalQty: 100,
-      totalWeight: 200,
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'drop shg accepted',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      orderDate: '2026-06-11',
-      barcode: 'BAR-ORD-DROP-201-4928',
-      shgDetails: { name: 'Nari Shakti Group', mobile: '9876543210', address: 'Village A, Ward 4, Pune' },
-      shgPickupSchedule: '2026-06-14 09:30 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub, District Pune' },
-      transporterPickupSchedule: '2026-06-14 11:00 AM',
-    },
-  ]);
+  const [counts, setCounts] = useState<Counts>(defaultCounts);
 
-  const [dropRejectedOrders, setDropRejectedOrdersRaw] = useState<DropOrder[]>([
-    {
-      id: 'ORD-DROP-REJ-01',
-      buyerName: 'Green Foods Outlet',
-      buyerMobile: '9988776654',
-      buyerAddress: 'Main Square Road, Satara',
-      buyerVillage: 'Satara',
-      buyerPincode: '415001',
-      productCount: 2,
-      totalQty: 40,
-      totalWeight: 80,
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'pending',
-      orderDate: '2026-06-11',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      rejectedDate: '2026-06-12',
-      barcode: 'BAR-ORD-DROP-REJ-01-9582',
-      shgDetails: { name: 'Savitri Co-op', mobile: '9876543213', address: 'Village D, Junnar' },
-      transporterDetails: { name: 'Ravi Logistics', mobile: '9876543222', address: 'Industrial Estate, Phase 1' },
-      rejectionReason: 'Damaged packaging detected',
-      rejectedBy: 'SHG',
-    },
-  ]);
+  const loadCounts = async () => {
+    try {
+      const data = await api.orders.getCounts();
+      setCounts(data);
+    } catch (e) {
+      console.error('Failed to load counts:', e);
+    }
+  };
 
-  const [dropRescheduledOrders, setDropRescheduledOrdersRaw] = useState<DropOrder[]>([
-    {
-      id: 'ORD-DROP-RES-01',
-      buyerName: 'Gramin Mandi Mumbai',
-      buyerMobile: '9988776653',
-      buyerAddress: 'Shop 15, Vashi Market, Navi Mumbai',
-      buyerVillage: 'Navi Mumbai',
-      buyerPincode: '400703',
-      productCount: 1,
-      totalQty: 100,
-      totalWeight: 200,
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'rescheduled',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      orderDate: '2026-06-11',
-      barcode: 'BAR-ORD-DROP-RES-01-6184',
-      shgDetails: { name: 'Gramin Vikas SHG', mobile: '9876543211', address: 'Village B, Shirur' },
-      shgPickupSchedule: '2026-06-15 10:00 AM (Rescheduled)',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
-      transporterPickupSchedule: '2026-06-15 11:30 AM (Rescheduled)',
-      rescheduledBy: 'Transporter',
-    },
-  ]);
+  // Lists state
+  const [pickupNewOrders, setPickupNewOrders] = useState<PickupOrder[]>([]);
+  const [pickupAssignedOrders, setPickupAssignedOrders] = useState<PickupOrder[]>([]);
+  const [pickupWarehouseOrders, setPickupWarehouseOrders] = useState<PickupOrder[]>([]);
+  const [pickupRejectedOrders, setPickupRejectedOrders] = useState<PickupOrder[]>([]);
+  const [pickupRescheduledOrders, setPickupRescheduledOrders] = useState<PickupOrder[]>([]);
 
-  const [dropCompletedOrders, setDropCompletedOrdersRaw] = useState<DropOrder[]>([
-    {
-      id: 'ORD-DROP-CMP-01',
-      buyerName: 'Urban Supermart Pune',
-      buyerMobile: '9988776651',
-      buyerAddress: 'FC Road, Shivajinagar, Pune',
-      buyerVillage: 'Pune',
-      buyerPincode: '411005',
-      productCount: 2,
-      totalQty: 60,
-      totalWeight: 120,
-      shgStatus: 'completed',
-      transporterStatus: 'completed',
-      mainStatus: 'completed',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      orderDate: '2026-06-08',
-      deliveredDate: '2026-06-12',
-      barcode: 'BAR-ORD-DROP-CMP-01-7294',
-      shgDetails: { name: 'Nari Shakti Group', mobile: '9876543210', address: 'Village A, Ward 4, Pune' },
-      shgPickupSchedule: '2026-06-12 09:30 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub, District Pune' },
-      transporterPickupSchedule: '2026-06-12 11:00 AM',
-    },
-  ]);
+  const [dropNewOrders, setDropNewOrders] = useState<DropOrder[]>([]);
+  const [dropAssignedOrders, setDropAssignedOrders] = useState<DropOrder[]>([]);
+  const [dropRejectedOrders, setDropRejectedOrders] = useState<DropOrder[]>([]);
+  const [dropRescheduledOrders, setDropRescheduledOrders] = useState<DropOrder[]>([]);
+  const [dropCompletedOrders, setDropCompletedOrders] = useState<DropOrder[]>([]);
 
-  // 3. Return Orders
-  const [returnNewOrders, setReturnNewOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-101',
-      buyerName: 'Green Grocers Pune',
-      buyerMobile: '9123456701',
-      buyerAddress: 'Katraj Mandi Area, Pune',
-      buyerVillage: 'Pune',
-      buyerPincode: '411046',
-      productCount: 2,
-      totalQty: 30,
-      totalWeight: 60,
-      orderDate: '2026-06-13',
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'pending',
-      status: 'pending',
-      created_at: '2026-06-13 10:00',
-      updated_at: '2026-06-13 10:00',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-    },
-  ]);
+  const [returnPickupNewOrders, setReturnPickupNewOrders] = useState<ReturnOrder[]>([]);
+  const [returnPickupCompletedOrders, setReturnPickupCompletedOrders] = useState<ReturnOrder[]>([]);
+  const [returnDropNewOrders, setReturnDropNewOrders] = useState<ReturnOrder[]>([]);
+  const [returnDropCompletedOrders, setReturnDropCompletedOrders] = useState<ReturnOrder[]>([]);
 
-  const [returnAssignedOrders, setReturnAssignedOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-201',
-      buyerName: 'Health Foods Mumbai',
-      buyerMobile: '9123456702',
-      buyerAddress: 'Andheri West, Mumbai',
-      buyerVillage: 'Mumbai',
-      buyerPincode: '400053',
-      productCount: 1,
-      totalQty: 10,
-      totalWeight: 20,
-      orderDate: '2026-06-12',
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'pickup shg accepted',
-      status: 'pickup shg accepted',
-      created_at: '2026-06-12 09:00',
-      updated_at: '2026-06-13 11:00',
-      buyerDetails: { name: 'Health Foods Mumbai', mobile: '9123456702', address: 'Andheri West, Mumbai' },
-      shgDetails: { name: 'Nari Shakti Group', mobile: '9876543210', address: 'Village A, Ward 4' },
-      shgPickupSchedule: '2026-06-14 09:30 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
-      transporterPickupSchedule: '2026-06-14 11:00 AM',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      barcode: 'BAR-ORD-RET-201-1829',
-    },
-  ]);
+  // Unsupported return fields that must exist to compile
+  const [returnNewOrders] = useState<ReturnOrder[]>([]);
+  const [returnAssignedOrders] = useState<ReturnOrder[]>([]);
 
-  const [returnPickupNewOrders, setReturnPickupNewOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-201',
-      buyerName: 'Health Foods Mumbai',
-      buyerMobile: '9123456702',
-      buyerAddress: 'Andheri West, Mumbai',
-      buyerVillage: 'Mumbai',
-      buyerPincode: '400053',
-      productCount: 1,
-      totalQty: 10,
-      totalWeight: 20,
-      orderDate: '2026-06-12',
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'pickup shg accepted',
-      status: 'pickup shg accepted',
-      created_at: '2026-06-12 09:00',
-      updated_at: '2026-06-13 11:00',
-      buyerDetails: { name: 'Health Foods Mumbai', mobile: '9123456702', address: 'Andheri West, Mumbai' },
-      shgDetails: { name: 'Nari Shakti Group', mobile: '9876543210', address: 'Village A, Ward 4' },
-      shgPickupSchedule: '2026-06-14 09:30 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
-      transporterPickupSchedule: '2026-06-14 11:00 AM',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      barcode: 'BAR-ORD-RET-201-1829',
-    },
-  ]);
+  const [incomingInventory, setIncomingInventory] = useState<InventoryItem[]>([]);
+  const [returnPickupInventory, setReturnPickupInventory] = useState<InventoryItem[]>([]);
+  const [returnDropInventory, setReturnDropInventory] = useState<InventoryItem[]>([]);
+  const [dropInventory] = useState<InventoryItem[]>([]);
 
-  const [returnPickupCompletedOrders, setReturnPickupCompletedOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-COMP-01',
-      buyerName: 'Organic Store Karjat',
-      buyerMobile: '9123456703',
-      buyerAddress: 'Katraj Mandi Area, Pune',
-      buyerVillage: 'Karjat',
-      buyerPincode: '410201',
-      productCount: 1,
-      totalQty: 25,
-      totalWeight: 50,
-      orderDate: '2026-06-10',
-      shgStatus: 'completed',
-      transporterStatus: 'completed',
-      mainStatus: 'completed',
-      status: 'returned',
-      created_at: '2026-06-10 11:00',
-      updated_at: '2026-06-11 15:00',
-      completionDate: '2026-06-11 15:00',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      barcode: 'BAR-ORD-RET-COMP-01-4928',
-      shgDetails: { name: 'Manchar Mahila SHG', mobile: '9158098765', address: 'Gram Panchayat Road, Manchar' },
-      shgPickupSchedule: '2026-06-11 09:30 AM',
-      transporterDetails: { name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area' },
-      transporterPickupSchedule: '2026-06-11 11:00 AM',
-    },
-  ]);
-
-  const [returnDropNewOrders, setReturnDropNewOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-DROP-101',
-      buyerName: 'Organic Store Karjat',
-      buyerMobile: '9123456703',
-      buyerAddress: 'Karjat Center Road',
-      buyerVillage: 'Karjat',
-      buyerPincode: '410201',
-      sellerName: 'Anita Millet Farms',
-      sellerMobile: '9876543205',
-      sellerAddress: 'Plot 5, Indapur Chowk',
-      sellerVillage: 'Indapur',
-      sellerPincode: '413106',
-      productCount: 1,
-      totalQty: 25,
-      totalWeight: 50,
-      orderDate: '2026-06-11',
-      shgStatus: 'Accepted',
-      transporterStatus: 'Accepted',
-      mainStatus: 'pickup shg accepted',
-      status: 'active',
-      created_at: '2026-06-11 10:00',
-      updated_at: '2026-06-11 10:00',
-      barcode: 'BAR-ORD-RET-DROP-101-7281',
-      shgDetails: { name: 'Savitri Co-op', mobile: '9876543213', address: 'Village D, Junnar' },
-      shgPickupSchedule: '2026-06-14 09:30 AM',
-      transporterDetails: { name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area' },
-      transporterPickupSchedule: '2026-06-14 11:00 AM',
-    },
-  ]);
-
-  const [returnDropCompletedOrders, setReturnDropCompletedOrdersRaw] = useState<ReturnOrder[]>([
-    {
-      id: 'ORD-RET-DROP-CMP-01',
-      buyerName: 'Fresh Mandi Mumbai',
-      buyerMobile: '9988776652',
-      buyerAddress: 'Crawford Market, Mumbai',
-      buyerVillage: 'Mumbai',
-      buyerPincode: '400001',
-      sellerName: 'Sita Weaving Center',
-      sellerMobile: '9876543206',
-      sellerAddress: 'Village B, Shirur Block',
-      sellerVillage: 'Shirur',
-      sellerPincode: '412210',
-      productCount: 2,
-      totalQty: 15,
-      totalWeight: 30,
-      orderDate: '2026-06-09',
-      shgStatus: 'completed',
-      transporterStatus: 'completed',
-      mainStatus: 'completed',
-      status: 'completed',
-      created_at: '2026-06-09 11:00',
-      updated_at: '2026-06-11 15:00',
-      completionDate: '2026-06-11 15:00',
-      barcode: 'BAR-ORD-RET-DROP-CMP-01-3829',
-      shgDetails: { name: 'Gramin Vikas SHG', mobile: '9876543211', address: 'Village B, Shirur' },
-      shgPickupSchedule: '2026-06-11 09:30 AM',
-      transporterDetails: { name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub' },
-      transporterPickupSchedule: '2026-06-11 11:00 AM',
-    },
-  ]);
+  const [shgList, setShgList] = useState<SHGProfile[]>([]);
+  const [transporterList, setTransporterList] = useState<TransporterProfile[]>([]);
 
   const returnCompletedOrders = [
     ...returnPickupCompletedOrders,
     ...returnDropCompletedOrders,
   ];
 
-  // 4. Inventory items
-  const [incomingInventory, setIncomingInventoryRaw] = useState<InventoryItem[]>([
-    {
-      id: 'ORD-INV-001',
-      sellerName: 'Anita Farms',
-      sellerMobile: '9876543201',
-      sellerVillage: 'Indapur',
-      buyerName: 'Metro Supermart',
-      buyerMobile: '9876543212',
-      buyerAddress: 'City Center, District H',
-      buyerVillage: 'Pune',
-      productCount: 2,
-      totalQty: 100,
-      totalWeight: 200,
-      status: 'stored',
-      orderDate: '2026-06-11',
-      shgName: 'Anita Mahila SHG',
-      shgMobile: '9158098766',
-      shgAddress: 'Gram Panchayat Road, Indapur',
-      transporterName: 'Sunil Transport',
-      transporterMobile: '9876543224',
-      transporterAddress: 'MIDC Road, Indapur',
-      barcode: 'BAR-ORD-PICK-301-3937',
-      storeDate: '2026-06-12',
-    },
-    {
-      id: 'ORD-INV-002',
-      sellerName: 'Gramin Vikas Co-op',
-      sellerMobile: '9876543202',
-      sellerVillage: 'Shirur',
-      buyerName: 'Local Bazaar Pune',
-      buyerMobile: '9876543213',
-      buyerAddress: 'Hadapsar Market Yard, Pune',
-      buyerVillage: 'Pune',
-      productCount: 1,
-      totalQty: 60,
-      totalWeight: 120,
-      status: 'dispatch',
-      orderDate: '2026-06-12',
-      shgName: 'Gramin Vikas SHG',
-      shgMobile: '9876543211',
-      shgAddress: 'Village B, Ward 2, Shirur',
-      transporterName: 'Surya Logistics',
-      transporterMobile: '9876543221',
-      transporterAddress: 'Highway Hub, District Pune',
-      barcode: 'BAR-ORD-PICK-302-2849',
-      storeDate: '2026-06-13',
-    },
-  ]);
+  // Dynamic details mapping helpers
+  const mapOrder = (o: any): any => {
+    const shgMember = shgList.find(s => s.id === o.pickupShgId || s.id === o.dropShgId || s.id === o.pickupReturnShgId);
+    const shgDetails = shgMember ? {
+      name: shgMember.name,
+      mobile: shgMember.mobile,
+      address: shgMember.address,
+    } : undefined;
 
-  const [returnPickupInventory, setReturnPickupInventoryRaw] = useState<InventoryItem[]>([
-    {
-      id: 'ORD-INV-003',
-      sellerName: 'Kalyani SHG Products',
-      sellerMobile: '9876543212',
-      sellerVillage: 'Junnar',
-      buyerName: 'West End Retail',
-      buyerMobile: '9876543233',
-      buyerAddress: 'South Avenue, District H',
-      buyerVillage: 'Pune',
-      productCount: 3,
-      totalQty: 45,
-      totalWeight: 90,
-      status: 'returned',
-      shgName: 'Kalyani SHG',
-      shgMobile: '9876543212',
-      transporterName: 'Rajesh Kumar',
-      transporterMobile: '9876543220',
-      orderDate: '2026-06-12',
-      barcode: 'BAR-ORD-INV-003-4928',
-      storeDate: '2026-06-12',
-    },
-  ]);
+    const transMember = transporterList.find(t => t.id === o.pickupTransporterId || t.id === o.dropTransporterId || t.id === o.returnTransporterId);
+    const transporterDetails = transMember ? {
+      name: transMember.name,
+      mobile: transMember.mobile,
+      address: transMember.address,
+    } : undefined;
 
-  const [dropInventory, setDropInventoryRaw] = useState<InventoryItem[]>([
-    {
-      id: 'ORD-INV-004',
-      sellerName: 'Eco Weavers',
-      buyerName: 'Crafts Emporium',
-      buyerMobile: '9876543234',
-      buyerAddress: 'Main Square Road',
-      productCount: 1,
-      totalQty: 75,
-      totalWeight: 150,
-      status: 'pending',
-      orderDate: '2026-06-12',
-    },
-  ]);
+    const isBuyerReturnFlow = [
+      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED',
+      'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING',
+      'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB',
+      'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+    ].includes(o.mainStatus) || o.returnType === 'BUYER_RETURN';
 
-  const [returnDropInventory, setReturnDropInventoryRaw] = useState<InventoryItem[]>([
-    {
-      id: 'ORD-INV-005',
-      sellerName: 'Nutty Farms Cashews',
-      sellerMobile: '9876543205',
-      sellerVillage: 'Indapur',
-      buyerName: 'Dry Fruits Hub',
-      buyerMobile: '9876543235',
-      buyerAddress: 'Kothrud, Pune',
-      buyerVillage: 'Pune',
-      productCount: 1,
-      totalQty: 20,
-      totalWeight: 40,
-      status: 'pending acceptance',
-      orderDate: '2026-06-13',
-      barcode: 'BAR-ORD-INV-005-9582',
-      storeDate: '2026-06-13',
-    },
-  ]);
+    const isDropOrTransporterReturnFlow = [
+      'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED',
+      'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG',
+      'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN',
+      'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'
+    ].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
 
-  const setPickupNewOrders = wrapSetter(setPickupNewOrdersRaw);
-  const setPickupAssignedOrders = wrapSetter(setPickupAssignedOrdersRaw);
-  const setPickupWarehouseOrders = wrapSetter(setPickupWarehouseOrdersRaw);
-  const setPickupRejectedOrders = wrapSetter(setPickupRejectedOrdersRaw);
-  const setPickupRescheduledOrders = wrapSetter(setPickupRescheduledOrdersRaw);
+    const mappedShgStatus = isBuyerReturnFlow
+      ? (
+          o.mainStatus === 'RETURN_SHG_PENDING'
+            ? 'pending'
+            : o.mainStatus === 'RETURN_SHG_ACCEPTED'
+              ? 'accepted'
+              : [
+                  'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING',
+                  'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB',
+                  'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+                ].includes(o.mainStatus)
+                ? 'picked'
+                : null
+        )
+      : isDropOrTransporterReturnFlow
+        ? (o.dropTransporterStatus === 'SHG_NOT_AVAILABLE' ? 'shg not available' : (o.dropShgStatus || null))
+        : (
+            o.mainStatus === 'PICKUP_ASSIGNED' && o.pickupShgStatus
+              ? o.pickupShgStatus
+              : ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'].includes(o.mainStatus)
+                ? (o.pickupShgStatus || 'pending')
+                : null
+          );
 
-  const setDropNewOrders = wrapSetter(setDropNewOrdersRaw);
-  const setDropAssignedOrders = wrapSetter(setDropAssignedOrdersRaw);
-  const setDropRejectedOrders = wrapSetter(setDropRejectedOrdersRaw);
-  const setDropRescheduledOrders = wrapSetter(setDropRescheduledOrdersRaw);
-  const setDropCompletedOrders = wrapSetter(setDropCompletedOrdersRaw);
+    const mappedTransporterStatus = isBuyerReturnFlow
+      ? (
+          o.mainStatus === 'RETURN_TRANSPORTER_PENDING'
+            ? 'pending'
+            : o.mainStatus === 'RETURN_TRANSPORTER_ACCEPTED'
+              ? 'accepted'
+              : o.mainStatus === 'RETURN_IN_TRANSIT_TO_HUB'
+                ? 'in_transit_to_hub'
+                : ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(o.mainStatus)
+                  ? 'delivered_to_gmu'
+                  : null
+        )
+      : isDropOrTransporterReturnFlow
+        ? (o.dropTransporterStatus || null)
+        : (
+            o.mainStatus === 'PICKUP_ASSIGNED' && o.pickupTransporterStatus
+              ? o.pickupTransporterStatus
+              : ['TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'TRANSPORTER_DECLINED'].includes(o.mainStatus)
+                ? (o.pickupTransporterStatus || 'pending')
+                : null
+          );
 
-  const setReturnNewOrders = wrapSetter(setReturnNewOrdersRaw);
-  const setReturnAssignedOrders = wrapSetter(setReturnAssignedOrdersRaw);
-  const setReturnPickupNewOrders = wrapSetter(setReturnPickupNewOrdersRaw);
-  const setReturnPickupCompletedOrders = wrapSetter(setReturnPickupCompletedOrdersRaw);
-  const setReturnDropNewOrders = wrapSetter(setReturnDropNewOrdersRaw);
-  const setReturnDropCompletedOrders = wrapSetter(setReturnDropCompletedOrdersRaw);
-
-  const setIncomingInventory = wrapSetter(setIncomingInventoryRaw);
-  const setReturnPickupInventory = wrapSetter(setReturnPickupInventoryRaw);
-  const setDropInventory = wrapSetter(setDropInventoryRaw);
-  const setReturnDropInventory = wrapSetter(setReturnDropInventoryRaw);
-
-  // 5. Partner Profiles
-  const [shgList, setShgList] = useState<SHGProfile[]>([
-    { id: 'SHG-101', name: 'Nari Shakti Group', leader: 'Kamala Devi', mobile: '9876543210', address: 'Village A, Ward 4, Pune', members: 15, status: 'Active', assignedOrders: 3 },
-    { id: 'SHG-102', name: 'Gramin Vikas SHG', leader: 'Sita Sharma', mobile: '9876543211', address: 'Village B, Ward 2, Shirur', members: 12, status: 'Active', assignedOrders: 2 },
-    { id: 'SHG-103', name: 'Kalyani SHG', leader: 'Radha Bai', mobile: '9876543212', address: 'Village C, Ward 1, Junnar', members: 20, status: 'Active', assignedOrders: 4 },
-    { id: 'SHG-104', name: 'Savitri Co-op', leader: 'Meena Patel', mobile: '9876543213', address: 'Village D, Ward 5, Karjat', members: 10, status: 'Active', assignedOrders: 1 },
-    { id: 'SHG-105', name: 'Eco Weavers', leader: 'Anjali Verma', mobile: '9876543214', address: 'Village E, Ward 3, Indapur', members: 25, status: 'Inactive', assignedOrders: 0 },
-  ]);
-
-  const [transporterList, setTransporterList] = useState<TransporterProfile[]>([
-    { id: 'TRN-201', name: 'Rajesh Kumar', mobile: '9876543220', address: 'Plot 45, MIDC Area, Pune', vehicle: 'Mini Truck', route: 'Pune-Shirur', status: 'Available', assignedOrders: 2 },
-    { id: 'TRN-202', name: 'Surya Logistics', mobile: '9876543221', address: 'Highway Hub, District Pune', vehicle: 'Heavy Truck', route: 'Pune-Junnar', status: 'Available', assignedOrders: 3 },
-    { id: 'TRN-203', name: 'Ravi Logistics', mobile: '9876543222', address: 'Industrial Estate, Phase 1', vehicle: 'Tempo Traveler', route: 'Local Pune', status: 'Busy', assignedOrders: 5 },
-    { id: 'TRN-204', name: 'Fast Movers', mobile: '9876543223', address: 'Logistics Park, Karjat', vehicle: 'Pickup Truck', route: 'Karjat-Vashi', status: 'Available', assignedOrders: 1 },
-    { id: 'TRN-205', name: 'Safe Transport', mobile: '9876543224', address: 'Near Toll Plaza, Satara', vehicle: 'Bolero Camper', route: 'Satara-Pune', status: 'Inactive', assignedOrders: 0 },
-  ]);
-
-  // --- ACTIONS ---
-
-  // Moves warehouse order to incoming inventory
-  const readyToStore = (orderId: string) => {
-    const order = pickupWarehouseOrders.find((o) => o.id === orderId);
-    if (!order) return;
-
-    // Remove from Warehouse orders
-    setPickupWarehouseOrders((prev) => prev.filter((o) => o.id !== orderId));
-
-    // Add to incoming inventory
-    const newItem: InventoryItem = {
-      id: order.id,
-      sellerName: order.sellerName,
-      sellerMobile: order.sellerMobile,
-      sellerVillage: order.sellerVillage,
-      buyerName: 'Mandi Wholesale', // default fallback
-      buyerMobile: '9900112233',
-      buyerAddress: 'Gram Mandi Hub Store',
-      buyerVillage: 'Pune',
-      productCount: order.productCount,
-      totalQty: order.totalQty,
-      totalWeight: order.totalWeight,
-      status: 'stored',
-      shgName: order.shgDetails?.name,
-      shgMobile: order.shgDetails?.mobile,
-      shgAddress: order.shgDetails?.address,
-      transporterName: order.transporterDetails?.name,
-      transporterMobile: order.transporterDetails?.mobile,
-      transporterAddress: order.transporterDetails?.address,
-      orderDate: order.orderDate,
-      barcode: order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`,
-      storeDate: new Date().toISOString().split('T')[0],
+    return {
+      id: o.orderId,
+      uuid: o.id,
+      sellerName: o.sellerName,
+      sellerMobile: o.sellerMobile,
+      sellerAddress: [o.sellerHouseNo, o.sellerAddress, o.sellerVillage, o.sellerTaluka, o.sellerDistrict, o.sellerState, o.sellerPincode].filter(Boolean).join(', '),
+      sellerVillage: o.sellerVillage,
+      sellerPincode: o.sellerPincode,
+      buyerName: o.buyerName,
+      buyerMobile: o.buyerMobile,
+      buyerAddress: [o.buyerHouseNo, o.buyerAddress, o.buyerVillage, o.buyerTaluka, o.buyerDistrict, o.buyerState, o.buyerPincode].filter(Boolean).join(', '),
+      buyerVillage: o.buyerVillage,
+      buyerPincode: o.buyerPincode,
+      productCount: o.productCount,
+      totalQty: o.totalQty,
+      totalWeight: o.totalWeight,
+      orderDate: o.createdAt ? o.createdAt.split('T')[0] : '-',
+      shgStatus: mappedShgStatus,
+      transporterStatus: mappedTransporterStatus,
+      mainStatus: o.mainStatus,
+      status: o.mainStatus,
+      created_at: o.createdAt ? o.createdAt.replace('T', ' ').substring(0, 16) : '',
+      updated_at: o.updatedAt ? o.updatedAt.replace('T', ' ').substring(0, 16) : '',
+      shgDetails,
+      shgPickupSchedule: o.rescheduledAt && o.rescheduleType?.includes('SHG') ? o.rescheduledAt.replace('T', ' ').substring(0, 16) : 'Tomorrow, 10:00 AM',
+      transporterDetails,
+      transporterPickupSchedule: o.rescheduledAt && o.rescheduleType?.includes('TRANSPORTER') ? o.rescheduledAt.replace('T', ' ').substring(0, 16) : 'Tomorrow, 12:00 PM',
+      barcode: o.barcode || undefined,
+      warehouseReceivedDate: o.warehouseReceivedAt ? o.warehouseReceivedAt.split('T')[0] : undefined,
+      storedDate: o.storedAt ? o.storedAt.split('T')[0] : undefined,
+      storeDate: o.storedAt ? o.storedAt.split('T')[0] : undefined,
+      sectionEnteredAt: o.updatedAt || o.createdAt,
+      rejectionReason: o.assignments?.find((a: any) => a.status === 'REJECTED')?.rejectionReason || 'Rejected by partner',
+      rejectedBy: o.assignments?.find((a: any) => a.status === 'REJECTED')?.assigneeType || 'SHG',
+      rescheduledBy: o.rescheduleType || 'SHG',
     };
-    setIncomingInventory((prev) => [...prev, newItem]);
-
-    // Update status in rejected orders list
-    setPickupRejectedOrders((prev) =>
-      prev.map((r) =>
-        r.id === orderId
-          ? {
-              ...r,
-              status: 'stored',
-              mainStatus: 'stored',
-              barcode: order.barcode || r.barcode || newItem.barcode,
-            }
-          : r
-      )
-    );
   };
 
-  // Dispatches item from incoming inventory or return drop inventory
-  const dispatchInventory = (orderId: string) => {
-    const returnDropItem = returnDropInventory.find((item) => item.id === orderId);
-    if (returnDropItem) {
-      // Update status in returnDropInventory instead of removing
-      setReturnDropInventory((prev) =>
-        prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
-      );
-      
-      // Add to dropNewOrders
-      const newDrop: DropOrder = {
-        id: returnDropItem.id,
-        buyerName: returnDropItem.buyerName,
-        buyerMobile: returnDropItem.buyerMobile,
-        buyerAddress: returnDropItem.buyerAddress,
-        buyerVillage: returnDropItem.buyerVillage || 'Pune',
-        buyerPincode: '411001',
-        productCount: returnDropItem.productCount,
-        totalQty: returnDropItem.totalQty,
-        totalWeight: returnDropItem.totalWeight,
-        shgStatus: 'pending',
-        transporterStatus: 'pending',
-        mainStatus: 'shg_pending_acceptance',
-        status: 'pending',
-        orderDate: returnDropItem.orderDate || new Date().toISOString().split('T')[0],
-        barcode: returnDropItem.barcode,
-        sellerName: returnDropItem.sellerName,
-        sellerMobile: returnDropItem.sellerMobile || 'N/A',
-        sellerAddress: returnDropItem.sellerAddress || 'Gram Mandi Hub Store',
-        sellerVillage: returnDropItem.sellerVillage || 'Indapur',
-        sellerPincode: '413106',
-      };
-      setDropNewOrders((prev) => [...prev, newDrop]);
-    } else {
-      setIncomingInventory((prev) =>
-        prev.map((item) => (item.id === orderId ? { ...item, status: 'dispatch' } : item))
-      );
+  const mapInventory = (o: any): InventoryItem => {
+    const mapped = mapOrder(o);
+    return {
+      id: mapped.id,
+      uuid: mapped.uuid,
+      sellerName: mapped.sellerName,
+      sellerMobile: mapped.sellerMobile,
+      sellerAddress: mapped.sellerAddress,
+      sellerVillage: mapped.sellerVillage,
+      buyerName: mapped.buyerName,
+      buyerMobile: mapped.buyerMobile,
+      buyerAddress: mapped.buyerAddress,
+      buyerVillage: mapped.buyerVillage,
+      productCount: mapped.productCount,
+      totalQty: mapped.totalQty,
+      totalWeight: mapped.totalWeight,
+      status: o.mainStatus || 'STORED',
+      shgName: mapped.shgDetails?.name,
+      shgMobile: mapped.shgDetails?.mobile,
+      shgAddress: mapped.shgDetails?.address,
+      transporterName: mapped.transporterDetails?.name,
+      transporterMobile: mapped.transporterDetails?.mobile,
+      transporterAddress: mapped.transporterDetails?.address,
+      orderDate: mapped.orderDate,
+      barcode: mapped.barcode,
+      storeDate: mapped.storeDate,
+      sectionEnteredAt: mapped.sectionEnteredAt,
+    };
+  };
+
+  // Partners lists fetching on mount
+  const fetchPartners = async () => {
+    try {
+      const shgMembers = await api.community.getShgMembers();
+      const mappedShgs = shgMembers.map((item: any) => ({
+        id: item.id,
+        name: item.shgName || item.fullName,
+        leader: item.leaderName || item.fullName,
+        mobile: item.mobileNumber,
+        address: [item.houseNo, item.deliveryAddress, item.village, item.pincode].filter(Boolean).join(', '),
+        members: item.groupSize || 0,
+        status: item.status === 'APPROVED' ? 'Active' : item.status === 'PENDING' ? 'Pending' : 'Inactive',
+        assignedOrders: 0,
+      }));
+      setShgList(mappedShgs);
+
+      const routePartners = await api.transporters.getRoutePartnerMembers();
+      const personal = await api.transporters.getPersonalMembers();
+      const mappedTransporters = [...routePartners, ...personal].map((item: any) => ({
+        id: item.id,
+        name: `${item.firstName} ${item.lastName}`,
+        mobile: item.mobileNumber,
+        address: [item.residentialAddress, item.village, item.pincode].filter(Boolean).join(', '),
+        vehicle: item.vehicleType || 'N/A',
+        route: [item.village, item.pincode].filter(Boolean).join(', '),
+        status: item.status === 'APPROVED' ? 'Available' : item.status === 'PENDING' ? 'Pending' : 'Inactive',
+        assignedOrders: 0,
+      }));
+      setTransporterList(mappedTransporters);
+    } catch (e) {
+      console.error('Failed to load SHG/Transporter partners list:', e);
     }
   };
 
-  const intakePickupOrders = (orderIds: string[]) => {
-    const ordersToMove = pickupAssignedOrders.filter((o) => orderIds.includes(o.id));
-    if (ordersToMove.length === 0) return;
+  useEffect(() => {
+    const token = localStorage.getItem('gmu_token');
+    if (token && currentPage !== 'landing') {
+      fetchPartners();
+      loadCounts();
+    }
+  }, [currentPage]);
 
-    setPickupAssignedOrders((prev) => prev.filter((o) => !orderIds.includes(o.id)));
-
-    const warehouseItems: PickupOrder[] = ordersToMove.map((order) => ({
-      ...order,
-      mainStatus: 'at hub',
-      status: 'hub received',
-      barcode: undefined,
-      warehouseReceivedDate: new Date().toISOString().split('T')[0],
-    }));
-
-    setPickupWarehouseOrders((prev) => [...prev, ...warehouseItems]);
-
-    // Update status in rejected orders as well
-    setPickupRejectedOrders((prev) =>
-      prev.map((r) =>
-        orderIds.includes(r.id)
-          ? { ...r, mainStatus: 'at hub', status: 'hub received', barcode: undefined }
-          : r
-      )
-    );
+  // API Load functions implementation
+  const loadPickupNew = async (status?: string, date?: string) => {
+    const data = await api.orders.getPickupNew(status, date);
+    setPickupNewOrders(data.map(mapOrder));
   };
 
-  const intakeReturnOrder = (orderId: string, returnType: 'pickup' | 'drop') => {
+  const loadPickupAssigned = async (status?: string, date?: string) => {
+    const data = await api.orders.getPickupAssigned(status, date);
+    setPickupAssignedOrders(data.map(mapOrder));
+  };
+
+  const loadPickupWarehouse = async (status?: string, date?: string) => {
+    const data = await api.orders.getPickupWarehouse(status, date);
+    setPickupWarehouseOrders(data.map(mapOrder));
+  };
+
+  const loadPickupRejected = async (status?: string, date?: string) => {
+    const data = await api.orders.getPickupRejected(status, date);
+    setPickupRejectedOrders(data.map(mapOrder));
+  };
+
+  const loadPickupRescheduled = async (status?: string, date?: string) => {
+    const data = await api.orders.getPickupRescheduled(status, date);
+    setPickupRescheduledOrders(data.map(mapOrder));
+  };
+
+  const loadDropNew = async (status?: string, date?: string) => {
+    const data = await api.orders.getDropNew(status, date);
+    setDropNewOrders(data.map(mapOrder));
+  };
+
+  const loadDropAssigned = async (status?: string, date?: string) => {
+    const data = await api.orders.getDropAssigned(status, date);
+    setDropAssignedOrders(data.map(mapOrder));
+  };
+
+  const loadDropRejected = async (status?: string, date?: string) => {
+    const data = await api.orders.getDropRejected(status, date);
+    setDropRejectedOrders(data.map(mapOrder));
+  };
+
+  const loadDropRescheduled = async (status?: string, date?: string) => {
+    const data = await api.orders.getDropRescheduled(status, date);
+    setDropRescheduledOrders(data.map(mapOrder));
+  };
+
+  const loadDropCompleted = async (status?: string, date?: string) => {
+    const data = await api.orders.getDropCompleted(status, date);
+    setDropCompletedOrders(data.map(mapOrder));
+  };
+
+  const loadReturnsTransporter = async (status?: string, date?: string) => {
+    const data = await api.orders.getReturnsTransporter(status, date);
+    const mapped = data.map(mapOrder);
+    setReturnDropNewOrders(mapped.filter((o: any) => o.mainStatus === 'TRANSPORTER_RETURN_PENDING'));
+    setReturnDropCompletedOrders(mapped.filter((o: any) => o.mainStatus === 'TRANSPORTER_RETURN_COMPLETED'));
+  };
+
+  const loadReturnsBuyer = async (status?: string, date?: string) => {
+    const data = await api.orders.getReturnsBuyer(status, date);
+    const mapped = data.map(mapOrder);
+    setReturnPickupNewOrders(mapped.filter((o: any) => !['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'COMPLETED', 'RETURN_COMPLETED'].includes(o.mainStatus)));
+    setReturnPickupCompletedOrders(mapped.filter((o: any) => o.mainStatus === 'BUYER_RETURN_COMPLETED'));
+  };
+
+  const loadInventoryStored = async (status?: string, date?: string) => {
+    const data = await api.orders.getInventoryStored(status, date);
+    setIncomingInventory(data.map(mapInventory));
+  };
+
+  const loadInventoryTransporterReturn = async (status?: string, date?: string) => {
+    const data = await api.orders.getInventoryTransporterReturn(status, date);
+    setReturnDropInventory(data.map(mapInventory));
+  };
+
+  const loadInventoryBuyerReturn = async (status?: string, date?: string) => {
+    const data = await api.orders.getInventoryBuyerReturn(status, date);
+    setReturnPickupInventory(data.map(mapInventory));
+  };
+
+  // Actions transition implementation
+  const readyToStore = async (orderId: string) => {
+    const order = pickupWarehouseOrders.find((o) => o.id === orderId) as any;
+    await api.orders.store(order?.uuid || orderId);
+    await loadCounts();
+  };
+
+  const dispatchInventory = async (orderId: string) => {
+    const isTransporterReturn = returnDropInventory.some((item) => item.id === orderId);
+    if (isTransporterReturn) {
+      const order = returnDropInventory.find((item) => item.id === orderId) as any;
+      await api.orders.transporterReturnDispatch(order?.uuid || orderId, order?.barcode || '');
+    } else {
+      const item = incomingInventory.find((item) => item.id === orderId) as any;
+      if (item) {
+        await api.orders.scan(item.uuid || orderId, item.barcode || '');
+      }
+    }
+    await loadCounts();
+  };
+
+  const intakePickupOrders = async (orderIds: string[]) => {
+    for (const id of orderIds) {
+      const order = pickupAssignedOrders.find((o) => o.id === id) as any;
+      await api.orders.warehouseIntake(order?.uuid || id);
+    }
+    await loadCounts();
+  };
+
+  const intakeReturnOrder = async (orderId: string, returnType: 'pickup' | 'drop') => {
     if (returnType === 'drop') {
-      const order = returnDropCompletedOrders.find((o) => o.id === orderId);
-      if (!order) return;
-
-      setReturnDropCompletedOrders((prev) => prev.filter((o) => o.id !== orderId));
-
-      const code = order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      const newItem: InventoryItem = {
-        id: order.id,
-        sellerName: order.sellerName || 'N/A',
-        sellerMobile: order.sellerMobile,
-        sellerVillage: order.sellerVillage,
-        buyerName: order.buyerName,
-        buyerMobile: order.buyerMobile,
-        buyerAddress: order.buyerAddress,
-        buyerVillage: order.buyerVillage,
-        productCount: order.productCount,
-        totalQty: order.totalQty,
-        totalWeight: order.totalWeight,
-        status: 'STORED',
-        shgName: order.shgDetails?.name,
-        shgMobile: order.shgDetails?.mobile,
-        shgAddress: order.shgDetails?.address,
-        transporterName: order.transporterDetails?.name,
-        transporterMobile: order.transporterDetails?.mobile,
-        transporterAddress: order.transporterDetails?.address,
-        orderDate: order.orderDate,
-        barcode: code,
-        storeDate: new Date().toISOString().split('T')[0],
-      };
-      setReturnDropInventory((prev) => [...prev, newItem]);
-
-      // Create copy in Drop -> New Orders, Status: PENDING
-      const newDrop: DropOrder = {
-        id: order.id,
-        buyerName: order.buyerName,
-        buyerMobile: order.buyerMobile,
-        buyerAddress: order.buyerAddress,
-        buyerVillage: order.buyerVillage || 'Pune',
-        buyerPincode: order.buyerPincode || '411001',
-        productCount: order.productCount,
-        totalQty: order.totalQty,
-        totalWeight: order.totalWeight,
-        shgStatus: 'pending',
-        transporterStatus: 'pending',
-        mainStatus: 'PENDING',
-        status: 'PENDING',
-        orderDate: order.orderDate || new Date().toISOString().split('T')[0],
-        barcode: code,
-        sellerName: order.sellerName,
-        sellerMobile: order.sellerMobile || 'N/A',
-        sellerAddress: order.sellerAddress || 'Gram Mandi Hub Store',
-        sellerVillage: order.sellerVillage || 'Indapur',
-        sellerPincode: order.sellerPincode || '413106',
-        pickupStatus: 'PENDING',
-      };
-      setDropNewOrders((prev) => [...prev, newDrop]);
+      const order = returnDropNewOrders.find((o) => o.id === orderId) as any;
+      await api.orders.transporterReturnIntake(order?.uuid || orderId);
     } else {
-      const order = returnPickupCompletedOrders.find((o) => o.id === orderId);
-      if (!order) return;
-
-      setReturnPickupCompletedOrders((prev) => prev.filter((o) => o.id !== orderId));
-
-      const code = order.barcode || `BAR-${order.id}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      const newItem: InventoryItem = {
-        id: order.id,
-        sellerName: order.sellerName || 'N/A',
-        sellerMobile: order.sellerMobile,
-        sellerVillage: order.sellerVillage,
-        buyerName: order.buyerName,
-        buyerMobile: order.buyerMobile,
-        buyerAddress: order.buyerAddress,
-        buyerVillage: order.buyerVillage,
-        productCount: order.productCount,
-        totalQty: order.totalQty,
-        totalWeight: order.totalWeight,
-        status: 'STORED',
-        shgName: order.shgDetails?.name,
-        shgMobile: order.shgDetails?.mobile,
-        shgAddress: order.shgDetails?.address,
-        transporterName: order.transporterDetails?.name,
-        transporterMobile: order.transporterDetails?.mobile,
-        transporterAddress: order.transporterDetails?.address,
-        orderDate: order.orderDate,
-        barcode: code,
-        storeDate: new Date().toISOString().split('T')[0],
-      };
-      setReturnPickupInventory((prev) => [...prev, newItem]);
+      const order = (returnPickupNewOrders.find((o) => o.id === orderId) || returnPickupCompletedOrders.find((o) => o.id === orderId)) as any;
+      await api.orders.buyerReturnIntake(order?.uuid || orderId);
     }
+    await loadCounts();
+  };
+
+  const requestBuyerReturn = async (dropOrderId: string) => {
+    const order = dropCompletedOrders.find((o) => o.id === dropOrderId) as any;
+    await api.orders.requestBuyerReturn(order?.uuid || dropOrderId);
+    await loadCounts();
   };
 
   const generateOTP = (orderId: string) => {
-    const otpVal = Math.floor(1000 + Math.random() * 9000).toString();
-    console.log(`Generated OTP for order ${orderId}: ${otpVal}`);
-    return otpVal;
+    return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
-  const generateBarcode = (orderId: string) => {
-    const code = `BAR-${orderId}-${Math.floor(1000 + Math.random() * 9000)}`;
-    
-    const order = pickupWarehouseOrders.find((o) => o.id === orderId);
-    if (order) {
-      setPickupWarehouseOrders((prev) => prev.filter((o) => o.id !== orderId));
-
-      const newItem: InventoryItem = {
-        id: order.id,
-        sellerName: order.sellerName,
-        sellerMobile: order.sellerMobile,
-        sellerVillage: order.sellerVillage,
-        buyerName: 'Mandi Wholesale',
-        buyerMobile: '9900112233',
-        buyerAddress: 'Gram Mandi Hub Store',
-        buyerVillage: 'Pune',
-        productCount: order.productCount,
-        totalQty: order.totalQty,
-        totalWeight: order.totalWeight,
-        status: 'STORED',
-        shgName: order.shgDetails?.name,
-        shgMobile: order.shgDetails?.mobile,
-        shgAddress: order.shgDetails?.address,
-        transporterName: order.transporterDetails?.name,
-        transporterMobile: order.transporterDetails?.mobile,
-        transporterAddress: order.transporterDetails?.address,
-        orderDate: order.orderDate,
-        barcode: code,
-        storeDate: new Date().toISOString().split('T')[0],
-      };
-      setIncomingInventory((prev) => [...prev, newItem]);
-
-      const newDrop: DropOrder = {
-        id: order.id,
-        buyerName: 'Mandi Wholesale',
-        buyerMobile: '9900112233',
-        buyerAddress: 'Gram Mandi Hub Store',
-        buyerVillage: 'Pune',
-        buyerPincode: '411001',
-        productCount: order.productCount,
-        totalQty: order.totalQty,
-        totalWeight: order.totalWeight,
-        shgStatus: 'pending',
-        transporterStatus: 'pending',
-        mainStatus: 'shg_pending_acceptance',
-        status: 'pending',
-        sellerName: order.sellerName,
-        sellerMobile: order.sellerMobile,
-        sellerAddress: order.sellerAddress,
-        sellerVillage: order.sellerVillage,
-        sellerPincode: order.sellerPincode,
-        orderDate: order.orderDate,
-        barcode: code,
-      };
-      setDropNewOrders((prev) => [...prev, newDrop]);
-
-      setPickupRejectedOrders((prev) =>
-        prev.map((r) =>
-          r.id === orderId
-            ? {
-                ...r,
-                status: 'BARCODE_GENERATED',
-                mainStatus: 'BARCODE_GENERATED',
-                barcode: code,
-              }
-            : r
-        )
-      );
-    }
-    
-    return code;
+  const generateBarcode = async (orderId: string) => {
+    const order = pickupWarehouseOrders.find((o) => o.id === orderId) as any;
+    const uuid = order?.uuid || orderId;
+    const res = await api.orders.generateBarcode(uuid);
+    await api.orders.store(uuid);
+    await loadCounts();
+    return res.barcode || `BAR-ORD-${orderId}`;
   };
 
   const approveSHG = (id: string) => {
-    setShgList((prev) =>
-      prev.map((shg) => (shg.id === id ? { ...shg, status: 'Active' } : shg))
-    );
+    api.community.approve(id).then(() => fetchPartners());
   };
 
   const approveTransporter = (id: string) => {
-    setTransporterList((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: 'Available' } : t))
-    );
+    api.transporters.approve(id).then(() => fetchPartners());
   };
 
   const addNewSHG = (shg: Omit<SHGProfile, 'id' | 'assignedOrders'>) => {
-    const newShgItem: SHGProfile = {
-      ...shg,
-      id: `SHG-${100 + shgList.length + 1}`,
-      assignedOrders: 0,
-    };
-    setShgList((prev) => [...prev, newShgItem]);
+    // Unsupported / not required by task, keep stub
   };
 
   const addNewTransporter = (transporter: Omit<TransporterProfile, 'id' | 'assignedOrders'>) => {
-    const newTransporterItem: TransporterProfile = {
-      ...transporter,
-      id: `TRN-${200 + transporterList.length + 1}`,
-      assignedOrders: 0,
-    };
-    setTransporterList((prev) => [...prev, newTransporterItem]);
+    // Unsupported / not required by task, keep stub
   };
 
-  // Helper action to assign details for demo purposes
-  const assignPickupOrder = (orderId: string, shgId: string, transporterId: string) => {
-    const newOrder = pickupNewOrders.find((o) => o.id === orderId);
-    const shg = shgList.find((s) => s.id === shgId);
-    const transporter = transporterList.find((t) => t.id === transporterId);
-
-    if (newOrder && shg && transporter) {
-      setPickupNewOrders((prev) => prev.filter((o) => o.id !== orderId));
-      
-      const assigned: PickupOrder = {
-        ...newOrder,
-        shgStatus: 'Accepted',
-        transporterStatus: 'Accepted',
-        mainStatus: 'pickup assigned',
-        status: 'pickup assigned',
-        shgDetails: {
-          name: shg.name,
-          mobile: shg.mobile,
-          address: shg.address,
-        },
-        shgPickupSchedule: '2026-06-15 10:00 AM',
-        transporterDetails: {
-          name: transporter.name,
-          mobile: transporter.mobile,
-          address: transporter.address,
-        },
-        transporterPickupSchedule: '2026-06-15 12:30 PM',
-      };
-      setPickupAssignedOrders((prev) => [...prev, assigned]);
-
-      // increment assigned count
-      setShgList(prev => prev.map(s => s.id === shgId ? { ...s, assignedOrders: s.assignedOrders + 1 } : s));
-      setTransporterList(prev => prev.map(t => t.id === transporterId ? { ...t, assignedOrders: t.assignedOrders + 1 } : t));
-
-      // Update status in rejected orders list
-      setPickupRejectedOrders((prev) =>
-        prev.map((r) =>
-          r.id === orderId
-            ? {
-                ...r,
-                shgStatus: 'Accepted',
-                transporterStatus: 'Accepted',
-                mainStatus: 'pickup assigned',
-                status: 'pickup assigned',
-              }
-            : r
-        )
-      );
-    }
+  const assignPickupOrder = async (orderId: string, shgId: string, transporterId: string) => {
+    const order = pickupNewOrders.find((o) => o.id === orderId) as any;
+    const uuid = order?.uuid || orderId;
+    await api.orders.shgAccept(uuid, shgId);
+    await api.orders.broadcastTransporter(uuid);
+    await api.orders.transporterAccept(uuid, transporterId);
+    await loadCounts();
   };
 
-  const simulateSHGAction = (
+  // Simulations implementation
+  const simulateSHGAction = async (
     orderId: string,
     type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop',
     action: 'accept' | 'reject' | 'reschedule' | 'pick' | 'deliver' | 'return-delivered',
     payload?: any
   ) => {
+    const findUuid = (list: any[]) => {
+      const found = list.find((o) => o.id === orderId);
+      return found?.uuid || found?.id || orderId;
+    };
+
+    let uuid = orderId;
+    const defaultShg = shgList[0] || { id: 'SHG-101' };
+
+    if (type === 'pickup') {
+      uuid = findUuid(pickupNewOrders.concat(pickupAssignedOrders).concat(pickupRejectedOrders).concat(pickupRescheduledOrders));
+    } else if (type === 'drop') {
+      uuid = findUuid(dropNewOrders.concat(dropAssignedOrders).concat(dropRejectedOrders).concat(dropRescheduledOrders));
+    } else if (type === 'return-pickup') {
+      uuid = findUuid(returnPickupNewOrders.concat(returnPickupCompletedOrders));
+    } else if (type === 'return-drop') {
+      uuid = findUuid(returnDropNewOrders.concat(returnDropCompletedOrders));
+    }
+
+    let shgId = defaultShg.id;
+    try {
+      const orderDetails = await api.orders.getDetails(uuid);
+      const pendingAssignment = orderDetails?.assignments?.find(
+        (a: any) => a.assigneeType === 'SHG' && a.status === 'PENDING'
+      );
+      if (pendingAssignment) {
+        shgId = pendingAssignment.assigneeId;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch order details for simulation, falling back to default SHG:', e);
+    }
+
     if (type === 'pickup') {
       if (action === 'accept') {
-        const order = pickupNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setPickupNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const updated: PickupOrder = {
-            ...order,
-            shgStatus: 'Accepted',
-            mainStatus: 'pickup shg accepted',
-            shgDetails: payload?.shgDetails || { name: 'Demo SHG', mobile: '9876543210', address: 'Village Center' },
-            shgPickupSchedule: payload?.shgPickupSchedule || 'Tomorrow, 10:00 AM',
-          };
-          setPickupAssignedOrders(prev => [...prev, updated]);
-          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'Accepted', mainStatus: 'pickup shg accepted' } : r));
-        }
+        await api.orders.shgAccept(uuid, shgId);
       } else if (action === 'reject') {
-        const order = pickupNewOrders.find(o => o.id === orderId);
-        if (order) {
-          const rejected: PickupOrder = {
-            ...order,
-            shgStatus: 'rejected',
-            mainStatus: 'pending',
-            rejectedDate: new Date().toISOString().split('T')[0],
-            rejectionReason: payload?.rejectionReason || 'SHG rejected the request',
-            rejectedBy: 'SHG',
-          };
-          setPickupRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
-          setPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
-        }
+        await api.orders.shgReject(uuid, shgId);
       } else if (action === 'reschedule') {
-        const order = pickupNewOrders.find(o => o.id === orderId) || pickupAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          const rescheduled: PickupOrder = {
-            ...order,
-            mainStatus: 'rescheduled',
-            shgPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
-            rescheduledBy: 'SHG',
-          };
-          setPickupRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
-          setPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
-          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
-          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : r));
-        }
+        await api.orders.shgReschedule(uuid, shgId, payload?.duration || '24 HOURS');
       } else if (action === 'pick') {
-        setPickupAssignedOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              shgStatus: 'picked',
-              mainStatus: 'parcel at shg',
-              transporterStatus: 'pending',
-            };
-          }
-          return o;
-        }));
-        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'picked', mainStatus: 'parcel at shg', transporterStatus: 'pending' } : r));
+        await api.orders.shgPicked(uuid);
       }
     } else if (type === 'drop') {
       if (action === 'accept') {
-        const order = dropNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setDropNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const updated: DropOrder = {
-            ...order,
-            shgStatus: 'ACCEPTED',
-            transporterStatus: 'DROP_ASSIGNED',
-            mainStatus: 'DROP_SHG_ACCEPTED',
-            pickupStatus: 'PENDING',
-            shgDetails: payload?.shgDetails || { name: 'Demo SHG', mobile: '9876543210', address: 'Village Center' },
-            shgPickupSchedule: payload?.shgPickupSchedule || 'Tomorrow, 10:00 AM',
-          };
-          setDropAssignedOrders(prev => [...prev, updated]);
-          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'ACCEPTED', transporterStatus: 'DROP_ASSIGNED', mainStatus: 'DROP_SHG_ACCEPTED', pickupStatus: 'PENDING' } : r));
-        }
+        await api.orders.dropShgAccept(uuid, shgId);
       } else if (action === 'reject') {
-        const order = dropNewOrders.find(o => o.id === orderId);
-        if (order) {
-          const rejected: DropOrder = {
-            ...order,
-            shgStatus: 'rejected',
-            mainStatus: 'pending',
-            rejectedDate: new Date().toISOString().split('T')[0],
-            rejectionReason: payload?.rejectionReason || 'SHG rejected request',
-            rejectedBy: 'SHG',
-          };
-          setDropRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
-          setDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
-        }
+        await api.orders.dropShgReject(uuid, shgId);
       } else if (action === 'reschedule') {
-        const order = dropNewOrders.find(o => o.id === orderId) || dropAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          const rescheduled: DropOrder = {
-            ...order,
-            mainStatus: 'rescheduled',
-            shgPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
-            rescheduledBy: 'SHG',
-          };
-          setDropRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
-          setDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
-          setDropAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : o));
-          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', shgPickupSchedule: payload?.newSchedule } : r));
-        }
+        await api.orders.dropShgReschedule(uuid, shgId, payload?.duration || '24 HOURS');
       } else if (action === 'deliver') {
-        const order = dropAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
-          const updated: DropOrder = {
-            ...order,
-            shgStatus: 'drop shg delivered',
-            mainStatus: 'completed',
-            deliveredDate: new Date().toISOString().split('T')[0],
-          };
-          setDropCompletedOrders(prev => [...prev, updated]);
-          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, shgStatus: 'drop shg delivered', mainStatus: 'completed' } : r));
-        }
+        await api.orders.dropComplete(uuid);
       }
     } else if (type === 'return-pickup') {
       if (action === 'accept') {
-        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'SHG_ACCEPTED', mainStatus: 'SHG_ACCEPTED', status: 'SHG_ACCEPTED' } : o));
-      } else if (action === 'reject') {
-        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+        await api.orders.buyerReturnShgAccept(uuid);
       } else if (action === 'pick') {
-        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'RETURN_PICKED_BY_SHG', mainStatus: 'RETURN_PICKED_BY_SHG', status: 'RETURN_PICKED_BY_SHG', transporterStatus: 'pending' } : o));
+        await api.orders.buyerReturnShgPicked(uuid);
       }
     } else if (type === 'return-drop') {
       if (action === 'accept') {
-        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'Accepted', mainStatus: 'shg accepted' } : o));
+        await api.orders.dropShgAccept(uuid, shgId);
       } else if (action === 'reject') {
-        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, shgStatus: 'rejected', mainStatus: 'pending' } : o));
+        await api.orders.dropShgReject(uuid, shgId);
       } else if (action === 'return-delivered') {
-        const order = returnDropNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const updated: ReturnOrder = {
-            ...order,
-            shgStatus: 'completed',
-            mainStatus: 'completed',
-            status: 'completed',
-            completionDate: new Date().toISOString().split('T')[0],
-          };
-          setReturnDropCompletedOrders(prev => [...prev, updated]);
-        }
+        await api.orders.dropComplete(uuid);
       }
     }
+    await loadCounts();
   };
 
-  const simulateTransporterAction = (
+  const simulateTransporterAction = async (
     orderId: string,
     type: 'pickup' | 'drop' | 'return-pickup' | 'return-drop',
     action: 'accept' | 'reject' | 'reschedule' | 'transit' | 'delivered-shg' | 'pickup-from-gmu' | 'shg-not-available' | 'return-to-gmu' | 'deliver-to-gmu' | 'drop-to-gmu',
     payload?: any
   ) => {
+    const findUuid = (list: any[]) => {
+      const found = list.find((o) => o.id === orderId);
+      return found?.uuid || found?.id || orderId;
+    };
+
+    let uuid = orderId;
+    const defaultTransporter = transporterList[0] || { id: 'TRN-201' };
+
+    if (type === 'pickup') {
+      uuid = findUuid(pickupAssignedOrders.concat(pickupRejectedOrders).concat(pickupRescheduledOrders));
+    } else if (type === 'drop') {
+      uuid = findUuid(dropAssignedOrders.concat(dropRejectedOrders).concat(dropRescheduledOrders));
+    } else if (type === 'return-pickup') {
+      uuid = findUuid(returnPickupNewOrders.concat(returnPickupCompletedOrders));
+    } else if (type === 'return-drop') {
+      uuid = findUuid(returnDropNewOrders.concat(returnDropCompletedOrders));
+    }
+
+    let transporterId = defaultTransporter.id;
+    try {
+      const orderDetails = await api.orders.getDetails(uuid);
+      const pendingAssignment = orderDetails?.assignments?.find(
+        (a: any) => a.assigneeType === 'TRANSPORTER' && a.status === 'PENDING'
+      );
+      if (pendingAssignment) {
+        transporterId = pendingAssignment.assigneeId;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch order details for simulation, falling back to default transporter:', e);
+    }
+
     if (type === 'pickup') {
       if (action === 'accept') {
-        setPickupAssignedOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              transporterStatus: 'transporter accepted',
-              transporterDetails: payload?.transporterDetails || { name: 'Demo Transporter', mobile: '9900088776', address: 'Logistics Hub' },
-              transporterPickupSchedule: payload?.transporterPickupSchedule || 'Tomorrow, 12:00 PM',
-            };
-          }
-          return o;
-        }));
-        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'transporter accepted' } : r));
+        await api.orders.transporterAccept(uuid, transporterId);
       } else if (action === 'reject') {
-        const order = pickupAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          const rejected: PickupOrder = {
-            ...order,
-            transporterStatus: 'rejected',
-            mainStatus: 'pending',
-            rejectedDate: new Date().toISOString().split('T')[0],
-            rejectionReason: payload?.rejectionReason || 'Transporter rejected request',
-            rejectedBy: 'Transporter',
-          };
-          setPickupRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
-          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'rejected', mainStatus: 'pending' } : o));
-        }
+        await api.orders.transporterReject(uuid, transporterId);
       } else if (action === 'reschedule') {
-        const order = pickupAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          const rescheduled: PickupOrder = {
-            ...order,
-            mainStatus: 'rescheduled',
-            transporterPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
-            rescheduledBy: 'Transporter',
-          };
-          setPickupRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
-          setPickupAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : o));
-          setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : r));
-        }
+        await api.orders.transporterReschedule(uuid, transporterId);
       } else if (action === 'transit') {
-        setPickupAssignedOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              transporterStatus: 'in transit to hub',
-              mainStatus: 'in transit to hub',
-            };
-          }
-          return o;
-        }));
-        setPickupRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'in transit to hub', mainStatus: 'in transit to hub' } : r));
+        await api.orders.transporterPicked(uuid);
       }
     } else if (type === 'drop') {
       if (action === 'accept') {
-        setDropAssignedOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              transporterStatus: 'TRANSPORTER_ACCEPTED',
-              pickupStatus: 'PENDING',
-              transporterDetails: payload?.transporterDetails || { name: 'Demo Transporter', mobile: '9900088776', address: 'Logistics Hub' },
-              transporterPickupSchedule: payload?.transporterPickupSchedule || 'Tomorrow, 12:00 PM',
-            };
-          }
-          return o;
-        }));
-        setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'TRANSPORTER_ACCEPTED', pickupStatus: 'PENDING' } : r));
-
+        await api.orders.dropTransporterAccept(uuid, transporterId);
       } else if (action === 'reject') {
-        const order = dropAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          if (order.transporterStatus === 'pending') {
-            const rejected: DropOrder = {
-              ...order,
-              transporterStatus: 'rejected',
-              mainStatus: 'pending',
-              rejectedDate: new Date().toISOString().split('T')[0],
-              rejectionReason: payload?.rejectionReason || 'Transporter rejected request',
-              rejectedBy: 'Transporter',
-            };
-            setDropRejectedOrders(prev => [...prev.filter(o => o.id !== orderId), rejected]);
-            setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
-            
-            const newRequest: DropOrder = {
-              ...order,
-              shgStatus: 'pending',
-              transporterStatus: 'pending',
-              mainStatus: 'shg_pending_acceptance',
-            };
-            setDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), newRequest]);
-          } else {
-            setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
-            const returnOrder: ReturnOrder = {
-              id: order.id,
-              buyerName: order.buyerName,
-              buyerMobile: order.buyerMobile,
-              buyerAddress: order.buyerAddress,
-              buyerVillage: order.buyerVillage,
-              buyerPincode: order.buyerPincode,
-              productCount: order.productCount,
-              totalQty: order.totalQty,
-              totalWeight: order.totalWeight,
-              orderDate: order.orderDate || new Date().toISOString().split('T')[0],
-              shgStatus: 'Return Drop Initiated',
-              transporterStatus: 'Return Drop Initiated',
-              mainStatus: 'Return Drop Initiated',
-              status: 'Return Drop Initiated',
-              created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              sellerName: order.sellerName,
-              sellerMobile: order.sellerMobile,
-              sellerAddress: order.sellerAddress,
-              sellerVillage: order.sellerVillage,
-              sellerPincode: order.sellerPincode,
-              barcode: order.barcode,
-              shgDetails: order.shgDetails,
-              transporterDetails: order.transporterDetails,
-            };
-            setReturnDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), returnOrder]);
-          }
-        }
+        await api.orders.dropTransporterReject(uuid, transporterId);
       } else if (action === 'reschedule') {
-        const order = dropAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          const rescheduled: DropOrder = {
-            ...order,
-            mainStatus: 'rescheduled',
-            transporterPickupSchedule: payload?.newSchedule || 'Rescheduled Next Week',
-            rescheduledBy: 'Transporter',
-          };
-          setDropRescheduledOrders(prev => [...prev.filter(o => o.id !== orderId), rescheduled]);
-          setDropAssignedOrders(prev => prev.map(o => o.id === orderId ? { ...o, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : o));
-          setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, mainStatus: 'rescheduled', transporterPickupSchedule: payload?.newSchedule } : r));
-        }
+        await api.orders.dropTransporterReschedule(uuid, transporterId);
       } else if (action === 'delivered-shg') {
-        setDropAssignedOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              transporterStatus: 'parcel at drop shg',
-              mainStatus: 'parcel at drop shg',
-            };
-          }
-          return o;
-        }));
-        setDropRejectedOrders(prev => prev.map(r => r.id === orderId ? { ...r, transporterStatus: 'parcel at drop shg', mainStatus: 'parcel at drop shg' } : r));
+        await api.orders.dropTransporterDropsToShg(uuid);
       } else if (action === 'shg-not-available') {
-        const order = dropAssignedOrders.find(o => o.id === orderId);
-        if (order) {
-          setDropAssignedOrders(prev => prev.filter(o => o.id !== orderId));
-          const returnOrder: ReturnOrder = {
-            id: order.id,
-            buyerName: order.buyerName,
-            buyerMobile: order.buyerMobile,
-            buyerAddress: order.buyerAddress,
-            buyerVillage: order.buyerVillage,
-            buyerPincode: order.buyerPincode,
-            productCount: order.productCount,
-            totalQty: order.totalQty,
-            totalWeight: order.totalWeight,
-            orderDate: order.orderDate || new Date().toISOString().split('T')[0],
-            shgStatus: 'SHG NOT AVAILABLE',
-            transporterStatus: 'pending',
-            mainStatus: 'SHG NOT AVAILABLE',
-            status: 'SHG NOT AVAILABLE',
-            created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-            updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-            sellerName: order.sellerName,
-            sellerMobile: order.sellerMobile,
-            sellerAddress: order.sellerAddress,
-            sellerVillage: order.sellerVillage,
-            sellerPincode: order.sellerPincode,
-            barcode: order.barcode,
-            shgDetails: order.shgDetails,
-            transporterDetails: order.transporterDetails,
-          };
-          setReturnDropNewOrders(prev => [...prev.filter(o => o.id !== orderId), returnOrder]);
-        }
+        await api.orders.createTransporterReturn(uuid);
       }
     } else if (type === 'return-pickup') {
       if (action === 'accept') {
-        setReturnPickupNewOrders(prev => prev.map(o => {
-          if (o.id === orderId) {
-            const matchingTrans = transporterList.find(t =>
-              t.route.toLowerCase().includes(o.buyerVillage.toLowerCase()) ||
-              t.route.toLowerCase().includes(o.buyerPincode.toLowerCase())
-            ) || transporterList[0];
-            return {
-              ...o,
-              transporterStatus: 'TRANSPORTER_ACCEPTED',
-              mainStatus: 'TRANSPORTER_ACCEPTED',
-              status: 'TRANSPORTER_ACCEPTED',
-              transporterDetails: {
-                name: matchingTrans.name,
-                mobile: matchingTrans.mobile,
-                address: matchingTrans.address,
-              },
-              transporterPickupSchedule: 'Tomorrow, 12:00 PM',
-            };
-          }
-          return o;
-        }));
+        await api.orders.buyerReturnTransporterAccept(uuid, transporterId);
       } else if (action === 'transit') {
-        setReturnPickupNewOrders(prev => prev.map(o => o.id === orderId ? {
-          ...o,
-          transporterStatus: 'IN_TRANSIT_TO_GMU',
-          mainStatus: 'IN_TRANSIT_TO_GMU',
-          status: 'IN_TRANSIT_TO_GMU',
-        } : o));
+        await api.orders.buyerReturnTransporterPicked(uuid);
       } else if (action === 'deliver-to-gmu') {
-        const order = returnPickupNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setReturnPickupNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const updated: ReturnOrder = {
-            ...order,
-            transporterStatus: 'RETURN_RECEIVED_AT_GMU',
-            mainStatus: 'RETURN_RECEIVED_AT_GMU',
-            status: 'RETURN_RECEIVED_AT_GMU',
-            completionDate: new Date().toISOString().split('T')[0],
-          };
-          setReturnPickupCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), updated]);
-        }
+        await api.orders.buyerReturnTransporterDelivered(uuid);
       }
     } else if (type === 'return-drop') {
       if (action === 'accept') {
-        setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'Accepted' } : o));
-
-      } else if (action === 'return-to-gmu') {
-        const order = returnDropNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const completedOrder: ReturnOrder = {
-            ...order,
-            shgStatus: 'RETURNED_TO_GMU',
-            transporterStatus: 'RETURNED_TO_GMU',
-            mainStatus: 'RETURNED_TO_GMU',
-            status: 'RETURNED_TO_GMU',
-            completionDate: new Date().toISOString().split('T')[0],
-          };
-          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
-        }
-      } else if (action === 'drop-to-gmu') {
-        const order = returnDropNewOrders.find(o => o.id === orderId);
-        if (order) {
-          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const completedOrder: ReturnOrder = {
-            ...order,
-            shgStatus: 'Completed',
-            transporterStatus: 'Completed',
-            mainStatus: 'Completed',
-            status: 'Completed',
-            completionDate: new Date().toISOString().split('T')[0],
-          };
-          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
-        }
+        await api.orders.dropTransporterAccept(uuid, transporterId);
       } else if (action === 'delivered-shg') {
-        const order = returnDropNewOrders.find(o => o.id === orderId);
-        if (order && (order.shgStatus === 'SHG Not Available' || order.shgStatus === 'SHG NOT AVAILABLE')) {
-          setReturnDropNewOrders(prev => prev.filter(o => o.id !== orderId));
-          const completedOrder: ReturnOrder = {
-            ...order,
-            shgStatus: 'completed',
-            transporterStatus: 'completed',
-            mainStatus: 'completed',
-            status: 'completed',
-            completionDate: new Date().toISOString().split('T')[0],
-          };
-          setReturnDropCompletedOrders(prev => [...prev.filter(o => o.id !== orderId), completedOrder]);
-        } else {
-          setReturnDropNewOrders(prev => prev.map(o => o.id === orderId ? { ...o, transporterStatus: 'parcel at drop shg', mainStatus: 'parcel at drop shg' } : o));
-        }
+        await api.orders.dropTransporterDropsToShg(uuid);
+      } else if (action === 'return-to-gmu' || action === 'drop-to-gmu') {
+        await api.orders.transporterReturnIntake(uuid);
       }
     }
-  };
-
-  const requestBuyerReturn = (dropOrderId: string) => {
-    const dropOrder = dropCompletedOrders.find((o) => o.id === dropOrderId);
-    if (!dropOrder) return;
-
-    const originalSHG = dropOrder.shgDetails;
-
-    const newReturn: ReturnOrder = {
-      id: dropOrder.id,
-      buyerName: dropOrder.buyerName,
-      buyerMobile: dropOrder.buyerMobile,
-      buyerAddress: dropOrder.buyerAddress,
-      buyerVillage: dropOrder.buyerVillage,
-      buyerPincode: dropOrder.buyerPincode,
-      productCount: dropOrder.productCount,
-      totalQty: dropOrder.totalQty,
-      totalWeight: dropOrder.totalWeight,
-      orderDate: new Date().toISOString().split('T')[0],
-      shgStatus: 'pending',
-      transporterStatus: 'pending',
-      mainStatus: 'pending',
-      status: 'pending',
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      updated_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      shgDetails: originalSHG,
-      sellerName: dropOrder.sellerName,
-      sellerMobile: dropOrder.sellerMobile,
-      sellerAddress: dropOrder.sellerAddress,
-      sellerVillage: dropOrder.sellerVillage,
-      sellerPincode: dropOrder.sellerPincode,
-      barcode: dropOrder.barcode,
-    };
-
-    setReturnPickupNewOrders((prev) => [...prev.filter((o) => o.id !== dropOrderId), newReturn]);
-  };
-
-  const enrich = <T extends { sectionEnteredAt?: string }>(items: T[]): T[] => {
-    return items.map(item => ({
-      ...item,
-      sectionEnteredAt: item.sectionEnteredAt || appLoadTime
-    }));
+    await loadCounts();
   };
 
   return (
     <AppContext.Provider
       value={{
-        pickupNewOrders: enrich(pickupNewOrders),
-        pickupAssignedOrders: enrich(pickupAssignedOrders),
-        pickupWarehouseOrders: enrich(pickupWarehouseOrders),
-        pickupRejectedOrders: enrich(pickupRejectedOrders),
-        pickupRescheduledOrders: enrich(pickupRescheduledOrders),
-        dropNewOrders: enrich(dropNewOrders),
-        dropAssignedOrders: enrich(dropAssignedOrders),
-        dropRejectedOrders: enrich(dropRejectedOrders),
-        dropRescheduledOrders: enrich(dropRescheduledOrders),
-        dropCompletedOrders: enrich(dropCompletedOrders),
-        returnNewOrders: enrich(returnNewOrders),
-        returnAssignedOrders: enrich(returnAssignedOrders),
-        returnCompletedOrders: enrich(returnCompletedOrders),
-        returnPickupNewOrders: enrich(returnPickupNewOrders),
-        returnPickupCompletedOrders: enrich(returnPickupCompletedOrders),
-        returnDropNewOrders: enrich(returnDropNewOrders),
-        returnDropCompletedOrders: enrich(returnDropCompletedOrders),
-        incomingInventory: enrich(incomingInventory),
-        returnPickupInventory: enrich(returnPickupInventory),
-        dropInventory: enrich(dropInventory),
-        returnDropInventory: enrich(returnDropInventory),
+        currentPage,
+        setCurrentPage,
+        counts,
+        loadCounts,
+        pickupNewOrders,
+        pickupAssignedOrders,
+        pickupWarehouseOrders,
+        pickupRejectedOrders,
+        pickupRescheduledOrders,
+        dropNewOrders,
+        dropAssignedOrders,
+        dropRejectedOrders,
+        dropRescheduledOrders,
+        dropCompletedOrders,
+        returnNewOrders,
+        returnAssignedOrders,
+        returnCompletedOrders,
+        returnPickupNewOrders,
+        returnPickupCompletedOrders,
+        returnDropNewOrders,
+        returnDropCompletedOrders,
+        incomingInventory,
+        returnPickupInventory,
+        dropInventory,
+        returnDropInventory,
         shgList,
         transporterList,
+
+        loadPickupNew,
+        loadPickupAssigned,
+        loadPickupWarehouse,
+        loadPickupRejected,
+        loadPickupRescheduled,
+        loadDropNew,
+        loadDropAssigned,
+        loadDropRejected,
+        loadDropRescheduled,
+        loadDropCompleted,
+        loadReturnsTransporter,
+        loadReturnsBuyer,
+        loadInventoryStored,
+        loadInventoryTransporterReturn,
+        loadInventoryBuyerReturn,
+
         readyToStore,
         dispatchInventory,
         intakePickupOrders,

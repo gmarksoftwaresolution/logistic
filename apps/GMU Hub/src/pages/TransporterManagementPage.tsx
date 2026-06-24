@@ -1,22 +1,25 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { DataTable } from '../components/DataTable';
 import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { Tabs } from '../components/Tabs';
+import { api } from '../utils/api';
 import { 
   Truck, User, MapPin, Building2, FileText, CheckCircle2, 
   MoreVertical, Eye, ShieldAlert, ArrowLeft, Check, X, ShieldX, Power, CreditCard, Navigation, Calendar, Phone, Mail, Clock, Layers
 } from 'lucide-react';
 
+
 interface TransporterProfileExt {
   id: string;
+  memberCode?: string;
   type: 'Milk Van' | 'Personal';
   name: string;
   mobile: string;
   email: string;
   photo: string;
-  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'INACTIVE';
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'INACTIVE' | 'REJECTED';
   sectionEnteredAt?: string;
   assignedOrders: number;
   completedOrders: number;
@@ -296,22 +299,20 @@ const initialTransporters: TransporterProfileExt[] = [
 ];
 
 export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
-  const [transporterList, setTransporterList] = useState<TransporterProfileExt[]>(initialTransporters);
-  const [assignedRoutes, setAssignedRoutes] = useState<Record<string, string[]>>({
-    'TRSP-VAN-101': ['Gadhinglaj', 'Wagrale'],
-    'TRSP-IND-102': ['Wagrale', 'Nesari'],
-    'TRSP-VAN-103': ['Gadhinglaj', 'Wagrale', 'Nesari'],
-    'TRSP-IND-104': ['Wagrale', 'Nesari'],
-    'TRSP-VAN-105': ['Gadhinglaj', 'Nesari']
-  });
+  const [transporterList, setTransporterList] = useState<TransporterProfileExt[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isActionProcessing, setIsActionProcessing] = useState(false);
+  
   const [activeTopSection, setActiveTopSection] = useState<'route' | 'personal'>('route');
-  const [activeTab, setActiveTab] = useState<'requests' | 'members'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'members' | 'rejected'>('requests');
   const [selectedProfile, setSelectedProfile] = useState<TransporterProfileExt | null>(null);
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState<{ type: 'approve' | 'reject' | 'activate' | 'deactivate'; id: string } | null>(null);
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
+  const [openUpwards, setOpenUpwards] = useState(false);
 
   // Document Viewer State
   const [viewingDoc, setViewingDoc] = useState<{ 
@@ -323,6 +324,100 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
     documentNumber?: string 
   } | null>(null);
 
+  const safeParseArray = (val: any): string[] => {
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  };
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      let requests: any[] = [];
+      let members: any[] = [];
+      let rejected: any[] = [];
+      
+      if (activeTopSection === 'route') {
+        [requests, members, rejected] = await Promise.all([
+          api.transporters.getRoutePartnerRequests(),
+          api.transporters.getRoutePartnerMembers(),
+          api.transporters.getRoutePartnerRejected()
+        ]);
+      } else {
+        [requests, members, rejected] = await Promise.all([
+          api.transporters.getPersonalRequests(),
+          api.transporters.getPersonalMembers(),
+          api.transporters.getPersonalRejected()
+        ]);
+      }
+      
+      const mapItem = (item: any) => ({
+        id: item.id,
+        memberCode: item.transporterCode || item.id,
+        type: (item.type === 'ROUTE_PARTNER' ? 'Milk Van' : 'Personal') as any,
+        name: `${item.firstName} ${item.lastName}`,
+        mobile: item.mobileNumber,
+        email: item.email || '',
+        photo: item.profilePhoto || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+        status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
+        registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
+        assignedOrders: 0,
+        completedOrders: 0,
+        address: item.residentialAddress || '',
+        village: item.village || '',
+        taluka: item.taluka || '',
+        district: item.district || '',
+        state: item.state || '',
+        pincode: item.pincode || '',
+        licenseNumber: item.licenseNumber || '',
+        licensePhoto: item.licensePhoto || '',
+        licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
+        experienceYears: item.experienceYears || 0,
+        accountHolderName: item.accountHolderName || '',
+        accountNumber: item.accountNumber || '',
+        ifscCode: item.ifscCode || '',
+        bankName: item.bankName || '',
+        branchName: item.branchName || '',
+        upiId: item.upiId || '',
+        vehicleCategory: item.vehicleCategory || '',
+        vehicleType: item.vehicleType || '',
+        vehicleMake: item.vehicleMake || '',
+        vehicleNumber: item.vehicleNumber || '',
+        rcBookPhoto: item.vehicleRcPhoto || '',
+        insurancePhoto: item.vehicleInsurancePhoto || '',
+        milkSangathanName: item.milkOrganizationName || 'N/A',
+        collectionCenterName: item.milkCenterName || 'N/A',
+        route: safeParseArray(item.assignedVillages).join(' - ') || 'N/A',
+        assignedPincodes: safeParseArray(item.assignedPincodes),
+        assignedVillages: safeParseArray(item.assignedVillages),
+        timing: item.morningShift && item.eveningShift ? `${item.morningShift} & ${item.eveningShift}` : (item.morningShift || item.eveningShift || 'N/A'),
+        workingDays: safeParseArray(item.workingDays),
+        morningShift: item.morningShift || 'N/A',
+        eveningShift: item.eveningShift || 'N/A'
+      });
+
+      const mappedRequests = requests.map(mapItem);
+      const mappedMembers = members.map(mapItem);
+      const mappedRejected = rejected.map(mapItem);
+      
+      setTransporterList([...mappedRequests, ...mappedMembers, ...mappedRejected]);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to fetch transporter data.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [activeTopSection]);
+
   // Tab Filtering
   const tabData = useMemo(() => {
     return transporterList.filter(t => {
@@ -331,6 +426,8 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
 
       if (activeTab === 'requests') {
         return t.status === 'PENDING_APPROVAL';
+      } else if (activeTab === 'rejected') {
+        return t.status === 'REJECTED';
       } else {
         return t.status === 'ACTIVE' || t.status === 'INACTIVE';
       }
@@ -338,40 +435,81 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   }, [transporterList, activeTopSection, activeTab]);
 
   // Action handlers
-  const handleModalConfirm = () => {
-    if (!modalAction) return;
+  const handleModalConfirm = async () => {
+    if (!modalAction || isActionProcessing) return;
     const { type, id } = modalAction;
+    setIsActionProcessing(true);
+    setErrorMsg('');
 
-    setTransporterList(prev => prev.map(t => {
-      if (t.id === id) {
-        if (type === 'approve' || type === 'activate') {
-          return { ...t, status: 'ACTIVE' as const, sectionEnteredAt: new Date().toISOString() };
-        } else if (type === 'deactivate') {
-          return { ...t, status: 'INACTIVE' as const, sectionEnteredAt: new Date().toISOString() };
+    try {
+      if (type === 'approve' || type === 'activate') {
+        await api.transporters.approve(id);
+      } else if (type === 'reject' || type === 'deactivate') {
+        await api.transporters.reject(id);
+      }
+
+      // If viewing the selected profile, refresh its details from backend
+      if (selectedProfile && selectedProfile.id === id) {
+        try {
+          const item = await api.transporters.getDetails(id);
+          const mappedProfile: TransporterProfileExt = {
+            id: item.id,
+            memberCode: item.transporterCode || item.id,
+            type: (item.type === 'ROUTE_PARTNER' ? 'Milk Van' : 'Personal') as any,
+            name: `${item.firstName} ${item.lastName}`,
+            mobile: item.mobileNumber,
+            email: item.email || '',
+            photo: item.profilePhoto || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+            status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
+            registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
+            assignedOrders: 0,
+            completedOrders: 0,
+            address: item.residentialAddress || '',
+            village: item.village || '',
+            taluka: item.taluka || '',
+            district: item.district || '',
+            state: item.state || '',
+            pincode: item.pincode || '',
+            licenseNumber: item.licenseNumber || '',
+            licensePhoto: item.licensePhoto || '',
+            licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
+            experienceYears: item.experienceYears || 0,
+            accountHolderName: item.accountHolderName || '',
+            accountNumber: item.accountNumber || '',
+            ifscCode: item.ifscCode || '',
+            bankName: item.bankName || '',
+            branchName: item.branchName || '',
+            upiId: item.upiId || '',
+            vehicleCategory: item.vehicleCategory || '',
+            vehicleType: item.vehicleType || '',
+            vehicleMake: item.vehicleMake || '',
+            vehicleNumber: item.vehicleNumber || '',
+            rcBookPhoto: item.vehicleRcPhoto || '',
+            insurancePhoto: item.vehicleInsurancePhoto || '',
+            milkSangathanName: item.milkOrganizationName || 'N/A',
+            collectionCenterName: item.milkCenterName || 'N/A',
+            route: safeParseArray(item.assignedVillages).join(' - ') || 'N/A',
+            assignedPincodes: safeParseArray(item.assignedPincodes),
+            assignedVillages: safeParseArray(item.assignedVillages),
+            timing: item.morningShift && item.eveningShift ? `${item.morningShift} & ${item.eveningShift}` : (item.morningShift || item.eveningShift || 'N/A'),
+            workingDays: safeParseArray(item.workingDays),
+            morningShift: item.morningShift || 'N/A',
+            eveningShift: item.eveningShift || 'N/A'
+          };
+          setSelectedProfile(mappedProfile);
+        } catch (e) {
+          setSelectedProfile(null);
+          setIsViewModalOpen(false);
         }
       }
-      return t;
-    }).filter(t => {
-      // Reject deletes it
-      if (type === 'reject' && t.id === id) return false;
-      return true;
-    }));
 
-    // If viewing the selected profile, sync status
-    if (selectedProfile && selectedProfile.id === id) {
-      if (type === 'reject') {
-        setSelectedProfile(null);
-        setIsViewModalOpen(false);
-      } else {
-        setSelectedProfile(prev => {
-          if (!prev) return null;
-          const updatedStatus = (type === 'approve' || type === 'activate') ? 'ACTIVE' : 'INACTIVE';
-          return { ...prev, status: updatedStatus as any };
-        });
-      }
+      setModalAction(null);
+      await fetchData();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Action failed.');
+    } finally {
+      setIsActionProcessing(false);
     }
-
-    setModalAction(null);
   };
 
   const navigateToDetails = (profile: TransporterProfileExt) => {
@@ -380,15 +518,18 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   };
 
   // Action 3-dots popup
-  const getActionButtons = (row: TransporterProfileExt, subTab: 'requests' | 'members') => {
+  const getActionButtons = (row: TransporterProfileExt, subTab: 'requests' | 'members' | 'rejected') => {
     return (
-      <div className="relative inline-block text-left" onClick={e => e.stopPropagation()}>
+      <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={(e) => {
             e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const shouldOpenUpwards = rect.bottom > window.innerHeight * 0.65;
+            setOpenUpwards(shouldOpenUpwards);
             setActiveActionMenu(activeActionMenu === row.id ? null : row.id);
           }}
-          className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-full transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center mx-auto"
+          className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-full transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
           title="Actions"
         >
           <MoreVertical className="h-4 w-4" />
@@ -403,7 +544,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                 setActiveActionMenu(null);
               }}
             />
-            <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className={`absolute right-0 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in ${openUpwards ? 'bottom-full mb-2 slide-in-from-bottom-2' : 'top-full mt-2 slide-in-from-top-2'} duration-150`}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -439,6 +580,20 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                   >
                     <X className="h-4 w-4 text-red-500" />
                     <span>Reject Request</span>
+                  </button>
+                </>
+              ) : subTab === 'rejected' ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveActionMenu(null);
+                      setModalAction({ type: 'approve', id: row.id });
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <span>Approve Request</span>
                   </button>
                 </>
               ) : (
@@ -480,16 +635,25 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   // Requests Table Column Schema
   const requestColumns = [
     {
-      header: 'Transporter ID',
+      header: 'MEMBER CODE',
       accessor: (row: TransporterProfileExt) => (
-        <span className="font-bold font-mono text-slate-700">{row.id}</span>
+        <span className="font-bold font-mono text-slate-700">{row.memberCode || row.id}</span>
       )
     },
     { header: 'Type', accessor: 'type' as keyof TransporterProfileExt },
     { header: 'Full Name', accessor: 'name' as keyof TransporterProfileExt },
     { header: 'Mobile Number', accessor: 'mobile' as keyof TransporterProfileExt },
     { header: 'Vehicle Category', accessor: 'vehicleCategory' as keyof TransporterProfileExt },
-    { header: 'Assigned Route', accessor: 'route' as keyof TransporterProfileExt },
+    { 
+      header: 'Assigned Route', 
+      accessor: (row: TransporterProfileExt) => {
+        const formatted = row.assignedVillages.map((v, idx) => {
+          const pin = row.assignedPincodes[idx] || '';
+          return pin ? `${v} (${pin})` : v;
+        }).join(', ');
+        return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
+      }
+    },
     { header: 'Status', accessor: (row: TransporterProfileExt) => <StatusBadge status={row.status} /> },
     {
       header: 'Action',
@@ -500,22 +664,60 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   // Members Table Column Schema
   const memberColumns = [
     {
-      header: 'Transporter ID',
+      header: 'MEMBER CODE',
       accessor: (row: TransporterProfileExt) => (
-        <span className="font-bold font-mono text-slate-700">{row.id}</span>
+        <span className="font-bold font-mono text-slate-700">{row.memberCode || row.id}</span>
       )
     },
     { header: 'Type', accessor: 'type' as keyof TransporterProfileExt },
     { header: 'Full Name', accessor: 'name' as keyof TransporterProfileExt },
     { header: 'Mobile Number', accessor: 'mobile' as keyof TransporterProfileExt },
     { header: 'Vehicle Category', accessor: 'vehicleCategory' as keyof TransporterProfileExt },
-    { header: 'Assigned Route', accessor: 'route' as keyof TransporterProfileExt },
+    { 
+      header: 'Assigned Route', 
+      accessor: (row: TransporterProfileExt) => {
+        const formatted = row.assignedVillages.map((v, idx) => {
+          const pin = row.assignedPincodes[idx] || '';
+          return pin ? `${v} (${pin})` : v;
+        }).join(', ');
+        return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
+      }
+    },
     { header: 'Assigned Orders', accessor: 'assignedOrders' as keyof TransporterProfileExt },
     { header: 'Completed Orders', accessor: 'completedOrders' as keyof TransporterProfileExt },
     { header: 'Status', accessor: (row: TransporterProfileExt) => <StatusBadge status={row.status} /> },
     {
       header: 'Action',
       accessor: (row: TransporterProfileExt) => getActionButtons(row, 'members')
+    }
+  ];
+
+  // Rejected Table Column Schema
+  const rejectedColumns = [
+    {
+      header: 'MEMBER CODE',
+      accessor: (row: TransporterProfileExt) => (
+        <span className="font-bold font-mono text-slate-700">{row.memberCode || row.id}</span>
+      )
+    },
+    { header: 'Type', accessor: 'type' as keyof TransporterProfileExt },
+    { header: 'Full Name', accessor: 'name' as keyof TransporterProfileExt },
+    { header: 'Mobile Number', accessor: 'mobile' as keyof TransporterProfileExt },
+    { header: 'Vehicle Category', accessor: 'vehicleCategory' as keyof TransporterProfileExt },
+    { 
+      header: 'Assigned Route', 
+      accessor: (row: TransporterProfileExt) => {
+        const formatted = row.assignedVillages.map((v, idx) => {
+          const pin = row.assignedPincodes[idx] || '';
+          return pin ? `${v} (${pin})` : v;
+        }).join(', ');
+        return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
+      }
+    },
+    { header: 'Status', accessor: (row: TransporterProfileExt) => <StatusBadge status={row.status} /> },
+    {
+      header: 'Action',
+      accessor: (row: TransporterProfileExt) => getActionButtons(row, 'rejected')
     }
   ];
 
@@ -535,6 +737,13 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2">
+            <span className="text-red-500">⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Primary Tabs: Route Partners | Personal */}
         <Tabs
           activeTab={activeTopSection}
@@ -551,7 +760,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
         <Tabs
           activeTab={activeTab}
           onChange={(id) => {
-            setActiveTab(id as 'requests' | 'members');
+            setActiveTab(id as 'requests' | 'members' | 'rejected');
           }}
           variant="secondary"
           tabs={[
@@ -565,16 +774,28 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
               label: 'Members', 
               count: transporterList.filter(t => (t.status === 'ACTIVE' || t.status === 'INACTIVE') && t.type === (activeTopSection === 'route' ? 'Milk Van' : 'Personal')).length 
             },
+            { 
+              id: 'rejected', 
+              label: 'Rejected Requests', 
+              count: transporterList.filter(t => t.status === 'REJECTED' && t.type === (activeTopSection === 'route' ? 'Milk Van' : 'Personal')).length 
+            },
           ]}
         />
 
         {/* Data Table */}
-        <DataTable 
-          columns={activeTab === 'requests' ? requestColumns : memberColumns} 
-          data={tabData} 
-          statusFilterField="status"
-          onRowDoubleClick={navigateToDetails}
-        />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-200 rounded-3xl shadow-sm min-h-[350px]">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#073318]"></div>
+            <p className="mt-4 text-xs font-semibold text-slate-500">Loading transporters from backend...</p>
+          </div>
+        ) : (
+          <DataTable 
+            columns={activeTab === 'requests' ? requestColumns : activeTab === 'rejected' ? rejectedColumns : memberColumns} 
+            data={tabData} 
+            statusFilterField="status"
+            onRowDoubleClick={navigateToDetails}
+          />
+        )}
       </div>
 
       {/* Full screen View Modal styled like Order Details view page */}
@@ -629,7 +850,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
 
             {/* Actions Panel */}
             <div className="flex justify-end gap-3">
-              {selectedProfile.status === 'PENDING_APPROVAL' && (
+              {(selectedProfile.status === 'PENDING_APPROVAL' || selectedProfile.status === 'REJECTED') && (
                 <>
                   <button 
                     onClick={() => setModalAction({ type: 'approve', id: selectedProfile.id })}
@@ -637,12 +858,14 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                   >
                     Approve Request
                   </button>
-                  <button 
-                    onClick={() => setModalAction({ type: 'reject', id: selectedProfile.id })}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
-                  >
-                    Reject Request
-                  </button>
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <button 
+                      onClick={() => setModalAction({ type: 'reject', id: selectedProfile.id })}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                    >
+                      Reject Request
+                    </button>
+                  )}
                 </>
               )}
               {selectedProfile.status === 'ACTIVE' && (
@@ -845,10 +1068,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                     Route Details
                   </h4>
                   <div className="space-y-2.5 text-xs">
-                    <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
-                      <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1">Route Name</p>
-                      <p className="font-bold text-sm text-[#B2D534]">{selectedProfile.route}</p>
-                    </div>
+                    
                     <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
                       <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1.5">List of Assigned Villages with Pincode</p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
@@ -1019,18 +1239,21 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             </p>
             <div className="flex gap-3 pt-2">
               <button
+                disabled={isActionProcessing}
                 onClick={handleModalConfirm}
                 className={`flex-1 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-colors cursor-pointer ${
+                  isActionProcessing ? 'bg-slate-400 cursor-not-allowed text-slate-200' :
                   modalAction.type === 'reject' || modalAction.type === 'deactivate'
                     ? 'bg-red-600 hover:bg-red-700'
                     : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
-                Confirm {modalAction.type}
+                {isActionProcessing ? 'Processing...' : `Confirm ${modalAction.type}`}
               </button>
               <button
+                disabled={isActionProcessing}
                 onClick={() => setModalAction(null)}
-                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>

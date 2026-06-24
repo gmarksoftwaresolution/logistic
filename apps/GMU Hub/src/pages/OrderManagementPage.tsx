@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { Tabs } from '../components/Tabs';
 import { DataTable } from '../components/DataTable';
@@ -6,7 +6,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { PickupOrder, DropOrder, ReturnOrder } from '../context/AppContext';
-import { Eye, ShieldAlert, Barcode, ClipboardCheck, CheckCircle2, Copy, X, FileText, MoreVertical, Phone, MapPin, Calendar, Truck, Clock, Package, Layers } from 'lucide-react';
+import { Eye, ShieldAlert, Barcode, ClipboardCheck, CheckCircle2, Copy, X, FileText, MoreVertical, Phone, MapPin, Calendar, Truck, Clock, Package, Layers, QrCode } from 'lucide-react';
+import { api } from '../utils/api';
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
   if (!startDate) return '-';
@@ -21,6 +22,8 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
 
 export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const {
+    counts,
+    loadCounts,
     pickupNewOrders,
     pickupAssignedOrders,
     pickupWarehouseOrders,
@@ -44,6 +47,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     transporterList,
     assignPickupOrder,
     requestBuyerReturn,
+    loadPickupNew,
+    loadPickupAssigned,
+    loadPickupWarehouse,
+    loadPickupRejected,
+    loadPickupRescheduled,
+    loadDropNew,
+    loadDropAssigned,
+    loadDropRejected,
+    loadDropRescheduled,
+    loadDropCompleted,
+    loadReturnsTransporter,
+    loadReturnsBuyer,
   } = useAppContext();
 
   // Top level tabs: Pickup | Drop | Return
@@ -55,10 +70,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [activeReturnType, setActiveReturnType] = useState<'pickup' | 'drop'>('drop');
   const [activeReturnSubTab, setActiveReturnSubTab] = useState<'new' | 'completed'>('new');
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
+  const [openUpwards, setOpenUpwards] = useState(false);
 
   // Multi-select state
   const [selectedAssignedOrderIds, setSelectedAssignedOrderIds] = useState<string[]>([]);
   const [selectedWarehouseOrderIds, setSelectedWarehouseOrderIds] = useState<string[]>([]);
+
+  // Filters and Loading state
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [actionProcessing, setActionProcessing] = useState(false);
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -79,6 +102,115 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [selectedSHG, setSelectedSHG] = useState('');
   const [selectedTransporter, setSelectedTransporter] = useState('');
 
+  // QR Scan Modal State for Returns
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrItem, setQrItem] = useState<ReturnOrder | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [qrScanSuccess, setQrScanSuccess] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
+
+  const handleOpenQrModal = (item: ReturnOrder) => {
+    setQrItem(item);
+    setIsQrModalOpen(true);
+    setQrScanSuccess(false);
+    setIsScanning(false);
+    setScanMessage('');
+  };
+
+  const handleSimulateScan = async () => {
+    if (!qrItem) return;
+    setIsScanning(true);
+    setScanMessage('Scanning QR Code...');
+    try {
+      if (activeReturnType === 'drop') {
+        await api.orders.transporterReturnScan(qrItem.uuid || qrItem.id, qrItem.barcode || '');
+        setQrScanSuccess(true);
+        setScanMessage('Transporter return scanned and moved to inventory successfully.');
+      } else {
+        await api.orders.buyerReturnScan(qrItem.uuid || qrItem.id, qrItem.barcode || '');
+        setQrScanSuccess(true);
+        setScanMessage('Buyer return scanned and moved to inventory successfully.');
+      }
+      await loadData();
+    } catch (err: any) {
+      setScanMessage(err.message || 'Failed to process return scan.');
+    } finally {
+      setIsScanning(false);
+      setTimeout(() => {
+        setIsQrModalOpen(false);
+      }, 1500);
+    }
+  };
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const sf = statusFilter === 'all' ? undefined : statusFilter;
+      const df = dateFilter || undefined;
+      await loadCounts();
+
+      if (activeTopTab === 'pickup') {
+        if (activePickupSubTab === 'new') {
+          await loadPickupNew(sf, df);
+        } else if (activePickupSubTab === 'assigned') {
+          await loadPickupAssigned(sf, df);
+        } else if (activePickupSubTab === 'warehouse') {
+          await loadPickupWarehouse(sf, df);
+        } else if (activePickupSubTab === 'rejected') {
+          await loadPickupRejected(sf, df);
+        } else if (activePickupSubTab === 'reschedule') {
+          await loadPickupRescheduled(sf, df);
+        }
+      } else if (activeTopTab === 'drop') {
+        if (activeDropSubTab === 'new') {
+          await loadDropNew(sf, df);
+        } else if (activeDropSubTab === 'assigned') {
+          await loadDropAssigned(sf, df);
+        } else if (activeDropSubTab === 'rejected') {
+          await loadDropRejected(sf, df);
+        } else if (activeDropSubTab === 'reschedule') {
+          await loadDropRescheduled(sf, df);
+        } else if (activeDropSubTab === 'completed') {
+          await loadDropCompleted(sf, df);
+        }
+      } else if (activeTopTab === 'return') {
+        if (activeReturnType === 'drop') {
+          await loadReturnsTransporter(sf, df);
+        } else if (activeReturnType === 'pickup') {
+          await loadReturnsBuyer(sf, df);
+        }
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Failed to load data from server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [
+    activeTopTab,
+    activePickupSubTab,
+    activeDropSubTab,
+    activeReturnType,
+    activeReturnSubTab,
+    statusFilter,
+    dateFilter
+  ]);
+
+  useEffect(() => {
+    setStatusFilter('all');
+    setDateFilter('');
+  }, [
+    activeTopTab,
+    activePickupSubTab,
+    activeDropSubTab,
+    activeReturnType,
+    activeReturnSubTab
+  ]);
+
   // Handle View Action
   const handleViewOrder = (order: any) => {
     setSelectedOrderDetails(order);
@@ -89,6 +221,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const handleIntakeClick = (order: any, type: 'pickup' | 'return-pickup' | 'return-drop') => {
     setIntakeOrder({
       id: order.id,
+      uuid: order.uuid,
       qty: order.totalQty || order.quantity || 0,
       weight: order.totalWeight || order.weight || 0,
       sellerName: order.sellerName || 'N/A',
@@ -102,21 +235,30 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setIsIntakeModalOpen(true);
   };
 
-  const handleConfirmIntake = () => {
+  const handleConfirmIntake = async () => {
     if (!intakeOrder || !intakeType) return;
-
-    if (intakeType === 'pickup') {
-      const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
-      intakePickupOrders(orderIds);
-    } else if (intakeType === 'return-pickup') {
-      intakeReturnOrder(intakeOrder.id, 'pickup');
-    } else if (intakeType === 'return-drop') {
-      intakeReturnOrder(intakeOrder.id, 'drop');
+    setActionProcessing(true);
+    try {
+      if (intakeType === 'pickup') {
+        const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
+        await intakePickupOrders(orderIds);
+        alert('Pickup orders intake completed successfully.');
+      } else if (intakeType === 'return-pickup') {
+        await intakeReturnOrder(intakeOrder.id, 'pickup');
+        alert('Buyer return order intake completed successfully.');
+      } else if (intakeType === 'return-drop') {
+        await intakeReturnOrder(intakeOrder.id, 'drop');
+        alert('Transporter return order intake completed successfully.');
+      }
+      setIsIntakeModalOpen(false);
+      setIntakeOrder(null);
+      setIntakeType(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Intake action failed.');
+    } finally {
+      setActionProcessing(false);
     }
-
-    setIsIntakeModalOpen(false);
-    setIntakeOrder(null);
-    setIntakeType(null);
   };
 
   // Handle Barcode Action
@@ -130,7 +272,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Render Table Action Button Helper
   const getActionButtons = (row: any, type: 'pickup' | 'drop' | 'return', subTab: string) => {
-    const hasIntake = (type === 'pickup' && subTab === 'assigned') || (type === 'return' && subTab === 'completed');
+    const hasIntake = type === 'pickup' && subTab === 'assigned';
     const hasWarehouse = type === 'pickup' && subTab === 'warehouse';
 
     return (
@@ -138,6 +280,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         <button
           onClick={(e) => {
             e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const shouldOpenUpwards = rect.bottom > window.innerHeight * 0.65;
+            setOpenUpwards(shouldOpenUpwards);
             setActiveActionMenu(activeActionMenu === row.id ? null : row.id);
           }}
           className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-xl transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
@@ -155,7 +300,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 setActiveActionMenu(null);
               }}
             />
-            <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className={`absolute right-0 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in ${openUpwards ? 'bottom-full mb-2 slide-in-from-bottom-2' : 'top-full mt-2 slide-in-from-top-2'} duration-150`}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -167,6 +312,149 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 <Eye className="h-4 w-4 text-slate-400" />
                 <span>View Details</span>
               </button>
+
+              {type === 'pickup' && subTab === 'new' && (
+                <>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setActiveActionMenu(null);
+                      if (confirm('Broadcast this pickup request to matching SHGs?')) {
+                        setActionProcessing(true);
+                        try {
+                          await api.orders.broadcastShg(row.uuid || row.id);
+                          alert('Broadcasted to matching SHGs successfully.');
+                          await loadData();
+                        } catch (err: any) {
+                          alert(err.message || 'Broadcast failed.');
+                        } finally {
+                          setActionProcessing(false);
+                        }
+                      }
+                    }}
+                    disabled={actionProcessing}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Layers className="h-4 w-4 text-emerald-500/70" />
+                    <span>Broadcast SHG</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveActionMenu(null);
+                      setAssignOrderId(row.id);
+                      setIsAssignModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-550/5 hover:text-slate-750 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <ClipboardCheck className="h-4 w-4 text-slate-400" />
+                    <span>Assign Partners</span>
+                  </button>
+                </>
+              )}
+
+              {type === 'pickup' && subTab === 'assigned' && row.transporterStatus?.toLowerCase() === 'pending' && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    if (confirm('Broadcast this pickup request to matching transporters?')) {
+                      setActionProcessing(true);
+                      try {
+                        await api.orders.broadcastTransporter(row.uuid || row.id);
+                        alert('Broadcasted to matching transporters successfully.');
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.message || 'Broadcast failed.');
+                      } finally {
+                        setActionProcessing(false);
+                      }
+                    }
+                  }}
+                  disabled={actionProcessing}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Truck className="h-4 w-4 text-blue-500/70" />
+                  <span>Broadcast Transporter</span>
+                </button>
+              )}
+
+              {type === 'return' && subTab === 'assigned' && ['RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING'].includes(row.mainStatus) && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    if (confirm('Broadcast this return pickup request to matching transporters?')) {
+                      setActionProcessing(true);
+                      try {
+                        await api.orders.broadcastBuyerReturnTransporter(row.uuid || row.id);
+                        alert('Broadcasted to matching transporters successfully.');
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.message || 'Broadcast failed.');
+                      } finally {
+                        setActionProcessing(false);
+                      }
+                    }
+                  }}
+                  disabled={actionProcessing}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Truck className="h-4 w-4 text-blue-500/70" />
+                  <span>Broadcast Transporter</span>
+                </button>
+              )}
+
+              {type === 'drop' && subTab === 'new' && (
+                <>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setActiveActionMenu(null);
+                      if (confirm('Broadcast this drop request to matching SHGs?')) {
+                        setActionProcessing(true);
+                        try {
+                          await api.orders.dropShgBroadcast(row.uuid || row.id);
+                          alert('Broadcasted to matching SHGs successfully.');
+                          await loadData();
+                        } catch (err: any) {
+                          alert(err.message || 'Broadcast failed.');
+                        } finally {
+                          setActionProcessing(false);
+                        }
+                      }
+                    }}
+                    disabled={actionProcessing}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Layers className="h-4 w-4 text-emerald-500/70" />
+                    <span>Broadcast SHG</span>
+                  </button>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setActiveActionMenu(null);
+                      if (confirm('Broadcast this drop request to matching transporters?')) {
+                        setActionProcessing(true);
+                        try {
+                          await api.orders.dropTransporterBroadcast(row.uuid || row.id);
+                          alert('Broadcasted to matching transporters successfully.');
+                          await loadData();
+                        } catch (err: any) {
+                          alert(err.message || 'Broadcast failed.');
+                        } finally {
+                          setActionProcessing(false);
+                        }
+                      }
+                    }}
+                    disabled={actionProcessing}
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Truck className="h-4 w-4 text-blue-500/70" />
+                    <span>Broadcast Transporter</span>
+                  </button>
+                </>
+              )}
 
               {hasIntake && (
                 <button
@@ -197,14 +485,40 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 </button>
               )}
 
-              {type === 'drop' && subTab === 'completed' && (
+              {type === 'return' && subTab === 'completed' && ['TRANSPORTER_RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED'].includes(row.mainStatus) && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setActiveActionMenu(null);
-                    requestBuyerReturn(row.id);
+                    handleOpenQrModal(row);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <QrCode className="h-4 w-4 text-[#073318]/70" />
+                  <span>Scan QR</span>
+                </button>
+              )}
+
+              {type === 'drop' && subTab === 'completed' && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    if (confirm('Are you sure you want to request a return for this buyer?')) {
+                      setActionProcessing(true);
+                      try {
+                        await requestBuyerReturn(row.uuid || row.id);
+                        alert('Buyer return request created successfully.');
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.message || 'Failed to request return.');
+                      } finally {
+                        setActionProcessing(false);
+                      }
+                    }
+                  }}
+                  disabled={actionProcessing}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
                 >
                   <ShieldAlert className="h-4 w-4 text-rose-500/70" />
                   <span>Request Buyer Return</span>
@@ -549,14 +863,23 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
 
   // Manual Partner Assignment Form Submit
-  const handleAssignSubmit = (e: React.FormEvent) => {
+  const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (assignOrderId && selectedSHG && selectedTransporter) {
-      assignPickupOrder(assignOrderId, selectedSHG, selectedTransporter);
-      setIsAssignModalOpen(false);
-      setSelectedSHG('');
-      setSelectedTransporter('');
-      setAssignOrderId(null);
+      setActionProcessing(true);
+      try {
+        await assignPickupOrder(assignOrderId, selectedSHG, selectedTransporter);
+        alert('Partners assigned successfully.');
+        setIsAssignModalOpen(false);
+        setSelectedSHG('');
+        setSelectedTransporter('');
+        setAssignOrderId(null);
+        await loadData();
+      } catch (err: any) {
+        alert(err.message || 'Assignment failed.');
+      } finally {
+        setActionProcessing(false);
+      }
     }
   };
 
@@ -570,6 +893,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             <p className="text-sm font-medium text-slate-500 mt-1">Manage Pickups, Drops, and Returns operations.</p>
           </div>
         </div>
+
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-bold">
+            {errorMsg}
+          </div>
+        )}
+        {isLoading && (
+          <div className="flex items-center justify-center py-4 text-xs font-bold text-slate-500 gap-2">
+            <span className="w-4 h-4 border-2 border-[#073318] border-t-transparent rounded-full animate-spin" />
+            Loading live data from GMU APIs...
+          </div>
+        )}
 
         {/* Top-level Tabs */}
         <Tabs
@@ -592,15 +927,24 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               onChange={setActivePickupSubTab}
               variant="secondary"
               tabs={[
-                { id: 'new', label: 'New Orders', count: pickupNewOrders.length },
-                { id: 'assigned', label: 'Assigned Orders', count: pickupAssignedOrders.length },
-                { id: 'warehouse', label: 'Warehouse Orders', count: pickupWarehouseOrders.length },
-                { id: 'rejected', label: 'Rejected Orders', count: pickupRejectedOrders.length },
-                { id: 'reschedule', label: 'Rescheduled Orders', count: pickupRescheduledOrders.length },
+                { id: 'new', label: 'New Orders', count: counts.pickup.new },
+                { id: 'assigned', label: 'Assigned Orders', count: counts.pickup.assigned },
+                { id: 'warehouse', label: 'Warehouse Orders', count: counts.pickup.warehouse },
+                { id: 'rejected', label: 'Rejected Orders', count: counts.pickup.rejected },
+                { id: 'reschedule', label: 'Rescheduled Orders', count: counts.pickup.rescheduled },
               ]}
             />
             {activePickupSubTab === 'new' && (
-              <DataTable columns={pickupNewColumns} data={pickupNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={pickupNewColumns}
+                data={pickupNewOrders}
+                statusFilterField="mainStatus"
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activePickupSubTab === 'assigned' && (
               <div className="space-y-3">
@@ -612,11 +956,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         const totalQty = selectedOrders.reduce((sum, o) => sum + o.totalQty, 0);
                         const totalWeight = selectedOrders.reduce((sum, o) => sum + o.totalWeight, 0);
                         setIntakeOrder({
-                          id: selectedAssignedOrderIds.join(', '),
-                          qty: totalQty,
-                          weight: totalWeight,
-                          isBulk: true,
-                          selectedIds: selectedAssignedOrderIds,
+                           id: selectedAssignedOrderIds.join(', '),
+                           qty: totalQty,
+                           weight: totalWeight,
+                           isBulk: true,
+                           selectedIds: selectedAssignedOrderIds,
                         });
                         setIntakeType('pickup');
                         setGeneratedOTP(null);
@@ -630,17 +974,57 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     </button>
                   </div>
                 )}
-                <DataTable columns={pickupAssignedColumnsWithSelection} data={pickupAssignedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+                <DataTable
+                  columns={pickupAssignedColumnsWithSelection}
+                  data={pickupAssignedOrders}
+                  statusFilterField="mainStatus"
+                  statusFilterOptions={['Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub']}
+                  selectedStatus={statusFilter}
+                  onStatusChange={setStatusFilter}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewOrder}
+                />
               </div>
             )}
             {activePickupSubTab === 'warehouse' && (
-              <DataTable columns={pickupWarehouseColumns} data={pickupWarehouseOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={pickupWarehouseColumns}
+                data={pickupWarehouseOrders}
+                statusFilterField="status"
+                statusFilterOptions={['At Hub', 'Hub Received', 'Barcode Generated']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activePickupSubTab === 'rejected' && (
-              <DataTable columns={pickupRejectedColumns} data={pickupRejectedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={pickupRejectedColumns}
+                data={pickupRejectedOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Order Placed', 'Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activePickupSubTab === 'reschedule' && (
-              <DataTable columns={pickupRescheduledColumns} data={pickupRescheduledOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={pickupRescheduledColumns}
+                data={pickupRescheduledOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Reassigned', 'Pickup Assigned', 'Pickup SHG Accepted', 'Transporter Accepted']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
           </div>
         )}
@@ -653,27 +1037,77 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               onChange={setActiveDropSubTab}
               variant="secondary"
               tabs={[
-                { id: 'new', label: 'New Orders', count: dropNewOrders.length },
-                { id: 'assigned', label: 'Assigned Orders', count: dropAssignedOrders.length },
-                { id: 'rejected', label: 'Rejected Orders', count: dropRejectedOrders.length },
-                { id: 'reschedule', label: 'Reschedule Options', count: dropRescheduledOrders.length },
-                { id: 'completed', label: 'Completed Orders', count: dropCompletedOrders.length },
+                { id: 'new', label: 'New Orders', count: counts.drop.new },
+                { id: 'assigned', label: 'Assigned Orders', count: counts.drop.assigned },
+                { id: 'completed', label: 'Completed Orders', count: counts.drop.completed },
+                { id: 'rejected', label: 'Rejected Orders', count: counts.drop.rejected },
+                { id: 'reschedule', label: 'Reschedule Options', count: counts.drop.rescheduled },
               ]}
             />
             {activeDropSubTab === 'new' && (
-              <DataTable columns={dropNewColumns} data={dropNewOrders} onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={dropNewColumns}
+                data={dropNewOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Pending', 'Pending Acceptance', 'Pickuphub Receive', 'Barcode Generated', 'Stored', 'Drop Assigned', 'Dispatched', 'Pending Drop']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeDropSubTab === 'assigned' && (
-              <DataTable columns={dropAssignedColumns} data={dropAssignedOrders} onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={dropAssignedColumns}
+                data={dropAssignedOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Drop SHG Accepted', 'Drop Transporter Accepted', 'In Transit To Drop SHG', 'Parcel At Drop SHG']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeDropSubTab === 'rejected' && (
-              <DataTable columns={dropRejectedColumns} data={dropRejectedOrders} onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={dropRejectedColumns}
+                data={dropRejectedOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Drop Assigned', 'Drop SHG Accepted', 'Drop Transporter Accepted', 'Parcel At Drop SHG', 'In Transit To Drop SHG']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeDropSubTab === 'reschedule' && (
-              <DataTable columns={dropRescheduledColumns} data={dropRescheduledOrders} onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={dropRescheduledColumns}
+                data={dropRescheduledOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Reassigned', 'Drop Assigned', 'Drop SHG Accepted', 'Drop Transporter Accepted']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeDropSubTab === 'completed' && (
-              <DataTable columns={dropCompletedColumns} data={dropCompletedOrders} onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={dropCompletedColumns}
+                data={dropCompletedOrders}
+                statusFilterField="mainStatus"
+                statusFilterOptions={['Delivered', 'Completed']}
+                selectedStatus={statusFilter}
+                onStatusChange={setStatusFilter}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
           </div>
         )}
@@ -688,8 +1122,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 setActiveReturnSubTab('new');
               }}
               tabs={[
-                { id: 'drop', label: 'Traspoter return orders', count: returnDropNewOrders.length + returnDropCompletedOrders.length },
-                { id: 'pickup', label: 'Buyer return orders', count: returnPickupNewOrders.length + returnPickupCompletedOrders.length },
+                { id: 'drop', label: 'Traspoter return orders', count: counts.return.transporter },
+                { id: 'pickup', label: 'Buyer return orders', count: counts.return.buyer },
               ]}
             />
             <Tabs
@@ -709,16 +1143,40 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               }
             />
             {activeReturnType === 'pickup' && activeReturnSubTab === 'new' && (
-              <DataTable columns={returnPickupNewColumns} data={returnPickupNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={returnPickupNewColumns}
+                data={returnPickupNewOrders}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeReturnType === 'pickup' && activeReturnSubTab === 'completed' && (
-              <DataTable columns={returnPickupCompletedColumns} data={returnPickupCompletedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={returnPickupCompletedColumns}
+                data={returnPickupCompletedOrders}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'new' && (
-              <DataTable columns={returnDropNewColumns} data={returnDropNewOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={returnDropNewColumns}
+                data={returnDropNewOrders}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'completed' && (
-              <DataTable columns={returnDropCompletedColumns} data={returnDropCompletedOrders} statusFilterField="status" onRowDoubleClick={handleViewOrder} />
+              <DataTable
+                columns={returnDropCompletedColumns}
+                data={returnDropCompletedOrders}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+              />
             )}
           </div>
         )}
@@ -858,10 +1316,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (barcodeOrderId) {
-                      const code = generateBarcode(barcodeOrderId);
-                      setGeneratedBarcodeText(code);
+                      try {
+                        setActionProcessing(true);
+                        const code = await generateBarcode(barcodeOrderId);
+                        setGeneratedBarcodeText(code);
+                        await loadData();
+                      } catch (err: any) {
+                        alert(err.message || 'Failed to generate barcode.');
+                      } finally {
+                        setActionProcessing(false);
+                      }
                     }
                   }}
                   className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-sm shadow-md transition-colors cursor-pointer text-center"
@@ -1325,6 +1791,86 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+        </Modal>
+        
+        {/* --- QR SCAN MODAL --- */}
+        <Modal
+          isOpen={isQrModalOpen}
+          onClose={() => !isScanning && setIsQrModalOpen(false)}
+          title="Scan QR Code for Intake"
+          variant="modal"
+        >
+          {qrItem && (
+            <div className="space-y-6 text-center">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs font-semibold text-slate-700">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase">Order ID</span>
+                    <span className="font-mono text-sm text-[#073318] font-bold">{qrItem.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase">Barcode</span>
+                    <span className="font-mono text-slate-800">{qrItem.barcode || 'N/A'}</span>
+                  </div>
+                  <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
+                    <span className="text-slate-400 block text-[9px] uppercase">Buyer / Destination</span>
+                    <span className="text-slate-800">{qrItem.buyerName || 'N/A'} - {qrItem.buyerAddress || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Simulated Camera Viewfinder */}
+              <div className="relative w-64 h-64 mx-auto border-2 border-slate-300 rounded-3xl overflow-hidden bg-slate-950 flex items-center justify-center shadow-inner">
+                {/* Scanner corners */}
+                <div className="absolute top-4 left-4 w-6 h-6 border-t-4 border-l-4 border-[#B2D534] rounded-tl-md" />
+                <div className="absolute top-4 right-4 w-6 h-6 border-t-4 border-r-4 border-[#B2D534] rounded-tr-md" />
+                <div className="absolute bottom-4 left-4 w-6 h-6 border-b-4 border-l-4 border-[#B2D534] rounded-bl-md" />
+                <div className="absolute bottom-4 right-4 w-6 h-6 border-b-4 border-r-4 border-[#B2D534] rounded-br-md" />
+
+                {/* Red scanning line */}
+                {isScanning && (
+                  <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce" />
+                )}
+
+                {/* QR Code graphic */}
+                <div className="opacity-80 p-6 bg-white rounded-2xl shadow-md">
+                  <QrCode className={`h-24 w-24 text-slate-800 ${isScanning ? 'animate-pulse' : ''}`} />
+                </div>
+
+                {/* Success Overlay */}
+                {qrScanSuccess && (
+                  <div className="absolute inset-0 bg-[#073318]/90 backdrop-blur-xs flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+                    <div className="h-16 w-16 bg-[#B2D534] rounded-full flex items-center justify-center shadow-lg mb-2">
+                      <span className="text-3xl">✓</span>
+                    </div>
+                    <p className="text-sm font-bold">Scan Complete</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Message */}
+              <div className="h-6 flex items-center justify-center">
+                {scanMessage ? (
+                  <p className={`text-xs font-bold ${qrScanSuccess ? 'text-emerald-600' : 'text-[#073318]'}`}>
+                    {scanMessage}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400">Position the QR code within the viewfinder frame to scan.</p>
+                )}
+              </div>
+
+              {/* Action Button */}
+              {!qrScanSuccess && (
+                <button
+                  onClick={handleSimulateScan}
+                  disabled={isScanning}
+                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isScanning ? 'Processing...' : 'Simulate Successful QR Scan'}
+                </button>
+              )}
             </div>
           )}
         </Modal>

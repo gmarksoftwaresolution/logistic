@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '../utils/api';
 import { 
   ArrowRight, ArrowLeft,
   Users, Truck, Home, Handshake, CheckCircle2, MapPin,
@@ -46,6 +47,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
   // States
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Countdown Timer Effect for Resend OTP
   React.useEffect(() => {
@@ -107,41 +109,67 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
   };
 
   // Handlers for Login
-  const handleGetLoginOtp = () => {
+  const handleGetLoginOtp = async () => {
     setErrorMsg('');
     setSuccessMsg('');
     if (!mobileNum.trim()) {
       setErrorMsg('Please enter your mobile number.');
       return;
     }
+    if (mobileNum.length !== 10 || !/^\d+$/.test(mobileNum)) {
+      setErrorMsg('Mobile number must be exactly 10 digits.');
+      return;
+    }
 
-    setSuccessMsg('OTP sent successfully to ' + mobileNum);
-    setResendTimer(90); // Start 90s timer
-    setOtpDigits(['', '', '', '', '', '']);
-    setOtpVal('');
-    setTimeout(() => {
-      setLoginStep('otp');
-      setSuccessMsg('');
-    }, 500);
+    setIsLoading(true);
+    try {
+      const res = await api.auth.sendOtp(mobileNum);
+      if (res.success) {
+        setSuccessMsg('OTP sent successfully to ' + mobileNum);
+        setResendTimer(90); // Start 90s timer
+        setOtpDigits(['', '', '', '', '', '']);
+        setOtpVal('');
+        setTimeout(() => {
+          setLoginStep('otp');
+          setSuccessMsg('');
+        }, 500);
+      } else {
+        setErrorMsg(res.message || 'Failed to send OTP.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to connect to backend.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleVerifyLoginOtp = () => {
+  const handleVerifyLoginOtp = async () => {
     setErrorMsg('');
     setSuccessMsg('');
-    
-    // Save credentials for subsequent API calls
-    localStorage.setItem("gmu_token", "mock-token-xyz");
-    localStorage.setItem("gmu_user", JSON.stringify({
-      id: "MOCK-USR-001",
-      name: "Admin User",
-      mobile: mobileNum,
-      role: "Warehouse Head"
-    }));
+    if (otpVal.length < 6 || !/^\d{6}$/.test(otpVal)) {
+      setErrorMsg('Please enter the 6-digit OTP code.');
+      return;
+    }
 
-    setSuccessMsg('Login Successful! Redirecting...');
-    setTimeout(() => {
-      onNavigate('dashboard');
-    }, 1200);
+    setIsLoading(true);
+    try {
+      const res = await api.auth.login(mobileNum, otpVal);
+      if (res.success) {
+        localStorage.setItem("gmu_token", res.accessToken);
+        localStorage.setItem("gmu_user", JSON.stringify(res.user));
+
+        setSuccessMsg('Login Successful! Redirecting...');
+        setTimeout(() => {
+          onNavigate('dashboard');
+        }, 1200);
+      } else {
+        setErrorMsg(res.message || 'Invalid OTP');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Invalid OTP');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Handlers for Signup
@@ -448,6 +476,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 </span>
                                 <input
                                   type="tel"
+                                  disabled={isLoading}
                                   placeholder="Enter 10-digit mobile number"
                                   value={mobileNum}
                                   onChange={(e) => setMobileNum(e.target.value.replace(/\D/g, '').slice(0, 10))}
@@ -460,12 +489,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
                             <motion.button
                               type="button"
+                              disabled={isLoading}
                               onClick={handleGetLoginOtp}
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
-                              className="w-full h-[54px] py-3 px-6 rounded-xl font-semibold text-xs tracking-widest uppercase transition-all bg-[#073318] hover:bg-[#0a4d23] text-white shadow-lg flex items-center justify-between cursor-pointer group mt-4"
+                              whileHover={isLoading ? {} : { scale: 1.01 }}
+                              whileTap={isLoading ? {} : { scale: 0.99 }}
+                              className={`w-full h-[54px] py-3 px-6 rounded-xl font-semibold text-xs tracking-widest uppercase transition-all ${isLoading ? 'bg-slate-400 cursor-not-allowed text-slate-200' : 'bg-[#073318] hover:bg-[#0a4d23] text-white'} shadow-lg flex items-center justify-between cursor-pointer group mt-4`}
                             >
-                              <span className="mx-auto">Get verification OTP</span>
+                              <span className="mx-auto">{isLoading ? 'Sending...' : 'Get verification OTP'}</span>
                               <div className="h-6 w-6 rounded-lg bg-[#073318]/10 flex items-center justify-center transition-transform group-hover:translate-x-1 shrink-0">
                                 <ArrowRight className="h-3.5 w-3.5 stroke-[2.5]" />
                               </div>
@@ -487,6 +517,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                     id={`otp-input-${idx}`}
                                     type="text"
                                     maxLength={1}
+                                    disabled={isLoading}
                                     value={dig}
                                     onChange={(e) => handleOtpDigitChange(e.target.value, idx)}
                                     onKeyDown={(e) => handleOtpKeyDown(e, idx)}
@@ -497,6 +528,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                               <div className="flex items-center justify-between text-[11px] pt-1">
                                 <button
                                   type="button"
+                                  disabled={isLoading}
                                   onClick={() => setLoginStep('mobile')}
                                   className="text-slate-500 hover:text-[#073318] font-medium transition-colors underline cursor-pointer"
                                 >
@@ -510,6 +542,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                   ) : (
                                     <button
                                       type="button"
+                                      disabled={isLoading}
                                       onClick={handleResendOtp}
                                       className="text-[#B2D534] hover:underline font-semibold transition-colors cursor-pointer"
                                     >
@@ -524,12 +557,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
                             <motion.button
                               type="button"
+                              disabled={isLoading}
                               onClick={handleVerifyLoginOtp}
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
-                              className="w-full h-[54px] py-3 px-6 rounded-xl font-semibold text-xs tracking-widest uppercase transition-all bg-[#073318] hover:bg-[#0a4d23] text-white shadow-lg flex items-center justify-between cursor-pointer group mt-4"
+                              whileHover={isLoading ? {} : { scale: 1.01 }}
+                              whileTap={isLoading ? {} : { scale: 0.99 }}
+                              className={`w-full h-[54px] py-3 px-6 rounded-xl font-semibold text-xs tracking-widest uppercase transition-all ${isLoading ? 'bg-slate-400 cursor-not-allowed text-slate-200' : 'bg-[#073318] hover:bg-[#0a4d23] text-white'} shadow-lg flex items-center justify-between cursor-pointer group mt-4`}
                             >
-                              <span className="mx-auto">Verify & Login Node</span>
+                              <span className="mx-auto">{isLoading ? 'Verifying...' : 'Verify & Login Node'}</span>
                               <div className="h-6 w-6 rounded-lg bg-[#073318]/10 flex items-center justify-center transition-transform group-hover:translate-x-1 shrink-0">
                                 <ArrowRight className="h-3.5 w-3.5 stroke-[2.5]" />
                               </div>

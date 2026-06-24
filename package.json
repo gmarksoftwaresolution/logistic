@@ -13,6 +13,7 @@
     "transporter-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app",
     "shg-backend:dev": "npm run start:dev --workspace=@logistic/shg-backend",
     "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend",
+    "gmu-backend:dev": "npm run start:dev --workspace=@logistic/gmu-backend",
     "db:generate": "npm run prisma:generate --workspace=@logistic/db",
     "db:push": "npm run prisma:migrate --workspace=@logistic/db"
   },

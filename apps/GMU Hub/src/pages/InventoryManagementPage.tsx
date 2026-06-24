@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { Tabs } from '../components/Tabs';
 import { DataTable } from '../components/DataTable';
@@ -25,6 +25,11 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     returnPickupInventory,
     returnDropInventory,
     dispatchInventory,
+    loadInventoryStored,
+    loadInventoryTransporterReturn,
+    loadInventoryBuyerReturn,
+    counts,
+    loadCounts,
   } = useAppContext();
 
   // Sub-tabs: Incoming Inventory | Return Pickup Inventory | Return Drop Inventory
@@ -38,6 +43,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
+  const [openUpwards, setOpenUpwards] = useState(false);
 
   // QR Scan Modal State
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -45,6 +51,42 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [isScanning, setIsScanning] = useState(false);
   const [qrScanSuccess, setQrScanSuccess] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
+
+  // Filters and Loading state
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const sf = statusFilter === 'all' ? undefined : statusFilter;
+      const df = dateFilter || undefined;
+      await loadCounts();
+      if (activeSubTab === 'incoming') {
+        await loadInventoryStored(sf, df);
+      } else if (activeSubTab === 'returnDrop') {
+        await loadInventoryTransporterReturn(sf, df);
+      } else if (activeSubTab === 'returnPickup') {
+        await loadInventoryBuyerReturn(sf, df);
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Failed to load inventory data.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [activeSubTab, statusFilter, dateFilter]);
+
+  useEffect(() => {
+    setStatusFilter('all');
+    setDateFilter('');
+  }, [activeSubTab]);
 
   const handleOpenQrModal = (item: InventoryItem) => {
     setQrItem(item);
@@ -54,20 +96,24 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     setScanMessage('');
   };
 
-  const handleSimulateScan = () => {
+  const handleSimulateScan = async () => {
     setIsScanning(true);
     setScanMessage('Scanning QR Code...');
-    setTimeout(() => {
+    try {
       if (qrItem) {
-        dispatchInventory(qrItem.id);
+        await dispatchInventory(qrItem.id);
         setQrScanSuccess(true);
         setScanMessage('Order dispatched successfully.');
+        await loadData();
       }
+    } catch (err: any) {
+      setScanMessage(err.message || 'Failed to dispatch order.');
+    } finally {
       setIsScanning(false);
       setTimeout(() => {
         setIsQrModalOpen(false);
       }, 1500);
-    }, 1200);
+    }
   };
 
   const handleViewItem = (item: InventoryItem) => {
@@ -76,13 +122,30 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   };
 
   const getActionButtons = (row: InventoryItem, tab: string) => {
-    const canDispatch = (tab === 'incoming' || tab === 'returnDrop') && (row.status?.toLowerCase() === 'stored' || row.status?.toLowerCase() === 'pending acceptance' || row.status?.toLowerCase() === 'return drop inventory');
+    const statusLower = row.status?.toLowerCase() || '';
+    const canDispatch = (tab === 'incoming' || tab === 'returnDrop') && (
+      statusLower === 'stored' ||
+      statusLower === 'at_hub' ||
+      statusLower === 'at hub' ||
+      statusLower === 'hub_received' ||
+      statusLower === 'hub received' ||
+      statusLower === 'drop_assigned' ||
+      statusLower === 'drop assigned' ||
+      statusLower === 'on_hold' ||
+      statusLower === 'on hold' ||
+      statusLower === 'pending acceptance' ||
+      statusLower === 'return drop inventory' ||
+      statusLower === 'inventory_transporter_return'
+    );
 
     return (
       <div className="relative inline-block text-left">
         <button
           onClick={(e) => {
             e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const shouldOpenUpwards = rect.bottom > window.innerHeight * 0.65;
+            setOpenUpwards(shouldOpenUpwards);
             setActiveActionMenu(activeActionMenu === row.id ? null : row.id);
           }}
           className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-lg transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
@@ -100,7 +163,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 setActiveActionMenu(null);
               }}
             />
-            <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className={`absolute right-0 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in ${openUpwards ? 'bottom-full mb-2 slide-in-from-bottom-2' : 'top-full mt-2 slide-in-from-top-2'} duration-150`}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -243,26 +306,68 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-bold">
+            {errorMsg}
+          </div>
+        )}
+        {isLoading && (
+          <div className="flex items-center justify-center py-4 text-xs font-bold text-slate-500 gap-2">
+            <span className="w-4 h-4 border-2 border-[#073318] border-t-transparent rounded-full animate-spin" />
+            Loading live inventory data from GMU APIs...
+          </div>
+        )}
+
         {/* Tab Selection */}
         <Tabs
           activeTab={activeSubTab}
           onChange={setActiveSubTab}
           tabs={[
-            { id: 'incoming', label: 'Stored Orders', count: incomingInventory.length },
-            { id: 'returnDrop', label: 'Transpoter return orders', count: returnDropInventory.length },
-            { id: 'returnPickup', label: 'Buyer return Orders', count: returnPickupInventory.length },
+            { id: 'incoming', label: 'Stored Orders', count: counts.inventory.stored },
+            { id: 'returnDrop', label: 'Transpoter return orders', count: counts.inventory.transporterReturn },
+            { id: 'returnPickup', label: 'Buyer return Orders', count: counts.inventory.buyerReturn },
           ]}
         />
 
         {/* Main Data Tables */}
         {activeSubTab === 'incoming' && (
-          <DataTable columns={incomingColumns} data={incomingInventory} statusFilterField="status" onRowDoubleClick={handleViewItem} />
+          <DataTable
+            columns={incomingColumns}
+            data={incomingInventory}
+            statusFilterField="status"
+            statusFilterOptions={['At Hub', 'Hub Received', 'Barcode Generated', 'Drop Assigned', 'Dispatched']}
+            selectedStatus={statusFilter}
+            onStatusChange={setStatusFilter}
+            selectedDate={dateFilter}
+            onDateChange={setDateFilter}
+            onRowDoubleClick={handleViewItem}
+          />
         )}
         {activeSubTab === 'returnPickup' && (
-          <DataTable columns={returnPickupColumns} data={returnPickupInventory} onRowDoubleClick={handleViewItem} />
+          <DataTable
+            columns={returnPickupColumns}
+            data={returnPickupInventory}
+            statusFilterField="status"
+            statusFilterOptions={['Completed']}
+            selectedStatus={statusFilter}
+            onStatusChange={setStatusFilter}
+            selectedDate={dateFilter}
+            onDateChange={setDateFilter}
+            onRowDoubleClick={handleViewItem}
+          />
         )}
         {activeSubTab === 'returnDrop' && (
-          <DataTable columns={returnDropColumns} data={returnDropInventory} statusFilterField="status" onRowDoubleClick={handleViewItem} />
+          <DataTable
+            columns={returnDropColumns}
+            data={returnDropInventory}
+            statusFilterField="status"
+            statusFilterOptions={['On Hold', 'At Hub', 'Hub Received', 'Drop Assigned', 'Dispatched']}
+            selectedStatus={statusFilter}
+            onStatusChange={setStatusFilter}
+            selectedDate={dateFilter}
+            onDateChange={setDateFilter}
+            onRowDoubleClick={handleViewItem}
+          />
         )}
 
         {/* --- VIEW MODAL --- */}

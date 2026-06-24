@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { useAppContext } from '../context/AppContext';
 import { StatusBadge } from '../components/StatusBadge';
@@ -15,6 +15,14 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
     pickupRescheduledOrders,
     dropRescheduledOrders,
     simulateTransporterAction,
+    loadPickupAssigned,
+    loadDropAssigned,
+    loadReturnsBuyer,
+    loadReturnsTransporter,
+    loadPickupRejected,
+    loadDropRejected,
+    loadPickupRescheduled,
+    loadDropRescheduled,
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'pickup-req' | 'pickup-ass' | 'drop-req' | 'drop-ass' | 'ret-pickup-req' | 'ret-pickup-ass' | 'ret-drop-req' | 'ret-drop-ass' | 'rejected' | 'rescheduled'>('pickup-req');
@@ -22,6 +30,51 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
   const [rejectReason, setRejectReason] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [actionModal, setActionModal] = useState<{ type: 'reject' | 'reschedule'; orderId: string; flow: any } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    const loadAll = async () => {
+      try {
+        await Promise.all([
+          loadPickupAssigned(),
+          loadDropAssigned(),
+          loadReturnsBuyer(),
+          loadReturnsTransporter(),
+          loadPickupRejected(),
+          loadDropRejected(),
+          loadPickupRescheduled(),
+          loadDropRescheduled(),
+        ]);
+      } catch (e) {
+        console.error('Failed to load transporter portal data:', e);
+      }
+    };
+    loadAll();
+  }, []);
+
+  const handleSimulateAction = async (orderId: string, flow: any, action: any, payload?: any) => {
+    setIsProcessing(true);
+    try {
+      await simulateTransporterAction(orderId, flow, action, payload);
+      alert(`Simulation action '${action}' completed successfully.`);
+    } catch (err: any) {
+      alert(err.message || `Failed to execute simulation action '${action}'.`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleActionSubmit = async () => {
+    if (!actionModal) return;
+    if (actionModal.type === 'reject') {
+      await handleSimulateAction(actionModal.orderId, actionModal.flow, 'reject', { rejectionReason: rejectReason });
+      setRejectReason('');
+    } else {
+      await handleSimulateAction(actionModal.orderId, actionModal.flow, 'reschedule', { newSchedule: rescheduleTime });
+      setRescheduleTime('');
+    }
+    setActionModal(null);
+  };
 
   const tabs = [
     { id: 'pickup-req', label: 'Pickup Requests' },
@@ -35,18 +88,6 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
     { id: 'rejected', label: 'Rejected' },
     { id: 'rescheduled', label: 'Rescheduled' },
   ];
-
-  const handleActionSubmit = () => {
-    if (!actionModal) return;
-    if (actionModal.type === 'reject') {
-      simulateTransporterAction(actionModal.orderId, actionModal.flow, 'reject', { rejectionReason: rejectReason });
-      setRejectReason('');
-    } else {
-      simulateTransporterAction(actionModal.orderId, actionModal.flow, 'reschedule', { newSchedule: rescheduleTime });
-      setRescheduleTime('');
-    }
-    setActionModal(null);
-  };
 
   return (
     <Layout currentPage="transporter-demo-portal" onNavigate={onNavigate}>
@@ -92,7 +133,7 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {/* 1. Pickup Requests */}
-                {activeTab === 'pickup-req' && pickupAssignedOrders.filter(o => o.shgStatus === 'picked' && o.transporterStatus === 'pending').map((o) => (
+                {activeTab === 'pickup-req' && pickupAssignedOrders.filter(o => o.mainStatus === 'PICKUP_ASSIGNED' && o.shgStatus?.toLowerCase() === 'picked' && o.transporterStatus?.toLowerCase() === 'pending').map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -101,15 +142,15 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateTransporterAction(o.id, 'pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                      <button onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer">Reject</button>
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer disabled:opacity-50">Reject</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 2. Assigned Pickup Orders */}
-                {activeTab === 'pickup-ass' && pickupAssignedOrders.filter(o => o.transporterStatus !== 'pending').map((o) => (
+                {activeTab === 'pickup-ass' && pickupAssignedOrders.filter(o => o.transporterStatus?.toLowerCase() !== 'pending').map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -118,16 +159,16 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {o.transporterStatus !== 'in transit to hub' && (
-                        <button onClick={() => simulateTransporterAction(o.id, 'pickup', 'transit')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Mark In Transit</button>
+                      {!['in transit to hub', 'in_transit_to_hub'].includes(o.transporterStatus?.toLowerCase() || '') && (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'pickup', 'transit')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Mark In Transit</button>
                       )}
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 3. Drop Requests */}
-                {activeTab === 'drop-req' && dropAssignedOrders.filter(o => (o.shgStatus === 'Accepted' || o.shgStatus === 'ACCEPTED') && (o.transporterStatus === 'pending' || o.transporterStatus === 'DROP_ASSIGNED')).map((o) => (
+                {activeTab === 'drop-req' && dropAssignedOrders.filter(o => ['pending', 'PENDING'].includes(o.transporterStatus)).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -136,15 +177,15 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateTransporterAction(o.id, 'drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                      <button onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer">Reject</button>
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer disabled:opacity-50">Reject</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                  {/* 4. Assigned Drop Orders */}
-                {activeTab === 'drop-ass' && dropAssignedOrders.filter(o => o.transporterStatus !== 'pending' && o.transporterStatus !== 'DROP_ASSIGNED').map((o) => (
+                {activeTab === 'drop-ass' && dropAssignedOrders.filter(o => ['accepted', 'ACCEPTED'].includes(o.transporterStatus)).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -153,20 +194,20 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {o.transporterStatus !== 'parcel at drop shg' && (
+                      {!['parcel at drop shg', 'parcel_at_drop_shg', 'in transit to drop shg', 'in_transit_to_drop_shg', 'delivered'].includes(o.transporterStatus?.toLowerCase() || '') && (
                         <>
-                          <button onClick={() => simulateTransporterAction(o.id, 'drop', 'delivered-shg')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Deliver to SHG</button>
-                          <button onClick={() => simulateTransporterAction(o.id, 'drop', 'shg-not-available')} className="px-2.5 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer font-bold">SHG NOT AVAILABLE</button>
-                          <button onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer">Reject</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'drop', 'delivered-shg')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Deliver to SHG</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'drop', 'shg-not-available')} className="px-2.5 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer font-bold disabled:opacity-50">SHG NOT AVAILABLE</button>
+                          <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-750 cursor-pointer disabled:opacity-50">Reject</button>
                         </>
                       )}
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 5. Return Pickup Requests */}
-                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.filter(o => (o.shgStatus === 'RETURN_PICKED_BY_SHG' || o.shgStatus === 'picked') && o.transporterStatus === 'pending').map((o) => (
+                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.filter(o => o.mainStatus === 'RETURN_TRANSPORTER_PENDING' && ['return_picked_by_shg', 'picked'].includes(o.shgStatus?.toLowerCase() || '') && o.transporterStatus?.toLowerCase() === 'pending').map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -175,13 +216,13 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateTransporterAction(o.id, 'return-pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 6. Assigned Return Pickup Orders */}
-                {activeTab === 'ret-pickup-ass' && returnPickupNewOrders.filter(o => (o.shgStatus === 'RETURN_PICKED_BY_SHG' || o.shgStatus === 'picked') && (o.transporterStatus === 'TRANSPORTER_ACCEPTED' || o.transporterStatus === 'IN_TRANSIT_TO_GMU' || o.transporterStatus === 'Accepted' || o.transporterStatus === 'in transit to hub')).map((o) => (
+                {activeTab === 'ret-pickup-ass' && returnPickupNewOrders.filter(o => ['return_picked_by_shg', 'picked'].includes(o.shgStatus?.toLowerCase() || '') && ['transporter_accepted', 'transporter accepted', 'in_transit_to_gmu', 'in transit to gmu', 'accepted', 'in transit to hub', 'in_transit_to_hub'].includes(o.transporterStatus?.toLowerCase() || '')).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -190,18 +231,18 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {(o.transporterStatus === 'TRANSPORTER_ACCEPTED' || o.transporterStatus === 'Accepted') && (
-                        <button onClick={() => simulateTransporterAction(o.id, 'return-pickup', 'transit')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Mark In Transit</button>
+                      {['transporter_accepted', 'transporter accepted', 'accepted'].includes(o.transporterStatus?.toLowerCase() || '') && (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'transit')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Mark In Transit</button>
                       )}
-                      {(o.transporterStatus === 'IN_TRANSIT_TO_GMU' || o.transporterStatus === 'in transit to hub') && (
-                        <button onClick={() => simulateTransporterAction(o.id, 'return-pickup', 'deliver-to-gmu')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer font-bold">Deliver to GMU</button>
+                      {['in_transit_to_gmu', 'in transit to gmu', 'in transit to hub', 'in_transit_to_hub'].includes(o.transporterStatus?.toLowerCase() || '') && (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'deliver-to-gmu')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer font-bold disabled:opacity-50">Deliver to GMU</button>
                       )}
                     </td>
                   </tr>
                 ))}
 
                  {/* 7. Return Drop Requests */}
-                {activeTab === 'ret-drop-req' && returnDropNewOrders.filter(o => (o.shgStatus === 'Accepted' || o.shgStatus === 'SHG Not Available') && o.transporterStatus !== 'Accepted' && o.transporterStatus !== 'parcel at drop shg' && o.shgStatus !== 'Return Drop Initiated' && o.shgStatus !== 'SHG NOT AVAILABLE' && o.transporterStatus !== 'RETURNED_TO_GMU').map((o) => (
+                {activeTab === 'ret-drop-req' && returnDropNewOrders.filter(o => ['accepted', 'shg not available'].includes(o.shgStatus?.toLowerCase() || '') && !['accepted', 'parcel at drop shg', 'parcel_at_drop_shg', 'returned_to_gmu', 'returned to gmu'].includes(o.transporterStatus?.toLowerCase() || '')).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -210,13 +251,13 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateTransporterAction(o.id, 'return-drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 8. Assigned Return Drop Orders */}
-                {activeTab === 'ret-drop-ass' && returnDropNewOrders.filter(o => o.shgStatus === 'SHG NOT AVAILABLE' || ((o.shgStatus === 'Accepted' || o.shgStatus === 'SHG Not Available') && (o.transporterStatus === 'Accepted' || o.transporterStatus === 'parcel at drop shg')) || o.shgStatus === 'Return Drop Initiated').map((o) => (
+                {activeTab === 'ret-drop-ass' && returnDropNewOrders.filter(o => o.shgStatus?.toLowerCase() === 'shg not available' || ((o.shgStatus?.toLowerCase() === 'accepted' || o.shgStatus?.toLowerCase() === 'shg not available') && (o.transporterStatus?.toLowerCase() === 'accepted' || o.transporterStatus?.toLowerCase() === 'parcel at drop shg' || o.transporterStatus?.toLowerCase() === 'parcel_at_drop_shg' || o.transporterStatus?.toLowerCase() === 'in transit to drop shg' || o.transporterStatus?.toLowerCase() === 'in_transit_to_drop_shg')) || o.shgStatus?.toLowerCase() === 'return drop initiated').map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -225,14 +266,14 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                     <td className="p-4"><StatusBadge status={o.transporterStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {o.shgStatus === 'SHG NOT AVAILABLE' ? (
-                        <button onClick={() => simulateTransporterAction(o.id, 'return-drop', 'return-to-gmu')} className="px-2.5 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer font-bold">RETURN_TO_GMU</button>
-                      ) : o.shgStatus === 'Return Drop Initiated' ? (
-                        <button onClick={() => simulateTransporterAction(o.id, 'return-drop', 'drop-to-gmu')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Drop To GMU</button>
+                      {o.shgStatus?.toLowerCase() === 'shg not available' ? (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'return-to-gmu')} className="px-2.5 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer font-bold disabled:opacity-50">RETURN_TO_GMU</button>
+                      ) : o.shgStatus?.toLowerCase() === 'return drop initiated' ? (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'drop-to-gmu')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Drop To GMU</button>
                       ) : (
-                        o.transporterStatus !== 'parcel at drop shg' && (
-                          <button onClick={() => simulateTransporterAction(o.id, 'return-drop', 'delivered-shg')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">
-                            {(o.shgStatus === 'SHG Not Available' || o.shgStatus === 'SHG NOT AVAILABLE') ? 'Deliver to GMU' : 'Mark Delivered to SHG'}
+                        !['parcel at drop shg', 'parcel_at_drop_shg', 'in transit to drop shg', 'in_transit_to_drop_shg', 'delivered'].includes(o.transporterStatus?.toLowerCase() || '') && (
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'delivered-shg')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">
+                            {['shg not available'].includes(o.shgStatus?.toLowerCase() || '') ? 'Deliver to GMU' : 'Mark Delivered to SHG'}
                           </button>
                         )
                       )}
@@ -308,8 +349,8 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
               </div>
             )}
             <div className="flex gap-2 mt-6">
-              <button onClick={() => setActionModal(null)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase cursor-pointer">Cancel</button>
-              <button onClick={handleActionSubmit} className="flex-1 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-bold text-xs uppercase cursor-pointer">Submit</button>
+              <button disabled={isProcessing} onClick={() => setActionModal(null)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={isProcessing} onClick={handleActionSubmit} className="flex-1 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-bold text-xs uppercase cursor-pointer disabled:opacity-50">Submit</button>
             </div>
           </div>
         </div>

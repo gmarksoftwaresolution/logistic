@@ -13,7 +13,109 @@ interface DataTableProps<T> {
   data: T[];
   searchPlaceholder?: string;
   statusFilterField?: keyof T;
+  statusFilterOptions?: string[];
   onRowDoubleClick?: (row: T) => void;
+  selectedStatus?: string;
+  onStatusChange?: (status: string) => void;
+  selectedDate?: string;
+  onDateChange?: (date: string) => void;
+}
+
+export function getStatusDisplayLabel(status: string): string {
+  if (!status) return '';
+  const s = status.toLowerCase().trim().replace(/[-_]/g, ' ');
+  
+  if (s === 'pickup shg accepted' || s === 'shg accepted' || s === 'drop shg accepted' || s === 'accepted') {
+    return 'Accepted';
+  }
+  if (s === 'parcel at shg' || s === 'picked' || s === 'return picked by shg') {
+    return 'Picked';
+  }
+  if (s === 'transporter accepted') {
+    return 'Transporter Accepted';
+  }
+  if (s === 'in transit to hub' || s === 'in transit') {
+    return 'In Transit To Hub';
+  }
+  if (s === 'pending') {
+    return 'Pending';
+  }
+  if (s === 'pending acceptance' || s === 'pending-acceptance' || s === 'shg pending acceptance' || s === 'shg_pending_acceptance') {
+    return 'Pending Acceptance';
+  }
+  if (s === 'hub received' || s === 'pickuphub receive') {
+    return 'Pickuphub Receive';
+  }
+  if (s === 'barcode generated') {
+    return 'Barcode Generated';
+  }
+  
+  return s
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+export function isStatusMatching(rowValue: string, filterValue: string): boolean {
+  if (!rowValue) return false;
+  const r = rowValue.toLowerCase().trim().replace(/[-_]/g, ' ');
+  const f = filterValue.toLowerCase().trim().replace(/[-_]/g, ' ');
+
+  if (r === f) return true;
+
+  const isAccepted = (val: string) => 
+    val === 'accepted' || 
+    val === 'pickup shg accepted' || 
+    val === 'shg accepted' || 
+    val === 'drop shg accepted' ||
+    val === 'shg_accepted' ||
+    val === 'drop_shg_accepted';
+    
+  if (isAccepted(r) && (f === 'accepted' || f === 'pickup shg accepted')) {
+    return true;
+  }
+
+  const isPicked = (val: string) =>
+    val === 'picked' ||
+    val === 'parcel at shg' ||
+    val === 'return picked by shg' ||
+    val === 'parcel_at_shg';
+    
+  if (isPicked(r) && (f === 'picked' || f === 'parcel at shg')) {
+    return true;
+  }
+
+  if ((r === 'transporter accepted' || r === 'transporter_accepted') && f === 'transporter accepted') {
+    return true;
+  }
+
+  if ((r === 'in transit to hub' || r === 'in transit' || r === 'in_transit_to_hub') && f === 'in transit to hub') {
+    return true;
+  }
+
+  if (r === 'pending' && f === 'pending') {
+    return true;
+  }
+
+  const isPendingAcceptance = (val: string) =>
+    val === 'pending acceptance' ||
+    val === 'pending-acceptance' ||
+    val === 'shg pending acceptance' ||
+    val === 'shg_pending_acceptance';
+    
+  if (isPendingAcceptance(r) && f === 'pending acceptance') {
+    return true;
+  }
+
+  if ((r === 'hub received' || r === 'pickuphub receive') && f === 'pickuphub receive') {
+    return true;
+  }
+
+  if (r === 'barcode generated' && f === 'barcode generated') {
+    return true;
+  }
+
+  return false;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -21,11 +123,23 @@ export function DataTable<T extends Record<string, any>>({
   data,
   searchPlaceholder = 'Search...',
   statusFilterField,
+  statusFilterOptions,
   onRowDoubleClick,
+  selectedStatus: propSelectedStatus,
+  onStatusChange,
+  selectedDate: propSelectedDate,
+  onDateChange,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [internalSelectedStatus, setInternalSelectedStatus] = useState<string>('all');
+  const [internalSelectedDate, setInternalSelectedDate] = useState('');
+
+  const selectedStatus = propSelectedStatus !== undefined ? propSelectedStatus : internalSelectedStatus;
+  const setSelectedStatus = onStatusChange || setInternalSelectedStatus;
+
+  const selectedDate = propSelectedDate !== undefined ? propSelectedDate : internalSelectedDate;
+  const setSelectedDate = onDateChange || setInternalSelectedDate;
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -75,13 +189,19 @@ export function DataTable<T extends Record<string, any>>({
   const filteredData = useMemo(() => {
     let result = [...data];
 
-    // Status Filter
-    if (statusFilterField && selectedStatus !== 'all') {
-      result = result.filter((item) => item[statusFilterField] === selectedStatus);
+    // Status Filter (local filtering only if not delegated to parent)
+    if (!onStatusChange && statusFilterField && selectedStatus !== 'all') {
+      result = result.filter((item) => {
+        const val = item[statusFilterField];
+        if (val !== undefined && val !== null) {
+          return isStatusMatching(String(val), selectedStatus);
+        }
+        return false;
+      });
     }
 
-    // Date Filter
-    if (selectedDate) {
+    // Date Filter (local filtering only if not delegated to parent)
+    if (!onDateChange && selectedDate) {
       result = result.filter((item) => {
         return Object.values(item).some((val) => {
           if (val === null || val === undefined) return false;
@@ -111,7 +231,7 @@ export function DataTable<T extends Record<string, any>>({
     }
 
     return result;
-  }, [data, searchTerm, selectedStatus, selectedDate, statusFilterField]);
+  }, [data, searchTerm, selectedStatus, selectedDate, statusFilterField, onStatusChange, onDateChange]);
 
   // Pagination calculations
   const totalItems = filteredData.length;
@@ -180,7 +300,7 @@ export function DataTable<T extends Record<string, any>>({
           )}
 
           {/* Status Filter */}
-          {statusFilterField && uniqueStatuses.length > 0 && (
+          {statusFilterField && (statusFilterOptions || uniqueStatuses.length > 0) && (
             <div className="flex items-center gap-2.5">
               <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider whitespace-nowrap">Filter Status:</span>
               <select
@@ -192,9 +312,9 @@ export function DataTable<T extends Record<string, any>>({
                 className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer capitalize font-extrabold text-slate-700 transition-all duration-200 hover:border-slate-300"
               >
                 <option value="all">All Statuses</option>
-                {uniqueStatuses.map((status) => (
+                {(statusFilterOptions || uniqueStatuses).map((status) => (
                   <option key={status} value={status}>
-                    {status.replace(/[-_]/g, ' ')}
+                    {statusFilterOptions ? status : getStatusDisplayLabel(status)}
                   </option>
                 ))}
               </select>

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { useAppContext } from '../context/AppContext';
 import { StatusBadge } from '../components/StatusBadge';
-import { ClipboardList, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 import { TimeAgo } from '../components/TimeAgo';
 
 export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
@@ -19,14 +19,73 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
     dropRescheduledOrders,
     returnDropCompletedOrders,
     simulateSHGAction,
+    loadPickupNew,
+    loadPickupAssigned,
+    loadDropNew,
+    loadDropAssigned,
+    loadReturnsTransporter,
+    loadReturnsBuyer,
+    loadPickupRejected,
+    loadPickupRescheduled,
+    loadDropRejected,
+    loadDropRescheduled,
+    loadDropCompleted,
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'pickup-req' | 'pickup-ass' | 'drop-req' | 'drop-ass' | 'ret-pickup-req' | 'ret-pickup-ass' | 'ret-drop-req' | 'ret-drop-ass' | 'rejected' | 'rescheduled'>('pickup-req');
 
-  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [actionModal, setActionModal] = useState<{ type: 'reject' | 'reschedule'; orderId: string; flow: any } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    const loadAll = async () => {
+      try {
+        await Promise.all([
+          loadPickupNew(),
+          loadPickupAssigned(),
+          loadDropNew(),
+          loadDropAssigned(),
+          loadReturnsTransporter(),
+          loadReturnsBuyer(),
+          loadPickupRejected(),
+          loadPickupRescheduled(),
+          loadDropRejected(),
+          loadDropRescheduled(),
+          loadDropCompleted(),
+        ]);
+      } catch (e) {
+        console.error('Failed to load demo portal data:', e);
+      }
+    };
+    loadAll();
+  }, []);
+
+  const handleSimulateAction = async (orderId: string, flow: any, action: any, payload?: any) => {
+    setIsProcessing(true);
+    try {
+      await simulateSHGAction(orderId, flow, action, payload);
+      alert(`Simulation action '${action}' completed successfully.`);
+    } catch (err: any) {
+      alert(err.message || `Failed to execute simulation action '${action}'.`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleActionConfirm = async () => {
+    if (!actionModal) return;
+    const { type, orderId, flow } = actionModal;
+    if (type === 'reject') {
+      await handleSimulateAction(orderId, flow, 'reject', { reason: rejectReason });
+    } else {
+      await handleSimulateAction(orderId, flow, 'reschedule', { time: rescheduleTime });
+    }
+    setActionModal(null);
+    setRejectReason('');
+    setRescheduleTime('');
+  };
 
   const tabs = [
     { id: 'pickup-req', label: 'Pickup Requests' },
@@ -40,19 +99,6 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
     { id: 'rejected', label: 'Rejected Orders' },
     { id: 'rescheduled', label: 'Rescheduled Orders' },
   ];
-
-  const handleActionConfirm = () => {
-    if (!actionModal) return;
-    const { type, orderId, flow } = actionModal;
-    if (type === 'reject') {
-      simulateSHGAction(orderId, flow, 'reject', { reason: rejectReason });
-    } else {
-      simulateSHGAction(orderId, flow, 'reschedule', { time: rescheduleTime });
-    }
-    setActionModal(null);
-    setRejectReason('');
-    setRescheduleTime('');
-  };
 
   return (
     <Layout currentPage="shg-demo-portal" onNavigate={onNavigate}>
@@ -102,7 +148,7 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {/* 1. Pickup Requests */}
-                {activeTab === 'pickup-req' && pickupNewOrders.map((o) => (
+                {activeTab === 'pickup-req' && pickupNewOrders.filter(o => o.mainStatus === 'PICKUP_ASSIGNED' && ['pending', 'PENDING'].includes(o.shgStatus)).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -114,15 +160,15 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.shgStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateSHGAction(o.id, 'pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                      <button onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer">Reject</button>
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer disabled:opacity-50">Reject</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 2. Assigned Pickup Orders */}
-                {activeTab === 'pickup-ass' && pickupAssignedOrders.map((o) => (
+                {activeTab === 'pickup-ass' && pickupAssignedOrders.filter(o => !(o.mainStatus === 'PICKUP_ASSIGNED' && ['pending', 'PENDING'].includes(o.shgStatus))).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -135,15 +181,15 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
                       {o.shgStatus !== 'picked' && (
-                        <button onClick={() => simulateSHGAction(o.id, 'pickup', 'pick')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Mark Picked</button>
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'pickup', 'pick')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Mark Picked</button>
                       )}
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'pickup' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 3. Drop Requests */}
-                {activeTab === 'drop-req' && dropNewOrders.map((o) => (
+                {activeTab === 'drop-req' && dropNewOrders.filter(o => ['pending', 'PENDING'].includes(o.shgStatus)).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -155,15 +201,15 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.shgStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateSHGAction(o.id, 'drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                      <button onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer">Reject</button>
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reject', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer disabled:opacity-50">Reject</button>
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 4. Assigned Drop Orders */}
-                {activeTab === 'drop-ass' && dropAssignedOrders.map((o) => (
+                {activeTab === 'drop-ass' && dropAssignedOrders.filter(o => ['accepted', 'ACCEPTED'].includes(o.shgStatus)).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -175,14 +221,16 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.shgStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      <button onClick={() => simulateSHGAction(o.id, 'drop', 'deliver')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Deliver to Buyer</button>
-                      <button onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer">Reschedule</button>
+                      {o.shgStatus?.toLowerCase() !== 'delivered' && (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'drop', 'deliver')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Deliver to Buyer</button>
+                      )}
+                      <button disabled={isProcessing} onClick={() => setActionModal({ type: 'reschedule', orderId: o.id, flow: 'drop' })} className="px-2.5 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 cursor-pointer disabled:opacity-50">Reschedule</button>
                     </td>
                   </tr>
                 ))}
 
                 {/* 5. Return Pickup Requests */}
-                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.map((o) => (
+                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.filter(o => ['pending', 'PENDING'].includes(o.shgStatus || '')).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -194,10 +242,10 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.shgStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {o.shgStatus !== 'SHG_ACCEPTED' && o.shgStatus !== 'RETURN_PICKED_BY_SHG' && o.shgStatus !== 'Accepted' && o.shgStatus !== 'picked' && (
+                      {!['accepted', 'picked'].includes(o.shgStatus?.toLowerCase() || '') && (
                         <>
-                          <button onClick={() => simulateSHGAction(o.id, 'return-pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                          <button onClick={() => simulateSHGAction(o.id, 'return-pickup', 'reject')} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer">Reject</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'reject')} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer disabled:opacity-50">Reject</button>
                         </>
                       )}
                     </td>
@@ -205,7 +253,7 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                 ))}
  
                 {/* 6. Assigned Return Pickup Orders */}
-                {activeTab === 'ret-pickup-ass' && returnPickupNewOrders.filter(o => o.shgStatus === 'SHG_ACCEPTED' || o.shgStatus === 'RETURN_PICKED_BY_SHG' || o.shgStatus === 'Accepted' || o.shgStatus === 'picked').map((o) => (
+                {activeTab === 'ret-pickup-ass' && returnPickupNewOrders.filter(o => ['accepted', 'picked'].includes(o.shgStatus?.toLowerCase() || '')).map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>
@@ -217,8 +265,8 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.shgStatus} /></td>
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
-                      {o.shgStatus !== 'RETURN_PICKED_BY_SHG' && o.shgStatus !== 'picked' && (
-                        <button onClick={() => simulateSHGAction(o.id, 'return-pickup', 'pick')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Mark Picked</button>
+                      {o.shgStatus !== 'picked' && (
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-pickup', 'pick')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Mark Picked</button>
                       )}
                     </td>
                   </tr>
@@ -239,8 +287,8 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4 space-x-2">
                       {o.shgStatus !== 'Accepted' && o.shgStatus !== 'completed' && (
                         <>
-                          <button onClick={() => simulateSHGAction(o.id, 'return-drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Accept</button>
-                          <button onClick={() => simulateSHGAction(o.id, 'return-drop', 'reject')} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer">Reject</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'accept')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Accept</button>
+                          <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'reject')} className="px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer disabled:opacity-50">Reject</button>
                         </>
                       )}
                     </td>
@@ -261,7 +309,7 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
                     <td className="p-4"><StatusBadge status={o.mainStatus} /></td>
                     <td className="p-4 space-x-2">
                       {o.shgStatus !== 'completed' && (
-                        <button onClick={() => simulateSHGAction(o.id, 'return-drop', 'return-delivered')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer">Return Delivered</button>
+                        <button disabled={isProcessing} onClick={() => handleSimulateAction(o.id, 'return-drop', 'return-delivered')} className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50">Return Delivered</button>
                       )}
                     </td>
                   </tr>
@@ -335,18 +383,20 @@ export const SHGDemoPortalPage = ({ onNavigate }: { onNavigate: (page: string) =
             )}
             <div className="flex justify-end gap-3 mt-6">
               <button
+                disabled={isProcessing}
                 onClick={() => {
                   setActionModal(null);
                   setRejectReason('');
                   setRescheduleTime('');
                 }}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-500 hover:bg-slate-50 cursor-pointer"
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-500 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                disabled={isProcessing}
                 onClick={handleActionConfirm}
-                className="px-4 py-2 bg-[#073318] text-white rounded-xl text-xs font-extrabold hover:bg-brand-green-hover cursor-pointer"
+                className="px-4 py-2 bg-[#073318] text-white rounded-xl text-xs font-extrabold hover:bg-[#073318]/90 cursor-pointer disabled:opacity-50"
               >
                 Confirm
               </button>

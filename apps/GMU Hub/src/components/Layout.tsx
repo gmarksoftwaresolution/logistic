@@ -38,6 +38,18 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
 
   const currentLabel = navItems.find((i) => i.id === currentPage)?.label || 'GMU Hub';
 
+  const userStr = localStorage.getItem('gmu_user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  const userName = user?.name || 'Admin User';
+  const userRole = user?.role || 'Warehouse Head';
+  const userInitials = userName.substring(0, 1).toUpperCase();
+
+  const handleLogout = () => {
+    localStorage.removeItem('gmu_token');
+    localStorage.removeItem('gmu_user');
+    onNavigate('landing');
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
       {/* Premium Dark Sidebar (Desktop) */}
@@ -78,7 +90,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
 
         <div className="p-4 border-t border-white/10 relative z-10">
           <button
-            onClick={() => onNavigate('landing')}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-300 hover:bg-red-400/10 hover:text-red-200 transition-all font-semibold text-[13px] tracking-wide cursor-pointer"
           >
             <LogOut className="h-5 w-5 shrink-0" />
@@ -137,7 +149,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
 
             <div className="border-t border-white/10 pt-4">
               <button
-                onClick={() => onNavigate('landing')}
+                onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-350 hover:bg-red-400/10 font-semibold text-[13px] tracking-wide cursor-pointer"
               >
                 <LogOut className="h-5 w-5 shrink-0" />
@@ -220,11 +232,11 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
             {/* User Profile Avatar */}
             <div className="flex items-center gap-2">
               <div className="h-9 w-9 rounded-full bg-[#B2D534]/20 border border-[#B2D534]/50 flex items-center justify-center text-[#073318] font-bold text-sm">
-                U
+                {userInitials}
               </div>
               <div className="hidden lg:block text-left">
-                <p className="text-xs font-bold text-[#073318] leading-tight">Admin User</p>
-                <p className="text-[10px] text-slate-400">Warehouse Head</p>
+                <p className="text-xs font-bold text-[#073318] leading-tight">{userName}</p>
+                <p className="text-[10px] text-slate-400">{userRole}</p>
               </div>
             </div>
           </div>
