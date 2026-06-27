@@ -182,7 +182,7 @@ const validateCity = (val: string) => /^[a-zA-Z0-9\s,.\-\/()]+$/.test(val);
 const validateAddress = (val: string) => {
   if (!val) return false;
   const len = val.trim().length;
-  return len >= 3 && len <= 100;
+  return len >= 3 && len <= 500;
 };
 
 const formatLicenseNumber = (val: string) => {
@@ -531,7 +531,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         if (!val) return t('errors.taluka_required');
         return !/^[a-zA-Z\s]+$/.test(val as string) ? t('errors.taluka_invalid') : null;
       case 'address':
-        return val && !validateAddress(val as string) ? t('errors.address_char_count', 'Address must be between 3 and 100 characters') : null;
+        return val && !validateAddress(val as string) ? t('errors.address_char_count', 'Address must be between 3 and 500 characters') : null;
       case 'operatingArea':
         if (!val) return t('errors.required_field');
         return !validateCity(val as string) ? t('errors.only_alphabets', 'Only alphabets allowed') : null;

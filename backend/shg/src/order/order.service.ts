@@ -735,7 +735,7 @@ export class OrderService {
         ...d,
         legType: 'drop',
         sourceType: 'seller',
-        deliveryAddress: d.deliveryAddress || (sellerAddress ? `${sellerAddress.addressLine1 || ''}, ${sellerAddress.village || ''}`.trim() : 'Seller'),
+        deliveryAddress: d.deliveryAddress || (sellerAddress ? `${sellerAddress.houseNo || ''}, ${sellerAddress.village || ''}`.trim() : 'Seller'),
         seller: {
           fullName: d.shg?.fullName || 'SHG Hub',
           phoneNumber: d.shg?.phoneNumber || '',

@@ -450,6 +450,16 @@ export class OtherDetailsDto {
   @MaxLength(100)
   storageSpace: string;
 
+  @ApiPropertyOptional({ example: 10, description: 'Storage width in feet' })
+  @IsNumber()
+  @IsOptional()
+  storageWidth?: number;
+
+  @ApiPropertyOptional({ example: 10, description: 'Storage length/height in feet' })
+  @IsNumber()
+  @IsOptional()
+  storageLength?: number;
+
   @ApiProperty({ description: 'Does the user have a vehicle for delivery?' })
   @IsBoolean()
   hasVehicle: boolean;

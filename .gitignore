@@ -48,3 +48,5 @@ Thumbs.db
 # Ignore uploaded files
 backend/shg/uploads/
 
+# Scratch files
+scratch/

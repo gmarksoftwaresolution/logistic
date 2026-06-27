@@ -5,8 +5,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { Tabs } from '../components/Tabs';
 import { api } from '../utils/api';
-import { 
-  Users, User, MapPin, Store, Building2, FileText, CheckCircle2, 
+import {
+  Users, User, MapPin, Store, Building2, FileText, CheckCircle2,
   MoreVertical, Eye, ShieldAlert, ArrowLeft, Check, X, ShieldX, Power, CreditCard, Layers
 } from 'lucide-react';
 
@@ -28,7 +28,7 @@ interface SHGProfileExt {
   sectionEnteredAt?: string;
   activeOrders: number;
   completedOrders: number;
-  
+
   // Section 1: Personal Details
   photo: string;
   age: number;
@@ -367,12 +367,47 @@ const initialSHGs: SHGProfileExt[] = [
   }
 ];
 
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url);
+      parsed.hostname = 'localhost';
+      parsed.port = '3000';
+      return parsed.toString();
+    } catch (e) {
+      return url;
+    }
+  }
+  if (url.startsWith('/uploads')) {
+    return `http://localhost:3000${url}`;
+  }
+  if (url.startsWith('uploads/')) {
+    return `http://localhost:3000/${url}`;
+  }
+  return url;
+};
+
+const parseDimensions = (storageSpace?: string) => {
+  if (!storageSpace) return { width: '', height: '' };
+  const match = storageSpace.match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
+  if (match) {
+    return { width: `${match[1]} ft`, height: `${match[2]} ft` };
+  }
+  const num = parseFloat(storageSpace);
+  if (!isNaN(num) && num > 0) {
+    const side = Math.round(Math.sqrt(num));
+    return { width: `${side} ft`, height: `${side} ft` };
+  }
+  return { width: '', height: '' };
+};
+
 export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const [shgList, setShgList] = useState<SHGProfileExt[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
-  
+
   // Navigation Tab states
   const [activeTopSection, setActiveTopSection] = useState<'shg' | 'individual'>('shg');
   const [activeTab, setActiveTab] = useState<'requests' | 'members' | 'rejected'>('requests');
@@ -385,13 +420,13 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [openUpwards, setOpenUpwards] = useState(false);
 
   // Document Viewer State
-  const [viewingDoc, setViewingDoc] = useState<{ 
-    title: string; 
-    filename: string; 
-    type: 'aadhaar' | 'pan'; 
-    profileName: string; 
-    profileId: string; 
-    documentNumber?: string 
+  const [viewingDoc, setViewingDoc] = useState<{
+    title: string;
+    filename: string;
+    type: 'aadhaar' | 'pan';
+    profileName: string;
+    profileId: string;
+    documentNumber?: string
   } | null>(null);
 
   const fetchData = async () => {
@@ -401,7 +436,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       let requests: any[] = [];
       let members: any[] = [];
       let rejected: any[] = [];
-      
+
       if (activeTopSection === 'shg') {
         [requests, members, rejected] = await Promise.all([
           api.community.getShgRequests(),
@@ -415,71 +450,74 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           api.community.getIndividualRejected()
         ]);
       }
-      
-      const mapItem = (item: any) => ({
-        id: item.id,
-        memberCode: item.memberCode || item.id,
-        type: (item.type === 'SHG' ? 'SHG Group' : 'Individual') as any,
-        fullName: item.fullName,
-        mobile: item.mobileNumber,
-        village: item.village || '',
-        pincode: item.pincode || '',
-        role: (item.roleInShg || 'N/A') as any,
-        shgName: item.shgName || 'N/A',
-        storageAvailable: item.storageSpace || (item.storageWidth && item.storageHeight ? `${item.storageWidth * item.storageHeight} sq ft` : 'N/A'),
-        vehicleAvailable: item.vehicleAvailable ? 'Yes' : 'No',
-        registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
-        status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
-        activeOrders: 0,
-        completedOrders: 0,
-        photo: item.profilePhoto || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-        age: item.age || 0,
-        occupation: item.occupation || '',
-        crpName: item.crpName || '',
-        crpMobile: item.crpMobile || '',
-        crpEmail: item.crpEmail || '',
-        shgActiveSince: item.activeSince || '',
-        shgGroupSize: item.groupSize || 0,
-        groupLeaderName: item.leaderName || '',
-        groupLeaderMobile: item.leaderMobile || '',
-        producesProducts: item.producesProducts ? 'Yes' : 'No',
-        businessTeamSize: item.businessTeamSize || 0,
-        productName: item.productName || '',
-        productCategory: item.productCategory || '',
-        dailyProduction: item.dailyProduction ? `${item.dailyProduction} ${item.productionUnit || 'Kg'}` : '',
-        weeklyProduction: item.weeklyProduction ? `${item.weeklyProduction} ${item.productionUnit || 'Kg'}` : '',
-        unit: item.productionUnit || '',
-        pricePerUnit: item.pricePerUnit || 0,
-        houseNumber: item.houseNo || '',
-        address: item.deliveryAddress || '',
-        taluka: item.taluka || '',
-        district: item.district || '',
-        state: item.state || '',
-        aadhaarNumber: item.aadhaarNumber || '',
-        panNumber: item.panNumber || '',
-        aadhaarFront: item.aadhaarFrontPhoto || '',
-        aadhaarBack: item.aadhaarBackPhoto || '',
-        panCard: item.panCardPhoto || '',
-        accountHolderName: item.accountHolderName || '',
-        accountNumber: item.accountNumber || '',
-        ifscCode: item.ifscCode || '',
-        bankName: item.bankName || '',
-        branchName: item.branchName || '',
-        upiId: item.upiId || '',
-        width: item.storageWidth ? `${item.storageWidth} ft` : '',
-        height: item.storageHeight ? `${item.storageHeight} ft` : '',
-        storageDescription: item.storageDescription || '',
-        vehicleType: item.vehicleType || 'N/A',
-        registrationNumber: item.vehicleRegistrationNumber || 'N/A',
-        drivingLicenseNumber: item.drivingLicenseNumber || 'N/A',
-        drivingLicensePhoto: item.drivingLicensePhoto || 'N/A',
-        vehiclePhoto: item.vehiclePhoto || 'N/A'
-      });
+
+      const mapItem = (item: any) => {
+        const dims = parseDimensions(item.storageSpace);
+        return {
+          id: item.id,
+          memberCode: item.memberCode || item.id,
+          type: (item.type === 'SHG' ? 'SHG Group' : 'Individual') as any,
+          fullName: item.fullName,
+          mobile: item.mobileNumber,
+          village: item.village || '',
+          pincode: item.pincode || '',
+          role: (item.roleInShg || 'N/A') as any,
+          shgName: item.shgName || 'N/A',
+          storageAvailable: item.storageSpace || (item.storageWidth && item.storageHeight ? `${item.storageWidth * item.storageHeight} sq ft` : 'N/A'),
+          vehicleAvailable: item.vehicleAvailable ? 'Yes' : 'No',
+          registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
+          status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
+          activeOrders: 0,
+          completedOrders: 0,
+          photo: normalizeUrl(item.profilePhoto) || '',
+          age: item.age || 0,
+          occupation: item.occupation || '',
+          crpName: item.crpName || '',
+          crpMobile: item.crpMobile || '',
+          crpEmail: item.crpEmail || '',
+          shgActiveSince: item.activeSince || '',
+          shgGroupSize: item.groupSize || 0,
+          groupLeaderName: item.leaderName || '',
+          groupLeaderMobile: item.leaderMobile || '',
+          producesProducts: item.producesProducts ? 'Yes' : 'No',
+          businessTeamSize: item.businessTeamSize || 0,
+          productName: item.productName || '',
+          productCategory: item.productCategory || '',
+          dailyProduction: item.dailyProduction ? `${item.dailyProduction} ${item.productionUnit || 'Kg'}` : '',
+          weeklyProduction: item.weeklyProduction ? `${item.weeklyProduction} ${item.productionUnit || 'Kg'}` : '',
+          unit: item.productionUnit || '',
+          pricePerUnit: item.pricePerUnit || 0,
+          houseNumber: item.houseNo || '',
+          address: item.deliveryAddress || '',
+          taluka: item.taluka || '',
+          district: item.district || '',
+          state: item.state || '',
+          aadhaarNumber: item.aadhaarNumber || '',
+          panNumber: item.panNumber || '',
+          aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || '',
+          aadhaarBack: normalizeUrl(item.aadhaarBackPhoto) || '',
+          panCard: normalizeUrl(item.panCardPhoto) || '',
+          accountHolderName: item.accountHolderName || '',
+          accountNumber: item.accountNumber || '',
+          ifscCode: item.ifscCode || '',
+          bankName: item.bankName || '',
+          branchName: item.branchName || '',
+          upiId: item.upiId || '',
+          width: item.storageWidth ? `${item.storageWidth} ft` : dims.width,
+          height: item.storageHeight ? `${item.storageHeight} ft` : dims.height,
+          storageDescription: item.storageDescription || 'Clean and dry ventilated room storage.',
+          vehicleType: item.vehicleType || 'N/A',
+          registrationNumber: item.vehicleRegistrationNumber || 'N/A',
+          drivingLicenseNumber: item.drivingLicenseNumber || 'N/A',
+          drivingLicensePhoto: normalizeUrl(item.drivingLicensePhoto) || 'N/A',
+          vehiclePhoto: normalizeUrl(item.vehiclePhoto) || 'N/A'
+        };
+      };
 
       const mappedRequests = requests.map(mapItem);
       const mappedMembers = members.map(mapItem);
       const mappedRejected = rejected.map(mapItem);
-      
+
       setShgList([...mappedRequests, ...mappedMembers, ...mappedRejected]);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to fetch community data.');
@@ -528,6 +566,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       if (selectedProfile && selectedProfile.id === id) {
         try {
           const item = await api.community.getDetails(id);
+          const dims = parseDimensions(item.storageSpace);
           const mappedProfile: SHGProfileExt = {
             id: item.id,
             memberCode: item.memberCode || item.id,
@@ -544,7 +583,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
             activeOrders: 0,
             completedOrders: 0,
-            photo: item.profilePhoto || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+            photo: normalizeUrl(item.profilePhoto) || '',
             age: item.age || 0,
             occupation: item.occupation || '',
             crpName: item.crpName || '',
@@ -569,23 +608,23 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             state: item.state || '',
             aadhaarNumber: item.aadhaarNumber || '',
             panNumber: item.panNumber || '',
-            aadhaarFront: item.aadhaarFrontPhoto || '',
-            aadhaarBack: item.aadhaarBackPhoto || '',
-            panCard: item.panCardPhoto || '',
+            aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || '',
+            aadhaarBack: normalizeUrl(item.aadhaarBackPhoto) || '',
+            panCard: normalizeUrl(item.panCardPhoto) || '',
             accountHolderName: item.accountHolderName || '',
             accountNumber: item.accountNumber || '',
             ifscCode: item.ifscCode || '',
             bankName: item.bankName || '',
             branchName: item.branchName || '',
             upiId: item.upiId || '',
-            width: item.storageWidth ? `${item.storageWidth} ft` : '',
-            height: item.storageHeight ? `${item.storageHeight} ft` : '',
-            storageDescription: item.storageDescription || '',
+            width: item.storageWidth ? `${item.storageWidth} ft` : dims.width,
+            height: item.storageHeight ? `${item.storageHeight} ft` : dims.height,
+            storageDescription: item.storageDescription || 'Clean and dry ventilated room storage.',
             vehicleType: item.vehicleType || 'N/A',
             registrationNumber: item.vehicleRegistrationNumber || 'N/A',
             drivingLicenseNumber: item.drivingLicenseNumber || 'N/A',
-            drivingLicensePhoto: item.drivingLicensePhoto || 'N/A',
-            vehiclePhoto: item.vehiclePhoto || 'N/A'
+            drivingLicensePhoto: normalizeUrl(item.drivingLicensePhoto) || 'N/A',
+            vehiclePhoto: normalizeUrl(item.vehiclePhoto) || 'N/A'
           };
           setSelectedProfile(mappedProfile);
         } catch (e) {
@@ -843,20 +882,20 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           }}
           variant="secondary"
           tabs={[
-            { 
-              id: 'requests', 
-              label: 'New Approval Requests', 
-              count: shgList.filter(s => s.status === 'PENDING_APPROVAL' && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length 
+            {
+              id: 'requests',
+              label: 'New Approval Requests',
+              count: shgList.filter(s => s.status === 'PENDING_APPROVAL' && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length
             },
-            { 
-              id: 'members', 
-              label: 'Members', 
-              count: shgList.filter(s => (s.status === 'ACTIVE' || s.status === 'INACTIVE') && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length 
+            {
+              id: 'members',
+              label: 'Members',
+              count: shgList.filter(s => (s.status === 'ACTIVE' || s.status === 'INACTIVE') && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length
             },
-            { 
-              id: 'rejected', 
-              label: 'Rejected Requests', 
-              count: shgList.filter(s => s.status === 'REJECTED' && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length 
+            {
+              id: 'rejected',
+              label: 'Rejected Requests',
+              count: shgList.filter(s => s.status === 'REJECTED' && s.type === (activeTopSection === 'shg' ? 'SHG Group' : 'Individual')).length
             },
           ]}
         />
@@ -868,9 +907,9 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             <p className="mt-4 text-xs font-semibold text-slate-500">Loading community members from backend...</p>
           </div>
         ) : (
-          <DataTable 
-            columns={activeTab === 'requests' ? requestColumns : activeTab === 'rejected' ? rejectedColumns : memberColumns} 
-            data={tabData} 
+          <DataTable
+            columns={activeTab === 'requests' ? requestColumns : activeTab === 'rejected' ? rejectedColumns : memberColumns}
+            data={tabData}
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
           />
@@ -931,14 +970,14 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             <div className="flex justify-end gap-3">
               {(selectedProfile.status === 'PENDING_APPROVAL' || selectedProfile.status === 'REJECTED') && (
                 <>
-                  <button 
+                  <button
                     onClick={() => setModalAction({ type: 'approve', id: selectedProfile.id })}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                   >
                     Approve Request
                   </button>
                   {selectedProfile.status === 'PENDING_APPROVAL' && (
-                    <button 
+                    <button
                       onClick={() => setModalAction({ type: 'reject', id: selectedProfile.id })}
                       className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                     >
@@ -948,7 +987,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 </>
               )}
               {selectedProfile.status === 'ACTIVE' && (
-                <button 
+                <button
                   onClick={() => setModalAction({ type: 'deactivate', id: selectedProfile.id })}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                 >
@@ -956,7 +995,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 </button>
               )}
               {selectedProfile.status === 'INACTIVE' && (
-                <button 
+                <button
                   onClick={() => setModalAction({ type: 'activate', id: selectedProfile.id })}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                 >
@@ -984,11 +1023,17 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-6 items-center md:items-start pt-2">
-                    <img 
-                      src={selectedProfile.photo} 
-                      alt={selectedProfile.fullName} 
-                      className="w-24 h-24 rounded-2xl object-cover border-2 border-[#073318]/10 shadow-sm shrink-0"
-                    />
+                    {selectedProfile.photo ? (
+                      <img
+                        src={selectedProfile.photo}
+                        alt={selectedProfile.fullName}
+                        className="w-24 h-24 rounded-2xl object-cover border-2 border-[#073318]/10 shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[10px] text-slate-400 font-bold shrink-0">
+                        No Photo
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs flex-1 w-full">
                       <div>
                         <p className="text-slate-400 font-extrabold uppercase text-[9px] mb-0.5">Mobile Contact</p>
@@ -1146,10 +1191,6 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       <p className="text-slate-400 font-bold uppercase text-[9px] mb-0.5">Height</p>
                       <p className="font-bold text-slate-800">{selectedProfile.height || 'N/A'}</p>
                     </div>
-                    <div className="col-span-2 md:col-span-3">
-                      <p className="text-slate-400 font-bold uppercase text-[9px] mb-0.5">Storage Description</p>
-                      <p className="font-bold text-slate-800 leading-tight">{selectedProfile.storageDescription || 'N/A'}</p>
-                    </div>
                     <div>
                       <p className="text-slate-400 font-bold uppercase text-[9px] mb-0.5">Vehicle Available</p>
                       <p className="font-bold text-slate-800">{selectedProfile.vehicleAvailable || 'N/A'}</p>
@@ -1169,12 +1210,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                           <p className="font-bold text-slate-800 font-mono">{selectedProfile.drivingLicenseNumber || 'N/A'}</p>
                         </div>
                         {selectedProfile.drivingLicensePhoto && selectedProfile.drivingLicensePhoto !== 'N/A' && (
-                          <div 
-                            onClick={() => setViewingDoc({ 
-                              title: "Driver's License", 
-                              filename: selectedProfile.drivingLicensePhoto!, 
-                              type: 'aadhaar', 
-                              profileName: selectedProfile.fullName, 
+                          <div
+                            onClick={() => setViewingDoc({
+                              title: "Driver's License",
+                              filename: selectedProfile.drivingLicensePhoto!,
+                              type: 'aadhaar',
+                              profileName: selectedProfile.fullName,
                               profileId: selectedProfile.id,
                               documentNumber: selectedProfile.drivingLicenseNumber
                             })}
@@ -1184,12 +1225,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                           </div>
                         )}
                         {selectedProfile.vehiclePhoto && selectedProfile.vehiclePhoto !== 'N/A' && (
-                          <div 
-                            onClick={() => setViewingDoc({ 
-                              title: "Vehicle Photo", 
-                              filename: selectedProfile.vehiclePhoto!, 
-                              type: 'pan', 
-                              profileName: selectedProfile.fullName, 
+                          <div
+                            onClick={() => setViewingDoc({
+                              title: "Vehicle Photo",
+                              filename: selectedProfile.vehiclePhoto!,
+                              type: 'pan',
+                              profileName: selectedProfile.fullName,
                               profileId: selectedProfile.id,
                               documentNumber: selectedProfile.registrationNumber
                             })}
@@ -1322,12 +1363,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 text-center">
-                <div 
-                  onClick={() => setViewingDoc({ 
-                    title: 'Aadhaar Card Front', 
-                    filename: selectedProfile.aadhaarFront, 
-                    type: 'aadhaar', 
-                    profileName: selectedProfile.fullName, 
+                <div
+                  onClick={() => setViewingDoc({
+                    title: 'Aadhaar Card Front',
+                    filename: selectedProfile.aadhaarFront,
+                    type: 'aadhaar',
+                    profileName: selectedProfile.fullName,
                     profileId: selectedProfile.id,
                     documentNumber: selectedProfile.aadhaarNumber
                   })}
@@ -1335,12 +1376,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 >
                   📂 Aadhaar Front View
                 </div>
-                <div 
-                  onClick={() => setViewingDoc({ 
-                    title: 'Aadhaar Card Back', 
-                    filename: selectedProfile.aadhaarBack, 
-                    type: 'aadhaar', 
-                    profileName: selectedProfile.fullName, 
+                <div
+                  onClick={() => setViewingDoc({
+                    title: 'Aadhaar Card Back',
+                    filename: selectedProfile.aadhaarBack,
+                    type: 'aadhaar',
+                    profileName: selectedProfile.fullName,
                     profileId: selectedProfile.id,
                     documentNumber: selectedProfile.aadhaarNumber
                   })}
@@ -1348,12 +1389,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 >
                   📂 Aadhaar Back View
                 </div>
-                <div 
-                  onClick={() => setViewingDoc({ 
-                    title: 'PAN Card', 
-                    filename: selectedProfile.panCard, 
-                    type: 'pan', 
-                    profileName: selectedProfile.fullName, 
+                <div
+                  onClick={() => setViewingDoc({
+                    title: 'PAN Card',
+                    filename: selectedProfile.panCard,
+                    type: 'pan',
+                    profileName: selectedProfile.fullName,
                     profileId: selectedProfile.id,
                     documentNumber: selectedProfile.panNumber
                   })}
@@ -1393,12 +1434,11 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
               <button
                 disabled={isActionProcessing}
                 onClick={handleModalConfirm}
-                className={`flex-1 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-colors cursor-pointer ${
-                  isActionProcessing ? 'bg-slate-400 cursor-not-allowed text-slate-200' :
-                  modalAction.type === 'reject' || modalAction.type === 'deactivate'
-                    ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
+                className={`flex-1 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-colors cursor-pointer ${isActionProcessing ? 'bg-slate-400 cursor-not-allowed text-slate-200' :
+                    modalAction.type === 'reject' || modalAction.type === 'deactivate'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
               >
                 {isActionProcessing ? 'Processing...' : `Confirm ${modalAction.type}`}
               </button>
@@ -1424,84 +1464,113 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           size="md"
         >
           <div className="flex flex-col items-center p-4">
-            {viewingDoc.type === 'aadhaar' && (
-              <div className="w-full max-w-sm bg-gradient-to-r from-orange-50 via-white to-emerald-50 border-2 border-slate-300 rounded-2xl shadow-xl overflow-hidden text-xs">
-                <div className="bg-gradient-to-r from-orange-400 to-emerald-600 text-white font-extrabold text-[10px] tracking-wider text-center py-2 px-3 flex items-center justify-between">
-                  <span>भारत सरकार / GOVERNMENT OF INDIA</span>
-                  <span className="bg-white/20 px-1.5 py-0.5 rounded text-[8px]">Aadhaar</span>
-                </div>
-                <div className="p-4 flex gap-4 text-left">
-                  <div className="h-24 w-20 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
-                    <img 
-                      src={selectedProfile?.photo || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} 
-                      alt="Aadhaar Photo" 
-                      className="h-full w-full object-cover rounded" 
-                    />
-                  </div>
-                  <div className="space-y-1.5 flex-1">
-                    <div>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase">Name / नाम</p>
-                      <p className="font-extrabold text-slate-800 text-xs">{viewingDoc.profileName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-slate-450 font-bold uppercase">Date of Birth / जन्म तिथि</p>
-                      <p className="font-extrabold text-slate-800">12/08/1988</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-slate-450 font-bold uppercase">Gender / लिंग</p>
-                      <p className="font-extrabold text-slate-800">Female / महिला</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-slate-100 border-t border-slate-200 px-4 py-3 flex flex-col items-center justify-center">
-                  <p className="font-black text-slate-800 text-base tracking-widest font-mono">
-                    {viewingDoc.documentNumber || '5432 9876 1201'}
-                  </p>
-                  <p className="text-[9px] text-slate-450 font-extrabold tracking-wider mt-0.5">मेरा आधार, मेरी पहचान</p>
+            {viewingDoc.filename && viewingDoc.filename !== 'N/A' ? (
+              <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-md overflow-hidden p-2 flex flex-col items-center justify-center">
+                <img
+                  src={viewingDoc.filename}
+                  alt={viewingDoc.title}
+                  className="max-w-full max-h-[350px] object-contain rounded-xl"
+                  onError={(e) => {
+                    console.log("Failed to load uploaded document image");
+                  }}
+                />
+                <div className="mt-3 text-center">
+                  <p className="text-xs font-bold text-slate-800">{viewingDoc.title}</p>
+                  {viewingDoc.documentNumber && (
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">No: {viewingDoc.documentNumber}</p>
+                  )}
                 </div>
               </div>
-            )}
-
-            {viewingDoc.type === 'pan' && (
-              <div className="w-full max-w-sm bg-gradient-to-b from-teal-50 to-white border-2 border-teal-600 rounded-2xl shadow-xl overflow-hidden text-xs">
-                <div className="bg-teal-700 text-white font-extrabold text-[10px] tracking-wider text-center py-2.5 px-3 flex flex-col gap-0.5">
-                  <div className="flex justify-between">
-                    <span>आयकर विभाग / INCOME TAX DEPARTMENT</span>
-                    <span>GOVT. OF INDIA</span>
+            ) : (
+              <>
+                {viewingDoc.type === 'aadhaar' && (
+                  <div className="w-full max-w-sm bg-gradient-to-r from-orange-50 via-white to-emerald-50 border-2 border-slate-300 rounded-2xl shadow-xl overflow-hidden text-xs">
+                    <div className="bg-gradient-to-r from-orange-400 to-emerald-600 text-white font-extrabold text-[10px] tracking-wider text-center py-2 px-3 flex items-center justify-between">
+                      <span>भारत सरकार / GOVERNMENT OF INDIA</span>
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded text-[8px]">Aadhaar</span>
+                    </div>
+                    <div className="p-4 flex gap-4 text-left">
+                      <div className="h-24 w-20 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
+                        {selectedProfile?.photo ? (
+                          <img
+                            src={selectedProfile.photo}
+                            alt="Aadhaar Photo"
+                            className="h-full w-full object-cover rounded"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold">No Photo</span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase">Name / नाम</p>
+                          <p className="font-extrabold text-slate-800 text-xs">{viewingDoc.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-450 font-bold uppercase">Date of Birth / जन्म तिथि</p>
+                          <p className="font-extrabold text-slate-800">12/08/1988</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-450 font-bold uppercase">Gender / लिंग</p>
+                          <p className="font-extrabold text-slate-800">Female / महिला</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-100 border-t border-slate-200 px-4 py-3 flex flex-col items-center justify-center">
+                      <p className="font-black text-slate-800 text-base tracking-widest font-mono">
+                        {viewingDoc.documentNumber || '5432 9876 1201'}
+                      </p>
+                      <p className="text-[9px] text-slate-450 font-extrabold tracking-wider mt-0.5">मेरा आधार, मेरी पहचान</p>
+                    </div>
                   </div>
-                  <div className="text-[8px] text-slate-200 tracking-widest text-left uppercase font-mono mt-1">Permanent Account Number Card</div>
-                </div>
-                <div className="p-4 flex gap-4 text-left">
-                  <div className="space-y-3 flex-1">
-                    <div>
-                      <p className="text-[9px] text-teal-750 font-bold uppercase">Name / नाम</p>
-                      <p className="font-extrabold text-slate-800 text-xs">{viewingDoc.profileName}</p>
+                )}
+
+                {viewingDoc.type === 'pan' && (
+                  <div className="w-full max-w-sm bg-gradient-to-b from-teal-50 to-white border-2 border-teal-600 rounded-2xl shadow-xl overflow-hidden text-xs">
+                    <div className="bg-teal-700 text-white font-extrabold text-[10px] tracking-wider text-center py-2.5 px-3 flex flex-col gap-0.5">
+                      <div className="flex justify-between">
+                        <span>आयकर विभाग / INCOME TAX DEPARTMENT</span>
+                        <span>GOVT. OF INDIA</span>
+                      </div>
+                      <div className="text-[8px] text-slate-200 tracking-widest text-left uppercase font-mono mt-1">Permanent Account Number Card</div>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-teal-750 font-bold uppercase">Father's Name</p>
-                      <p className="font-extrabold text-slate-700 text-xs">Late V. Patil</p>
-                    </div>
-                    <div className="flex gap-4">
-                      <div>
-                        <p className="text-[9px] text-teal-750 font-bold uppercase">DOB / जन्म तिथि</p>
-                        <p className="font-extrabold text-slate-800">12/08/1988</p>
+                    <div className="p-4 flex gap-4 text-left">
+                      <div className="space-y-3 flex-1">
+                        <div>
+                          <p className="text-[9px] text-teal-750 font-bold uppercase">Name / नाम</p>
+                          <p className="font-extrabold text-slate-800 text-xs">{viewingDoc.profileName}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-teal-750 font-bold uppercase">Father's Name</p>
+                          <p className="font-extrabold text-slate-700 text-xs">Late V. Patil</p>
+                        </div>
+                        <div className="flex gap-4">
+                          <div>
+                            <p className="text-[9px] text-teal-750 font-bold uppercase">DOB / जन्म तिथि</p>
+                            <p className="font-extrabold text-slate-800">12/08/1988</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center justify-between shrink-0">
+                        <div className="h-20 w-16 bg-slate-100 border border-slate-200 rounded overflow-hidden p-0.5">
+                          {selectedProfile?.photo ? (
+                            <img
+                              src={selectedProfile.photo}
+                              alt="PAN Photo"
+                              className="h-full w-full object-cover rounded"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-bold">No Photo</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] bg-slate-50 border border-slate-200 p-1 font-mono font-bold tracking-wider rounded mt-2">
+                          {viewingDoc.documentNumber || 'BPDPA1201K'}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center justify-between shrink-0">
-                    <div className="h-20 w-16 bg-slate-100 border border-slate-200 rounded overflow-hidden p-0.5">
-                      <img 
-                        src={selectedProfile?.photo || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} 
-                        alt="PAN Photo" 
-                        className="h-full w-full object-cover rounded" 
-                      />
-                    </div>
-                    <div className="text-[10px] bg-slate-50 border border-slate-200 p-1 font-mono font-bold tracking-wider rounded mt-2">
-                      {viewingDoc.documentNumber || 'BPDPA1201K'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
 
             <button

@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CommunityManagementService } from './community-management.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,6 +9,18 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @ApiBearerAuth()
 export class CommunityManagementController {
   constructor(private readonly service: CommunityManagementService) {}
+
+  @Get('shg')
+  @ApiOperation({ summary: 'Get all SHG members' })
+  async getShg() {
+    return this.service.getCommunityMembers('SHG', null);
+  }
+
+  @Get('individual')
+  @ApiOperation({ summary: 'Get all Individual members' })
+  async getIndividual() {
+    return this.service.getCommunityMembers('INDIVIDUAL', null);
+  }
 
   @Get('shg/requests')
   @ApiOperation({ summary: 'Get all pending SHG approval requests' })
@@ -53,14 +65,26 @@ export class CommunityManagementController {
   }
 
   @Patch(':id/approve')
-  @ApiOperation({ summary: 'Approve a community member request' })
+  @ApiOperation({ summary: 'Approve a community member request via PATCH' })
   async approveMember(@Param('id') id: string) {
     return this.service.approveMember(id);
   }
 
+  @Post(':id/approve')
+  @ApiOperation({ summary: 'Approve a community member request via POST' })
+  async approveMemberPost(@Param('id') id: string) {
+    return this.service.approveMember(id);
+  }
+
   @Patch(':id/reject')
-  @ApiOperation({ summary: 'Reject a community member request' })
+  @ApiOperation({ summary: 'Reject a community member request via PATCH' })
   async rejectMember(@Param('id') id: string) {
+    return this.service.rejectMember(id);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Reject a community member request via POST' })
+  async rejectMemberPost(@Param('id') id: string) {
     return this.service.rejectMember(id);
   }
 }

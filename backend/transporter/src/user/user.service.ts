@@ -14,10 +14,11 @@ export class UserService {
         address: true,
         drivingDetail: true,
         bankDetails: true,
-        vehicles: true,
+        otherDetails: true,
         routeDetail: true,
         milkVanDetail: true,
         transporterDetail: true,
+        stepTracking: true,
       },
     });
 
@@ -27,11 +28,22 @@ export class UserService {
 
     const [firstName, ...lastNameParts] = (user.fullName || '').split(' ');
 
+    let vehicleCategory = null;
+    if (user.transporterDetail?.vehicleCategory) {
+      vehicleCategory = user.transporterDetail.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+    } else {
+      const st4 = user.stepTracking?.find((st) => st.step === 4);
+      if (st4 && st4.data) {
+        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+        vehicleCategory = st4Data.vehicleCategory === 'MILK_VAN' ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+      }
+    }
+
     return {
       ...user,
       requestId: user.id,
       transporterUniqueId: user.uniqueCode,
-      vehicleCategory: user.transporterDetail?.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : (user.transporterDetail?.vehicleCategory ? VehicleCategory.PERSONAL : null),
+      vehicleCategory,
       personalDetails: user.address ? {
         firstName: firstName || '',
         lastName: lastNameParts.join(' ') || '',
@@ -39,13 +51,13 @@ export class UserService {
         state: user.address.state,
         district: user.address.district,
         taluka: user.address.taluka,
-        residentialAddress: user.address.addressLine1,
+        residentialAddress: user.address.houseNo,
         pinCode: user.address.pincode,
         profilePhoto: user.profilePhoto,
       } : null,
       drivingDetails: user.drivingDetail,
       bankDetails: user.bankDetails?.[0] || null,
-      vehicleDetails: user.vehicles?.[0] || null,
+      vehicleDetails: user.otherDetails?.[0] || null,
       routeDetails: user.routeDetail,
       milkVanDetails: user.milkVanDetail,
       milkVanRoute: user.routeDetail,
@@ -57,14 +69,26 @@ export class UserService {
       where: { id: userId },
       include: {
         address: true,
-        vehicles: true,
+        otherDetails: true,
         routeDetail: true,
         transporterDetail: true,
+        stepTracking: true,
       },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    let vehicleCategory = 'Not selected';
+    if (user.transporterDetail?.vehicleCategory) {
+      vehicleCategory = user.transporterDetail.vehicleCategory;
+    } else {
+      const st4 = user.stepTracking?.find((st) => st.step === 4);
+      if (st4 && st4.data) {
+        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+        vehicleCategory = st4Data.vehicleCategory || 'Not selected';
+      }
     }
 
     const userName = user.fullName || user.phoneNumber;
@@ -76,8 +100,8 @@ export class UserService {
       currentStep: user.currentStep,
       applicationStatus: user.applicationStatus,
       highlights: {
-        vehicle: user.vehicles?.[0]?.vehicleName || 'Not updated',
-        category: user.transporterDetail?.vehicleCategory || 'Not selected',
+        vehicle: user.otherDetails?.[0]?.vehicleName || 'Not updated',
+        category: vehicleCategory,
         route: user.routeDetail?.operatingArea || 'Not updated',
       },
     };
@@ -86,7 +110,18 @@ export class UserService {
   private calculateCompletion(user: any): number {
     if (user.currentStep >= 8) return 100;
     
-    const maxSteps = user.transporterDetail?.vehicleCategory === VehicleType.MILK_VAN ? 7 : 6;
+    let isMilkVan = false;
+    if (user.transporterDetail?.vehicleCategory) {
+      isMilkVan = user.transporterDetail.vehicleCategory === VehicleType.MILK_VAN;
+    } else {
+      const st4 = user.stepTracking?.find((st: any) => st.step === 4);
+      if (st4 && st4.data) {
+        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+        isMilkVan = st4Data.vehicleCategory === 'MILK_VAN';
+      }
+    }
+
+    const maxSteps = isMilkVan ? 7 : 6;
     const current = Math.min(user.currentStep, maxSteps);
     
     return Math.round((current / maxSteps) * 100);

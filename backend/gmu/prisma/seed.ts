@@ -431,323 +431,321 @@ async function main() {
   console.log('Seeding Orders...');
   await prisma.orderAssignment.deleteMany({});
   await prisma.order.deleteMany({});
+  await prisma.seller.deleteMany({});
+  await prisma.buyer.deleteMany({});
 
-  const approvedShgs = await prisma.communityMember.findMany({
-    where: { type: 'SHG', status: 'APPROVED' },
-  });
-  const approvedTransporters = await prisma.transporterMember.findMany({
-    where: { status: 'APPROVED' },
-  });
+  console.log('Clearing public schema order and inventory tables...');
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_tracking RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_tracking RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.warehouse_inventory RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.sellers RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.buyers RESTART IDENTITY CASCADE;`);
 
-  if (approvedShgs.length === 0 || approvedTransporters.length === 0) {
-    console.log('WARNING: Seeding orders skipped because no approved SHGs or Transporters exist.');
-    return;
+  const sellersData = [
+    {
+      id: 1,
+      sellerCode: 'SEL001',
+      sellerName: 'Savitri Bai Patil',
+      mobileNumber: '9876500001',
+      email: 'savitri.patil@example.com',
+      addressLine1: 'Sakhi Center, Near Primary School',
+      village: 'Gadhinglaj',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    },
+    {
+      id: 2,
+      sellerCode: 'SEL002',
+      sellerName: 'Lata Mangeshk Gaikwad',
+      mobileNumber: '9876500002',
+      email: 'lata.gaikwad@example.com',
+      addressLine1: 'Main Galli, Ward 2',
+      village: 'Nesari',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416504'
+    },
+    {
+      id: 3,
+      sellerCode: 'SEL003',
+      sellerName: 'Anita Rameshw Chavan',
+      mobileNumber: '9876500003',
+      email: 'anita.chavan@example.com',
+      addressLine1: 'Temple Road',
+      village: 'Dundage',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416501'
+    },
+    {
+      id: 4,
+      sellerCode: 'SEL004',
+      sellerName: 'Kavita Suresha Kadam',
+      mobileNumber: '9876500004',
+      email: 'kavita.kadam@example.com',
+      addressLine1: 'Near Milk Dairy',
+      village: 'Mahagaon',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416503'
+    },
+    {
+      id: 5,
+      sellerCode: 'SEL005',
+      sellerName: 'Shalini Kishor Patil',
+      mobileNumber: '9876500005',
+      email: 'shalini.patil@example.com',
+      addressLine1: 'Grampanchayat Lane',
+      village: 'Inchnal',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    },
+    {
+      id: 6,
+      sellerCode: 'SEL006',
+      sellerName: 'Deepa Gajanan Kulkarni',
+      mobileNumber: '9876500006',
+      email: 'deepa.kulkarni@example.com',
+      addressLine1: 'Station Road',
+      village: 'Batkangale',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    }
+  ];
+
+  const buyersData = [
+    {
+      id: 1,
+      buyerCode: 'BUY001',
+      buyerName: 'Priya Ramesh Deshmukh',
+      mobileNumber: '9988700001',
+      email: 'priya.deshmukh@example.com',
+      addressLine1: 'Pragati Colony',
+      village: 'Gadhinglaj',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    },
+    {
+      id: 2,
+      buyerCode: 'BUY002',
+      buyerName: 'Gauri Shankar Patil',
+      mobileNumber: '9988700002',
+      email: 'gauri.patil@example.com',
+      addressLine1: 'Stand area, Main Road',
+      village: 'Nesari',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416504'
+    },
+    {
+      id: 3,
+      buyerCode: 'BUY003',
+      buyerName: 'Shweta Vinay More',
+      mobileNumber: '9988700003',
+      email: 'shweta.more@example.com',
+      addressLine1: 'Near Ganpati Temple',
+      village: 'Dundage',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416501'
+    },
+    {
+      id: 4,
+      buyerCode: 'BUY004',
+      buyerName: 'Neha Vikas Chavan',
+      mobileNumber: '9988700004',
+      email: 'neha.chavan@example.com',
+      addressLine1: 'Bazar Peth',
+      village: 'Mahagaon',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416503'
+    },
+    {
+      id: 5,
+      buyerCode: 'BUY005',
+      buyerName: 'Pooja Aditya Jadhav',
+      mobileNumber: '9988700005',
+      email: 'pooja.jadhav@example.com',
+      addressLine1: 'Near School No 1',
+      village: 'Inchnal',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    },
+    {
+      id: 6,
+      buyerCode: 'BUY006',
+      buyerName: 'Sonali Nitin Patil',
+      mobileNumber: '9988700006',
+      email: 'sonali.patil@example.com',
+      addressLine1: 'Naka Chowk',
+      village: 'Batkangale',
+      taluka: 'Gadhinglaj',
+      district: 'Kolhapur',
+      state: 'Maharashtra',
+      pincode: '416502'
+    }
+  ];
+
+  console.log('Inserting Sellers...');
+  for (const seller of sellersData) {
+    await prisma.seller.create({
+      data: {
+        id: seller.id,
+        sellerCode: seller.sellerCode,
+        sellerName: seller.sellerName,
+        mobileNumber: seller.mobileNumber,
+        email: seller.email,
+        addressLine1: seller.addressLine1,
+        village: seller.village,
+        taluka: seller.taluka,
+        district: seller.district,
+        state: seller.state,
+        pincode: seller.pincode
+      }
+    });
+
+    await prisma.$executeRaw`
+      INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, email, address_line1, village, taluka, district, state, pincode, created_at, updated_at)
+      VALUES (${seller.id}, ${seller.sellerCode}, ${seller.sellerName}, ${seller.mobileNumber}, ${seller.email}, ${seller.addressLine1}, ${seller.village}, ${seller.taluka}, ${seller.district}, ${seller.state}, ${seller.pincode}, NOW(), NOW());
+    `;
   }
 
-  // 1. Seed 20 Pickup Orders
+  console.log('Inserting Buyers...');
+  for (const buyer of buyersData) {
+    await prisma.buyer.create({
+      data: {
+        id: buyer.id,
+        buyerCode: buyer.buyerCode,
+        buyerName: buyer.buyerName,
+        mobileNumber: buyer.mobileNumber,
+        email: buyer.email,
+        addressLine1: buyer.addressLine1,
+        village: buyer.village,
+        taluka: buyer.taluka,
+        district: buyer.district,
+        state: buyer.state,
+        pincode: buyer.pincode
+      }
+    });
+
+    await prisma.$executeRaw`
+      INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, email, address_line1, village, taluka, district, state, pincode, created_at, updated_at)
+      VALUES (${buyer.id}, ${buyer.buyerCode}, ${buyer.buyerName}, ${buyer.mobileNumber}, ${buyer.email}, ${buyer.addressLine1}, ${buyer.village}, ${buyer.taluka}, ${buyer.district}, ${buyer.state}, ${buyer.pincode}, NOW(), NOW());
+    `;
+  }
+
+  // Reset auto-increment sequences for sellers and buyers
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
+
+  // Query existing products for mock order items
+  const existingProducts: any[] = await prisma.$queryRawUnsafe(`SELECT id, price FROM public.products;`);
+  let products = existingProducts;
+  if (products.length === 0) {
+    console.log('No products found in public.products, inserting default products for reference...');
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.products (id, name, category, price, stock, weight, seller_id, created_at)
+      VALUES 
+        (1, 'Pickle', 'FOOD', 110.0, 500, 1.0, 7, NOW()),
+        (3, 'Papad', 'FOOD', 100.0, 500, 0.5, 8, NOW());
+    `);
+    products = [
+      { id: 1, price: 110.0 },
+      { id: 3, price: 100.0 }
+    ];
+  }
+
+  // Seed 20 Pickup Orders
+  console.log('Seeding 20 pickup orders in ORDER_PLACED status...');
   for (let i = 1; i <= 20; i++) {
-    const shg = approvedShgs[(i - 1) % approvedShgs.length];
-    const transporter = approvedTransporters[(i - 1) % approvedTransporters.length];
+    const seller = sellersData[(i - 1) % sellersData.length];
+    const buyer = buyersData[(i - 1) % buyersData.length];
+    const product = products[(i - 1) % products.length];
     
-    let mainStatus = 'ORDER_PLACED';
-    let pickupShgStatus: string | null = null;
-    let pickupTransporterStatus: string | null = null;
-    let pickupShgId: string | null = null;
-    let pickupTransporterId: string | null = null;
-    let barcode: string | null = null;
+    const qty = 2 + (i % 5);
+    const itemPrice = Number(product.price || 100.0);
+    const totalAmount = qty * itemPrice;
+    const totalWeight = parseFloat((qty * 0.5).toFixed(2));
+    const orderNo = `ORD-PICK-${1000 + i}`;
 
-    const sellerLoc = {
-      village: shg.village || 'Gadhinglaj',
-      pincode: shg.pincode || '416502',
-      taluka: shg.taluka || 'Gadhinglaj',
-      district: shg.district || 'Kolhapur',
-      state: shg.state || 'Maharashtra'
-    };
-
-    const buyerLoc = getLocation(i + 3);
-    const buyerName = buyerNames[i % buyerNames.length];
-
+    // 1. Create in gmu schema Order table
     await prisma.order.create({
       data: {
-        orderId: `ORD-PICK-${1000 + i}`,
-        barcode,
-        sellerName: shg.fullName,
-        sellerMobile: shg.mobileNumber,
-        sellerVillage: sellerLoc.village,
-        sellerTaluka: sellerLoc.taluka,
-        sellerDistrict: sellerLoc.district,
-        sellerState: sellerLoc.state,
-        sellerPincode: sellerLoc.pincode,
-        
-        buyerName,
-        buyerMobile: '9988776655',
-        buyerVillage: buyerLoc.village,
-        buyerTaluka: buyerLoc.taluka,
-        buyerDistrict: buyerLoc.district,
-        buyerState: buyerLoc.state,
-        buyerPincode: buyerLoc.pincode,
-        
+        orderId: orderNo,
+        barcode: null,
+        sellerId: seller.id,
+        buyerId: buyer.id,
         productCount: 1,
-        totalQty: 2 + (i % 5),
-        totalWeight: 3.5 + i,
-        
-        pickupShgId,
-        pickupTransporterId,
-        mainStatus,
-        pickupShgStatus,
-        pickupTransporterStatus,
-      },
-    });
-  }
-
-  // 2. Seed 10 Drop Orders
-  for (let i = 1; i <= 10; i++) {
-    const shg = approvedShgs[(i - 1) % approvedShgs.length];
-    const transporter = approvedTransporters[(i - 1) % approvedTransporters.length];
-
-    let mainStatus = 'DROP_ASSIGNED';
-    let dropShgStatus: string | null = null;
-    let dropTransporterStatus: string | null = null;
-    let dropShgId: string | null = null;
-    let dropTransporterId: string | null = null;
-    let deliveredAt: Date | null = null;
-
-    // Distribute statuses across stages (0 to 6)
-    const stage = i % 7;
-
-    if (stage === 1) {
-      mainStatus = 'DROP_TRANSPORTER_ACCEPTED';
-      dropTransporterStatus = 'TRANSPORTER_ACCEPTED';
-      dropTransporterId = transporter.id;
-    } else if (stage === 2) {
-      mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
-      dropTransporterStatus = 'IN_TRANSIT_TO_DROP_SHG';
-      dropTransporterId = transporter.id;
-    } else if (stage === 3) {
-      mainStatus = 'PARCEL_AT_DROP_SHG';
-      dropTransporterStatus = 'DELIVERED';
-      dropTransporterId = transporter.id;
-    } else if (stage === 4) {
-      mainStatus = 'DROP_SHG_ACCEPTED';
-      dropShgStatus = 'ACCEPTED';
-      dropShgId = shg.id;
-      dropTransporterStatus = 'DELIVERED';
-      dropTransporterId = transporter.id;
-    } else if (stage === 5) {
-      mainStatus = 'DELIVERED';
-      dropShgStatus = 'DELIVERED';
-      dropShgId = shg.id;
-      dropTransporterStatus = 'DELIVERED';
-      dropTransporterId = transporter.id;
-      deliveredAt = new Date();
-    } else if (stage === 6) {
-      mainStatus = 'COMPLETED';
-      dropShgStatus = 'DELIVERED';
-      dropShgId = shg.id;
-      dropTransporterStatus = 'DELIVERED';
-      dropTransporterId = transporter.id;
-      deliveredAt = new Date();
-    }
-
-    const sellerName = individualNames[i % individualNames.length]; // Realistic seller name from our list
-    const sellerLoc = getLocation(i + 2);
-    const buyerLoc = {
-      village: shg.village || 'Nesari',
-      pincode: shg.pincode || '416504',
-      taluka: shg.taluka || 'Gadhinglaj',
-      district: shg.district || 'Kolhapur',
-      state: shg.state || 'Maharashtra'
-    };
-
-    const order = await prisma.order.create({
-      data: {
-        orderId: `ORD-DROP-${1000 + i}`,
-        sellerName,
-        sellerMobile: '9876543201',
-        sellerVillage: sellerLoc.village,
-        sellerTaluka: sellerLoc.taluka,
-        sellerDistrict: sellerLoc.district,
-        sellerState: sellerLoc.state,
-        sellerPincode: sellerLoc.pincode,
-
-        buyerName: shg.fullName,
-        buyerMobile: shg.mobileNumber,
-        buyerVillage: buyerLoc.village,
-        buyerTaluka: buyerLoc.taluka,
-        buyerDistrict: buyerLoc.district,
-        buyerState: buyerLoc.state,
-        buyerPincode: buyerLoc.pincode,
-
-        productCount: 1,
-        totalQty: 1 + (i % 3),
-        totalWeight: 2.0 + i * 0.5,
-
-        dropShgId,
-        dropTransporterId,
-        mainStatus,
-        dropShgStatus,
-        dropTransporterStatus,
-        deliveredAt,
-      },
+        totalQty: qty,
+        totalWeight: totalWeight,
+        pickupShgId: null,
+        pickupTransporterId: null,
+        mainStatus: 'ORDER_PLACED',
+        pickupShgStatus: null,
+        pickupTransporterStatus: null,
+      }
     });
 
-    // Create assignments to keep relations valid
-    if (mainStatus === 'DROP_ASSIGNED') {
-      await prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: transporter.id,
-          assigneeType: 'TRANSPORTER',
-          role: 'DROP',
-          status: 'PENDING',
-        },
-      });
-    } else if (mainStatus === 'DROP_TRANSPORTER_ACCEPTED' || mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || mainStatus === 'PARCEL_AT_DROP_SHG') {
-      await prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: transporter.id,
-          assigneeType: 'TRANSPORTER',
-          role: 'DROP',
-          status: 'ACCEPTED',
-        },
-      });
-    } else if (mainStatus === 'DROP_SHG_ACCEPTED' || mainStatus === 'DELIVERED' || mainStatus === 'COMPLETED') {
-      await prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: transporter.id,
-          assigneeType: 'TRANSPORTER',
-          role: 'DROP',
-          status: 'ACCEPTED',
-        },
-      });
-      await prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: shg.id,
-          assigneeType: 'SHG',
-          role: 'DROP',
-          status: 'ACCEPTED',
-        },
-      });
-    }
+    // 2. Create in public schema master_orders
+    const insertMo: any[] = await prisma.$queryRawUnsafe(`
+      INSERT INTO public.master_orders (order_number, buyer_id, total_amount, payment_status, status, created_at, updated_at)
+      VALUES ($1, $2, $3, 'PENDING', 'CREATED', NOW(), NOW())
+      RETURNING id;
+    `, orderNo, buyer.id, totalAmount);
+    const masterOrderId = insertMo[0].id;
+
+    // 3. Create in public schema master_order_items
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.master_order_items (master_order_id, product_id, seller_id, quantity, price)
+      VALUES ($1, $2, $3, $4, $5);
+    `, masterOrderId, product.id, seller.id, qty, itemPrice);
+
+    // 4. Create in public schema pickup_orders
+    const insertPo: any[] = await prisma.$queryRawUnsafe(`
+      INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
+      VALUES ($1, $2, $3, 'PENDING', NOW())
+      RETURNING id;
+    `, `PKP-${orderNo}`, masterOrderId, seller.id);
+    const pickupOrderId = insertPo[0].id;
+
+    // 5. Create in public schema pickup_order_items
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity)
+      VALUES ($1, $2, $3);
+    `, pickupOrderId, product.id, qty);
+
+    // 6. Create in public schema pickup_tracking
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
+      VALUES ($1, 'PENDING', 'Order created', NOW());
+    `, pickupOrderId);
   }
 
-  // 3. Seed 5 Transporter Return Orders
-  for (let i = 1; i <= 5; i++) {
-    const shg = approvedShgs[(i - 1) % approvedShgs.length];
-    const transporter = approvedTransporters[(i - 1) % approvedTransporters.length];
-
-    const mainStatus = i % 2 === 0 ? 'ON_HOLD' : 'TRANSPORTER_RETURN';
-    const buyerName = buyerNames[(i + 4) % buyerNames.length]; // Realistic buyer name
-    const buyerLoc = getLocation(i + 1);
-    const sellerLoc = {
-      village: shg.village || 'Gadhinglaj',
-      pincode: shg.pincode || '416502',
-      taluka: shg.taluka || 'Gadhinglaj',
-      district: shg.district || 'Kolhapur',
-      state: shg.state || 'Maharashtra'
-    };
-
-    await prisma.order.create({
-      data: {
-        orderId: `ORD-RET-T-${1000 + i}`,
-        sellerName: shg.fullName,
-        sellerMobile: shg.mobileNumber,
-        sellerVillage: sellerLoc.village,
-        sellerTaluka: sellerLoc.taluka,
-        sellerDistrict: sellerLoc.district,
-        sellerState: sellerLoc.state,
-        sellerPincode: sellerLoc.pincode,
-
-        buyerName,
-        buyerMobile: '9000000000',
-        buyerVillage: buyerLoc.village,
-        buyerTaluka: buyerLoc.taluka,
-        buyerDistrict: buyerLoc.district,
-        buyerState: buyerLoc.state,
-        buyerPincode: buyerLoc.pincode,
-
-        productCount: 1,
-        totalQty: 2,
-        totalWeight: 4.0,
-
-        dropTransporterId: transporter.id,
-        mainStatus,
-        returnType: 'TRANSPORTER_RETURN',
-      },
-    });
-  }
-
-  // 4. Seed 6 Buyer Return Orders
-  for (let i = 1; i <= 6; i++) {
-    const shg = approvedShgs[(i - 1) % approvedShgs.length];
-    const transporter = approvedTransporters[(i - 1) % approvedTransporters.length];
-
-    let mainStatus = 'RETURN_SHG_ASSIGNED';
-    let returnTransporterId: string | null = null;
-
-    if (i === 2) {
-      mainStatus = 'RETURN_PARCEL_AT_SHG';
-    } else if (i === 3) {
-      mainStatus = 'RETURN_TRANSPORTER_PENDING';
-    } else if (i === 4) {
-      mainStatus = 'RETURN_TRANSPORTER_ACCEPTED';
-      returnTransporterId = transporter.id;
-    } else if (i === 5) {
-      mainStatus = 'RETURN_IN_TRANSIT_TO_GMU';
-      returnTransporterId = transporter.id;
-    } else if (i === 6) {
-      mainStatus = 'COMPLETED';
-      returnTransporterId = transporter.id;
-    }
-
-    const sellerName = individualNames[(i + 4) % individualNames.length]; // Realistic male seller name
-    const sellerLoc = getLocation(i + 2);
-    const buyerLoc = {
-      village: shg.village || 'Nesari',
-      pincode: shg.pincode || '416504',
-      taluka: shg.taluka || 'Gadhinglaj',
-      district: shg.district || 'Kolhapur',
-      state: shg.state || 'Maharashtra'
-    };
-
-    await prisma.order.create({
-      data: {
-        orderId: `ORD-RET-B-${1000 + i}`,
-        sellerName,
-        sellerMobile: '9876543201',
-        sellerVillage: sellerLoc.village,
-        sellerTaluka: sellerLoc.taluka,
-        sellerDistrict: sellerLoc.district,
-        sellerState: sellerLoc.state,
-        sellerPincode: sellerLoc.pincode,
-
-        buyerName: shg.fullName,
-        buyerMobile: shg.mobileNumber,
-        buyerVillage: buyerLoc.village,
-        buyerTaluka: buyerLoc.taluka,
-        buyerDistrict: buyerLoc.district,
-        buyerState: buyerLoc.state,
-        buyerPincode: buyerLoc.pincode,
-
-        productCount: 1,
-        totalQty: 3,
-        totalWeight: 5.5,
-
-        dropShgId: shg.id,
-        dropTransporterId: transporter.id,
-        pickupReturnShgId: shg.id,
-        returnTransporterId,
-
-        mainStatus,
-        returnType: 'BUYER_RETURN',
-      },
-    });
-  }
-
-  console.log('Seeded Orders.');
   console.log('Database Seeding Completed Successfully!');
 }
 

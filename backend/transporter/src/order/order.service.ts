@@ -521,7 +521,7 @@ export class OrderService {
           
           if (pickupSeller.address) {
             const addr = pickupSeller.address;
-            const addressParts = [addr.addressLine1, addr.village, addr.taluka, addr.pincode].filter(Boolean);
+            const addressParts = [addr.houseNo, addr.village, addr.taluka, addr.pincode].filter(Boolean);
             dynamicAddress = addressParts.length > 0 ? addressParts.join(', ') : dynamicAddress;
             dynamicVillage = addr.village || dynamicVillage;
             dynamicPincode = addr.pincode || dynamicPincode;

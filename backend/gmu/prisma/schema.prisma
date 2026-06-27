@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model AdminUser {
@@ -154,23 +156,10 @@ model Order {
   orderId                 String            @unique
   barcode                 String?           @unique
   
-  // Seller details
-  sellerName              String
-  sellerMobile            String
-  sellerVillage           String
-  sellerTaluka            String
-  sellerDistrict          String
-  sellerState             String
-  sellerPincode           String
-  
-  // Buyer details
-  buyerName               String
-  buyerMobile             String
-  buyerVillage            String
-  buyerTaluka            String
-  buyerDistrict           String
-  buyerState              String
-  buyerPincode            String
+  sellerId                Int
+  seller                  Seller            @relation(fields: [sellerId], references: [id])
+  buyerId                 Int
+  buyer                   Buyer             @relation(fields: [buyerId], references: [id])
   
   // Package dimensions
   productCount            Int               @default(1)
@@ -220,5 +209,47 @@ model OrderAssignment {
   status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Seller {
+  id           Int      @id @default(autoincrement())
+  sellerCode   String   @unique @map("seller_code")
+  sellerName   String   @map("seller_name")
+  mobileNumber String   @map("mobile_number")
+  email        String?
+  addressLine1 String?  @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  village      String
+  taluka       String
+  district     String
+  state        String
+  pincode      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  orders       Order[]
+
+  @@map("sellers")
+}
+
+model Buyer {
+  id           Int      @id @default(autoincrement())
+  buyerCode    String   @unique @map("buyer_code")
+  buyerName    String   @map("buyer_name")
+  mobileNumber String   @map("mobile_number")
+  email        String?
+  addressLine1 String?  @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  village      String
+  taluka       String
+  district     String
+  state        String
+  pincode      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  orders       Order[]
+
+  @@map("buyers")
 }
 

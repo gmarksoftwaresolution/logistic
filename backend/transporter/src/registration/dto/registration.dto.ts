@@ -22,7 +22,7 @@ import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const NAME_REGEX = /^[a-zA-Z ]+$/;
-const ADDRESS_REGEX = /^[a-zA-Z0-9\s,.-]+$/;
+const ADDRESS_REGEX = /^[\s\S]*$/;
 const MOBILE_REGEX = /^[6789]\d{9}$/;
 const PIN_REGEX = /^\d{6}$/;
 const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -172,7 +172,7 @@ export class Step1PersonalDetailsDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(3)
-  @MaxLength(100)
+  @MaxLength(500)
   @Matches(ADDRESS_REGEX, { message: 'Address contains invalid characters' })
   @Transform(({ value }) => value?.trim())
   residentialAddress: string;

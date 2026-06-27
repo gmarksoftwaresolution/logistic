@@ -38,6 +38,18 @@ export class AuthService {
       throw new ForbiddenException('Registration incomplete. Please complete sign up first.');
     }
 
+    if (user.applicationStatus === ApplicationStatus.COMPLETED || user.applicationStatus === ApplicationStatus.UNDER_REVIEW) {
+      throw new ForbiddenException('Your application is pending approval.');
+    }
+
+    if (user.applicationStatus === ApplicationStatus.REJECTED) {
+      throw new ForbiddenException(
+        user.rejectionReason 
+          ? `Your application has been rejected: ${user.rejectionReason}` 
+          : 'Your application has been rejected.'
+      );
+    }
+
     console.log(`Sending OTP 123456 to ${mobileNumber}`);
     return { success: true, message: 'OTP sent successfully (Simulated: 123456)' };
   }
@@ -59,6 +71,18 @@ export class AuthService {
       throw new ForbiddenException('Registration incomplete. Please complete sign up first.');
     }
 
+    if (user.applicationStatus === ApplicationStatus.COMPLETED || user.applicationStatus === ApplicationStatus.UNDER_REVIEW) {
+      throw new ForbiddenException('Your application is pending approval.');
+    }
+
+    if (user.applicationStatus === ApplicationStatus.REJECTED) {
+      throw new ForbiddenException(
+        user.rejectionReason 
+          ? `Your application has been rejected: ${user.rejectionReason}` 
+          : 'Your application has been rejected.'
+      );
+    }
+
     const { accessToken, refreshToken } = await this.generateTokens(user);
 
     const response: any = {
@@ -77,10 +101,6 @@ export class AuthService {
         transporterUniqueId: user.uniqueCode,
       },
     };
-
-    if (user.applicationStatus === ApplicationStatus.REJECTED) {
-      response.user.rejectionReason = user.rejectionReason;
-    }
 
     return response;
   }

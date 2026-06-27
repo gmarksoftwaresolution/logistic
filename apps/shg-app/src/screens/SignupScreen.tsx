@@ -1828,6 +1828,8 @@ export default function SignupScreen({
       };
       const response = await signupService.submitOtherDetails({
         storageSpace: storageSpace.trim(),
+        storageWidth: storageWidth ? parseFloat(storageWidth) : undefined,
+        storageLength: storageLength ? parseFloat(storageLength) : undefined,
         hasVehicle: hasVehicle === 'yes',
         vehicle: hasVehicle === 'yes' ? {
           vehicleType: vehicleTypeMap[vehicleType] || undefined,

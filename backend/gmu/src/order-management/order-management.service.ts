@@ -340,7 +340,7 @@ export class OrderManagementService {
 
   // --- QUERY ENDPOINTS ---
 
-  async getOrderDetails(id: string) {
+  async getOrderDetails(id: string): Promise<any> {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id }, { orderId: id }] },
       include: { assignments: true },
@@ -348,7 +348,7 @@ export class OrderManagementService {
     if (!order) {
       throw new NotFoundException(`Order with ID/OrderId ${id} not found`);
     }
-    return order;
+    return order as any;
   }
 
   async getPickupNewOrders(filter?: OrderFilterDto) {
@@ -625,27 +625,52 @@ export class OrderManagementService {
       throw new BadRequestException(`Order ID ${orderId} already exists`);
     }
 
+    // Find or create Seller
+    let seller = await this.prisma.seller.findFirst({
+      where: { mobileNumber: dto.sellerMobile },
+    });
+    if (!seller) {
+      seller = await this.prisma.seller.create({
+        data: {
+          sellerCode: `SEL-${Math.floor(100000 + Math.random() * 900000)}`,
+          sellerName: dto.sellerName,
+          mobileNumber: dto.sellerMobile,
+          village: dto.sellerVillage,
+          taluka: dto.sellerTaluka,
+          district: dto.sellerDistrict,
+          state: dto.sellerState,
+          pincode: dto.sellerPincode,
+        },
+      });
+    }
+
+    // Find or create Buyer
+    let buyer = await this.prisma.buyer.findFirst({
+      where: { mobileNumber: dto.buyerMobile },
+    });
+    if (!buyer) {
+      buyer = await this.prisma.buyer.create({
+        data: {
+          buyerCode: `BUY-${Math.floor(100000 + Math.random() * 900000)}`,
+          buyerName: dto.buyerName,
+          mobileNumber: dto.buyerMobile,
+          village: dto.buyerVillage,
+          taluka: dto.buyerTaluka,
+          district: dto.buyerDistrict,
+          state: dto.buyerState,
+          pincode: dto.buyerPincode,
+        },
+      });
+    }
+
     return this.prisma.order.create({
       data: {
         orderId,
-        sellerName: dto.sellerName,
-        sellerMobile: dto.sellerMobile,
-        sellerVillage: dto.sellerVillage,
-        sellerTaluka: dto.sellerTaluka,
-        sellerDistrict: dto.sellerDistrict,
-        sellerState: dto.sellerState,
-        sellerPincode: dto.sellerPincode,
-        buyerName: dto.buyerName,
-        buyerMobile: dto.buyerMobile,
-        buyerVillage: dto.buyerVillage,
-        buyerTaluka: dto.buyerTaluka,
-        buyerDistrict: dto.buyerDistrict,
-        buyerState: dto.buyerState,
-        buyerPincode: dto.buyerPincode,
+        sellerId: seller.id,
+        buyerId: buyer.id,
         productCount: dto.productCount,
         totalQty: dto.totalQty,
         totalWeight: dto.totalWeight,
-        // Phase 1: ORDER_PLACED is the new canonical status for a freshly created order
         mainStatus: 'ORDER_PLACED',
       },
     });

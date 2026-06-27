@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TransporterManagementService } from './transporter-management.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,6 +9,18 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @ApiBearerAuth()
 export class TransporterManagementController {
   constructor(private readonly service: TransporterManagementService) {}
+
+  @Get('route-partners')
+  @ApiOperation({ summary: 'Get all Route Partner transporters' })
+  async getRoutePartners() {
+    return this.service.getTransporters('ROUTE_PARTNER', null);
+  }
+
+  @Get('personal')
+  @ApiOperation({ summary: 'Get all Personal transporters' })
+  async getPersonal() {
+    return this.service.getTransporters('PERSONAL', null);
+  }
 
   @Get('route-partners/requests')
   @ApiOperation({ summary: 'Get all pending Route Partner approval requests' })
@@ -53,14 +65,26 @@ export class TransporterManagementController {
   }
 
   @Patch(':id/approve')
-  @ApiOperation({ summary: 'Approve a transporter member request' })
+  @ApiOperation({ summary: 'Approve a transporter member request via PATCH' })
   async approveTransporter(@Param('id') id: string) {
     return this.service.approveTransporter(id);
   }
 
+  @Post(':id/approve')
+  @ApiOperation({ summary: 'Approve a transporter member request via POST' })
+  async approveTransporterPost(@Param('id') id: string) {
+    return this.service.approveTransporter(id);
+  }
+
   @Patch(':id/reject')
-  @ApiOperation({ summary: 'Reject a transporter member request' })
+  @ApiOperation({ summary: 'Reject a transporter member request via PATCH' })
   async rejectTransporter(@Param('id') id: string) {
+    return this.service.rejectTransporter(id);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Reject a transporter member request via POST' })
+  async rejectTransporterPost(@Param('id') id: string) {
     return this.service.rejectTransporter(id);
   }
 }

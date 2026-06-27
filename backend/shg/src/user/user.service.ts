@@ -14,7 +14,7 @@ export class UserService {
         address: true,
         documents: true,
         bankDetails: true,
-        vehicles: true,
+        otherDetails: true,
         applications: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -73,6 +73,9 @@ export class UserService {
       where: { id: userId },
       include: {
         shgDetail: true,
+        stepTracking: {
+          where: { step: 2 }
+        },
         applications: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -84,6 +87,19 @@ export class UserService {
 
     const latestApp = user.applications[0];
 
+    let resolvedRole: string = user.role;
+    if (user.role === 'SHG') {
+      if (user.shgDetail?.shgRole) {
+        resolvedRole = user.shgDetail.shgRole;
+      } else {
+        const step2 = user.stepTracking.find(t => t.step === 2);
+        if (step2 && step2.data) {
+          const data = step2.data as any;
+          resolvedRole = data.shgRole || user.role;
+        }
+      }
+    }
+
     return {
       id: user.id,
       fullName: user.fullName || 'N/A',
@@ -91,9 +107,7 @@ export class UserService {
       signupStep: user.currentStep === 7 ? 'COMPLETED' : 'PROFILE',
       isCompleted: user.currentStep === 7,
       mobileNumber: this.maskMobile(user.phoneNumber),
-      role: user.role === 'SHG'
-        ? user.shgDetail?.shgRole
-        : user.role,
+      role: resolvedRole,
       applicationStatus: latestApp?.status || null,
       requestId: user.uniqueCode || latestApp?.id || null,
       shgUniqueId: user.uniqueCode,

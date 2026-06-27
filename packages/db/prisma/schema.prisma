@@ -101,7 +101,7 @@ model User {
   address             Address?
   bankDetails         BankDetail[]
   documents           Document[]
-  vehicles            Vehicle[]
+  otherDetails        OtherDetails[]
 
   shgDetail           ShgDetail?
   businessDetail      BusinessDetail?
@@ -117,14 +117,9 @@ model User {
   auditLogs           AuditLog[]
 
   // New clean architecture relations
-  buyerOrders         MasterOrder[]       @relation("BuyerOrders")
-  sellerOrderItems    MasterOrderItem[]   @relation("SellerOrderItems")
-  
-  sellerPickupOrders  PickupOrder[]       @relation("SellerPickupOrders")
   shgPickupOrders     PickupOrder[]       @relation("ShgPickupOrders")
   transporterPickups  PickupOrder[]       @relation("TransporterPickupOrders")
   
-  buyerDropOrders     DropOrder[]         @relation("BuyerDropOrders")
   shgDropOrders       DropOrder[]         @relation("ShgDropOrders")
   transporterDrops    DropOrder[]         @relation("TransporterDropOrders")
 
@@ -142,8 +137,8 @@ model Address {
   userId        Int      @unique
   user          User     @relation(fields: [userId], references: [id])
 
-  addressLine1  String
-  addressLine2  String?
+  houseNo       String
+  deliveryAddress String?
 
   village       String?
   taluka        String?
@@ -191,12 +186,10 @@ model Document {
 
   aadhaarNumber       String?
   panNumber           String?
-  drivingLicenseNo    String?
 
   aadhaarFrontUrl     String?
   aadhaarBackUrl      String?
   panCardUrl          String?
-  drivingLicenseUrl   String?
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -204,13 +197,13 @@ model Document {
   @@index([userId])
 }
 
-model Vehicle {
+model OtherDetails {
   id                    Int         @id @default(autoincrement())
 
   userId                Int
   user                  User        @relation(fields: [userId], references: [id])
 
-  vehicleType           VehicleType
+  vehicleType           String
 
   vehicleName           String?
   registrationNumber    String?
@@ -219,6 +212,12 @@ model Vehicle {
   rcUrl                 String?
   insuranceUrl          String?
   vehicleImageUrl       String?
+
+  heihgt                Float?
+  width                 Float?
+  storageSpace          String?
+  DLurl                 String?
+  wheeler               String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -277,6 +276,7 @@ model ShgDetail {
   userId              Int         @unique
   user                User        @relation(fields: [userId], references: [id])
 
+  fullName            String?
   shgName             String?
   shgLeaderName       String?
   shgLeaderContact    String?
@@ -288,6 +288,8 @@ model ShgDetail {
   crpEmail            String?
 
   groupSize           Int?
+  imgUrl              String?
+  age                 Int?
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -301,8 +303,6 @@ model BusinessDetail {
 
   producesProduct     Boolean     @default(false)
   businessTeamSize    Int?
-
-  storageSpace        String?
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -340,6 +340,8 @@ model DrivingDetail {
   expiryDate            DateTime
 
   drivingExperience     Int?
+  drivingLicenseNo      String?
+  drivingLicenseUrl     String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -439,6 +441,9 @@ model Product {
   stock       Int      @default(0)
   weight      Float?
   image       String?
+  dailyProduction  Float?
+  Unit             String?
+  weeklyProduction Float?
   createdAt   DateTime @default(now()) @map("created_at")
 
   masterOrderItems   MasterOrderItem[]
@@ -455,7 +460,7 @@ model MasterOrder {
   id            Int               @id @default(autoincrement())
   orderNumber   String            @unique @map("order_number")
   buyerId       Int               @map("buyer_id")
-  buyer         User              @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyer         Buyer             @relation("BuyerOrders", fields: [buyerId], references: [id])
   totalAmount   Float             @map("total_amount")
   paymentMethod String?           @map("payment_method")
   paymentStatus String            @default("PENDING") @map("payment_status")
@@ -479,7 +484,7 @@ model MasterOrderItem {
   productId     Int         @map("product_id")
   product       Product     @relation(fields: [productId], references: [id])
   sellerId      Int         @map("seller_id")
-  seller        User        @relation("SellerOrderItems", fields: [sellerId], references: [id])
+  seller        Seller      @relation(fields: [sellerId], references: [id])
   quantity      Int
   price         Float
 
@@ -495,7 +500,7 @@ model PickupOrder {
   masterOrderId      Int               @map("master_order_id")
   masterOrder        MasterOrder       @relation(fields: [masterOrderId], references: [id])
   sellerId           Int               @map("seller_id")
-  seller             User              @relation("SellerPickupOrders", fields: [sellerId], references: [id])
+  seller             Seller            @relation(fields: [sellerId], references: [id])
   shgId              Int?              @map("shg_id")
   shg                User?             @relation("ShgPickupOrders", fields: [shgId], references: [id])
   transporterId      Int?              @map("transporter_id")
@@ -560,7 +565,7 @@ model DropOrder {
   masterOrderId   Int             @map("master_order_id")
   masterOrder     MasterOrder     @relation(fields: [masterOrderId], references: [id])
   buyerId         Int             @map("buyer_id")
-  buyer           User            @relation("BuyerDropOrders", fields: [buyerId], references: [id])
+  buyer           Buyer           @relation(fields: [buyerId], references: [id])
   shgId           Int?            @map("shg_id")
   shg             User?           @relation("ShgDropOrders", fields: [shgId], references: [id])
   transporterId   Int?            @map("transporter_id")
@@ -639,5 +644,63 @@ model Pincode {
   @@index([pincode])
   @@map("pincodes")
 }
+
+model PincodeDirectory {
+  id        Int      @id @default(autoincrement())
+  pincode   String
+  village   String
+  taluka    String
+  district  String
+  state     String
+  country   String   @default("India")
+
+  @@index([pincode])
+  @@map("pincode_directory")
+}
+
+model Seller {
+  id           Int      @id @default(autoincrement())
+  sellerCode   String   @unique @map("seller_code")
+  sellerName   String   @map("seller_name")
+  mobileNumber String   @map("mobile_number")
+  email        String?
+  addressLine1 String?  @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  village      String
+  taluka       String
+  district     String
+  state        String
+  pincode      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  masterOrderItems  MasterOrderItem[]
+  pickupOrders      PickupOrder[]
+
+  @@map("sellers")
+}
+
+model Buyer {
+  id           Int      @id @default(autoincrement())
+  buyerCode    String   @unique @map("buyer_code")
+  buyerName    String   @map("buyer_name")
+  mobileNumber String   @map("mobile_number")
+  email        String?
+  addressLine1 String?  @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  village      String
+  taluka       String
+  district     String
+  state        String
+  pincode      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  masterOrders     MasterOrder[]     @relation("BuyerOrders")
+  dropOrders       DropOrder[]
+
+  @@map("buyers")
+}
+
 
 

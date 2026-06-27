@@ -138,37 +138,10 @@ export class SignupService {
     };
   }
 
-  // ─── SHG Details (SHG flow only) ────────────────────────────────────────────
-
   async saveShgDetails(userId: number, dto: ShgDetailsDto) {
     const user = await this.ensureVerified(userId);
     this.ensureUserType(user.role, UserRole.SHG);
     this.validateStep(user.currentStep, 1);
-
-    await this.prisma.shgDetail.upsert({
-      where: { userId },
-      create: {
-        userId,
-        shgName: dto.shgName || null,
-        shgLeaderName: dto.shgLeaderName || null,
-        shgLeaderContact: dto.shgLeaderContact || null,
-        shgRole: dto.shgRole,
-        crpName: dto.crpName || null,
-        crpMobile: dto.crpMobile || null,
-        crpEmail: dto.crpEmail || null,
-        groupSize: dto.shgGroupSize || null,
-      },
-      update: {
-        shgName: dto.shgName || null,
-        shgLeaderName: dto.shgLeaderName || null,
-        shgLeaderContact: dto.shgLeaderContact || null,
-        shgRole: dto.shgRole,
-        crpName: dto.crpName || null,
-        crpMobile: dto.crpMobile || null,
-        crpEmail: dto.crpEmail || null,
-        groupSize: dto.shgGroupSize || null,
-      },
-    });
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -190,29 +163,13 @@ export class SignupService {
     this.ensureUserType(user.role, UserRole.INDIVIDUAL);
     this.validateStep(user.currentStep, 1);
 
-    // If role is DELIVERY_PARTNER or DRIVER, they register as TRANSPORTER
-    const finalRole = (dto.nonShgRole === 'DELIVERY_PARTNER' || dto.nonShgRole === 'DRIVER')
-      ? UserRole.TRANSPORTER
-      : UserRole.INDIVIDUAL;
-
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        role: finalRole,
+        role: UserRole.INDIVIDUAL,
         currentStep: 2,
       },
     });
-
-    if (finalRole === UserRole.TRANSPORTER) {
-      await this.prisma.transporterDetail.upsert({
-        where: { userId },
-        create: {
-          userId,
-          transporterCode: user.uniqueCode,
-        },
-        update: {},
-      });
-    }
 
     await this.trackStep(userId, 2, 'COMPLETED', dto);
 
@@ -240,6 +197,9 @@ export class SignupService {
           name: p.productName,
           category: p.category,
           price: p.price || 0,
+          dailyProduction: p.dailyProductionQty || null,
+          weeklyProduction: p.weeklyProduction || null,
+          Unit: p.unit || null,
         })),
       });
     }
@@ -284,7 +244,7 @@ export class SignupService {
       where: { userId },
       create: {
         userId,
-        addressLine1: dto.houseNo,
+        houseNo: dto.houseNo,
         village: dto.village,
         taluka: dto.taluka,
         district: dto.district,
@@ -293,7 +253,7 @@ export class SignupService {
         landmark: dto.landmark || null,
       },
       update: {
-        addressLine1: dto.houseNo,
+        houseNo: dto.houseNo,
         village: dto.village,
         taluka: dto.taluka,
         district: dto.district,
@@ -406,36 +366,51 @@ export class SignupService {
     try {
       const user = await this.ensureVerified(userId);
 
-      // 1. Save storage space to BusinessDetail
-      await this.prisma.businessDetail.upsert({
-        where: { userId },
-        create: {
+      // 1 & 2. Handle OtherDetails (Storage Space + Vehicle info)
+      let width: number | null = null;
+      let height: number | null = null;
+
+      if (dto.storageWidth !== undefined && dto.storageWidth !== null) {
+        width = dto.storageWidth;
+      }
+      if (dto.storageLength !== undefined && dto.storageLength !== null) {
+        height = dto.storageLength;
+      }
+
+      if (width === null || height === null) {
+        if (dto.storageSpace) {
+          const match = dto.storageSpace.match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
+          if (match) {
+            if (width === null) width = parseFloat(match[1]);
+            if (height === null) height = parseFloat(match[2]);
+          } else {
+            const num = parseFloat(dto.storageSpace);
+            if (!isNaN(num) && num > 0) {
+              const side = Math.round(Math.sqrt(num));
+              if (width === null) width = side;
+              if (height === null) height = side;
+            }
+          }
+        }
+      }
+
+      await this.prisma.otherDetails.deleteMany({ where: { userId } });
+      await this.prisma.otherDetails.create({
+        data: {
           userId,
-          storageSpace: dto.storageSpace,
-        },
-        update: {
-          storageSpace: dto.storageSpace,
+          vehicleType: (dto.hasVehicle && dto.vehicle?.vehicleType) ? dto.vehicle.vehicleType : VehicleType.OTHER,
+          vehicleName: null,
+          registrationNumber: (dto.hasVehicle && dto.vehicle?.vehicleRegistrationNo) ? dto.vehicle.vehicleRegistrationNo : null,
+          licenseNumber: (dto.hasVehicle && (dto.vehicle?.licenseNumber || dto.vehicle?.drivingLicenseNumber)) ? (dto.vehicle.licenseNumber || dto.vehicle.drivingLicenseNumber) : null,
+          rcUrl: null,
+          insuranceUrl: null,
+          vehicleImageUrl: (dto.hasVehicle && dto.vehicle?.vehicleImageUrl) ? dto.vehicle.vehicleImageUrl : null,
+          heihgt: height,
+          width: width,
+          storageSpace: dto.storageSpace || null,
+          DLurl: (dto.hasVehicle && dto.vehicle?.drivingLicenseImageUrl) ? dto.vehicle.drivingLicenseImageUrl : null,
         },
       });
-
-      // 2. Handle Vehicle
-      if (dto.hasVehicle && dto.vehicle) {
-        await this.prisma.vehicle.deleteMany({ where: { userId } });
-        await this.prisma.vehicle.create({
-          data: {
-            userId,
-            vehicleType: dto.vehicle.vehicleType || VehicleType.OTHER,
-            vehicleName: null,
-            registrationNumber: dto.vehicle.vehicleRegistrationNo || null,
-            licenseNumber: dto.vehicle.licenseNumber || dto.vehicle.drivingLicenseNumber || null,
-            rcUrl: null,
-            insuranceUrl: null,
-            vehicleImageUrl: dto.vehicle.vehicleImageUrl || null,
-          },
-        });
-      } else {
-        await this.prisma.vehicle.deleteMany({ where: { userId } });
-      }
 
       // 3. Ensure Unique ID exists
       let requestId = user.uniqueCode;
@@ -493,7 +468,7 @@ export class SignupService {
         address: true,
         documents: true,
         bankDetails: true,
-        vehicles: true,
+        otherDetails: true,
         applications: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -512,7 +487,7 @@ export class SignupService {
 
     const steps: Record<string, boolean> = {
       profile: !!user.fullName && !!user.role,
-      shgDetails: !!user.shgDetail,
+      shgDetails: user.role === UserRole.SHG ? user.stepTracking.some(t => t.step === 2 && t.status === 'COMPLETED') : true,
       product: user.role === UserRole.SHG ? user.products.length > 0 || user.currentStep > 2 : true,
       address: !!user.address,
       documents: user.documents.length > 0,

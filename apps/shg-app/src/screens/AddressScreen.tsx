@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -7,7 +7,10 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
+import { signupService } from '../services/signupService';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'Address'>;
+
 export default function AddressScreen({
   navigation
 }: Props) {
@@ -30,6 +33,29 @@ export default function AddressScreen({
   });
   const [showSuccess, setShowSuccess] = useState(false);
   const [generalError, setGeneralError] = useState('');
+
+  useEffect(() => {
+    if (formData.pincode && formData.pincode.length === 6) {
+      const fetchPincodeDetails = async () => {
+        try {
+          const data = await signupService.getPincodeDetails(formData.pincode);
+          if (data) {
+            setFormData(prev => ({
+              ...prev,
+              stateName: data.state || prev.stateName,
+              district: data.district || prev.district,
+              taluka: data.taluka || prev.taluka,
+              village: data.villages && data.villages.length > 0 ? (data.villages.length === 1 ? data.villages[0] : (prev.village || data.villages[0])) : prev.village
+            }));
+          }
+        } catch (error) {
+          console.error('Error fetching pincode details in AddressScreen:', error);
+        }
+      };
+      fetchPincodeDetails();
+    }
+  }, [formData.pincode]);
+
   const hasChanges = () => {
     return formData.pincode !== user.pincode || formData.stateName !== user.stateName || formData.district !== user.district || formData.taluka !== user.taluka || formData.village !== user.village || formData.homeAddress !== user.homeAddress;
   };

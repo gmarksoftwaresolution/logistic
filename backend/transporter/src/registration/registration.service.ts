@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
@@ -27,6 +27,23 @@ export class RegistrationService {
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) { }
+
+  private async trackStep(userId: number, step: number, data: any) {
+    await this.prisma.stepTracking.upsert({
+      where: { userId_step: { userId, step } },
+      create: {
+        userId,
+        step,
+        status: 'COMPLETED',
+        data: data || {},
+      },
+      update: {
+        status: 'COMPLETED',
+        data: data || {},
+        updatedAt: new Date(),
+      },
+    });
+  }
 
   private async generateTransporterUniqueId(): Promise<string> {
     // Generate a random unique ID for the transporter since sequence table is removed
@@ -118,6 +135,18 @@ export class RegistrationService {
       throw new NotFoundException('Transporter not found');
     }
 
+    if (existingUser.applicationStatus === ApplicationStatus.COMPLETED || existingUser.applicationStatus === ApplicationStatus.UNDER_REVIEW) {
+      throw new ForbiddenException('Your application is pending approval.');
+    }
+
+    if (existingUser.applicationStatus === ApplicationStatus.REJECTED) {
+      throw new ForbiddenException(
+        existingUser.rejectionReason 
+          ? `Your application has been rejected: ${existingUser.rejectionReason}` 
+          : 'Your application has been rejected.'
+      );
+    }
+
     const user = await this.prisma.user.update({
       where: { phoneNumber: dto.mobileNumber },
       data: {
@@ -154,11 +183,12 @@ export class RegistrationService {
         address: true,
         drivingDetail: true,
         bankDetails: true,
-        vehicles: true,
+        otherDetails: true,
         routeDetail: true,
         milkVanDetail: true,
         transporterDetail: true,
         documents: true,
+        stepTracking: true,
       },
     });
 
@@ -168,12 +198,23 @@ export class RegistrationService {
 
     const [firstName, ...lastNameParts] = (user.fullName || '').split(' ');
 
+    let vehicleCategory = null;
+    if (user.transporterDetail?.vehicleCategory) {
+      vehicleCategory = user.transporterDetail.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+    } else {
+      const st4 = user.stepTracking?.find((st) => st.step === 4);
+      if (st4 && st4.data) {
+        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+        vehicleCategory = st4Data.vehicleCategory === 'MILK_VAN' ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+      }
+    }
+
     // Map back to frontend expected structure
     return {
       ...user,
       requestId: user.id,
       transporterUniqueId: user.uniqueCode,
-      vehicleCategory: user.transporterDetail?.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : (user.transporterDetail?.vehicleCategory ? VehicleCategory.PERSONAL : null),
+      vehicleCategory,
       personalDetails: user.address ? {
         firstName: firstName || '',
         lastName: lastNameParts.join(' ') || '',
@@ -182,17 +223,17 @@ export class RegistrationService {
         district: user.address.district,
         taluka: user.address.taluka,
         village: user.address.village || '',
-        residentialAddress: user.address.addressLine1,
+        residentialAddress: user.address.houseNo,
         pinCode: user.address.pincode,
         profilePhoto: user.profilePhoto,
       } : null,
       drivingDetails: user.drivingDetail ? {
         ...user.drivingDetail,
-        licensePhoto: user.documents?.[0]?.drivingLicenseUrl || null,
+        licensePhoto: user.drivingDetail.drivingLicenseUrl || null,
         experienceYears: user.drivingDetail.drivingExperience,
       } : null,
       bankDetails: user.bankDetails?.[0] || null,
-      vehicleDetails: user.vehicles?.[0] || null,
+      vehicleDetails: user.otherDetails?.[0] || null,
       routeDetails: user.routeDetail,
       milkVanDetails: user.milkVanDetail,
       milkVanRoute: user.routeDetail,
@@ -217,7 +258,7 @@ export class RegistrationService {
     await this.prisma.address.upsert({
       where: { userId: user.id },
       update: {
-        addressLine1: dto.residentialAddress,
+        houseNo: dto.residentialAddress,
         state: dto.state,
         district: dto.district,
         taluka: dto.taluka,
@@ -226,7 +267,7 @@ export class RegistrationService {
       },
       create: {
         userId: user.id,
-        addressLine1: dto.residentialAddress,
+        houseNo: dto.residentialAddress,
         state: dto.state,
         district: dto.district,
         taluka: dto.taluka,
@@ -234,6 +275,8 @@ export class RegistrationService {
         pincode: dto.pinCode,
       },
     });
+
+    await this.trackStep(user.id, 1, dto);
 
     return { message: 'Step 1 completed', nextStep: 2 };
   }
@@ -241,43 +284,7 @@ export class RegistrationService {
   async saveStep2(phoneNumber: string, dto: Step2DrivingDetailsDto) {
     const user = await this.validateStep(phoneNumber, 2);
 
-    await this.prisma.drivingDetail.upsert({
-      where: { userId: user.id },
-      update: {
-        licenseNumber: dto.licenseNumber,
-        expiryDate: new Date(dto.expiryDate),
-        drivingExperience: dto.experienceYears,
-      },
-      create: {
-        userId: user.id,
-        licenseNumber: dto.licenseNumber,
-        expiryDate: new Date(dto.expiryDate),
-        drivingExperience: dto.experienceYears,
-      },
-    });
-
-    // License photo to User or Document table - putting it in Documents
-    const doc = await this.prisma.document.findFirst({
-      where: { userId: user.id }
-    });
-
-    if (doc) {
-      await this.prisma.document.update({
-        where: { id: doc.id },
-        data: {
-          drivingLicenseNo: dto.licenseNumber,
-          drivingLicenseUrl: dto.licensePhoto,
-        },
-      });
-    } else {
-      await this.prisma.document.create({
-        data: {
-          userId: user.id,
-          drivingLicenseNo: dto.licenseNumber,
-          drivingLicenseUrl: dto.licensePhoto,
-        },
-      });
-    }
+    await this.trackStep(user.id, 2, dto);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -317,6 +324,8 @@ export class RegistrationService {
       });
     }
 
+    await this.trackStep(user.id, 3, dto);
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: { currentStep: Math.max(user.currentStep, 4) },
@@ -328,13 +337,7 @@ export class RegistrationService {
   async saveStep4(phoneNumber: string, dto: Step4VehicleTypeDto) {
     const user = await this.validateStep(phoneNumber, 4);
 
-    const vehicleType = dto.vehicleCategory === VehicleCategory.MILK_VAN ? VehicleType.MILK_VAN : VehicleType.OTHER;
-
-    await this.prisma.transporterDetail.upsert({
-      where: { userId: user.id },
-      update: { vehicleCategory: vehicleType },
-      create: { userId: user.id, vehicleCategory: vehicleType }
-    });
+    await this.trackStep(user.id, 4, dto);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -348,25 +351,7 @@ export class RegistrationService {
   async saveStep5Personal(phoneNumber: string, dto: Step5PersonalVehicleDto) {
     const user = await this.validateStep(phoneNumber, 5, VehicleCategory.PERSONAL);
 
-    const existingVehicles = await this.prisma.vehicle.findMany({ where: { userId: user.id } });
-    const data = {
-      vehicleType: VehicleType.OTHER,
-      vehicleName: dto.make,
-      registrationNumber: dto.number,
-      rcUrl: dto.rcUpload,
-      insuranceUrl: dto.insuranceUpload,
-    };
-
-    if (existingVehicles.length > 0) {
-      await this.prisma.vehicle.update({
-        where: { id: existingVehicles[0].id },
-        data,
-      });
-    } else {
-      await this.prisma.vehicle.create({
-        data: { userId: user.id, ...data },
-      });
-    }
+    await this.trackStep(user.id, 5, dto);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -379,24 +364,7 @@ export class RegistrationService {
   async saveStep6Personal(phoneNumber: string, dto: Step6PersonalRouteDto) {
     const user = await this.validateStep(phoneNumber, 6, VehicleCategory.PERSONAL);
 
-    await this.prisma.routeDetail.upsert({
-      where: { userId: user.id },
-      update: {
-        operatingArea: dto.operatingArea,
-        pickupLocations: dto.pickupLocations,
-        dropLocations: dto.dropLocations,
-        workingDays: dto.workingDays,
-        workingSchedule: dto.workingSchedule,
-      } as any,
-      create: {
-        userId: user.id,
-        operatingArea: dto.operatingArea,
-        pickupLocations: dto.pickupLocations,
-        dropLocations: dto.dropLocations,
-        workingDays: dto.workingDays,
-        workingSchedule: dto.workingSchedule,
-      } as any,
-    });
+    await this.trackStep(user.id, 6, dto);
 
     return this.completeRegistration(user.id);
   }
@@ -405,18 +373,7 @@ export class RegistrationService {
   async saveStep5MilkVan(phoneNumber: string, dto: Step5MilkVanOrgDto) {
     const user = await this.validateStep(phoneNumber, 5, VehicleCategory.MILK_VAN);
 
-    await this.prisma.milkVanDetail.upsert({
-      where: { userId: user.id },
-      update: {
-        sangathanName: dto.sangathanName,
-        centerName: dto.centerName,
-      },
-      create: {
-        userId: user.id,
-        sangathanName: dto.sangathanName,
-        centerName: dto.centerName,
-      },
-    });
+    await this.trackStep(user.id, 5, dto);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -433,29 +390,7 @@ export class RegistrationService {
   async saveStep6MilkVan(phoneNumber: string, dto: Step6MilkVanRouteDto) {
     const user = await this.validateStep(phoneNumber, 6, VehicleCategory.MILK_VAN);
 
-    await this.prisma.routeDetail.upsert({
-      where: { userId: user.id },
-      update: {
-        operatingArea: 'Milk Van Route',
-        workingDays: dto.workingDays,
-        workingSchedule: dto.workingSchedule,
-      } as any,
-      create: {
-        userId: user.id,
-        operatingArea: 'Milk Van Route',
-        workingDays: dto.workingDays,
-        workingSchedule: dto.workingSchedule,
-      } as any,
-    });
-
-    await this.prisma.milkVanDetail.update({
-      where: { userId: user.id },
-      data: {
-        assignedVillages: dto.assignedVillages,
-        morningShiftTime: dto.morningShiftTime,
-        eveningShiftTime: dto.eveningShiftTime,
-      } as any
-    });
+    await this.trackStep(user.id, 6, dto);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -468,54 +403,34 @@ export class RegistrationService {
   async saveStep7MilkVan(phoneNumber: string, dto: Step7MilkVanVehicleDto) {
     const user = await this.validateStep(phoneNumber, 7, VehicleCategory.MILK_VAN);
 
-    const existingVehicles = await this.prisma.vehicle.findMany({ where: { userId: user.id } });
-    const data = {
-      vehicleType: VehicleType.MILK_VAN,
-      vehicleName: dto.make,
-      registrationNumber: dto.number,
-      rcUrl: dto.rcUpload,
-      insuranceUrl: dto.insuranceUpload,
-    };
-
-    if (existingVehicles.length > 0) {
-      await this.prisma.vehicle.update({
-        where: { id: existingVehicles[0].id },
-        data,
-      });
-    } else {
-      await this.prisma.vehicle.create({
-        data: { userId: user.id, ...data },
-      });
-    }
+    await this.trackStep(user.id, 7, dto);
 
     return this.completeRegistration(user.id);
   }
 
   async getPincodeInfo(pincode: string) {
-    const data = await this.prisma.pincode.findFirst({
-      where: { pincode },
-    });
-    if (!data) {
+    const records: any[] = await this.prisma.$queryRaw`
+      SELECT state, district, taluka FROM public.pincode_directory WHERE pincode = ${pincode} LIMIT 1
+    `;
+    if (!records || records.length === 0) {
       throw new NotFoundException('Pincode details not found');
     }
+    const data = records[0];
     return {
       success: true,
       state: data.state,
       district: data.district,
-      taluka: data.block || data.district,
+      taluka: data.taluka || data.district,
     };
   }
 
   async getPincodeVillages(pincode: string) {
-    const records = await this.prisma.pincode.findMany({
-      where: { pincode },
-      select: { name: true, block: true, district: true },
-      distinct: ['name'],
-      orderBy: { name: 'asc' },
-    });
+    const records: any[] = await this.prisma.$queryRaw`
+      SELECT DISTINCT village, taluka, district FROM public.pincode_directory WHERE pincode = ${pincode} ORDER BY village ASC
+    `;
     return records.map(r => ({
-      name: r.name,
-      taluka: r.block || r.district || '',
+      name: r.village,
+      taluka: r.taluka || r.district || '',
     }));
   }
 
@@ -526,7 +441,6 @@ export class RegistrationService {
   ) {
     const user = await this.prisma.user.findUnique({
       where: { phoneNumber },
-      include: { transporterDetail: true }
     });
 
     if (!user) {
@@ -538,7 +452,14 @@ export class RegistrationService {
     }
 
     if (category) {
-      const dbCategory = user.transporterDetail?.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+      let dbCategory = VehicleCategory.PERSONAL;
+      const st4 = await this.prisma.stepTracking.findUnique({
+        where: { userId_step: { userId: user.id, step: 4 } }
+      });
+      if (st4 && st4.data) {
+        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+        dbCategory = st4Data.vehicleCategory === VehicleCategory.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+      }
       if (dbCategory !== category) {
         throw new BadRequestException(`Invalid flow for your selected vehicle type.`);
       }
@@ -550,7 +471,6 @@ export class RegistrationService {
   private async completeRegistration(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { drivingDetail: true }
     });
 
     if (user.applicationStatus === ApplicationStatus.APPROVED ||
@@ -572,20 +492,6 @@ export class RegistrationService {
         currentStep: 7, // Set to 7 as per requirement
         uniqueCode: transporterUniqueId,
       },
-    });
-
-    // Save transporter details in TransporterDetail table
-    await this.prisma.transporterDetail.upsert({
-      where: { userId: id },
-      update: {
-        transporterCode: transporterUniqueId,
-        experienceYears: user.drivingDetail?.drivingExperience || null
-      },
-      create: {
-        userId: id,
-        transporterCode: transporterUniqueId,
-        experienceYears: user.drivingDetail?.drivingExperience || null
-      }
     });
 
     return {

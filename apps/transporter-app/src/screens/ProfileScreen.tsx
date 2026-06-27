@@ -480,6 +480,10 @@ const ProfileScreen: React.FC = () => {
                     <Text style={styles.detailLabel}>{t('signup.vehicle_type')}</Text>
                     <Text style={styles.detailValue}>{vehicleDetails.vehicleType || '-'}</Text>
                   </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t('signup.vehicle_wheeler') || 'Wheeler'}</Text>
+                    <Text style={styles.detailValue}>{vehicleDetails.wheeler || '-'}</Text>
+                  </View>
 
                   <View style={styles.documentGrid}>
                     {vehicleDetails.rcUrl && (
