@@ -3720,9 +3720,11 @@ const styles = StyleSheet.create({
     borderWidth: moderateScale(1.5),
     borderColor: '#E5E7EB',
     textAlign: 'center',
+    textAlignVertical: 'center',
     fontFamily: Fonts.bold,
     fontSize: moderateScale(20),
     color: Colors.textPrimary,
+    padding: 0,
   },
   otpBoxError: {
     borderColor: '#EF4444',

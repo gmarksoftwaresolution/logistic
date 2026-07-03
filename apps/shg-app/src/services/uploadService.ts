@@ -5,7 +5,7 @@ import { STORAGE_KEYS } from '../utils/storage';
 const performUpload = async (endpoint: string, uri: string) => {
   try {
     const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
-    const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+    const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3002/api';
     const fullUrl = `${baseURL}${endpoint}`;
 
     const headers: Record<string, string> = {

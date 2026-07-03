@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/@prisma/client"
+  output   = "../../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -530,6 +530,11 @@ model PickupOrderItem {
   product       Product     @relation(fields: [productId], references: [id])
   quantity      Int
 
+  verificationCode String?   @map("verification_code")
+  generatedTime    DateTime? @map("generated_time")
+  verifiedTime     DateTime? @map("verified_time")
+  verificationStatus String?  @default("PENDING") @map("verification_status")
+
   @@index([pickupOrderId])
   @@index([productId])
   @@map("pickup_order_items")
@@ -594,6 +599,11 @@ model DropOrderItem {
   productId   Int       @map("product_id")
   product     Product   @relation(fields: [productId], references: [id])
   quantity    Int?
+
+  verificationCode String?   @map("verification_code")
+  generatedTime    DateTime? @map("generated_time")
+  verifiedTime     DateTime? @map("verified_time")
+  verificationStatus String?  @default("PENDING") @map("verification_status")
 
   @@index([dropOrderId])
   @@index([productId])
@@ -703,3 +713,119 @@ model Buyer {
   @@map("buyers")
 }
 
+model TransporterMember {
+  id              String   @id @default(uuid())
+  transporterCode String?  @unique
+  type            String   // ROUTE_PARTNER, PERSONAL
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+
+  // Personal Details
+  profilePhoto    String?
+  firstName       String
+  lastName        String
+  mobileNumber    String
+  email           String?
+
+  // Address Details
+  residentialAddress String?
+  village            String?
+  taluka             String?
+  district           String?
+  state              String?
+  pincode            String?
+
+  // Driving Details
+  licenseNumber      String?
+  licensePhoto       String?
+  licenseExpiryDate  DateTime?
+  experienceYears    Int?
+
+  // Bank Details
+  accountHolderName  String?
+  accountNumber      String?
+  ifscCode           String?
+  bankName           String?
+  branchName         String?
+  upiId              String?
+
+  // Vehicle Details
+  vehicleCategory       String?
+  vehicleType           String?
+  vehicleMake           String?
+  vehicleNumber         String?
+  vehicleRcPhoto        String?
+  vehicleInsurancePhoto String?
+
+  // Route Details
+  assignedPincodes   Json?
+  assignedVillages   Json?
+  morningShift       String?
+  eveningShift       String?
+  workingDays        Json?
+
+  // Milk Organization Details
+  milkOrganizationName String?
+  milkCenterName       String?
+}
+
+model VerificationRecord {
+  id               Int       @id @default(autoincrement())
+  orderId          String
+  orderItemId      Int?
+  pickupOrderId    Int?
+  dropOrderId      Int?
+  verificationType String
+  senderId         Int?
+  receiverId       Int?
+  generatedCode    String
+  status           String    @default("PENDING")
+  generatedTime    DateTime? @default(now())
+  verifiedTime     DateTime?
+  expiryTime       DateTime?
+  generatedBy      Int?
+  verifiedBy       Int?
+  attemptCount     Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("VerificationRecord")
+}
+
+model BarcodeRecord {
+  id           Int       @id @default(autoincrement())
+  orderId      String
+  pickupOrderId Int?
+  dropOrderId   Int?
+  inventoryId   Int?
+  barcodeValue String    @unique
+  barcodeType  String
+  status       String    @default("GENERATED")
+  generatedTime DateTime? @default(now())
+  printedTime  DateTime?
+  scannedTime  DateTime?
+  dispatchTime DateTime?
+  intakeTime   DateTime?
+  returnType   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("BarcodeRecord")
+}
+
+model ScanHistory {
+  id           Int       @id @default(autoincrement())
+  orderId      String
+  barcode      String
+  scanType     String
+  scanLocation String?
+  scannedBy    Int?
+  userRole     String?
+  scanResult   String
+  device       String?
+  timestamp    DateTime  @default(now())
+
+  @@map("ScanHistory")
+}

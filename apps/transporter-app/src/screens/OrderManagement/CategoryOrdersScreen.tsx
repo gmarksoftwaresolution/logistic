@@ -265,7 +265,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                    }}
                                  >
                                   <View style={styles.widgetTopRow}>
-                                    <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
+                                    <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                                   </View>
                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
@@ -324,9 +324,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                      navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'drop' });
                                    }}
                                  >
-                                   <View style={styles.widgetTopRow}>
-                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
-                                   </View>
+                                    <View style={styles.widgetTopRow}>
+                                      <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                                    </View>
                                    <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
                                      <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>

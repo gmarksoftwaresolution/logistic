@@ -1,11 +1,82 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderFilterDto } from './dto/order-filter.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
-export class OrderManagementService {
+export class OrderManagementService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
+
+  onModuleInit() {
+    // Start background auto-broadcast polling loop
+    setInterval(async () => {
+      try {
+        await this.runAutoBroadcastLoop();
+      } catch (err: any) {
+        console.error('[AutoBroadcastLoop] Error running loop:', err.message);
+      }
+    }, 5000); // Check every 5 seconds
+  }
+
+  async runAutoBroadcastLoop() {
+    // 1. Check SHG auto-broadcasts
+    const ordersPlaced = await this.prisma.order.findMany({
+      where: {
+        phase: 'PICKUP',
+        mainStatus: 'ORDER_PLACED',
+        pickupShgStatus: { not: 'NO_PARTNERS_FOUND' },
+      },
+      include: {
+        assignments: {
+          where: {
+            role: 'PICKUP',
+            assigneeType: 'SHG',
+            status: { in: ['PENDING', 'ACCEPTED'] },
+          },
+        },
+      },
+    });
+
+    for (const order of ordersPlaced) {
+      if (order.assignments.length === 0) {
+        console.log(`[AutoBroadcastLoop] Automatically triggering SHG broadcast for order ${order.orderId} (${order.id})`);
+        try {
+          await this.broadcastShg(order.id);
+        } catch (err: any) {
+          console.error(`[AutoBroadcastLoop] SHG broadcast failed for order ${order.id}:`, err.message);
+        }
+      }
+    }
+
+    // 2. Check Transporter auto-broadcasts
+    const ordersAtShg = await this.prisma.order.findMany({
+      where: {
+        phase: 'PICKUP',
+        mainStatus: 'PARCEL_AT_SHG',
+        pickupTransporterStatus: { not: 'NO_PARTNERS_FOUND' },
+      },
+      include: {
+        assignments: {
+          where: {
+            role: 'PICKUP',
+            assigneeType: 'TRANSPORTER',
+            status: { in: ['PENDING', 'ACCEPTED'] },
+          },
+        },
+      },
+    });
+
+    for (const order of ordersAtShg) {
+      if (order.assignments.length === 0) {
+        console.log(`[AutoBroadcastLoop] Automatically triggering Transporter broadcast for order ${order.orderId} (${order.id})`);
+        try {
+          await this.broadcastTransporter(order.id);
+        } catch (err: any) {
+          console.error(`[AutoBroadcastLoop] Transporter broadcast failed for order ${order.id}:`, err.message);
+        }
+      }
+    }
+  }
 
   // Parse helper for transporter JSON fields safely
   private parseJsonArray(fieldVal: any): string[] {
@@ -16,6 +87,150 @@ export class OrderManagementService {
         if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
+    return [];
+  }
+
+  async findMatchingShgs(address: { village?: string; pincode?: string; taluka?: string; district?: string }) {
+    try {
+      const approvedUsers = await this.prisma.$queryRawUnsafe(`
+        SELECT u.id, u."fullName", u."phoneNumber", sd."shgName", 
+               a.village, a.taluka, a.district, a.state, a.pincode, a."deliveryAddress"
+        FROM public."User" u
+        LEFT JOIN public."ShgDetail" sd ON u.id = sd."userId"
+        LEFT JOIN public."Address" a ON u.id = a."userId"
+        WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED';
+      `) as any[];
+
+      for (const u of approvedUsers) {
+        const shgUuid = '00000000-0000-0000-0000-' + String(u.id).padStart(12, '0');
+        await this.prisma.$executeRawUnsafe(`
+          INSERT INTO gmu."CommunityMember" (
+            id, "memberCode", type, status, "fullName", "mobileNumber", "shgName", 
+            village, taluka, district, state, pincode, "deliveryAddress", "createdAt"
+          ) VALUES ($1, $2, 'SHG', 'APPROVED', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+          ON CONFLICT (id) DO UPDATE SET 
+            "mobileNumber" = EXCLUDED."mobileNumber",
+            "fullName" = EXCLUDED."fullName",
+            "shgName" = EXCLUDED."shgName",
+            village = EXCLUDED.village,
+            taluka = EXCLUDED.taluka,
+            district = EXCLUDED.district,
+            state = EXCLUDED.state,
+            pincode = EXCLUDED.pincode,
+            "deliveryAddress" = EXCLUDED."deliveryAddress",
+            status = 'APPROVED';
+        `,
+          shgUuid,
+          `CM-SHG-${u.id}`,
+          u.fullName || 'SHG Member',
+          u.phoneNumber,
+          u.shgName || 'Local SHG',
+          u.village || '',
+          u.taluka || '',
+          u.district || '',
+          u.state || '',
+          u.pincode || '',
+          u.deliveryAddress || ''
+        );
+      }
+    } catch (err) {
+      console.error('Error synchronizing approved SHGs in findMatchingShgs:', err.message);
+    }
+
+    const shgs = await this.prisma.communityMember.findMany({
+      where: {
+        type: 'SHG',
+        status: 'APPROVED',
+      }
+    });
+
+    const normalizeVillage = (v?: string | null): string => {
+      if (!v) return '';
+      return v.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+    };
+
+    const targetVillage = normalizeVillage(address.village);
+    const targetPincode = address.pincode ? address.pincode.toLowerCase().trim() : '';
+
+    return shgs.filter(shg => {
+      const shgVillage = normalizeVillage(shg.village);
+      const shgPincode = shg.pincode ? shg.pincode.toLowerCase().trim() : '';
+
+      // BOTH village and pincode must match
+      const villageMatches = !targetVillage || shgVillage === targetVillage;
+      const pincodeMatches = !targetPincode || shgPincode === targetPincode;
+
+      return villageMatches && pincodeMatches;
+    });
+  }
+
+  async findMatchingTransporters(address: { village?: string; pincode?: string; taluka?: string; district?: string }) {
+    const transporters = await this.prisma.$queryRawUnsafe(`
+      SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd."operatingArea"
+      FROM gmu."TransporterMember" tm
+      JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
+      LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+      WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED';
+    `) as any[];
+
+    const parseJsonArray = (val: any) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { }
+      }
+      return [];
+    };
+
+    const getTransporterLocations = (tr: any) => {
+      const areas = tr.operatingArea
+        ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+        : [];
+      const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+      const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+      return { areas, villages, pincodes };
+    };
+
+    const p = address.pincode ? address.pincode.toLowerCase().trim() : '';
+    const v = address.village ? address.village.toLowerCase().trim() : '';
+    const t = address.taluka ? address.taluka.toLowerCase().trim() : '';
+    const d = address.district ? address.district.toLowerCase().trim() : '';
+
+    // Priority 1: Pincode
+    if (p) {
+      const matches = transporters.filter(tr => {
+        const { areas, pincodes } = getTransporterLocations(tr);
+        return pincodes.includes(p) || areas.includes(p);
+      });
+      if (matches.length > 0) return matches;
+    }
+
+    // Priority 2: Village
+    if (v) {
+      const matches = transporters.filter(tr => {
+        const { areas, villages } = getTransporterLocations(tr);
+        return villages.includes(v) || areas.includes(v);
+      });
+      if (matches.length > 0) return matches;
+    }
+
+    // Priority 3: Taluka
+    if (t) {
+      const matches = transporters.filter(tr => {
+        const { areas } = getTransporterLocations(tr);
+        return areas.includes(t);
+      });
+      if (matches.length > 0) return matches;
+    }
+
+    // Priority 4: District
+    if (d) {
+      const matches = transporters.filter(tr => {
+        const { areas } = getTransporterLocations(tr);
+        return areas.includes(d);
+      });
+      if (matches.length > 0) return matches;
+    }
+
     return [];
   }
 
@@ -58,16 +273,16 @@ export class OrderManagementService {
 
     // ── Phase 5: Hub Receive & Dispatch ───────────────────────────────────────
     if (s === 'AT_HUB') {
-      return ['AT_HUB', 'HUB_RECEIVED'];
+      return ['AT_HUB', 'HUB_RECEIVED', 'PARCEL_AT_HUB'];
     }
     if (s === 'HUB_RECEIVED' || s === 'PICKUPHUB_RECEIVE') {
-      return ['HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED'];
+      return ['HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'PARCEL_AT_HUB'];
     }
     if (s === 'BARCODE_GENERATED') {
       return ['BARCODE_GENERATED', 'HUB_RECEIVED'];
     }
     if (s === 'STORED') {
-      return ['STORED', 'AT_HUB'];
+      return ['STORED', 'AT_HUB', 'PARCEL_AT_HUB'];
     }
     if (s === 'DROP_ASSIGNED' || s === 'DISPATCH' || s === 'DISPATCHED') {
       return ['DROP_ASSIGNED', 'DISPATCHED', 'DISPATCH', 'PENDING_DROP', 'DROP_SHG_PENDING'];
@@ -214,6 +429,7 @@ export class OrderManagementService {
       this.prisma.order.count({
         where: this.applyFilters(
           {
+            phase: 'PICKUP',
             returnType: null,
             OR: [
               { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
@@ -228,27 +444,29 @@ export class OrderManagementService {
       this.prisma.order.count({
         where: this.applyFilters(
           {
+            phase: 'PICKUP',
             returnType: null,
             OR: [
-              { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
+              { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
               { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
             ]
           },
           undefined,
-          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
+          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
         )
       }),
       // pickup.warehouse — Phase 5
-      this.prisma.order.count({ where: this.applyFilters({ returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) }),
       // pickup.rejected — orders with any rejected assignment
-      this.prisma.order.count({ where: this.applyFilters({ assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
       // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
-      this.prisma.order.count({ where: this.applyFilters({ mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) }),
 
       // drop.new — Phase 5 dispatch
       this.prisma.order.count({
         where: this.applyFilters(
           {
+            phase: 'DROP',
             AND: [
               {
                 OR: [
@@ -258,20 +476,21 @@ export class OrderManagementService {
               },
               {
                 OR: [
-                  { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN'] } },
+                  { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
                   { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
                 ]
               }
             ]
           },
           undefined,
-          ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN']
+          ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
         )
       }),
       // drop.assigned — Phase 6-7
       this.prisma.order.count({
         where: this.applyFilters(
           {
+            phase: 'DROP',
             AND: [
               {
                 OR: [
@@ -292,11 +511,11 @@ export class OrderManagementService {
         )
       }),
       // drop.completed — Phase 7-8
-      this.prisma.order.count({ where: this.applyFilters({ OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED']) }),
       // drop.rejected
-      this.prisma.order.count({ where: this.applyFilters({ assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
       // drop.rescheduled
-      this.prisma.order.count({ where: this.applyFilters({ mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) }),
 
       // return.transporter
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) }),
@@ -304,7 +523,7 @@ export class OrderManagementService {
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) }),
 
       // inventory.stored
-      this.prisma.order.count({ where: this.applyFilters({ returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) }),
       // inventory.transporterReturn
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['INVENTORY_TRANSPORTER_RETURN', 'DROP_ASSIGNED', 'DISPATCHED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']) }),
       // inventory.buyerReturn
@@ -341,8 +560,9 @@ export class OrderManagementService {
   // --- QUERY ENDPOINTS ---
 
   async getOrderDetails(id: string): Promise<any> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
     const order = await this.prisma.order.findFirst({
-      where: { OR: [{ id }, { orderId: id }] },
+      where: isUuid ? { OR: [{ id }, { orderId: id }] } : { orderId: id },
       include: { assignments: true },
     });
     if (!order) {
@@ -354,6 +574,7 @@ export class OrderManagementService {
   async getPickupNewOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'PICKUP',
         returnType: null,
         OR: [
           { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
@@ -365,6 +586,7 @@ export class OrderManagementService {
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -372,6 +594,7 @@ export class OrderManagementService {
   async getPickupAssignedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'PICKUP',
         returnType: null,
         OR: [
           { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING'] } },
@@ -381,25 +604,28 @@ export class OrderManagementService {
       filter,
       [
         'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED',
-        'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'TRANSPORTER_DECLINED',
+        'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED',
+        'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED',
         'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING',
       ]
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getPickupWarehouseOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { returnType: null },
+      { phase: 'PICKUP', returnType: null },
       filter,
       // Phase 5: hub received (AT_HUB new canonical + legacy HUB_RECEIVED, BARCODE_GENERATED)
-      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED']
+      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -407,6 +633,7 @@ export class OrderManagementService {
   async getPickupRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'PICKUP',
         assignments: {
           some: { role: 'PICKUP', status: 'REJECTED' },
         },
@@ -416,6 +643,7 @@ export class OrderManagementService {
       [
         'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED',
         'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED',
+        'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER',
         'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB',
         // legacy
         'PENDING_PICKUP', 'PICKUP_SHG_PENDING',
@@ -423,6 +651,7 @@ export class OrderManagementService {
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -430,6 +659,7 @@ export class OrderManagementService {
   async getPickupRescheduledOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'PICKUP',
         mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] },
         rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] },
         returnType: null,
@@ -438,6 +668,7 @@ export class OrderManagementService {
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -445,6 +676,7 @@ export class OrderManagementService {
   async getDropNewOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'DROP',
         AND: [
           {
             OR: [
@@ -454,17 +686,18 @@ export class OrderManagementService {
           },
           {
             OR: [
-              { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN'] } },
+              { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
               { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
             ]
           }
         ]
       },
       filter,
-      ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN']
+      ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -472,6 +705,7 @@ export class OrderManagementService {
   async getDropAssignedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'DROP',
         AND: [
           {
             OR: [
@@ -495,13 +729,14 @@ export class OrderManagementService {
     );
     return this.prisma.order.findMany({
       where,
+      include: { assignments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getDropCompletedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] },
+      { phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] },
       filter,
       // Phase 7-8: Delivered and Completed
       ['DELIVERED', 'COMPLETED']
@@ -515,6 +750,7 @@ export class OrderManagementService {
   async getDropRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'DROP',
         assignments: {
           some: { role: 'DROP', status: 'REJECTED' },
         },
@@ -537,6 +773,7 @@ export class OrderManagementService {
   async getDropRescheduledOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
+        phase: 'DROP',
         mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] },
         rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] },
         OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }],
@@ -579,10 +816,10 @@ export class OrderManagementService {
 
   async getInventoryStoredOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { returnType: null },
+      { phase: 'PICKUP', returnType: null },
       filter,
       // Phase 5: all warehouse/hub/dispatch states
-      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DROP_ASSIGNED', 'DISPATCHED']
+      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,
@@ -619,8 +856,8 @@ export class OrderManagementService {
   async createOrder(dto: CreateOrderDto) {
     const orderId = dto.orderId || `ORD-PICK-${Math.floor(1000 + Math.random() * 9000)}`;
     
-    // Check uniqueness of orderId
-    const existing = await this.prisma.order.findUnique({ where: { orderId } });
+    // Check uniqueness of orderId for PICKUP phase
+    const existing = await this.prisma.order.findFirst({ where: { orderId, phase: 'PICKUP' } });
     if (existing) {
       throw new BadRequestException(`Order ID ${orderId} already exists`);
     }
@@ -663,7 +900,7 @@ export class OrderManagementService {
       });
     }
 
-    return this.prisma.order.create({
+    const order = await this.prisma.order.create({
       data: {
         orderId,
         sellerId: seller.id,
@@ -672,47 +909,95 @@ export class OrderManagementService {
         totalQty: dto.totalQty,
         totalWeight: dto.totalWeight,
         mainStatus: 'ORDER_PLACED',
+        phase: 'PICKUP',
       },
     });
+
+    try {
+      await this.broadcastShg(order.id);
+    } catch (err: any) {
+      console.warn(`[broadcastShg auto-run] Failed to broadcast order ${order.id}:`, err.message);
+    }
+
+    return order;
   }
 
   async broadcastShg(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Find APPROVED SHGs matching seller village & pincode
-    const matchingShgs = await this.prisma.communityMember.findMany({
-      where: {
-        type: 'SHG',
-        status: 'APPROVED',
-        village: order.sellerVillage,
-        pincode: order.sellerPincode,
-      },
-    });
+    // Find APPROVED & ACTIVE SHGs
+    // Join public."User" u to make sure the account is active/approved
+    const approvedShgs = await this.prisma.$queryRawUnsafe(`
+      SELECT cm.id, cm.pincode, cm.village
+      FROM gmu."CommunityMember" cm
+      JOIN public."User" u ON cm."mobileNumber" = u."phoneNumber"
+      WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+    `) as any[];
+
+    // Match BOTH Pincode AND Village (exact, trimmed, case-insensitive)
+    const matchingShgs = approvedShgs.filter(shg => 
+      shg.pincode && order.sellerPincode && 
+      shg.pincode.trim().toLowerCase() === order.sellerPincode.trim().toLowerCase() &&
+      shg.village && order.sellerVillage && 
+      shg.village.trim().toLowerCase() === order.sellerVillage.trim().toLowerCase()
+    );
 
     if (matchingShgs.length === 0) {
-      throw new BadRequestException(`No matching approved SHGs found for village ${order.sellerVillage} and pincode ${order.sellerPincode}`);
+      console.log(`[SHG Broadcast]
+        Order ID: ${order.orderId} (${order.id})
+        Seller Village: ${order.sellerVillage}
+        Seller Pincode: ${order.sellerPincode}
+        Matching SHG IDs: []
+        Number of assignments created: 0
+        Reason: No approved and active SHG matches Seller Pincode and Village.
+      `);
+      return this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          mainStatus: 'ORDER_PLACED',
+          pickupShgStatus: 'NO_PARTNERS_FOUND',
+        },
+        include: { assignments: true },
+      });
     }
 
-    // Delete existing pending assignments for this role/type
-    await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'PENDING' },
-    });
+    // Create PENDING assignments with duplicate protection
+    let assignmentsCreatedCount = 0;
+    for (const shg of matchingShgs) {
+      const existing = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: shg.id,
+          assigneeType: 'SHG',
+          role: 'PICKUP',
+          status: 'PENDING',
+        },
+      });
+      if (!existing) {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: shg.id,
+            assigneeType: 'SHG',
+            role: 'PICKUP',
+            status: 'PENDING',
+          },
+        });
+        assignmentsCreatedCount++;
+      }
+    }
 
-    // Create PENDING assignments
-    await this.prisma.orderAssignment.createMany({
-      data: matchingShgs.map((shg) => ({
-        orderId: order.id,
-        assigneeId: shg.id,
-        assigneeType: 'SHG',
-        role: 'PICKUP',
-        status: 'PENDING',
-      })),
-    });
+    console.log(`[SHG Broadcast]
+      Order ID: ${order.orderId} (${order.id})
+      Seller Village: ${order.sellerVillage}
+      Seller Pincode: ${order.sellerPincode}
+      Matching SHG IDs: ${JSON.stringify(matchingShgs.map(s => s.id))}
+      Number of assignments created: ${assignmentsCreatedCount}
+    `);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        // Phase 2: Broadcast SHG → PICKUP_ASSIGNED
         mainStatus: 'PICKUP_ASSIGNED',
         pickupShgStatus: 'PENDING',
       },
@@ -866,42 +1151,97 @@ export class OrderManagementService {
   async broadcastTransporter(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Get all approved transporters
-    const approvedTransporters = await this.prisma.transporterMember.findMany({
-      where: { status: 'APPROVED' },
-    });
+    // Get all approved and active transporters joining route details and user accounts
+    const approvedTransporters = await this.prisma.$queryRawUnsafe(`
+      SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd.id AS "routeDetailId", rd."operatingArea", rd."pickupLocations"
+      FROM gmu."TransporterMember" tm
+      JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
+      LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+      WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+    `) as any[];
 
-    // Filter in JS based on JSON pincodes or villages matches
-    const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages);
-      const pincodes = this.parseJsonArray(t.assignedPincodes);
-      return villages.includes(order.sellerVillage) || pincodes.includes(order.sellerPincode);
+    const parseJsonArray = (val: any) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch(e) {}
+      }
+      return [];
+    };
+
+    const p = order.sellerPincode?.trim()?.toLowerCase();
+    const v = order.sellerVillage?.trim()?.toLowerCase();
+
+    // Match only Transporters whose assigned routes contain the same Village AND Pincode
+    const matchingTransporters = approvedTransporters.filter((tr) => {
+      const areas = tr.operatingArea
+        ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+        : [];
+      const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).trim().toLowerCase());
+      const pincodes = [
+        ...parseJsonArray(tr.assignedPincodes),
+        ...parseJsonArray(tr.pickupLocations)
+      ].map((s: any) => String(s).trim().toLowerCase());
+
+      const villageMatched = v && (villages.includes(v) || areas.includes(v));
+      const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
+      return !!(villageMatched && pincodeMatched);
     });
 
     if (matchingTransporters.length === 0) {
-      throw new BadRequestException(`No matching approved transporters found for village ${order.sellerVillage} or pincode ${order.sellerPincode}`);
+      console.log(`[Transporter Broadcast]
+        Order ID: ${order.orderId} (${order.id})
+        Seller Village: ${order.sellerVillage}
+        Seller Pincode: ${order.sellerPincode}
+        Matching Transporter IDs: []
+        Number of assignments created: 0
+        Reason: No approved and active transporter matches Seller Pincode and Village.
+      `);
+      return this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          pickupTransporterStatus: 'NO_PARTNERS_FOUND',
+        },
+        include: { assignments: true },
+      });
     }
 
-    // Delete existing pending transporter requests
-    await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'PICKUP', assigneeType: 'TRANSPORTER', status: 'PENDING' },
-    });
+    // Create PENDING assignments with duplicate protection
+    let assignmentsCreatedCount = 0;
+    for (const t of matchingTransporters) {
+      const existing = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: t.id,
+          assigneeType: 'TRANSPORTER',
+          role: 'PICKUP',
+          status: 'PENDING',
+        },
+      });
+      if (!existing) {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: t.id,
+            assigneeType: 'TRANSPORTER',
+            role: 'PICKUP',
+            status: 'PENDING',
+          },
+        });
+        assignmentsCreatedCount++;
+      }
+    }
 
-    // Create assignments
-    await this.prisma.orderAssignment.createMany({
-      data: matchingTransporters.map((t) => ({
-        orderId: order.id,
-        assigneeId: t.id,
-        assigneeType: 'TRANSPORTER',
-        role: 'PICKUP',
-        status: 'PENDING',
-      })),
-    });
+    console.log(`[Transporter Broadcast]
+      Order ID: ${order.orderId} (${order.id})
+      Seller Village: ${order.sellerVillage}
+      Seller Pincode: ${order.sellerPincode}
+      Matching Transporter IDs: ${JSON.stringify(matchingTransporters.map(t => t.id))}
+      Number of assignments created: ${assignmentsCreatedCount}
+    `);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'PICKUP_ASSIGNED',
         pickupTransporterStatus: 'PENDING',
       },
       include: { assignments: true },
@@ -1075,12 +1415,195 @@ export class OrderManagementService {
   async storeInventory(id: string) {
     const order = await this.getOrderDetails(id);
 
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        mainStatus: 'STORED',
-        storedAt: new Date(),
-      },
+    // Find the master order to get items and buyer address details using raw SQL from public schema
+    const rawMasterOrders = await this.prisma.$queryRawUnsafe(`
+      SELECT id, order_number, buyer_id FROM public.master_orders WHERE order_number = $1 LIMIT 1;
+    `, order.orderId) as any[];
+    const masterOrder = rawMasterOrders?.[0] || null;
+
+    let buyer: any = null;
+    let items: any[] = [];
+
+    if (masterOrder) {
+      const rawBuyers = await this.prisma.$queryRawUnsafe(`
+        SELECT id, village, pincode, taluka, district, address_line1, address_line2 FROM public.buyers WHERE id = $1 LIMIT 1;
+      `, masterOrder.buyer_id) as any[];
+      buyer = rawBuyers?.[0] || null;
+
+      items = await this.prisma.$queryRawUnsafe(`
+        SELECT product_id, quantity FROM public.master_order_items WHERE master_order_id = $1;
+      `, masterOrder.id) as any[];
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (masterOrder) {
+        // Increment warehouse inventory
+        let warehouse = await tx.warehouse.findFirst();
+        if (!warehouse) {
+          warehouse = await tx.warehouse.create({
+            data: {
+              name: 'GMU Hub Warehouse',
+              address: 'Kolhapur',
+            }
+          });
+        }
+
+        // Synchronize products and seller users from public schema to gmu schema
+        for (const item of items) {
+          const rawPubProducts = await this.prisma.$queryRawUnsafe(`
+            SELECT * FROM public.products WHERE id = $1 LIMIT 1;
+          `, item.product_id) as any[];
+          const pubProduct = rawPubProducts?.[0];
+
+          if (pubProduct) {
+            // Check if seller exists in gmu."User"
+            const rawGmuUsers = await this.prisma.$queryRawUnsafe(`
+              SELECT id FROM gmu."User" WHERE id = $1 LIMIT 1;
+            `, pubProduct.seller_id) as any[];
+            const gmuUser = rawGmuUsers?.[0];
+
+            if (!gmuUser) {
+              // Fetch user from public."User"
+              const rawPubUsers = await this.prisma.$queryRawUnsafe(`
+                SELECT * FROM public."User" WHERE id = $1 LIMIT 1;
+              `, pubProduct.seller_id) as any[];
+              const pubUser = rawPubUsers?.[0];
+
+              if (pubUser) {
+                // Insert into gmu."User"
+                await this.prisma.$executeRawUnsafe(`
+                  INSERT INTO gmu."User" (
+                    id, "authId", role, "phoneNumber", email, "fullName", "profilePhoto", 
+                    language, "isVerified", "currentStep", "profileCompletion", "applicationStatus", 
+                    "uniqueCode", "approvedAt", "rejectedAt", "rejectionReason", "createdAt", "updatedAt", "deletedAt"
+                  ) VALUES (
+                    $1, $2::uuid, $3::"UserRole", $4, $5, $6, $7, 
+                    $8, $9, $10, $11, $12::"ApplicationStatus", 
+                    $13, $14, $15, $16, $17, $18, $19
+                  ) ON CONFLICT (id) DO NOTHING;
+                `,
+                  pubUser.id, pubUser.authId, pubUser.role, pubUser.phoneNumber, pubUser.email, pubUser.fullName, pubUser.profilePhoto,
+                  pubUser.language, pubUser.isVerified, pubUser.currentStep, pubUser.profileCompletion, pubUser.applicationStatus,
+                  pubUser.uniqueCode, pubUser.approvedAt, pubUser.rejectedAt, pubUser.rejectionReason, pubUser.createdAt, pubUser.updatedAt, pubUser.deletedAt
+                );
+              }
+            }
+
+            // Check if product exists in gmu.products
+            const rawGmuProducts = await this.prisma.$queryRawUnsafe(`
+              SELECT id FROM gmu.products WHERE id = $1 LIMIT 1;
+            `, item.product_id) as any[];
+            const gmuProduct = rawGmuProducts?.[0];
+
+            if (!gmuProduct) {
+              // Insert product into gmu.products
+              await this.prisma.$executeRawUnsafe(`
+                INSERT INTO gmu.products (
+                  id, seller_id, name, category, price, weight, image, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (id) DO NOTHING;
+              `,
+                pubProduct.id, pubProduct.seller_id, pubProduct.name, pubProduct.category,
+                pubProduct.price, pubProduct.weight, pubProduct.image || pubProduct.image_uri || null,
+                pubProduct.createdAt || pubProduct.created_at || new Date()
+              );
+            }
+          }
+
+          await tx.warehouseInventory.upsert({
+            where: {
+              warehouseId_productId: {
+                warehouseId: warehouse.id,
+                productId: item.product_id
+              }
+            },
+            update: {
+              quantity: { increment: item.quantity }
+            },
+            create: {
+              warehouseId: warehouse.id,
+              productId: item.product_id,
+              quantity: item.quantity,
+              qcStatus: 'PASSED'
+            }
+          });
+        }
+      }
+
+      // 1. Update Phase 1 Pickup Order status strictly to STORED
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          mainStatus: 'STORED',
+          storedAt: new Date(),
+        },
+      });
+
+      // Update public.master_orders status
+      await tx.masterOrder.updateMany({
+        where: { orderNumber: order.orderId },
+        data: { status: 'STORED' }
+      });
+
+      // 2. Create the new Phase 2 Drop Order in gmu."Order"
+      const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+      const dropId = dropOrderUuid();
+      await tx.order.create({
+        data: {
+          id: dropId,
+          orderId: order.orderId,
+          barcode: order.barcode,
+          sellerId: order.sellerId,
+          buyerId: order.buyerId,
+          productCount: order.productCount,
+          totalQty: order.totalQty,
+          totalWeight: order.totalWeight,
+          mainStatus: 'DROP_CREATED',
+          phase: 'DROP',
+        }
+      });
+
+      // 3. Create the corresponding public DropOrder if it doesn't exist
+      if (masterOrder && buyer) {
+        const existingDrop = await tx.$queryRawUnsafe(`
+          SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
+        `, `DRP-${order.orderId}`) as any[];
+
+        if (existingDrop.length === 0) {
+          const deliveryAddress = [buyer.address_line1, buyer.address_line2, buyer.village, buyer.taluka, buyer.district, buyer.pincode]
+            .filter(Boolean)
+            .join(', ') || '';
+
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public.drop_orders (
+              master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number
+            ) VALUES ($1, $2, 'PENDING', $3, NOW(), $4);
+          `, masterOrder.id, buyer.id, deliveryAddress, `DRP-${order.orderId}`);
+
+          const generatedDrop = await tx.$queryRawUnsafe(`
+            SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
+          `, `DRP-${order.orderId}`) as any[];
+
+          if (generatedDrop?.[0]) {
+            const dropOrderId = generatedDrop[0].id;
+            for (const item of items) {
+              await tx.$executeRawUnsafe(`
+                INSERT INTO public.drop_order_items (
+                  drop_order_id, product_id, quantity, verification_status
+                ) VALUES ($1, $2, $3, 'PENDING');
+              `, dropOrderId, item.product_id, item.quantity);
+            }
+
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public.drop_tracking (
+                drop_order_id, status, remarks, updated_at
+              ) VALUES ($1, 'PENDING', 'Delivery leg created upon arrival at GMU Hub.', NOW());
+            `, dropOrderId);
+          }
+        }
+      }
+
+      return updated;
     });
   }
 
@@ -1163,28 +1686,139 @@ export class OrderManagementService {
       throw new BadRequestException(`No drop SHG assignment request found for SHG ID ${shgId}`);
     }
 
-    await this.prisma.orderAssignment.update({
-      where: { id: assignment.id },
-      data: { status: 'ACCEPTED' },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.orderAssignment.update({
+        where: { id: assignment.id },
+        data: { status: 'ACCEPTED' },
+      });
 
-    await this.prisma.orderAssignment.deleteMany({
-      where: {
-        orderId: order.id,
-        role: 'DROP',
-        assigneeType: 'SHG',
-        status: 'PENDING',
-        id: { not: assignment.id },
-      },
-    });
+      await tx.orderAssignment.deleteMany({
+        where: {
+          orderId: order.id,
+          role: 'DROP',
+          assigneeType: 'SHG',
+          status: 'PENDING',
+          id: { not: assignment.id },
+        },
+      });
 
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        dropShgId: shgId,
-        dropShgStatus: 'ACCEPTED',
-        mainStatus: 'DROP_SHG_ACCEPTED',
-      },
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          dropShgId: shgId,
+          dropShgStatus: 'ACCEPTED',
+          mainStatus: 'DROP_SHG_ACCEPTED',
+        },
+      });
+
+      // Update public.master_orders status
+      await tx.masterOrder.updateMany({
+        where: { orderNumber: order.orderId },
+        data: { status: 'DROP_SHG_ACCEPTED' }
+      });
+
+      // Update public.drop_orders status
+      const cmUser = await tx.$queryRawUnsafe(`
+        SELECT u.id FROM public."User" u
+        JOIN gmu."CommunityMember" cm ON u."phoneNumber" = cm."mobileNumber"
+        WHERE cm.id = $1 LIMIT 1;
+      `, shgId) as any[];
+      const shgUserId = cmUser?.[0]?.id || null;
+
+      await tx.dropOrder.updateMany({
+        where: { dropOrderNumber: `DRP-${order.orderId}` },
+        data: { status: 'ACCEPTED', shgId: shgUserId }
+      });
+
+      // Broadcast to matching transporters based on configured routes (priority: Pincode -> Village -> Taluka -> District)
+      const buyerVillage = order.buyer?.village || order.buyerVillage;
+      const buyerPincode = order.buyer?.pincode || order.buyerPincode;
+      
+      const rawBuyer = await tx.$queryRawUnsafe(`
+        SELECT taluka, district FROM public.buyers WHERE id = $1 LIMIT 1;
+      `, order.buyerId) as any[];
+      const buyerTaluka = rawBuyer?.[0]?.taluka || '';
+      const buyerDistrict = rawBuyer?.[0]?.district || '';
+
+      const approvedTransporters = await tx.$queryRawUnsafe(`
+        SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd."operatingArea"
+        FROM gmu."TransporterMember" tm
+        JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED';
+      `) as any[];
+
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch(e) {}
+        }
+        return [];
+      };
+
+      const p = buyerPincode?.toLowerCase();
+      const v = buyerVillage?.toLowerCase();
+      const t = buyerTaluka?.toLowerCase();
+      const d = buyerDistrict?.toLowerCase();
+
+      const getTransporterLocations = (tr: any) => {
+        const areas = tr.operatingArea
+          ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+          : [];
+        const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+        const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+        return { areas, villages, pincodes };
+      };
+
+      // Priority 1: Pincode
+      let matchingTransporters = approvedTransporters.filter(tr => {
+        const { areas, pincodes } = getTransporterLocations(tr);
+        return p && (pincodes.includes(p) || areas.includes(p));
+      });
+
+      // Priority 2: Village
+      if (matchingTransporters.length === 0 && v) {
+        matchingTransporters = approvedTransporters.filter(tr => {
+          const { areas, villages } = getTransporterLocations(tr);
+          return villages.includes(v) || areas.includes(v);
+        });
+      }
+
+      // Priority 3: Taluka
+      if (matchingTransporters.length === 0 && t) {
+        matchingTransporters = approvedTransporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.includes(t);
+        });
+      }
+
+      // Priority 4: District
+      if (matchingTransporters.length === 0 && d) {
+        matchingTransporters = approvedTransporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.includes(d);
+        });
+      }
+
+      if (matchingTransporters.length > 0) {
+        await tx.$executeRawUnsafe(`
+          DELETE FROM gmu."OrderAssignment" WHERE "orderId" = $1 AND role = 'DROP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
+        `, order.id);
+
+        for (const tr of matchingTransporters) {
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          await tx.$executeRawUnsafe(`
+            INSERT INTO gmu."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW());
+          `, uuidv4(), order.id, tr.id);
+        }
+
+        await tx.$executeRawUnsafe(`
+          UPDATE gmu."Order" SET "dropTransporterStatus" = 'PENDING' WHERE id = $1;
+        `, order.id);
+      }
+
+      return updated;
     });
   }
 

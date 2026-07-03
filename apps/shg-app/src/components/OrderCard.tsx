@@ -20,6 +20,10 @@ interface OrderCardProps {
   isHighlighted?: 'new' | 'updated';
   isRejectedDelivery?: boolean;
   isRescheduled?: boolean;
+  transporterName?: string;
+  transporterMobile?: string;
+  vehicleNumber?: string;
+  transporterId?: string;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -36,7 +40,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   onViewAddress,
   isHighlighted,
   isRejectedDelivery,
-  isRescheduled
+  isRescheduled,
+  transporterName,
+  transporterMobile,
+  vehicleNumber,
+  transporterId
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -139,6 +147,29 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               </Text>
             </View>
           </View>
+
+          {/* Transporter Details */}
+          {!!transporterName && transporterName !== 'N/A' && (
+            <View className="mt-2.5 pt-2.5 border-t border-slate-100 flex-col">
+              <Text className="text-[10px] font-extrabold text-[#073318] uppercase tracking-wider mb-1">Assigned Transporter</Text>
+              <View className="flex-row items-center gap-1.5 flex-wrap">
+                <View className="bg-slate-50 px-2 py-0.5 rounded-[6px] border border-slate-100 flex-row items-center">
+                  <Ionicons name="person-outline" size={10} color="#64748B" />
+                  <Text className="text-[10px] font-bold text-slate-700 ml-1">{transporterName} ({transporterId || 'N/A'})</Text>
+                </View>
+                <View className="bg-slate-50 px-2 py-0.5 rounded-[6px] border border-slate-100 flex-row items-center">
+                  <Ionicons name="call-outline" size={10} color="#64748B" />
+                  <Text className="text-[10px] font-bold text-slate-700 ml-1">{transporterMobile}</Text>
+                </View>
+                {!!vehicleNumber && (
+                  <View className="bg-slate-50 px-2 py-0.5 rounded-[6px] border border-slate-100 flex-row items-center">
+                    <Ionicons name="car-outline" size={10} color="#64748B" />
+                    <Text className="text-[10px] font-bold text-slate-700 ml-1">{vehicleNumber}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Right Icon and Distance */}

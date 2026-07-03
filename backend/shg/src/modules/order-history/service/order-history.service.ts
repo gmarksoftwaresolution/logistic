@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { HistoryQueryDto, OrderHistoryStatus } from '../dto/history-query.dto';
 import { IHistoryStats, IHistoryResponse } from '../interfaces/history.interface';
@@ -46,7 +46,7 @@ export class OrderHistoryService {
       this.prisma.pickupOrder.findMany({
         where: pickupWhere,
         include: {
-          seller: { select: { fullName: true, phoneNumber: true, address: true } },
+          seller: true,
           items: { include: { product: true } },
           masterOrder: true,
           tracking: true,
@@ -57,10 +57,10 @@ export class OrderHistoryService {
       this.prisma.dropOrder.findMany({
         where: dropWhere,
         include: {
-          buyer: { select: { fullName: true, phoneNumber: true, address: true } },
+          buyer: true,
           items: { include: { product: true } },
           masterOrder: {
-            include: { items: { include: { seller: { include: { address: true } } } } },
+            include: { items: { include: { seller: true } } },
           },
           tracking: true,
         },
@@ -69,9 +69,55 @@ export class OrderHistoryService {
       })
     ]);
 
-    // Map to unified format
-    const mappedPickups = pickups.map(p => ({ ...p, legType: 'pickup' }));
-    const mappedDrops = drops.map(d => ({ ...d, legType: 'drop' }));
+    // Map to unified format with dynamic mapping for buyer/seller schema discrepancy
+    const mappedPickups = pickups.map(p => ({
+      ...p,
+      legType: 'pickup',
+      seller: p.seller ? {
+        fullName: p.seller.sellerName,
+        phoneNumber: p.seller.mobileNumber,
+        address: {
+          houseNo: p.seller.addressLine1 || '',
+          village: p.seller.village,
+          taluka: p.seller.taluka,
+          district: p.seller.district,
+          pincode: p.seller.pincode,
+        }
+      } : null
+    })) as any[];
+
+    const mappedDrops = drops.map(d => ({
+      ...d,
+      legType: 'drop',
+      buyer: d.buyer ? {
+        fullName: d.buyer.buyerName,
+        phoneNumber: d.buyer.mobileNumber,
+        address: {
+          houseNo: d.buyer.addressLine1 || '',
+          village: d.buyer.village,
+          taluka: d.buyer.taluka,
+          district: d.buyer.district,
+          pincode: d.buyer.pincode,
+        }
+      } : null,
+      masterOrder: d.masterOrder ? {
+        ...d.masterOrder,
+        items: d.masterOrder.items.map(item => ({
+          ...item,
+          seller: item.seller ? {
+            fullName: item.seller.sellerName,
+            phoneNumber: item.seller.mobileNumber,
+            address: {
+              houseNo: item.seller.addressLine1 || '',
+              village: item.seller.village,
+              taluka: item.seller.taluka,
+              district: item.seller.district,
+              pincode: item.seller.pincode,
+            }
+          } : null
+        }))
+      } : null
+    })) as any[];
 
     let allOrders = [...mappedPickups, ...mappedDrops].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
@@ -159,53 +205,141 @@ export class OrderHistoryService {
     const dropId = parseInt(id.replace('drop-', ''), 10);
 
     if (!isNaN(pickupId) && id.includes('pickup-')) {
-      return this.prisma.pickupOrder.findFirst({
+      const p = await this.prisma.pickupOrder.findFirst({
         where: { id: pickupId, shgId },
         include: {
-          seller: { select: { fullName: true, phoneNumber: true, address: true } },
+          seller: true,
           items: { include: { product: true } },
           masterOrder: true,
           tracking: { orderBy: { updatedAt: 'desc' } },
         }
-      });
+      }) as any;
+      if (p) {
+        p.seller = p.seller ? {
+          fullName: p.seller.sellerName,
+          phoneNumber: p.seller.mobileNumber,
+          address: {
+            houseNo: p.seller.addressLine1 || '',
+            village: p.seller.village,
+            taluka: p.seller.taluka,
+            district: p.seller.district,
+            pincode: p.seller.pincode,
+          }
+        } : null;
+      }
+      return p;
     }
 
     if (!isNaN(dropId) && id.includes('drop-')) {
-      return this.prisma.dropOrder.findFirst({
+      const d = await this.prisma.dropOrder.findFirst({
         where: { id: dropId, shgId },
         include: {
-          buyer: { select: { fullName: true, phoneNumber: true, address: true } },
+          buyer: true,
           items: { include: { product: true } },
           masterOrder: {
-            include: { items: { include: { seller: { include: { address: true } } } } },
+            include: { items: { include: { seller: true } } },
           },
           tracking: { orderBy: { updatedAt: 'desc' } },
         }
-      });
+      }) as any;
+      if (d) {
+        d.buyer = d.buyer ? {
+          fullName: d.buyer.buyerName,
+          phoneNumber: d.buyer.mobileNumber,
+          address: {
+            houseNo: d.buyer.addressLine1 || '',
+            village: d.buyer.village,
+            taluka: d.buyer.taluka,
+            district: d.buyer.district,
+            pincode: d.buyer.pincode,
+          }
+        } : null;
+        if (d.masterOrder?.items) {
+          d.masterOrder.items = d.masterOrder.items.map((item: any) => ({
+            ...item,
+            seller: item.seller ? {
+              fullName: item.seller.sellerName,
+              phoneNumber: item.seller.mobileNumber,
+              address: {
+                houseNo: item.seller.addressLine1 || '',
+                village: item.seller.village,
+                taluka: item.seller.taluka,
+                district: item.seller.district,
+                pincode: item.seller.pincode,
+              }
+            } : null
+          }));
+        }
+      }
+      return d;
     }
 
     const pickup = await this.prisma.pickupOrder.findFirst({
         where: { masterOrder: { orderNumber: id }, shgId },
         include: {
-          seller: { select: { fullName: true, phoneNumber: true, address: true } },
+          seller: true,
           items: { include: { product: true } },
           masterOrder: true,
           tracking: { orderBy: { updatedAt: 'desc' } },
         }
-    });
+    }) as any;
 
-    if (pickup) return pickup;
+    if (pickup) {
+      pickup.seller = pickup.seller ? {
+        fullName: pickup.seller.sellerName,
+        phoneNumber: pickup.seller.mobileNumber,
+        address: {
+          houseNo: pickup.seller.addressLine1 || '',
+          village: pickup.seller.village,
+          taluka: pickup.seller.taluka,
+          district: pickup.seller.district,
+          pincode: pickup.seller.pincode,
+        }
+      } : null;
+      return pickup;
+    }
 
-    return this.prisma.dropOrder.findFirst({
+    const d = await this.prisma.dropOrder.findFirst({
         where: { masterOrder: { orderNumber: id }, shgId },
         include: {
-          buyer: { select: { fullName: true, phoneNumber: true, address: true } },
+          buyer: true,
           items: { include: { product: true } },
           masterOrder: {
-            include: { items: { include: { seller: { include: { address: true } } } } },
+            include: { items: { include: { seller: true } } },
           },
           tracking: { orderBy: { updatedAt: 'desc' } },
         }
-    });
+    }) as any;
+
+    if (d) {
+      d.buyer = d.buyer ? {
+        fullName: d.buyer.buyerName,
+        phoneNumber: d.buyer.mobileNumber,
+        address: {
+          houseNo: d.buyer.addressLine1 || '',
+          village: d.buyer.village,
+          taluka: d.buyer.taluka,
+          district: d.buyer.district,
+          pincode: d.buyer.pincode,
+        }
+      } : null;
+      if (d.masterOrder?.items) {
+        d.masterOrder.items = d.masterOrder.items.map((item: any) => ({
+          ...item,
+          seller: item.seller ? {
+            fullName: item.seller.sellerName,
+            phoneNumber: item.seller.mobileNumber,
+            address: {
+              houseNo: item.seller.addressLine1 || '',
+              village: item.seller.village,
+              taluka: item.seller.taluka,
+              district: item.seller.district,
+              pincode: item.seller.pincode,
+            }
+          } : null
+        }));
+      }
+    }
+    return d;
   }
 }

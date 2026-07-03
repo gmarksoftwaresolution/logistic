@@ -19,6 +19,8 @@ export interface Order {
   transporterName?: string;
   transporterMobile?: string;
   transporterId?: string;
+  transporterAddress?: string;
+  transporterRoute?: string;
   pickupTime?: string;
   vehicleNumber?: string;
   currentHolder?: string;
@@ -44,6 +46,8 @@ export interface Order {
   isReturn?: boolean;
   buyerName?: string;
   sellerName?: string;
+  products?: any[];
+  handoverCode?: string;
 }
 
 interface OrderContextType {
@@ -60,9 +64,9 @@ interface OrderContextType {
   acceptOrders: (orders: Order[]) => Promise<void>;
   acceptAllOrders: () => Promise<void>;
   rejectOrder: (order: Order) => Promise<void>;
-  receiveOrder: (order: Order) => Promise<void>;
+  receiveOrder: (order: Order, code?: string, activeType?: string) => Promise<void>;
   notReceiveOrder: (order: Order) => void;
-  deliverOrder: (order: Order) => Promise<void>;
+  deliverOrder: (order: Order, code?: string) => Promise<void>;
   refreshOrdersList: () => Promise<void>;
   isOrdersLoading: boolean;
   incomingReturnOrders: Order[];
@@ -82,19 +86,26 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
 
   const masterId = dbOrder.masterOrderId || dbOrder.id;
 
-  // Use master order items if available for correct quantity/weight representing the full order
-  const orderItems = dbOrder.masterOrder?.items?.length > 0 ? dbOrder.masterOrder.items : items;
+  const orderItems = items;
 
   const dbQty = orderItems.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
   const qty = dbQty > 0 ? dbQty : 1;
+
+
 
   const sellerAddressArr = [
     dbOrder.seller?.address?.addressLine1,
     dbOrder.seller?.address?.addressLine2,
     dbOrder.seller?.address?.village,
     dbOrder.seller?.address?.district,
+    dbOrder.seller?.addressLine1,
+    dbOrder.seller?.addressLine2,
+    dbOrder.seller?.village,
+    dbOrder.seller?.district,
     dbOrder.masterOrder?.items?.[0]?.seller?.address?.addressLine1,
-    dbOrder.masterOrder?.items?.[0]?.seller?.address?.village
+    dbOrder.masterOrder?.items?.[0]?.seller?.address?.village,
+    dbOrder.masterOrder?.items?.[0]?.seller?.addressLine1,
+    dbOrder.masterOrder?.items?.[0]?.seller?.village
   ].filter(Boolean);
   const actualPickupAddress = sellerAddressArr.length > 0 ? sellerAddressArr[0] : '';
 
@@ -103,8 +114,14 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     dbOrder.buyer?.address?.addressLine2,
     dbOrder.buyer?.address?.village,
     dbOrder.buyer?.address?.district,
+    dbOrder.buyer?.addressLine1,
+    dbOrder.buyer?.addressLine2,
+    dbOrder.buyer?.village,
+    dbOrder.buyer?.district,
     dbOrder.masterOrder?.buyer?.address?.addressLine1,
-    dbOrder.masterOrder?.buyer?.address?.village
+    dbOrder.masterOrder?.buyer?.address?.village,
+    dbOrder.masterOrder?.buyer?.addressLine1,
+    dbOrder.masterOrder?.buyer?.village
   ].filter(Boolean);
 
   let actualDropAddress = dbOrder.deliveryAddress;
@@ -132,7 +149,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
       parcelName,
       category,
-      mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.phoneNumber || ''),
+      mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
       amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
       payment: dbOrder.masterOrder?.paymentMethod || 'Online',
       address: finalAddress,
@@ -140,46 +157,78 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       deliveryDay: dateStr,
       date: dateStr,
       status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
-              (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' :
-              (dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') ? 'PickedUp' :
+              (
+                (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') &&
+                !['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')
+              ) ? 'Accepted' :
+              (
+                dbOrder.status === 'PICKED_UP' || 
+                dbOrder.status === 'RETURN_PICKED_UP' || 
+                (type === 'pickup' && (
+                  (dbOrder.status === 'COMPLETED' && !['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')) ||
+                  ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED'].includes(dbOrder.masterOrder?.status || '')
+                ))
+              ) ? 'PickedUp' :
               dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
       isReturn: isReturnFlag,
       image: items[0]?.product?.image || '',
       currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
       remainingQty: qty,
-      weight: orderItems.reduce((sum: number, i: any) => sum + (i.product?.weight || 0), 0) || '',
+      weight: orderItems.reduce((sum: number, i: any) => sum + ((i.product?.weight || 0) * (i.quantity || 1)), 0) || '',
       distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
       time: timeStr,
-    legType: type,
-    rejectReason: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '')
-      : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Delivery leg rejected by SHG. Reason: ', ''),
-    rejectedAt: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt
-      : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt,
-    acceptedAt: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
-      : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
-    completedAt: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
-      : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
-    fromLocation: isGeneratedReturn
-      ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
-      : isGeneratedNewOrder
-        ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
-        : (type === 'drop' 
-          ? (actualPickupAddress || 'Transporter')
-          : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
-    toLocation: isGeneratedReturn
-      ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-      : isGeneratedNewOrder
+      legType: type,
+      rejectReason: type === 'pickup'
+        ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '')
+        : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Delivery leg rejected by SHG. Reason: ', ''),
+      rejectedAt: type === 'pickup'
+        ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt
+        : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt,
+      acceptedAt: type === 'pickup'
+        ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
+        : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
+      completedAt: type === 'pickup'
+        ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
+        : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+      fromLocation: isGeneratedReturn
+        ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
+        : isGeneratedNewOrder
+          ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
+          : (type === 'drop' 
+            ? (actualPickupAddress || 'Transporter')
+            : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
+      toLocation: isGeneratedReturn
         ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-        : (type === 'drop' 
-          ? (actualDropAddress || 'Buyer') 
-          : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
-    buyerName: dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.fullName || '',
-    sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
-  };
+        : isGeneratedNewOrder
+          ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
+          : (type === 'drop' 
+            ? (actualDropAddress || 'Buyer') 
+            : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
+      buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
+      sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
+      products: orderItems.map((item: any) => ({
+        code: `#P-${item.productId || item.id}`,
+        tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
+        name: item.product?.name || 'Item',
+        details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
+        weightValue: (item.product?.weight || 0) * item.quantity,
+        qty: item.quantity,
+        unit: item.product?.unit || 'kg',
+        price: item.product?.price || 0,
+        category: item.product?.category || 'FOOD',
+        itemId: item.id,
+        productId: item.productId,
+        verificationCode: item.verificationCode || '',
+        verificationStatus: item.verificationStatus || 'PENDING',
+      })),
+      transporterName: dbOrder.transporter?.fullName || '',
+      transporterMobile: dbOrder.transporter?.phoneNumber || '',
+      vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
+      transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
+      transporterAddress: dbOrder.transporter?.transporterAddress || '',
+      transporterRoute: dbOrder.transporter?.transporterRoute || '',
+      handoverCode: dbOrder.handoverCode || '',
+    };
 };
 
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -296,7 +345,14 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
-          if (hasDropOrder) {
+          if (hasDropOrder && (order.status === 'PickedUp' || order.status === 'COMPLETED')) {
+            return false;
+          }
+        } else if (order.legType === 'drop') {
+          const hasIncompletePickup = allMapped.some(
+            o => o.legType === 'pickup' && o.orderId === order.orderId && o.status !== 'PickedUp' && o.status !== 'COMPLETED'
+          );
+          if (hasIncompletePickup) {
             return false;
           }
         }
@@ -352,14 +408,18 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
       });
-      setIncomingOrders(sortedIncoming);
+      const uniqueIncomingMap = new Map<string, Order>();
+      sortedIncoming.forEach(o => uniqueIncomingMap.set(o.id, o));
+      setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
       const sortedAccepted = finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
       });
-      setAcceptedOrders(sortedAccepted);
+      const uniqueAcceptedMap = new Map<string, Order>();
+      sortedAccepted.forEach(o => uniqueAcceptedMap.set(o.id, o));
+      setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
 
       const mappedReturns = rawReturns.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType, true);
@@ -422,7 +482,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Completed = Everything Completed
       const backendCompleted = finalMapped.filter(o => o.status === 'COMPLETED');
       const returnCompleted = mappedReturns.filter(o => o.status === 'COMPLETED');
-      setDeliveredOrders([...backendCompleted, ...returnCompleted, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current]);
+      const allCompleted = [...backendCompleted, ...returnCompleted, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
+      const uniqueCompletedMap = new Map<string, Order>();
+      allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));
+      setDeliveredOrders(Array.from(uniqueCompletedMap.values()));
 
     } catch (error) {
       console.warn('Error fetching live order lists from backend:', error);
@@ -431,12 +494,63 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, []);
 
+  const lastTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
-    refreshOrdersList();
-  }, []);
+    const checkTokenAndRefresh = async () => {
+      try {
+        const token = await AsyncStorage.getItem('jwt_token');
+        if (token !== lastTokenRef.current) {
+          lastTokenRef.current = token;
+          console.log('[SHG OrderContext] JWT Token changed. Clearing state and refreshing orders...');
+          if (!token) {
+            setIncomingOrders([]);
+            setAcceptedOrders([]);
+            setDeliveredOrders([]);
+            setPendingOrders([]);
+            setRejectedOrders([]);
+            setReturnedOrders([]);
+          } else {
+            await refreshOrdersList();
+          }
+        }
+      } catch (err) {
+        console.error('Error checking token change in SHG:', err);
+      }
+    };
+
+    checkTokenAndRefresh();
+    const interval = setInterval(checkTokenAndRefresh, 1000);
+    return () => clearInterval(interval);
+  }, [refreshOrdersList]);
 
   const getStockItems = () => {
     return orders.filter(o => o.currentHolder === 'SHG');
+  };
+
+  const clearLocalStateForOrders = async (orderIds: string[]) => {
+    try {
+      const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
+      let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
+      localPickedUp = localPickedUp.filter(id => !orderIds.includes(id));
+      await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
+      setLocalPickedUpPickups(localPickedUp);
+
+      const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
+      let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
+      localRejected = localRejected.filter(id => !orderIds.includes(id));
+      await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
+      setRejectedDeliveries(localRejected);
+
+      const localRescheduledStr = await AsyncStorage.getItem('rescheduled_orders');
+      let localRescheduled = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
+      orderIds.forEach(id => {
+        delete localRescheduled[id];
+      });
+      await AsyncStorage.setItem('rescheduled_orders', JSON.stringify(localRescheduled));
+    } catch (err) {
+      console.warn('Error clearing local state for accepted orders:', err);
+    }
   };
 
   const acceptOrder = async (order: Order) => {
@@ -445,6 +559,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const endpoint = `/orders/new/${rawId}/accept`;
 
       await axiosInstance.post(endpoint, { legType: order.legType });
+      await clearLocalStateForOrders([order.id]);
       await refreshOrdersList();
     } catch (error) {
       console.error(`Error accepting order ${order.id}:`, error);
@@ -459,6 +574,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const endpoint = `/orders/new/${rawId}/accept`;
         return axiosInstance.post(endpoint, { legType: order.legType });
       }));
+      await clearLocalStateForOrders(ordersToAccept.map(o => o.id));
       await refreshOrdersList();
     } catch (error) {
       console.error('Error accepting orders:', error);
@@ -472,6 +588,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const rawId = id.replace('pickup-', '').replace('drop-', '');
         return axiosInstance.post(`/orders/returns/${rawId}/accept`);
       }));
+      await clearLocalStateForOrders(orderIds);
       await refreshOrdersList();
       
       setHighlightedOrders(prev => {
@@ -662,11 +779,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const receiveOrder = async (order: Order) => {
-    if (order.id.startsWith('RTO-')) {
-      // It's a dummy return order. Process it locally to move it to Delivery Returns Tab.
-      const updatedOrder = { ...order, legType: 'drop' as 'drop' };
-      localAcceptedReturnsRef.current = localAcceptedReturnsRef.current.map(o => o.id === order.id ? updatedOrder : o);
+  const receiveOrder = async (order: Order, code?: string, activeType?: string) => {
+    if (order.id.startsWith('RTO-') && order.status === 'COMPLETED') {
+      const updatedOrder = { ...order, isRejectedDelivery: true };
       setReturnedOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
       applyHighlight(order.id);
       return;
@@ -676,25 +791,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
       if (order.isReturn) {
         const endpoint = `/orders/returns/pickup/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: '1234' });
+        await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
         await refreshOrdersList();
         return;
       }
 
       if (order.legType === 'pickup') {
-        // Local simulation: move to PickedUp status locally to place it in the Delivery tab
-        const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
-        const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
-        if (!localPickedUp.includes(order.id)) {
-          localPickedUp.push(order.id);
-          await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
-          setLocalPickedUpPickups(localPickedUp);
-        }
+        const endpoint = `/orders/new/pickup/${rawId}/complete`;
+        const paramLegType = activeType === 'transporter' ? 'handover' : 'pickup';
+        await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });
         await refreshOrdersList();
       } else {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { legType: 'drop', code: '1234' });
+        await axiosInstance.post(endpoint, { legType: 'drop', code: code || '1234' });
         await refreshOrdersList();
       }
     } catch (error) {
@@ -708,7 +818,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setPendingOrders(prev => [...prev, { ...order, status: 'Pending' }]);
   };
 
-  const deliverOrder = async (order: Order) => {
+  const deliverOrder = async (order: Order, code?: string) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
 
@@ -737,7 +847,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const endpoint = order.legType === 'pickup'
           ? `/orders/new/pickup/${rawId}/complete`
           : `/orders/new/dilivery/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: '1234' });
+        await axiosInstance.post(endpoint, { code: code || '1234' });
 
         // Remove from rejected deliveries
         const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
@@ -761,7 +871,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (order.isReturn) {
         const endpoint = `/orders/returns/dilivery/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: '1234' });
+        await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
         await refreshOrdersList();
         return;
@@ -770,7 +880,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (order.legType === 'pickup') {
         // Complete the pickup order on the backend now that it is delivered to the transporter
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: '1234' });
+        await axiosInstance.post(endpoint, { code: code || '1234' });
 
         const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
         let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
@@ -784,7 +894,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await refreshOrdersList();
       } else {
         const endpoint = `/orders/new/dilivery/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: '1234' });
+        await axiosInstance.post(endpoint, { code: code || '1234' });
         
         const completedOrder = { ...order, status: 'COMPLETED' as any };
         localCompletedOrdersRef.current = [...localCompletedOrdersRef.current, completedOrder];

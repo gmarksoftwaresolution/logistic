@@ -14,12 +14,7 @@ interface Driver {
   image?: string;
 }
 
-const MOCK_DRIVERS: Driver[] = [
-  { id: '1', name: 'Vikram Singh', vehicle: 'Tata Prima', vehicleNumber: 'MH 12 AB 1234', rating: 4.8, status: 'Available' },
-  { id: '2', name: 'Suresh Raina', vehicle: 'Ashok Leyland', vehicleNumber: 'KA 01 CD 5678', rating: 4.5, status: 'Available' },
-  { id: '3', name: 'Amit Kumar', vehicle: 'Eicher Pro', vehicleNumber: 'DL 04 EF 9012', rating: 4.2, status: 'Busy' },
-  { id: '4', name: 'Rajesh Patil', vehicle: 'Mahindra Blazo', vehicleNumber: 'GA 02 GH 3456', rating: 4.9, status: 'Available' },
-];
+const MOCK_DRIVERS: Driver[] = [];
 
 interface DriverSelectionModalProps {
   visible: boolean;

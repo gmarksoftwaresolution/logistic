@@ -12,12 +12,7 @@ interface TaskDetailsModalProps {
   onReject: () => void;
 }
 
-const MOCK_PRODUCTS = [
-  { id: '1', type: 'PICKUP', name: 'Rice Bags', qty: 10, weight: '50kg' },
-  { id: '2', type: 'PICKUP', name: 'Wheat Flour', qty: 5, weight: '25kg' },
-  { id: '3', type: 'DROP', name: 'Packaged Rice', qty: 8, weight: '40kg' },
-  { id: '4', type: 'DROP', name: 'Atta Packets', qty: 5, weight: '25kg' },
-];
+const MOCK_PRODUCTS: any[] = [];
 
 const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ visible, onClose, task, onAccept, onReject }) => {
   if (!task) return null;

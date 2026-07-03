@@ -45,9 +45,9 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   let detailsTitle = t('su_seller_details') || "Seller Details";
   let headerIcon: any = "storefront-outline";
   let nameLabel = t('su_seller_name') || "Seller Name";
-  let nameValue = order.transporterName || "Sanjay Desai";
+  let nameValue = order.sellerName || source;
   let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
-  let mobileValue = order.transporterMobile || "9654782390";
+  let mobileValue = order.mobile || "N/A";
   let addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
   let addressOrVehicleIcon: any = "location-outline";
   let addressOrVehicleValue = "";
@@ -55,67 +55,23 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
     detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
     nameLabel = t('su_buyer_name') || "Buyer Name";
-    nameValue = destination;
+    nameValue = order.buyerName || destination;
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
-    mobileValue = order.mobile || "+91 8484830180";
+    mobileValue = order.mobile || "N/A";
     addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
     addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = `${destination}, Chandgad, kolhapur, Maharastra`;
+    addressOrVehicleValue = order.address || destination;
   } else {
     // Seller details
-    let resolvedAddress = source;
-    if (rawSource.toLowerCase().includes('hifi')) {
-      resolvedAddress = "Hifi Shop, Bramhan galli, Chandgad, kolhapur, Maharastra";
-    } else if (rawSource.toLowerCase().includes('home no')) {
-      resolvedAddress = "Home No. 23, Market Road, Kowad, kolhapur, Maharastra";
-    } else {
-      resolvedAddress = `${source}, Chandgad, kolhapur, Maharastra`;
-    }
-    addressOrVehicleValue = resolvedAddress;
+    addressOrVehicleValue = order.address || source;
   }
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
   // Dynamic products list matching the remainingQty length
-  const productCount = order.remainingQty || 1;
-  const AVAILABLE_PRODUCTS = [{
-    code: '#P101',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Raw Organic Turmeric Packs',
-    details: `2 ${t('su_items') || 'items'} • 10 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P102',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Cold Pressed Groundnut Oil',
-    details: `1 ${t('su_item') || 'item'} • 5 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P103',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Premium Basmati Rice Bag',
-    details: `3 ${t('su_items') || 'items'} • 25 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P104',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Organic Jaggery Block',
-    details: `2 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P105',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Fresh Pure Desi Ghee',
-    details: `1 ${t('su_item') || 'item'} • 1 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P106',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Whole Wheat Atta Bag',
-    details: `1 ${t('su_item') || 'item'} • 10 ${t('su_kg') || 'kg'}`
-  }, {
-    code: '#P107',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Natural Honey Bottle',
-    details: `4 ${t('su_items') || 'items'} • 2 ${t('su_kg') || 'kg'}`
-  }];
-  const products = AVAILABLE_PRODUCTS.slice(0, productCount);
+  const products = order.products || [];
+  const totalWeight = order.weight || products.reduce((sum: number, p: any) => sum + (p.weightValue || 0), 0);
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       {/* Header mimicking the mockup layout */}
       <View className="px-6 py-4 flex-row items-center justify-between">
@@ -314,7 +270,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
             <Text className="text-[15px] font-black text-[#111827]">{t("su_products_delivered_380")}{products.length})</Text>
           </View>
 
-          {products.map(product => <View key={product.code} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
+          {products.map((product: any) => <View key={product.code} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
               <View className="flex-1">
                 <View className="flex-row items-center">
                   <View className="bg-[#E0F2FE] px-2 py-0.5 rounded-[4px] mr-2">

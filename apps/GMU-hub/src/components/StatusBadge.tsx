@@ -23,12 +23,18 @@ const STATUS_MAP: Record<string, { colorClasses: string; dotColor: string }> = {
 
   // Phase 4 - Transporter Pickup from SHG
   TRANSPORTER_ACCEPTED:       { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
+  PICKUP_TRANSPORTER_ACCEPTED:{ colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
   TRANSPORTER_DECLINED:       { colorClasses: 'bg-red-50 text-red-800 border-red-200',          dotColor: 'bg-red-500' },
   IN_TRANSIT_TO_HUB:          { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  PARCEL_AT_TRANSPORTER:      { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
 
   // Phase 5 - Hub Receive and Dispatch
   AT_HUB:                     { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
+  PARCEL_AT_HUB:              { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
+  RETURN_PARCEL_AT_HUB:       { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   HUB_RECEIVED:               { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
+  PARCEL_AT_GMU:              { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  RETURN_PARCEL_AT_GMU:       { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
   BARCODE_GENERATED:          { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   STORED:                     { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   DROP_ASSIGNED:              { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
@@ -47,6 +53,7 @@ const STATUS_MAP: Record<string, { colorClasses: string; dotColor: string }> = {
   DELIVERED:                  { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   DELVIERED_TO_BUYER:         { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   DELIVERED_TO_BUYER:         { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
+  PARCEL_AT_BUYER:            { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
 
   // Phase 8 - Order Completion
   COMPLETED:                  { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
@@ -96,9 +103,18 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   const key = status.toUpperCase().trim().replace(/[\s-]/g, '_');
   const canonical = STATUS_MAP[key];
   if (canonical) {
-    let label = status.replace(/[-_]/g, ' ');
-    if (key === 'DELIVERED_TO_BUYER' || key === 'DELVIERED_TO_BUYER') {
+    let label = status.toLowerCase().replace(/[-_]/g, ' ');
+    if (key === 'DELIVERED_TO_BUYER' || key === 'DELVIERED_TO_BUYER' || key === 'PARCEL_AT_BUYER') {
       label = 'delivered';
+    }
+    if (key === 'PARCEL_AT_GMU') {
+      label = 'parcel at hub';
+    }
+    if (key === 'RETURN_PARCEL_AT_GMU') {
+      label = 'return parcel at hub';
+    }
+    if (key === 'HUB_RECEIVED' || key === 'AT_HUB' || key === 'PARCEL_AT_HUB') {
+      label = 'parcel at hub';
     }
     return (
       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${canonical.colorClasses}`}>
@@ -176,7 +192,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     dotColor = 'bg-red-500';
   }
 
-  const label = status.replace(/[-_]/g, ' ');
+  const label = status.toLowerCase().replace(/[-_]/g, ' ');
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${colorClasses}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />

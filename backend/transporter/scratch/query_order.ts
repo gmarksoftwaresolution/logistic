@@ -22,8 +22,8 @@ async function main() {
           status: drop.status,
           transporterId: drop.transporterId,
           masterOrderId: drop.masterOrderId,
-          buyerPhone: drop.buyer?.phoneNumber,
-          buyerName: drop.buyer?.fullName,
+          buyerPhone: drop.buyer?.mobileNumber,
+          buyerName: drop.buyer?.buyerName,
         });
 
         // Find associated pickup order

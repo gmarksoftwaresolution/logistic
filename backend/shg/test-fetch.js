@@ -3,12 +3,12 @@ require('dotenv').config();
 
 async function testFetch() {
   try {
-    const loginRes = await axios.post('http://localhost:3000/api/auth/login', {
+    const loginRes = await axios.post('http://localhost:3002/api/auth/login', {
       phoneNumber: '7777777777' // Assuming this is SHG 9
     });
     const token = loginRes.data.token;
     
-    const res = await axios.get('http://localhost:3000/api/orders/new/assigned', {
+    const res = await axios.get('http://localhost:3002/api/orders/new/assigned', {
       headers: { Authorization: `Bearer ${token}` }
     });
     

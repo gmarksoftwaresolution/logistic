@@ -1,3 +1,27 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+const envPaths = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '..', '..', '.env'),
+];
+
+for (const p of envPaths) {
+  if (fs.existsSync(p)) {
+    try {
+      const parsed = dotenv.parse(fs.readFileSync(p));
+      for (const key in parsed) {
+        process.env[key] = parsed[key];
+      }
+    } catch (err) {
+      console.error(`Failed to parse .env at ${p}:`, err);
+    }
+    break;
+  }
+}
+
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
@@ -58,7 +82,7 @@ async function bootstrap() {
     prefix: '/uploads',
   });
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 3003;
   await app.listen(port, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger documentation: http://localhost:${port}/api/docs`);

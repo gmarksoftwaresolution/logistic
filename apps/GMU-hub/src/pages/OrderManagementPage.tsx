@@ -272,7 +272,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Render Table Action Button Helper
   const getActionButtons = (row: any, type: 'pickup' | 'drop' | 'return', subTab: string) => {
-    const hasIntake = type === 'pickup' && subTab === 'assigned';
+    const hasIntake = false;
     const hasWarehouse = type === 'pickup' && subTab === 'warehouse';
 
     return (
@@ -313,71 +313,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 <span>View Details</span>
               </button>
 
-              {type === 'pickup' && subTab === 'new' && (
-                <>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      if (confirm('Broadcast this pickup request to matching SHGs?')) {
-                        setActionProcessing(true);
-                        try {
-                          await api.orders.broadcastShg(row.uuid || row.id);
-                          alert('Broadcasted to matching SHGs successfully.');
-                          await loadData();
-                        } catch (err: any) {
-                          alert(err.message || 'Broadcast failed.');
-                        } finally {
-                          setActionProcessing(false);
-                        }
-                      }
-                    }}
-                    disabled={actionProcessing}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Layers className="h-4 w-4 text-emerald-500/70" />
-                    <span>Broadcast SHG</span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      setAssignOrderId(row.id);
-                      setIsAssignModalOpen(true);
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-550/5 hover:text-slate-750 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <ClipboardCheck className="h-4 w-4 text-slate-400" />
-                    <span>Assign Partners</span>
-                  </button>
-                </>
-              )}
 
-              {type === 'pickup' && subTab === 'assigned' && row.transporterStatus?.toLowerCase() === 'pending' && (
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    if (confirm('Broadcast this pickup request to matching transporters?')) {
-                      setActionProcessing(true);
-                      try {
-                        await api.orders.broadcastTransporter(row.uuid || row.id);
-                        alert('Broadcasted to matching transporters successfully.');
-                        await loadData();
-                      } catch (err: any) {
-                        alert(err.message || 'Broadcast failed.');
-                      } finally {
-                        setActionProcessing(false);
-                      }
-                    }
-                  }}
-                  disabled={actionProcessing}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Truck className="h-4 w-4 text-blue-500/70" />
-                  <span>Broadcast Transporter</span>
-                </button>
-              )}
 
               {type === 'return' && subTab === 'assigned' && ['RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING'].includes(row.mainStatus) && (
                 <button
@@ -405,56 +341,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 </button>
               )}
 
-              {type === 'drop' && subTab === 'new' && (
-                <>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      if (confirm('Broadcast this drop request to matching SHGs?')) {
-                        setActionProcessing(true);
-                        try {
-                          await api.orders.dropShgBroadcast(row.uuid || row.id);
-                          alert('Broadcasted to matching SHGs successfully.');
-                          await loadData();
-                        } catch (err: any) {
-                          alert(err.message || 'Broadcast failed.');
-                        } finally {
-                          setActionProcessing(false);
-                        }
-                      }
-                    }}
-                    disabled={actionProcessing}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Layers className="h-4 w-4 text-emerald-500/70" />
-                    <span>Broadcast SHG</span>
-                  </button>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setActiveActionMenu(null);
-                      if (confirm('Broadcast this drop request to matching transporters?')) {
-                        setActionProcessing(true);
-                        try {
-                          await api.orders.dropTransporterBroadcast(row.uuid || row.id);
-                          alert('Broadcasted to matching transporters successfully.');
-                          await loadData();
-                        } catch (err: any) {
-                          alert(err.message || 'Broadcast failed.');
-                        } finally {
-                          setActionProcessing(false);
-                        }
-                      }
-                    }}
-                    disabled={actionProcessing}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Truck className="h-4 w-4 text-blue-500/70" />
-                    <span>Broadcast Transporter</span>
-                  </button>
-                </>
-              )}
+
 
               {hasIntake && (
                 <button
@@ -464,9 +351,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     const intakeKind = type === 'pickup' ? 'pickup' : (activeReturnType === 'pickup' ? 'return-pickup' : 'return-drop');
                     handleIntakeClick(row, intakeKind);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                  disabled={row.mainStatus !== 'PARCEL_AT_GMU' && row.mainStatus !== 'RETURN_PARCEL_AT_GMU' && row.mainStatus !== 'PARCEL_AT_HUB' && row.mainStatus !== 'RETURN_PARCEL_AT_HUB'}
+                  className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition-all duration-150 flex items-center gap-2.5 ${
+                    (row.mainStatus === 'PARCEL_AT_GMU' || row.mainStatus === 'RETURN_PARCEL_AT_GMU' || row.mainStatus === 'PARCEL_AT_HUB' || row.mainStatus === 'RETURN_PARCEL_AT_HUB')
+                      ? 'text-[#073318] hover:bg-[#B2D534]/20 cursor-pointer'
+                      : 'text-gray-400 opacity-50 cursor-not-allowed'
+                  }`}
                 >
-                  <ClipboardCheck className="h-4 w-4 text-[#073318]/70" />
+                  <ClipboardCheck className="h-4 w-4" />
                   <span>Intake Order</span>
                 </button>
               )}
@@ -558,10 +450,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'SHG Name', accessor: (row: PickupOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
     { header: 'SHG Address', accessor: (row: PickupOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
     { header: 'SHG Mobile', accessor: (row: PickupOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof PickupOrder },
     { header: 'Transporter Name', accessor: (row: PickupOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
     { header: 'Transporter Mobile', accessor: (row: PickupOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof PickupOrder },
     { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
     { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
     { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
@@ -577,6 +467,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         <input
           type="checkbox"
           checked={selectedAssignedOrderIds.includes(row.id)}
+          disabled={row.mainStatus !== 'PARCEL_AT_GMU' && row.mainStatus !== 'RETURN_PARCEL_AT_GMU' && row.mainStatus !== 'PARCEL_AT_HUB' && row.mainStatus !== 'RETURN_PARCEL_AT_HUB'}
           onChange={(e) => {
             if (e.target.checked) {
               setSelectedAssignedOrderIds((prev) => [...prev, row.id]);
@@ -584,7 +475,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               setSelectedAssignedOrderIds((prev) => prev.filter((id) => id !== row.id));
             }
           }}
-          className="h-4 w-4 text-[#073318] focus:ring-[#073318] border-slate-300 rounded cursor-pointer"
+          className={`h-4 w-4 focus:ring-[#073318] border-slate-300 rounded ${
+            (row.mainStatus === 'PARCEL_AT_GMU' || row.mainStatus === 'RETURN_PARCEL_AT_GMU' || row.mainStatus === 'PARCEL_AT_HUB' || row.mainStatus === 'RETURN_PARCEL_AT_HUB')
+              ? 'text-[#073318] cursor-pointer'
+              : 'text-slate-200 cursor-not-allowed opacity-40'
+          }`}
         />
       ),
     },
@@ -944,6 +839,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activePickupSubTab === 'assigned' && (
@@ -978,12 +874,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   columns={pickupAssignedColumnsWithSelection}
                   data={pickupAssignedOrders}
                   statusFilterField="mainStatus"
-                  statusFilterOptions={['Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub']}
+                  statusFilterOptions={['Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub', 'Parcel At Transporter', 'Parcel At GMU']}
                   selectedStatus={statusFilter}
                   onStatusChange={setStatusFilter}
                   selectedDate={dateFilter}
                   onDateChange={setDateFilter}
                   onRowDoubleClick={handleViewOrder}
+                  onRefresh={loadData}
                 />
               </div>
             )}
@@ -992,12 +889,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 columns={pickupWarehouseColumns}
                 data={pickupWarehouseOrders}
                 statusFilterField="status"
-                statusFilterOptions={['At Hub', 'Hub Received', 'Barcode Generated']}
+                statusFilterOptions={['Parcel At Hub', 'Barcode Generated']}
                 selectedStatus={statusFilter}
                 onStatusChange={setStatusFilter}
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activePickupSubTab === 'rejected' && (
@@ -1011,6 +909,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activePickupSubTab === 'reschedule' && (
@@ -1024,6 +923,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
           </div>
@@ -1055,6 +955,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeDropSubTab === 'assigned' && (
@@ -1068,6 +969,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeDropSubTab === 'rejected' && (
@@ -1081,6 +983,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeDropSubTab === 'reschedule' && (
@@ -1094,6 +997,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeDropSubTab === 'completed' && (
@@ -1107,6 +1011,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
           </div>
@@ -1149,6 +1054,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeReturnType === 'pickup' && activeReturnSubTab === 'completed' && (
@@ -1158,6 +1064,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'new' && (
@@ -1167,6 +1074,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
             {activeReturnType === 'drop' && activeReturnSubTab === 'completed' && (
@@ -1176,6 +1084,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
               />
             )}
           </div>
@@ -1537,7 +1446,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Priority</p>
                         <div className="mt-1">
                           <span className="inline-block bg-blue-50 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
-                            MEDIUM
+                            {selectedOrderDetails.priority || 'MEDIUM'}
                           </span>
                         </div>
                       </div>
@@ -1715,23 +1624,32 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                       {/* Stepper history items */}
                       <div className="relative border-l border-white/20 pl-4 space-y-4 ml-2.5 py-1">
-                        <div className="relative">
-                          <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                          <p className="text-xs font-black text-[#B2D534]">{selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ').pop() : '08:30 AM'}</p>
-                          <p className="text-xs font-semibold text-slate-200 mt-0.5">Order Created</p>
-                        </div>
-                        {selectedOrderDetails.shgDetails && (
+                        {selectedOrderDetails.tracking && selectedOrderDetails.tracking.length > 0 ? (
+                          selectedOrderDetails.tracking.map((t: any, idx: number) => {
+                            const timeStr = t.updatedAt
+                              ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })
+                              : '08:30 AM';
+                            return (
+                              <div key={idx} className="relative">
+                                <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
+                                <p className="text-xs font-black text-[#B2D534]">{timeStr}</p>
+                                <p className="text-xs font-semibold text-slate-200 mt-0.5">
+                                  {t.remarks || t.status.replace(/[-_]/g, ' ')}
+                                </p>
+                              </div>
+                            );
+                          })
+                        ) : (
                           <div className="relative">
                             <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                            <p className="text-xs font-black text-[#B2D534]">10:15 AM</p>
-                            <p className="text-xs font-semibold text-slate-200 mt-0.5">Assigned to SHG: {selectedOrderDetails.shgDetails.name}</p>
-                          </div>
-                        )}
-                        {selectedOrderDetails.transporterDetails && (
-                          <div className="relative">
-                            <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                            <p className="text-xs font-black text-[#B2D534]">11:30 AM</p>
-                            <p className="text-xs font-semibold text-slate-200 mt-0.5">Transporter Accepted: {selectedOrderDetails.transporterDetails.name}</p>
+                            <p className="text-xs font-black text-[#B2D534]">
+                              {selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ').pop() : '08:30 AM'}
+                            </p>
+                            <p className="text-xs font-semibold text-slate-200 mt-0.5">Order Created</p>
                           </div>
                         )}
                       </div>
@@ -1765,28 +1683,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700 font-semibold">
-                      <tr>
-                        <td className="px-5 py-4 font-bold text-slate-800">Organic Honey</td>
-                        <td className="px-5 py-4">25 Jars</td>
-                        <td className="px-5 py-4">100 kg</td>
-                        <td className="px-5 py-4">
-                          <span className="bg-blue-50 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                            FOOD
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right font-black text-[#073318]">₹450</td>
-                      </tr>
-                      <tr>
-                        <td className="px-5 py-4 font-bold text-slate-800">Sunflower Oil</td>
-                        <td className="px-5 py-4">15 Cans</td>
-                        <td className="px-5 py-4">60 kg</td>
-                        <td className="px-5 py-4">
-                          <span className="bg-blue-50 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                            FOOD
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right font-black text-[#073318]">₹200</td>
-                      </tr>
+                      {selectedOrderDetails.items && selectedOrderDetails.items.length > 0 ? (
+                        selectedOrderDetails.items.map((item: any, idx: number) => (
+                          <tr key={idx}>
+                            <td className="px-5 py-4 font-bold text-slate-800">{item.name}</td>
+                            <td className="px-5 py-4">{item.quantity}</td>
+                            <td className="px-5 py-4">{item.weight} kg</td>
+                            <td className="px-5 py-4">
+                              <span className="bg-blue-50 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                {item.category}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-right font-black text-[#073318]">₹{item.price}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-4 text-center text-slate-400">
+                            No product details found
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

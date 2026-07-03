@@ -59,6 +59,10 @@ export class TransporterManagementService {
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
         COALESCE(rd."pickupLocations", st6.data->'pickupLocations') as "assignedPincodes",
+        tm."assignedVillages" as "tmAssignedVillages",
+        tm."assignedPincodes" as "tmAssignedPincodes",
+        rd."operatingArea" as "operatingArea",
+        rd."pickupLocations" as "pickupLocations",
         COALESCE(rd."workingDays", st6.data->'workingDays') as "workingDays",
         COALESCE(mv."morningShiftTime", st6.data->>'morningShiftTime') as "morningShift",
         COALESCE(mv."eveningShiftTime", st6.data->>'eveningShiftTime') as "eveningShift",
@@ -96,15 +100,84 @@ export class TransporterManagementService {
     `;
 
     const results = await this.prisma.$queryRawUnsafe<any[]>(query);
-    return results.map(item => {
-      const [firstName, ...rest] = (item.fullName || '').split(' ');
-      return {
-        ...item,
-        type: typeFilter,
-        firstName: firstName || '',
-        lastName: rest.join(' ') || ''
-      };
-    });
+    return results.map(item => this.formatTransporterItem(item, typeFilter));
+  }
+
+  private formatTransporterItem(item: any, typeFilter?: string) {
+    const [firstName, ...rest] = (item.fullName || '').split(' ');
+    
+    const parseJsonArray = (val: any): string[] => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) return parsed;
+          return [parsed];
+        } catch (e) {
+          if (val.includes(',')) {
+            return val.split(',').map(s => s.trim());
+          }
+          return [val];
+        }
+      }
+      return [];
+    };
+
+    const rawVillages = item.tmAssignedVillages || item.assignedVillages;
+    const rawPincodes = item.tmAssignedPincodes || item.assignedPincodes;
+
+    let villages = parseJsonArray(rawVillages);
+    let pincodes = parseJsonArray(rawPincodes);
+
+    let pickupLocs: string[] = [];
+    if (item.pickupLocations) {
+      if (typeof item.pickupLocations === 'string') {
+        pickupLocs = item.pickupLocations.split(',').map((v: string) => v.trim());
+      } else if (Array.isArray(item.pickupLocations)) {
+        pickupLocs = item.pickupLocations.map((v: any) => String(v).trim());
+      }
+    }
+
+    if (villages.length === 0) {
+      if (pickupLocs.length > 0) {
+        villages = pickupLocs;
+      } else if (item.operatingArea) {
+        villages = item.operatingArea.split(',').map((v: string) => v.trim());
+      } else if (item.village) {
+        villages = [item.village];
+      } else {
+        villages = ['Nesari'];
+      }
+    }
+
+    if (pincodes.length === 0) {
+      if (pickupLocs.length > 0) {
+        pincodes = pickupLocs.map((v: string) => {
+          const match = v.match(/\d{6}/);
+          return match ? match[0] : (item.pincode || '416504');
+        });
+      } else if (item.pincode) {
+        pincodes = [item.pincode];
+      } else {
+        pincodes = ['416504'];
+      }
+    }
+
+    if (pincodes.length < villages.length) {
+      const lastPin = pincodes[pincodes.length - 1] || item.pincode || '416504';
+      while (pincodes.length < villages.length) {
+        pincodes.push(lastPin);
+      }
+    }
+
+    return {
+      ...item,
+      type: typeFilter || (item.vehicleCategory === 'MILK_VAN' ? 'ROUTE_PARTNER' : 'PERSONAL'),
+      firstName: firstName || '',
+      lastName: rest.join(' ') || '',
+      assignedVillages: villages,
+      assignedPincodes: pincodes,
+    };
   }
 
   async getRoutePartnerRequests() {
@@ -192,6 +265,10 @@ export class TransporterManagementService {
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
         COALESCE(rd."pickupLocations", st6.data->'pickupLocations') as "assignedPincodes",
+        tm."assignedVillages" as "tmAssignedVillages",
+        tm."assignedPincodes" as "tmAssignedPincodes",
+        rd."operatingArea" as "operatingArea",
+        rd."pickupLocations" as "pickupLocations",
         COALESCE(rd."workingDays", st6.data->'workingDays') as "workingDays",
         COALESCE(mv."morningShiftTime", st6.data->>'morningShiftTime') as "morningShift",
         COALESCE(mv."eveningShiftTime", st6.data->>'eveningShiftTime') as "eveningShift",
@@ -230,14 +307,7 @@ export class TransporterManagementService {
     if (!results || results.length === 0) {
       throw new NotFoundException(`Transporter member with ID ${id} not found`);
     }
-    const item = results[0];
-    const [firstName, ...rest] = (item.fullName || '').split(' ');
-    return {
-      ...item,
-      type: item.vehicleCategory === 'MILK_VAN' ? 'ROUTE_PARTNER' : 'PERSONAL',
-      firstName: firstName || '',
-      lastName: rest.join(' ') || ''
-    };
+    return this.formatTransporterItem(results[0]);
   }
 
   async approveTransporter(id: string) {

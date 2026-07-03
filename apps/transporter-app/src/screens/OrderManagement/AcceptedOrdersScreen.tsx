@@ -235,7 +235,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                             >
                               <View style={styles.widgetLeftData}>
                                 <View style={styles.widgetTopRow}>
-                                  <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.id}</Text>
+                                  <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                                 </View>
 
                                 <Text style={styles.widgetRouteText} numberOfLines={2}>

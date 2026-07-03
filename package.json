@@ -8,15 +8,21 @@
     "backend/*",
     "packages/*"
   ],
+
+
+
   "scripts": {
-    "shg-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/shg-app",
-    "transporter-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app",
+    "shg-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --offline",
+    "shg-app:start-tunnel": "node scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --tunnel",
+    "transporter-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --offline",
+    "transporter-app:start-tunnel": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --tunnel",
     "shg-backend:dev": "npm run start:dev --workspace=@logistic/shg-backend",
     "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend",
     "gmu-backend:dev": "npm run start:dev --workspace=@logistic/gmu-backend",
     "db:generate": "npm run prisma:generate --workspace=@logistic/db",
     "db:push": "npm run prisma:migrate --workspace=@logistic/db"
   },
+
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "class-transformer": "^0.5.1",

@@ -1,13 +1,13 @@
 import axios from 'axios';
 
 async function main() {
-  const loginRes = await axios.post('http://localhost:3002/auth/login', {
+  const loginRes = await axios.post('http://localhost:3001/auth/login', {
     mobileNumber: '1111111111',
     otp: '123456'
   });
   const token = loginRes.data.accessToken;
   
-  const returnsRes = await axios.get('http://localhost:3002/orders/returns/buyer', {
+  const returnsRes = await axios.get('http://localhost:3001/orders/returns/buyer', {
     headers: {
       Authorization: `Bearer ${token}`
     }

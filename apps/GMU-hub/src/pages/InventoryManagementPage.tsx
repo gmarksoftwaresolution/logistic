@@ -335,12 +335,13 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             columns={incomingColumns}
             data={incomingInventory}
             statusFilterField="status"
-            statusFilterOptions={['At Hub', 'Hub Received', 'Barcode Generated', 'Drop Assigned', 'Dispatched']}
+            statusFilterOptions={['Stored', 'Parcel At Hub', 'Barcode Generated', 'Drop Assigned', 'Dispatched']}
             selectedStatus={statusFilter}
             onStatusChange={setStatusFilter}
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
+            onRefresh={loadData}
           />
         )}
         {activeSubTab === 'returnPickup' && (
@@ -354,6 +355,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
+            onRefresh={loadData}
           />
         )}
         {activeSubTab === 'returnDrop' && (
@@ -361,12 +363,13 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             columns={returnDropColumns}
             data={returnDropInventory}
             statusFilterField="status"
-            statusFilterOptions={['On Hold', 'At Hub', 'Hub Received', 'Drop Assigned', 'Dispatched']}
+            statusFilterOptions={['On Hold', 'Parcel At Hub', 'Barcode Generated', 'Drop Assigned', 'Dispatched']}
             selectedStatus={statusFilter}
             onStatusChange={setStatusFilter}
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
+            onRefresh={loadData}
           />
         )}
 

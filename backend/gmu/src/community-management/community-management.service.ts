@@ -369,6 +369,44 @@ export class CommunityManagementService {
         imgUrl,
         age
       );
+
+      // Get address details
+      const addressList = await this.prisma.$queryRawUnsafe<any[]>(
+        `SELECT village, taluka, district, state, pincode, "deliveryAddress" FROM public."Address" WHERE "userId" = $1 LIMIT 1`,
+        userId
+      );
+      const address = addressList?.[0] || null;
+
+      const shgUuid = '00000000-0000-0000-0000-' + String(userId).padStart(12, '0');
+      await this.prisma.$executeRawUnsafe(`
+        INSERT INTO gmu."CommunityMember" (
+          id, "memberCode", type, status, "fullName", "mobileNumber", "shgName", 
+          village, taluka, district, state, pincode, "deliveryAddress", "createdAt"
+        ) VALUES ($1, $2, 'SHG', 'APPROVED', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        ON CONFLICT (id) DO UPDATE SET 
+          "mobileNumber" = EXCLUDED."mobileNumber",
+          "fullName" = EXCLUDED."fullName",
+          "shgName" = EXCLUDED."shgName",
+          village = EXCLUDED.village,
+          taluka = EXCLUDED.taluka,
+          district = EXCLUDED.district,
+          state = EXCLUDED.state,
+          pincode = EXCLUDED.pincode,
+          "deliveryAddress" = EXCLUDED."deliveryAddress",
+          status = 'APPROVED';
+      `, 
+        shgUuid, 
+        `CM-SHG-${userId}`, 
+        user.fullName || 'SHG Member', 
+        user.phoneNumber, 
+        shgName || 'Local SHG',
+        address?.village || '',
+        address?.taluka || '',
+        address?.district || '',
+        address?.state || '',
+        address?.pincode || '',
+        address?.deliveryAddress || ''
+      );
     }
 
     return { success: true };

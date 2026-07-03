@@ -102,7 +102,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>{t('orders.activity_details', { defaultValue: 'Activity Details' })}</Text>
-            <Text style={styles.headerSubtitle}>{batch.id}</Text>
+            <Text style={styles.headerSubtitle}>{batch.displayId || batch.id}</Text>
           </View>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
             <X size={scale(18)} color={Colors.textPrimary} strokeWidth={2.5} />
@@ -122,7 +122,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 <Package size={scale(18)} color="#FFFFFF" />
               </View>
               <View style={styles.summaryTextContainer}>
-                <Text style={styles.batchIdText} numberOfLines={1} adjustsFontSizeToFit>{batch.id}</Text>
+                <Text style={styles.batchIdText} numberOfLines={1} adjustsFontSizeToFit>{batch.displayId || batch.id}</Text>
                 <Text style={styles.areaTagText}>
                   {batch.areaName} • {batch.flowType === 'gmu_to_shg' ? t('orders.drop_orders', { defaultValue: 'Drop' }).toUpperCase() : t('orders.pickup_orders', { defaultValue: 'Pickup' }).toUpperCase()}
                 </Text>

@@ -154,7 +154,26 @@ export class OrderController {
     if (legType === 'drop') {
       return this.orderService.pickupDrop(id, user.id, code);
     }
-    return this.orderService.completePickup(id, user.id, code);
+    return this.orderService.completePickup(id, user.id, code, legType);
+  }
+
+  @Post('new/pickup/:id/generate-code')
+  @ApiOperation({ summary: 'Generate verification code for pickup order' })
+  async generateCode(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+  ) {
+    return this.orderService.generateCode(id, user.id);
+  }
+
+  @Post('new/pickup/:id/verify-codes')
+  @ApiOperation({ summary: 'Verify product-wise codes for pickup order' })
+  async verifyCodes(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('codes') codes: Record<number, string>,
+  ) {
+    return this.orderService.verifyCodes(id, user.id, codes);
   }
 
   @Post('new/dilivery/:id/complete')

@@ -340,6 +340,10 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRejectedDelivery={item.isRejectedDelivery}
                 isRescheduled={!!item.rescheduledDate}
+                transporterName={item.transporterName}
+                transporterMobile={item.transporterMobile}
+                vehicleNumber={item.vehicleNumber}
+                transporterId={item.transporterId}
               />
             );
           }}

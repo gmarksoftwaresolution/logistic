@@ -794,6 +794,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             data={tabData} 
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
+            onRefresh={fetchData}
           />
         )}
       </div>

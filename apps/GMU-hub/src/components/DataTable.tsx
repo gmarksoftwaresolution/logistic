@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
 import { TimeAgo } from './TimeAgo';
 
 export interface Column<T> {
@@ -19,6 +19,7 @@ interface DataTableProps<T> {
   onStatusChange?: (status: string) => void;
   selectedDate?: string;
   onDateChange?: (date: string) => void;
+  onRefresh?: () => void;
 }
 
 export function getStatusDisplayLabel(status: string): string {
@@ -111,6 +112,13 @@ export function isStatusMatching(rowValue: string, filterValue: string): boolean
     return true;
   }
 
+  if (
+    (r === 'parcel at hub' || r === 'at hub' || r === 'hub received' || r === 'parcel_at_hub' || r === 'at_hub' || r === 'hub_received') &&
+    f === 'parcel at hub'
+  ) {
+    return true;
+  }
+
   if (r === 'barcode generated' && f === 'barcode generated') {
     return true;
   }
@@ -129,6 +137,7 @@ export function DataTable<T extends Record<string, any>>({
   onStatusChange,
   selectedDate: propSelectedDate,
   onDateChange,
+  onRefresh,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [internalSelectedStatus, setInternalSelectedStatus] = useState<string>('all');
@@ -330,6 +339,16 @@ export function DataTable<T extends Record<string, any>>({
               className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200/80 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Filter
+            </button>
+          )}
+
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="px-4 py-2.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+              <span>Refresh</span>
             </button>
           )}
         </div>

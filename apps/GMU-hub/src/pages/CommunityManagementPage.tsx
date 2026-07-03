@@ -380,10 +380,10 @@ const normalizeUrl = (url?: string) => {
     }
   }
   if (url.startsWith('/uploads')) {
-    return `http://localhost:3000${url}`;
+    return `http://localhost:3001${url}`;
   }
   if (url.startsWith('uploads/')) {
-    return `http://localhost:3000/${url}`;
+    return `http://localhost:3001/${url}`;
   }
   return url;
 };
@@ -912,6 +912,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             data={tabData}
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
+            onRefresh={fetchData}
           />
         )}
       </div>

@@ -28,7 +28,7 @@ function getLocalIp() {
 }
 
 const localIp = getLocalIp();
-const backendPort = 3001; // Transporter backend port
+const backendPort = 3003; // Transporter backend port
 const apiUrlValue = `http://${localIp}:${backendPort}/api`;
 
 console.log(`[IP Auto-Config] Detected local LAN IP: ${localIp}`);
@@ -37,9 +37,9 @@ console.log(`[IP Auto-Config] Detected local LAN IP: ${localIp}`);
 const transporterEnvPath = path.join(__dirname, '..', 'apps', 'transporter-app', '.env');
 updateEnvFile(transporterEnvPath, apiUrlValue);
 
-// Also update .env for shg-app if it exists (using its port 3000)
+// Also update .env for shg-app if it exists (using its port 3002)
 const shgEnvPath = path.join(__dirname, '..', 'apps', 'shg-app', '.env');
-const shgApiUrlValue = `http://${localIp}:3000/api`;
+const shgApiUrlValue = `http://${localIp}:3002/api`;
 updateEnvFile(shgEnvPath, shgApiUrlValue);
 
 function updateEnvFile(filePath, value) {

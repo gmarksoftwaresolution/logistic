@@ -45,6 +45,15 @@ export class OrderController {
     return this.orderService.completePickup(id, req.user.id, code);
   }
 
+  @Post('pickup/:id/complete-drop')
+  @ApiOperation({ summary: 'Mark a pickup order delivery to hub as complete' })
+  async completePickupDrop(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    return this.orderService.completePickupDrop(id, req.user.id);
+  }
+
   @Post('pickup/:id/reject')
   @ApiOperation({ summary: 'Reject a pickup order' })
   async rejectPickup(
@@ -86,6 +95,29 @@ export class OrderController {
   ) {
     return this.orderService.completeDrop(id, req.user.id, code);
   }
+
+  @Post('drop/:id/complete-pickup')
+  @ApiOperation({ summary: 'Confirm drop order pickup from GMU Hub' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Barcode value of the parcel',
+          example: '1234',
+        },
+      },
+    },
+  })
+  async completeDropPickup(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body('code') code?: string,
+  ) {
+    return this.orderService.completeDropPickup(id, req.user.id, code);
+  }
+
 
   @Post('drop/:id/reject')
   @ApiOperation({ summary: 'Reject a drop order' })

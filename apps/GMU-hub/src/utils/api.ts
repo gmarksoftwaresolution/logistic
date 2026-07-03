@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:3002';
+const BASE_URL = 'http://localhost:3001';
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('gmu_token');

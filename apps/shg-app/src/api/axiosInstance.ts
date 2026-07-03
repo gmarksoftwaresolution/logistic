@@ -5,7 +5,7 @@ import { STORAGE_KEYS } from '../utils/storage';
 console.log("API URL =", process.env.EXPO_PUBLIC_API_URL);
 
 const axiosInstance = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
+  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3002/api',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',

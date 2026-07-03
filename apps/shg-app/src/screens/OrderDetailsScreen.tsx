@@ -15,6 +15,7 @@ import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
 import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
+import axiosInstance from '../api/axiosInstance';
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
@@ -48,7 +49,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
     rejectOrder,
     deliverOrder,
     orders,
-    rescheduleOrder
+    rescheduleOrder,
+    refreshOrdersList
   } = useOrders();
 
   const order = orders.find(o => o.id === routeOrder.id) || routeOrder;
@@ -92,12 +94,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
   let nameLabel = t('su_person_name') || "Person Name";
-  let nameValue = order.transporterName || "Rahul Patil";
+  let nameValue = order.transporterName || "N/A";
   let mobileLabel = t('su_mobile_number') || "Mobile Number";
-  let mobileValue = order.transporterMobile || "+91 9123456789";
+  let mobileValue = order.transporterMobile || "N/A";
   let addressOrVehicleLabel = t('su_vehicle_number') || "Vehicle Number";
   let addressOrVehicleIcon: any = "car-outline";
-  let addressOrVehicleValue = order.vehicleNumber || "MH-09-AB-1234";
+  let addressOrVehicleValue = order.vehicleNumber || "N/A";
 
   if (order.isRejectedDelivery && activeType === 'transporter') {
     addressOrVehicleLabel = "Return Hub Address";
@@ -108,7 +110,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     mobileLabel = "Transporter Mobile Number";
     addressOrVehicleLabel = "Transporter Address";
     addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = order.address || "Kolhapur Transporter Hub, Main Road, Kolhapur";
+    addressOrVehicleValue = order.transporterAddress || "N/A";
   }
 
   if (activeType === 'seller') {
@@ -145,53 +147,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
     addressOrVehicleValue = order.address || `${destination}, Chandgad, kolhapur, Maharastra`;
   }
 
-  // Dynamic products list matching the remainingQty length
-  const productCount = order.remainingQty || 1;
-  const AVAILABLE_PRODUCTS = [{
-    code: '#P101',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Raw Organic Turmeric Packs',
-    details: `2 ${t('su_items') || 'items'}`,
-    weightValue: 10
-  }, {
-    code: '#P102',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Cold Pressed Groundnut Oil',
-    details: `1 ${t('su_item') || 'item'}`,
-    weightValue: 5
-  }, {
-    code: '#P103',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Premium Basmati Rice Bag',
-    details: `3 ${t('su_items') || 'items'}`,
-    weightValue: 25
-  }, {
-    code: '#P104',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Organic Jaggery Block',
-    details: `2 ${t('su_items') || 'items'}`,
-    weightValue: 2
-  }, {
-    code: '#P105',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Fresh Pure Desi Ghee',
-    details: `1 ${t('su_item') || 'item'}`,
-    weightValue: 1
-  }, {
-    code: '#P106',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Whole Wheat Atta Bag',
-    details: `1 ${t('su_item') || 'item'}`,
-    weightValue: 10
-  }, {
-    code: '#P107',
-    tag: t('su_pickup_order') || 'Pickup Order',
-    name: 'Natural Honey Bottle',
-    details: `4 ${t('su_items') || 'items'}`,
-    weightValue: 2
-  }];
-  const products = AVAILABLE_PRODUCTS.slice(0, productCount);
-  const totalWeight = products.reduce((sum, p) => sum + p.weightValue, 0);
+  const products = order.products || [];
+  const totalWeight = products.reduce((sum: number, p: any) => sum + p.weightValue, 0);
   const formattedOrderId = getFormattedOrderId(order);
   const headerTitle = isDeliveryPhase ? (t('su_delivery_details') || "Delivery Details") : (t('su_collection_details') || "Collection Details");
   const headerSubtitle = `${t('su_batch_hash') || 'Batch #'} ${formattedOrderId} • ${source}`;
@@ -199,57 +156,75 @@ const OrderDetailsScreen: React.FC<Props> = ({
     Linking.openURL(`tel:${phone}`);
   };
   const [tempPhotoUri, setTempPhotoUri] = useState<string | null>(null);
+  const [dropItemCodes, setDropItemCodes] = useState<Record<number, string>>({});
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+  const [sellerEnteredCode, setSellerEnteredCode] = useState<string>('');
+  const sellerInputRefs = useRef<any[]>([]);
+
+  const handleSellerCodeChange = (digitIdx: number, text: string) => {
+    const cleanText = text.replace(/[^0-9]/g, '');
+    const currentVal = sellerEnteredCode.padEnd(4, ' ');
+    const chars = currentVal.split('');
+    chars[digitIdx] = cleanText || ' ';
+    const newVal = chars.join('').trimEnd();
+    setSellerEnteredCode(newVal);
+
+    if (cleanText && digitIdx < 3) {
+      sellerInputRefs.current[digitIdx + 1]?.focus();
+    }
+  };
+
+  const handleSellerKeyPress = (digitIdx: number, key: string) => {
+    if (key === 'Backspace' && !sellerEnteredCode[digitIdx] && digitIdx > 0) {
+      sellerInputRefs.current[digitIdx - 1]?.focus();
+    }
+  };
+
+  const setRef = (itemId: number, digitIndex: number, ref: TextInput | null) => {
+    inputRefs.current[`${itemId}-${digitIndex}`] = ref;
+  };
+
+  const handleCodeChange = (itemId: number, digitIndex: number, text: string) => {
+    const cleanText = text.replace(/[^0-9]/g, '');
+    const currentVal = (dropItemCodes[itemId] || '').padEnd(4, ' ');
+    const valArr = currentVal.split('');
+    valArr[digitIndex] = cleanText || ' ';
+    const newVal = valArr.join('').trimEnd();
+    setDropItemCodes(prev => ({ ...prev, [itemId]: newVal }));
+
+    if (cleanText && digitIndex < 3) {
+      inputRefs.current[`${itemId}-${digitIndex + 1}`]?.focus();
+    }
+  };
+
+  const handleKeyPress = (itemId: number, digitIndex: number, key: string) => {
+    if (key === 'Backspace') {
+      const currentVal = dropItemCodes[itemId] || '';
+      if (!currentVal[digitIndex] || currentVal[digitIndex] === ' ' || currentVal[digitIndex] === '') {
+        if (digitIndex > 0) {
+          inputRefs.current[`${itemId}-${digitIndex - 1}`]?.focus();
+        }
+      }
+    }
+  };
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // OTP states
-  const [otpSent, setOtpSent] = useState<boolean>(false);
-  const [otpVerified, setOtpVerified] = useState<boolean>(false);
-  const [otp, setOtp] = useState<string[]>(['', '', '', '']);
-  const inputRefs = [useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null)];
+  // Dynamic computed variables directly from database/backend data structure
+  const codesGenerated = (order.products || []).some((p: any) => !!p.verificationCode);
+  const deliveryCodeGenerated = codesGenerated;
+  const deliveryCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
+  const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
+  const pickupCodeVisible = codesGenerated;
 
-  const handleOtpChange = (text: string, index: number) => {
-    if (!/^\d*$/.test(text)) return;
-    const newOtp = [...otp];
-    newOtp[index] = text;
-    setOtp(newOtp);
-    if (text && index < 3) {
-      inputRefs[index + 1].current?.focus();
-    }
-  };
 
-  const handleOtpKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs[index - 1].current?.focus();
-    }
-  };
 
-  // Delivery Code states (for Transporter delivery)
-  const [deliveryCodeGenerated, setDeliveryCodeGenerated] = useState<boolean>(false);
-  const [deliveryCodeVerified, setDeliveryCodeVerified] = useState<boolean>(false);
-  const [deliveryCode, setDeliveryCode] = useState<string[]>(['', '', '', '']);
-  const deliveryCodeRefs = [useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null), useRef<TextInput>(null)];
-
-  // Pickup Code states (for Transporter pickup)
-  const [pickupCodeVisible, setPickupCodeVisible] = useState<boolean>(false);
-  const [pickupCodeVerified, setPickupCodeVerified] = useState<boolean>(false);
-
-  const handleDeliveryCodeChange = (text: string, index: number) => {
-    if (!/^\d*$/.test(text)) return;
-    const newCode = [...deliveryCode];
-    newCode[index] = text;
-    setDeliveryCode(newCode);
-    if (text && index < 3) {
-      deliveryCodeRefs[index + 1].current?.focus();
-    }
-  };
-
-  const handleDeliveryCodeKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !deliveryCode[index] && index > 0) {
-      deliveryCodeRefs[index - 1].current?.focus();
-    }
-  };
+  const isSubmitDisabled = isSubmitting || (
+    activeType === 'transporter'
+      ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified)
+      : (activeType === 'buyer' ? !deliveryCodeVerified : !deliveryCodeVerified)
+  );
 
   // Delivery Scanner states
   const [isScanned, setIsScanned] = useState<boolean>(false);
@@ -385,9 +360,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
     try {
       setIsSubmitting(true);
 
-      // OTP Verification Rule
-      if ((activeType === 'seller' || activeType === 'buyer') && !otpVerified) {
-        Alert.alert("Verification Required", "Please verify OTP before submitting.");
+      // Code Verification Rule
+      if (activeType === 'seller' && !deliveryCodeGenerated) {
+        Alert.alert("Verification Required", "Please generate delivery code before submitting.");
         setIsSubmitting(false);
         return;
       }
@@ -439,7 +414,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         await receiveOrder({
           ...order,
           image: capturedPhotoUri
-        });
+        }, undefined, activeType);
       }
       if (order.id.startsWith('RTO-')) {
         if (navigation.canGoBack()) {
@@ -684,32 +659,98 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         </View>
 
-        <View className="flex-row items-start">
-          <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-            <Ionicons name={addressOrVehicleIcon} size={18} color="#073318" />
-          </View>
-          <View className="flex-1 justify-center mt-0.5">
-            <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{addressOrVehicleLabel}</Text>
-            <Text className="text-[14px] font-black text-[#111827] pr-2">
-              {addressOrVehicleValue}
-            </Text>
-
-            {order.isRejectedDelivery && (
-              <View className="mt-3 bg-[#FEF2F2] border border-[#FECACA] p-3 rounded-[16px] flex-row items-start">
-                <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
-                <View className="flex-1">
-                  <Text className="text-[12px] font-extrabold text-[#991B1B] uppercase tracking-wider mb-1">
-                    Return Address Updated
-                  </Text>
-                  <Text className="text-[12px] font-medium text-[#7F1D1D] leading-tight">
-                    This order was rejected during delivery. The address has been updated to the original pickup point from where the order was collected. Please return the products to this location.
-                  </Text>
-                </View>
+        {activeType === 'transporter' ? (
+          <>
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="car-outline" size={18} color="#073318" />
               </View>
-            )}
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Vehicle Number</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.vehicleNumber || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="location-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Address</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.transporterAddress || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="map-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Route Details</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.transporterRoute || 'N/A'}</Text>
+              </View>
+            </View>
+          </>
+        ) : (
+          <View className="flex-row items-start">
+            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+              <Ionicons name={addressOrVehicleIcon} size={18} color="#073318" />
+            </View>
+            <View className="flex-1 justify-center mt-0.5">
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{addressOrVehicleLabel}</Text>
+              <Text className="text-[14px] font-black text-[#111827] pr-2">
+                {addressOrVehicleValue}
+              </Text>
+
+              {order.isRejectedDelivery && (
+                <View className="mt-3 bg-[#FEF2F2] border border-[#FECACA] p-3 rounded-[16px] flex-row items-start">
+                  <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
+                  <View className="flex-1">
+                    <Text className="text-[12px] font-extrabold text-[#991B1B] uppercase tracking-wider mb-1">
+                      Return Address Updated
+                    </Text>
+                    <Text className="text-[12px] font-medium text-[#7F1D1D] leading-tight">
+                      This order was rejected during delivery. The address has been updated to the original pickup point from where the order was collected. Please return the products to this location.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Transporter N/A Info Card */}
+      {activeType === 'seller' && (
+        <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 4
+        }}>
+          <View className="flex-row items-center pb-4 border-b border-slate-100 mb-4">
+            <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
+              <Ionicons name="car-outline" size={16} color="#073318" />
+            </View>
+            <Text className="text-[15px] font-black text-[#111827]">{t('su_transporter_details') || "Transporter Details"}</Text>
+          </View>
+          <View className="flex-col gap-3">
+            <View className="flex-row justify-between">
+              <Text className="text-[13px] font-medium text-slate-500">Transporter Name</Text>
+              <Text className="text-[13px] font-black text-[#111827]">N/A</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-[13px] font-medium text-slate-500">Transporter Mobile</Text>
+              <Text className="text-[13px] font-black text-[#111827]">N/A</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-[13px] font-medium text-slate-500">Vehicle Number</Text>
+              <Text className="text-[13px] font-black text-[#111827]">N/A</Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* Task Items / Products Header */}
       <View className="flex-row justify-between items-center mb-4 mx-1">
@@ -742,7 +783,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         shadowRadius: 8,
         elevation: 4
       }}>
-        {products.map((item, index) => {
+        {products.map((item: any, index: number) => {
           const isLast = index === products.length - 1;
           return <View key={item.code} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
             {/* LEFT + CENTER Wrapper */}
@@ -770,175 +811,237 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
         {/* Verification Section */}
         {activeType === 'transporter' ? (
-          isDeliveryPhase ? (
+          !codesGenerated ? (
             <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
               <View className="flex-row items-center mb-4">
                 <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
                   <Ionicons name="keypad-outline" size={16} color="#073318" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-[15px] font-black text-[#111827]">Generate Delivery Code</Text>
-                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">Generate a 4-digit delivery verification code before submitting the order.</Text>
+                  <Text className="text-[15px] font-black text-[#111827]">
+                    {isDeliveryPhase ? "Generate Delivery Code" : "Generate Handover Code"}
+                  </Text>
+                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                    Generate a 4-digit verification code.
+                  </Text>
                 </View>
               </View>
 
-              {deliveryCodeVerified ? (
-                <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
-                  <Ionicons name="checkmark-circle" size={20} color="#059669" />
-                  <Text className="text-[14px] font-bold text-[#059669] ml-2">Delivery code verified successfully</Text>
-                </View>
-              ) : !deliveryCodeGenerated ? (
-                <TouchableOpacity onPress={() => {
-                  setDeliveryCodeGenerated(true);
-                  Toast.show({
-                    type: 'success',
-                    text1: 'Code Generated',
-                    text2: 'Delivery code generated successfully'
-                  });
-                }} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
-                  <Text className="text-[14px] font-bold text-white">Generate Delivery Code</Text>
-                </TouchableOpacity>
-              ) : (
-                <View>
-                  <View className="flex-row justify-center gap-3 mb-5 mt-2">
-                    {[0, 1, 2, 3].map((index) => (
-                      <TextInput
-                        key={index}
-                        ref={deliveryCodeRefs[index]}
-                        value={deliveryCode[index]}
-                        onChangeText={(text) => handleDeliveryCodeChange(text, index)}
-                        onKeyPress={(e) => handleDeliveryCodeKeyPress(e, index)}
-                        keyboardType="numeric"
-                        maxLength={1}
-                        className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-[#111827]"
-                      />
-                    ))}
-                  </View>
-
-                  <TouchableOpacity 
-                    onPress={() => {
-                      if (deliveryCode.join('') === '5678') {
-                        setDeliveryCodeVerified(true);
-                        Toast.show({
-                          type: 'success',
-                          text1: 'Code Verified',
-                          text2: 'Delivery code verified successfully'
-                        });
-                      } else {
-                        Alert.alert("Error", "Invalid delivery code");
-                      }
-                    }} 
-                    className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
-                  >
-                    <Text className="text-[14px] font-bold text-white">Verify Code</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                    await axiosInstance.post(`/orders/new/pickup/${rawId}/generate-code`);
+                    await refreshOrdersList();
+                    Toast.show({
+                      type: 'success',
+                      text1: 'Code Generated',
+                      text2: 'Verification code generated successfully'
+                    });
+                  } catch (err) {
+                    console.error('Error generating code:', err);
+                    Alert.alert('Error', 'Failed to generate verification code. Please try again.');
+                  }
+                }}
+                className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+              >
+                <Text className="text-[14px] font-bold text-white">Generate Code</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
               <View className="flex-row items-center mb-4">
                 <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
-                  <Ionicons name="eye-outline" size={16} color="#073318" />
+                  <Ionicons name="keypad-outline" size={16} color="#073318" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-[15px] font-black text-[#111827]">View Code</Text>
-                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">Pickup verification code generated by transporter.</Text>
+                  <Text className="text-[15px] font-black text-[#111827]">
+                    {isDeliveryPhase ? "Delivery Verification" : "Handover Verification"}
+                  </Text>
+                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                    Enter the 4-digit code from the transporter to confirm handover.
+                  </Text>
                 </View>
               </View>
 
-              {pickupCodeVerified ? (
-                <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
-                  <Ionicons name="checkmark-circle" size={20} color="#059669" />
-                  <Text className="text-[14px] font-bold text-[#059669] ml-2">Pickup verified successfully</Text>
+              <View className="flex-col gap-3">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[13px] font-black text-[#111827]">Verification Pending</Text>
+                  {deliveryCodeVerified ? (
+                    <View className="bg-[#ECFDF5] border border-[#D1FAE5] px-3 py-1.5 rounded-[8px] flex-row items-center">
+                      <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                      <Text className="text-[12px] font-bold text-[#059669] ml-1">Verified</Text>
+                    </View>
+                  ) : null}
                 </View>
-              ) : !pickupCodeVisible ? (
-                <TouchableOpacity onPress={() => setPickupCodeVisible(true)} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
-                  <Text className="text-[14px] font-bold text-white">View Code</Text>
-                </TouchableOpacity>
-              ) : (
-                <View>
-                  <View className="flex-row justify-center gap-3 mb-5 mt-2">
-                    {['5', '6', '7', '8'].map((digit, index) => (
-                      <View key={index} className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] items-center justify-center">
-                        <Text className="text-[18px] font-black text-[#111827]">{digit}</Text>
-                      </View>
-                    ))}
-                  </View>
 
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setPickupCodeVerified(true);
-                      Toast.show({
-                        type: 'success',
-                        text1: 'Verification Successful',
-                        text2: 'Pickup verified successfully'
-                      });
-                    }} 
-                    className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
-                  >
-                    <Text className="text-[14px] font-bold text-white">Verify Code</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                {!deliveryCodeVerified && (
+                  <View className="flex-row items-center justify-between mt-1">
+                    <View className="flex-row gap-2">
+                      {[0, 1, 2, 3].map((digitIdx) => {
+                        const val = (sellerEnteredCode || '')[digitIdx] || '';
+                        return (
+                          <TextInput
+                            key={digitIdx}
+                            ref={(ref) => { sellerInputRefs.current[digitIdx] = ref; }}
+                            value={val === ' ' ? '' : val}
+                            onChangeText={(text) => handleSellerCodeChange(digitIdx, text)}
+                            onKeyPress={({ nativeEvent }) => handleSellerKeyPress(digitIdx, nativeEvent.key)}
+                            keyboardType="numeric"
+                            maxLength={1}
+                            style={{ padding: 0, textAlignVertical: 'center', includeFontPadding: false }}
+                            className="w-12 h-12 bg-white border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-slate-800"
+                          />
+                        );
+                      })}
+                    </View>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                        const entered = sellerEnteredCode.replace(/\s/g, '');
+                        if (!entered || entered.length !== 4) {
+                          Alert.alert("Error", "Please enter a 4-digit verification code.");
+                          return;
+                        }
+                        try {
+                          const codesMap: Record<number, string> = {};
+                          products.forEach((p: any) => {
+                            codesMap[p.itemId] = entered;
+                          });
+                          await axiosInstance.post(`/orders/new/pickup/${rawId}/verify-codes`, {
+                            codes: codesMap
+                          });
+                          await refreshOrdersList();
+                          Toast.show({
+                            type: 'success',
+                            text1: 'Verified Successfully',
+                            text2: 'Order verified successfully'
+                          });
+                        } catch (err: any) {
+                          console.error('Error verifying code:', err);
+                          const msg = err.response?.data?.message || 'Invalid code. Please try again.';
+                          Alert.alert('Verification Failed', msg);
+                        }
+                      }}
+                      className="bg-[#073318] px-4 py-2 rounded-[10px] items-center justify-center shadow-sm"
+                    >
+                      <Text className="text-[12px] font-bold text-white">Verify</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
           )
-        ) : (
+        ) : (activeType === 'seller' || activeType === 'buyer') ? (
           <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
             <View className="flex-row items-center mb-4">
               <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
-                <Ionicons name="shield-checkmark-outline" size={16} color="#073318" />
+                <Ionicons name="keypad-outline" size={16} color="#073318" />
               </View>
-              <Text className="text-[15px] font-black text-[#111827]">OTP Verification</Text>
+              <View className="flex-1">
+                <Text className="text-[15px] font-black text-[#111827]">
+                  {isDeliveryPhase ? "Delivery Verification" : "Seller Pickup Verification"}
+                </Text>
+                <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                  {isDeliveryPhase 
+                    ? "Generate or enter verification code to confirm delivery." 
+                    : "Generate or enter verification code to confirm pickup from seller."}
+                </Text>
+              </View>
             </View>
 
-            {otpVerified ? (
-              <View className="bg-[#ECFDF5] border border-[#D1FAE5] p-3 rounded-[12px] flex-row items-center justify-center">
-                <Ionicons name="checkmark-circle" size={20} color="#059669" />
-                <Text className="text-[14px] font-bold text-[#059669] ml-2">OTP Verified Successfully</Text>
-              </View>
-            ) : !otpSent ? (
-              <TouchableOpacity onPress={() => setOtpSent(true)} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
-                <Text className="text-[14px] font-bold text-white">Send OTP</Text>
+            {!deliveryCodeGenerated ? (
+              <TouchableOpacity onPress={async () => {
+                try {
+                  const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                  const res = await axiosInstance.post(`/orders/new/pickup/${rawId}/generate-code`);
+                  await refreshOrdersList();
+                  Toast.show({
+                    type: 'success',
+                    text1: 'Code Generated',
+                    text2: `Verification code generated successfully`
+                  });
+                } catch (err) {
+                  console.error('Error generating code:', err);
+                  Alert.alert('Error', 'Failed to generate verification code. Please try again.');
+                }
+              }} className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm">
+                <Text className="text-[14px] font-bold text-white">Generate Code</Text>
               </TouchableOpacity>
             ) : (
-              <View>
-                <Text className="text-[12px] font-medium text-slate-500 mb-3 text-center">
-                  OTP sent to:{'\n'}
-                  <Text className="font-bold text-[#111827] mt-1">{mobileValue}</Text>
-                </Text>
-                
-                <View className="flex-row justify-center gap-3 mb-5">
-                  {[0, 1, 2, 3].map((index) => (
-                    <TextInput
-                      key={index}
-                      ref={inputRefs[index]}
-                      value={otp[index]}
-                      onChangeText={(text) => handleOtpChange(text, index)}
-                      onKeyPress={(e) => handleOtpKeyPress(e, index)}
-                      keyboardType="numeric"
-                      maxLength={1}
-                      className="w-12 h-12 bg-[#F8FAFC] border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-[#111827]"
-                    />
-                  ))}
+              <View className="flex-col gap-3">
+                <View className="flex-row items-center justify-between">
+                  {!isDeliveryPhase ? (
+                    <Text className="text-[13px] font-black text-[#111827]">Verification Code: {products[0]?.verificationCode || ''}</Text>
+                  ) : (
+                    <Text className="text-[13px] font-black text-[#111827]">Verification Pending</Text>
+                  )}
+                  {deliveryCodeVerified ? (
+                    <View className="bg-[#ECFDF5] border border-[#D1FAE5] px-3 py-1.5 rounded-[8px] flex-row items-center">
+                      <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                      <Text className="text-[12px] font-bold text-[#059669] ml-1">Verified</Text>
+                    </View>
+                  ) : null}
                 </View>
-
-                <TouchableOpacity 
-                  onPress={() => {
-                    if (otp.join('') === '1234') {
-                      setOtpVerified(true);
-                    } else {
-                      Alert.alert("Error", "Invalid OTP");
-                    }
-                  }} 
-                  className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
-                >
-                  <Text className="text-[14px] font-bold text-white">Verify OTP</Text>
-                </TouchableOpacity>
+                
+                {!deliveryCodeVerified && (
+                  <View className="flex-row items-center justify-between mt-1">
+                    <View className="flex-row gap-2">
+                      {[0, 1, 2, 3].map((digitIdx) => {
+                        const val = (sellerEnteredCode || '')[digitIdx] || '';
+                        return (
+                          <TextInput
+                            key={digitIdx}
+                            ref={(ref) => { sellerInputRefs.current[digitIdx] = ref; }}
+                            value={val === ' ' ? '' : val}
+                            onChangeText={(text) => handleSellerCodeChange(digitIdx, text)}
+                            onKeyPress={({ nativeEvent }) => handleSellerKeyPress(digitIdx, nativeEvent.key)}
+                            keyboardType="numeric"
+                            maxLength={1}
+                            style={{ padding: 0, textAlignVertical: 'center', includeFontPadding: false }}
+                            className="w-12 h-12 bg-white border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-slate-800"
+                          />
+                        );
+                      })}
+                    </View>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                        const entered = sellerEnteredCode.replace(/\s/g, '');
+                        if (!entered || entered.length !== 4) {
+                          Alert.alert("Error", "Please enter a 4-digit verification code.");
+                          return;
+                        }
+                        try {
+                          const codesMap: Record<number, string> = {};
+                          products.forEach((p: any) => {
+                            codesMap[p.itemId] = entered;
+                          });
+                          await axiosInstance.post(`/orders/new/pickup/${rawId}/verify-codes`, {
+                            codes: codesMap
+                          });
+                          await refreshOrdersList();
+                          Toast.show({
+                            type: 'success',
+                            text1: 'Verified Successfully',
+                            text2: 'Order verified successfully'
+                          });
+                        } catch (err: any) {
+                          console.error('Error verifying code:', err);
+                          const msg = err.response?.data?.message || 'Invalid code. Please try again.';
+                          Alert.alert('Verification Failed', msg);
+                        }
+                      }}
+                      className="bg-[#073318] px-4 py-2 rounded-[10px] items-center justify-center shadow-sm"
+                    >
+                      <Text className="text-[12px] font-bold text-white">Verify</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
           </View>
-        )}
+        ) : null}
       </View>
 
       {/* Action Buttons Row */}
@@ -998,8 +1101,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
         {/* Submit Order full-width button */}
         <TouchableOpacity 
           onPress={handleSubmitOrder} 
-          disabled={isSubmitting || (activeType === 'transporter' ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified) : !otpVerified)} 
-          className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${(isSubmitting || (activeType === 'transporter' ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified) : !otpVerified)) ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
+          disabled={isSubmitDisabled} 
+          className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitDisabled ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
           {isSubmitting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="checkmark-circle-outline" size={16} color="white" />}
           <Text className="text-[14px] font-bold text-white ml-2">
             {isSubmitting

@@ -124,7 +124,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               <View style={styles.cardHeaderRow}>
                 <View style={styles.idGroup}>
                   <Text style={styles.journeyIdText}>
-                    {journey.masterOrderId ? `Order #${journey.masterOrderId}` : `Seed Order`}
+                    {journey.masterOrderId ? `Order #${journey.masterOrderId}` : `Order #${journey.id}`}
                   </Text>
                   <View style={[styles.successPill, journey.dropCompleted ? styles.pillDelivered : styles.pillTransit]}>
                     <Text style={[styles.successPillText, journey.dropCompleted ? styles.textDelivered : styles.textTransit]}>

@@ -1,3 +1,27 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+const envPaths = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '..', '..', '.env'),
+];
+
+for (const p of envPaths) {
+  if (fs.existsSync(p)) {
+    try {
+      const parsed = dotenv.parse(fs.readFileSync(p));
+      for (const key in parsed) {
+        process.env[key] = parsed[key];
+      }
+    } catch (err) {
+      console.error(`Failed to parse .env at ${p}:`, err);
+    }
+    break;
+  }
+}
+
 // Globally override Date serialization to output Indian Standard Time (IST) in YYYY-MM-DD HH:mm:ss format
 Date.prototype.toJSON = function () {
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -42,7 +66,7 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // Swagger (Hosted at http://localhost:3002/api)
+  // Swagger (Hosted at http://localhost:3001/api)
   const config = new DocumentBuilder()
     .setTitle('GMU Hub Backend API')
     .setDescription('The GMU Hub Backend application API documentation')
@@ -52,7 +76,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 3002;
+  const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger documentation: http://localhost:${port}/api`);

@@ -7,5 +7,8 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: ['.trycloudflare.com']
+  },
+  resolve: {
+    dedupe: ['react', 'react-dom']
   }
 })

@@ -127,7 +127,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                           >
                             <View style={styles.cardHeaderRow}>
                               <View style={styles.idGroup}>
-                                <Text style={styles.batchIdText}>{batch.id}</Text>
+                                <Text style={styles.batchIdText}>{batch.displayId || batch.id}</Text>
                                 <View style={styles.errorPill}>
                                   <Text style={styles.errorPillText}>{t('orders.rejected')}</Text>
                                 </View>

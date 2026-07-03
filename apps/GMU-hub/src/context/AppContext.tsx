@@ -40,6 +40,8 @@ export interface PickupOrder {
   rejectedBy?: string;
   rescheduledBy?: string;
   sectionEnteredAt?: string;
+  items?: any[];
+  tracking?: any[];
 }
 
 export interface DropOrder {
@@ -78,6 +80,8 @@ export interface DropOrder {
   status?: string;
   pickupStatus?: string;
   sectionEnteredAt?: string;
+  items?: any[];
+  tracking?: any[];
 }
 
 export interface ReturnOrder {
@@ -114,6 +118,8 @@ export interface ReturnOrder {
   rejectedBy?: string;
   rescheduledBy?: string;
   sectionEnteredAt?: string;
+  items?: any[];
+  tracking?: any[];
 }
 
 export interface InventoryItem {
@@ -141,6 +147,8 @@ export interface InventoryItem {
   barcode?: string;
   storeDate?: string;
   sectionEnteredAt?: string;
+  items?: any[];
+  tracking?: any[];
 }
 
 export interface SHGProfile {
@@ -324,34 +332,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ];
 
   // Dynamic details mapping helpers
-  const mapOrder = (o: any): any => {
-    const shgMember = shgList.find(s => s.id === o.pickupShgId || s.id === o.dropShgId || s.id === o.pickupReturnShgId);
-    const shgDetails = shgMember ? {
+  const mapOrder = (o: any, flowType?: 'pickup' | 'drop' | 'return'): any => {
+    const isBuyerReturnFlow = flowType 
+      ? flowType === 'return' && (o.returnType === 'BUYER_RETURN' || ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus))
+      : ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus) || o.returnType === 'BUYER_RETURN';
+
+    const isDropOrTransporterReturnFlow = flowType
+      ? flowType === 'drop' || (flowType === 'return' && (o.returnType === 'TRANSPORTER_RETURN' || ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus)))
+      : ['PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN', 'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
+
+    const targetShgId = isBuyerReturnFlow
+      ? (o.pickupReturnShgId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId)
+      : isDropOrTransporterReturnFlow
+        ? (o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId)
+        : (o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId);
+
+    const shgMember = shgList.find(s => s.id === targetShgId);
+
+    const apiShgDetails = (isBuyerReturnFlow
+      ? o.returnShgDetails
+      : isDropOrTransporterReturnFlow
+        ? o.dropShgDetails
+        : o.pickupShgDetails) || o.shgDetails;
+
+    const shgDetails = apiShgDetails ? {
+      name: apiShgDetails.name,
+      mobile: apiShgDetails.mobile,
+      address: apiShgDetails.address,
+    } : (shgMember ? {
       name: shgMember.name,
       mobile: shgMember.mobile,
       address: shgMember.address,
-    } : undefined;
+    } : undefined);
 
-    const transMember = transporterList.find(t => t.id === o.pickupTransporterId || t.id === o.dropTransporterId || t.id === o.returnTransporterId);
-    const transporterDetails = transMember ? {
+    const targetTransporterId = isBuyerReturnFlow
+      ? (o.returnTransporterId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId)
+      : isDropOrTransporterReturnFlow
+        ? (o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId)
+        : (o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId);
+
+    const transMember = transporterList.find(t => t.id === targetTransporterId);
+
+    const apiTransDetails = (isBuyerReturnFlow
+      ? o.returnTransporterDetails
+      : isDropOrTransporterReturnFlow
+        ? o.dropTransporterDetails
+        : o.pickupTransporterDetails) || o.transporterDetails;
+
+    const transporterDetails = apiTransDetails ? {
+      name: apiTransDetails.name,
+      mobile: apiTransDetails.mobile,
+      address: apiTransDetails.address,
+    } : (transMember ? {
       name: transMember.name,
       mobile: transMember.mobile,
       address: transMember.address,
-    } : undefined;
-
-    const isBuyerReturnFlow = [
-      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED',
-      'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING',
-      'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB',
-      'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
-    ].includes(o.mainStatus) || o.returnType === 'BUYER_RETURN';
-
-    const isDropOrTransporterReturnFlow = [
-      'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED',
-      'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG',
-      'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN',
-      'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'
-    ].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
+    } : undefined);
 
     const mappedShgStatus = isBuyerReturnFlow
       ? (
@@ -362,17 +398,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               : [
                   'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING',
                   'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB',
-                  'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+                  'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
+                  'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'
                 ].includes(o.mainStatus)
-                ? 'picked'
+                ? (o.pickupShgStatus || 'picked')
                 : null
         )
       : isDropOrTransporterReturnFlow
-        ? (o.dropTransporterStatus === 'SHG_NOT_AVAILABLE' ? 'shg not available' : (o.dropShgStatus || null))
+        ? (o.dropTransporterStatus === 'SHG_NOT_AVAILABLE' ? 'shg not available' : (o.dropShgStatus || 'pending'))
         : (
             o.mainStatus === 'PICKUP_ASSIGNED' && o.pickupShgStatus
               ? o.pickupShgStatus
-              : ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'].includes(o.mainStatus)
+              : ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(o.mainStatus)
                 ? (o.pickupShgStatus || 'pending')
                 : null
           );
@@ -385,16 +422,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? 'accepted'
               : o.mainStatus === 'RETURN_IN_TRANSIT_TO_HUB'
                 ? 'in_transit_to_hub'
-                : ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(o.mainStatus)
-                  ? 'delivered_to_gmu'
-                  : null
+                : (o.mainStatus === 'RETURN_PARCEL_AT_GMU' || o.mainStatus === 'RETURN_PARCEL_AT_HUB')
+                  ? 'dropped'
+                  : ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(o.mainStatus)
+                    ? 'delivered_to_gmu'
+                    : ['RETURN_PARCEL_AT_TRANSPORTER'].includes(o.mainStatus)
+                      ? (o.pickupTransporterStatus || 'pending')
+                      : null
         )
       : isDropOrTransporterReturnFlow
-        ? (o.dropTransporterStatus || null)
+        ? (o.dropTransporterStatus || 'pending')
         : (
             o.mainStatus === 'PICKUP_ASSIGNED' && o.pickupTransporterStatus
               ? o.pickupTransporterStatus
-              : ['TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'TRANSPORTER_DECLINED'].includes(o.mainStatus)
+              : ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'TRANSPORTER_DECLINED', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(o.mainStatus)
                 ? (o.pickupTransporterStatus || 'pending')
                 : null
           );
@@ -434,12 +475,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rejectionReason: o.assignments?.find((a: any) => a.status === 'REJECTED')?.rejectionReason || 'Rejected by partner',
       rejectedBy: o.assignments?.find((a: any) => a.status === 'REJECTED')?.assigneeType || 'SHG',
       rescheduledBy: o.rescheduleType || 'SHG',
+      items: o.items,
+      tracking: o.tracking,
+      rawCreatedAt: o.createdAt,
+      rawUpdatedAt: o.updatedAt,
     };
   };
 
   const mapInventory = (o: any): InventoryItem => {
     const mapped = mapOrder(o);
     return {
+      ...mapped,
       id: mapped.id,
       uuid: mapped.uuid,
       sellerName: mapped.sellerName,
@@ -464,6 +510,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       barcode: mapped.barcode,
       storeDate: mapped.storeDate,
       sectionEnteredAt: mapped.sectionEnteredAt,
+      items: o.items,
+      tracking: o.tracking,
     };
   };
 
@@ -509,84 +557,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentPage]);
 
+  const sortNewestFirst = (orders: any[]) => {
+    return [...orders].sort((a, b) => {
+      const timeA = a.rawUpdatedAt ? new Date(a.rawUpdatedAt).getTime() : (a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : 0);
+      const timeB = b.rawUpdatedAt ? new Date(b.rawUpdatedAt).getTime() : (b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : 0);
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+      const getNum = (idStr: string) => {
+        const match = idStr?.match(/\d+$/);
+        return match ? parseInt(match[0], 10) : 0;
+      };
+      const numA = getNum(a.id);
+      const numB = getNum(b.id);
+      return numB - numA;
+    });
+  };
+
   // API Load functions implementation
   const loadPickupNew = async (status?: string, date?: string) => {
     const data = await api.orders.getPickupNew(status, date);
-    setPickupNewOrders(data.map(mapOrder));
+    setPickupNewOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'pickup'))));
   };
 
   const loadPickupAssigned = async (status?: string, date?: string) => {
     const data = await api.orders.getPickupAssigned(status, date);
-    setPickupAssignedOrders(data.map(mapOrder));
+    setPickupAssignedOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'pickup'))));
   };
 
   const loadPickupWarehouse = async (status?: string, date?: string) => {
     const data = await api.orders.getPickupWarehouse(status, date);
-    setPickupWarehouseOrders(data.map(mapOrder));
+    setPickupWarehouseOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'pickup'))));
   };
 
   const loadPickupRejected = async (status?: string, date?: string) => {
     const data = await api.orders.getPickupRejected(status, date);
-    setPickupRejectedOrders(data.map(mapOrder));
+    setPickupRejectedOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'pickup'))));
   };
 
   const loadPickupRescheduled = async (status?: string, date?: string) => {
     const data = await api.orders.getPickupRescheduled(status, date);
-    setPickupRescheduledOrders(data.map(mapOrder));
+    setPickupRescheduledOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'pickup'))));
   };
 
   const loadDropNew = async (status?: string, date?: string) => {
     const data = await api.orders.getDropNew(status, date);
-    setDropNewOrders(data.map(mapOrder));
+    setDropNewOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'drop'))));
   };
 
   const loadDropAssigned = async (status?: string, date?: string) => {
     const data = await api.orders.getDropAssigned(status, date);
-    setDropAssignedOrders(data.map(mapOrder));
+    setDropAssignedOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'drop'))));
   };
 
   const loadDropRejected = async (status?: string, date?: string) => {
     const data = await api.orders.getDropRejected(status, date);
-    setDropRejectedOrders(data.map(mapOrder));
+    setDropRejectedOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'drop'))));
   };
 
   const loadDropRescheduled = async (status?: string, date?: string) => {
     const data = await api.orders.getDropRescheduled(status, date);
-    setDropRescheduledOrders(data.map(mapOrder));
+    setDropRescheduledOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'drop'))));
   };
 
   const loadDropCompleted = async (status?: string, date?: string) => {
     const data = await api.orders.getDropCompleted(status, date);
-    setDropCompletedOrders(data.map(mapOrder));
+    setDropCompletedOrders(sortNewestFirst(data.map((o: any) => mapOrder(o, 'drop'))));
   };
 
   const loadReturnsTransporter = async (status?: string, date?: string) => {
     const data = await api.orders.getReturnsTransporter(status, date);
-    const mapped = data.map(mapOrder);
+    const mapped = sortNewestFirst(data.map((o: any) => mapOrder(o, 'return')));
     setReturnDropNewOrders(mapped.filter((o: any) => o.mainStatus === 'TRANSPORTER_RETURN_PENDING'));
     setReturnDropCompletedOrders(mapped.filter((o: any) => o.mainStatus === 'TRANSPORTER_RETURN_COMPLETED'));
   };
 
   const loadReturnsBuyer = async (status?: string, date?: string) => {
     const data = await api.orders.getReturnsBuyer(status, date);
-    const mapped = data.map(mapOrder);
+    const mapped = sortNewestFirst(data.map((o: any) => mapOrder(o, 'return')));
     setReturnPickupNewOrders(mapped.filter((o: any) => !['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'COMPLETED', 'RETURN_COMPLETED'].includes(o.mainStatus)));
     setReturnPickupCompletedOrders(mapped.filter((o: any) => o.mainStatus === 'BUYER_RETURN_COMPLETED'));
   };
 
   const loadInventoryStored = async (status?: string, date?: string) => {
     const data = await api.orders.getInventoryStored(status, date);
-    setIncomingInventory(data.map(mapInventory));
+    setIncomingInventory(sortNewestFirst(data.map(mapInventory)));
   };
 
   const loadInventoryTransporterReturn = async (status?: string, date?: string) => {
     const data = await api.orders.getInventoryTransporterReturn(status, date);
-    setReturnDropInventory(data.map(mapInventory));
+    setReturnDropInventory(sortNewestFirst(data.map(mapInventory)));
   };
 
   const loadInventoryBuyerReturn = async (status?: string, date?: string) => {
     const data = await api.orders.getInventoryBuyerReturn(status, date);
-    setReturnPickupInventory(data.map(mapInventory));
+    setReturnPickupInventory(sortNewestFirst(data.map(mapInventory)));
   };
 
   // Actions transition implementation
@@ -645,6 +710,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await api.orders.generateBarcode(uuid);
     await api.orders.store(uuid);
     await loadCounts();
+    await loadPickupWarehouse();
+    await loadInventoryStored();
     return res.barcode || `BAR-ORD-${orderId}`;
   };
 
