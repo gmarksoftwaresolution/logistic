@@ -62,10 +62,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const destination = translateRoutePart(rawDestination, t);
 
   // 1. Determine if we are in Pickup or Delivery phase
-  // Drop orders are always in the delivery phase (they go from Accepted → Complete, no pickup step)
+  // For drop orders:
+  // - When accepted (status === 'Accepted'), SHG is picking up from the Transporter (show Transporter details)
+  // - Once picked up (status === 'PickedUp'), SHG is delivering to the Buyer (show Buyer details)
   const isDeliveryPhase = order.status === 'PickedUp' 
-    || (order.id.startsWith('RTO-') && order.legType === 'drop')
-    || (order.legType === 'drop' && !order.isReturn);
+    || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
   // 2. Resolve active side details
   const activeRawName = isDeliveryPhase ? rawDestination : rawSource;

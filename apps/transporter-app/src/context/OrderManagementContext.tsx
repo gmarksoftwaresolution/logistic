@@ -287,7 +287,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropCount: 1,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-          status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING') 
+          status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId) 
             ? 'NEW_ORDER' 
             : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED') 
               ? (isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
@@ -308,6 +308,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         })(),
         masterOrderId: o.masterOrderId,
         dropOrderId: o.id, // Track the actual DB drop order ID
+        transporterId: o.transporterId,
         handoverCode: o.handoverCode,
         isRTO: o.isRTO || false,
         shgContact: {

@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Image,
   Linking,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
@@ -55,6 +56,62 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [verifiedProductIds, setVerifiedProductIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedGmuDropProductIds, setSelectedGmuDropProductIds] = useState<string[]>([]);
+
+  // Scanner state variables
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [manualBarcode, setManualBarcode] = useState('');
+  const [scannerError, setScannerError] = useState('');
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (showScannerModal) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanLineAnim, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanLineAnim, {
+            toValue: 0,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      scanLineAnim.stopAnimation();
+    }
+  }, [showScannerModal]);
+
+  const translateY = scanLineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 180],
+  });
+
+  const handleVerifyScannedBarcode = async () => {
+    if (!batch) return;
+    const expected = batch.handoverCode || '1234';
+    if (manualBarcode.trim() !== expected) {
+      setScannerError('Barcode mismatch! Please scan or enter the correct barcode.');
+      return;
+    }
+    
+    setScannerError('');
+    setShowScannerModal(false);
+    setIsFinalizing(true);
+    try {
+      await finalizePickup(batch.id, expected);
+      setSuccessMessage('Pickup Completed Successfully');
+      setShowSuccessDialog(true);
+    } catch (err: any) {
+      console.error('Error finalizing GMU batch:', err);
+      setFailureMessage(err.response?.data?.message || err.message || 'Pickup failed');
+      setShowFailureDialog(true);
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
 
   const modalScrollRef = useRef<ScrollView>(null);
 
@@ -689,26 +746,41 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           ) : isHubPoint ? (
             <View style={{ gap: verticalScale(12) }}>
-              <TouchableOpacity
-                style={[
-                  styles.primaryConfirmBtn,
-                  type === 'pickup' ? styles.bgPickup : styles.bgDrop,
-                  (isFinalizing || (type === 'drop' && selectedGmuDropProductIds.length < displayProducts.length)) && styles.btnDisabled
-                ]}
-                disabled={isFinalizing || (type === 'drop' && selectedGmuDropProductIds.length < displayProducts.length)}
-                onPress={handleGmuConfirm}
-              >
-                <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                <Text style={styles.primaryConfirmBtnText}>
-                  {isFinalizing
-                    ? 'Confirming...'
-                    : type === 'pickup'
-                    ? 'Confirm Pickup'
-                    : selectedGmuDropProductIds.length < displayProducts.length
-                    ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
-                    : 'Confirm Delivery'}
-                </Text>
-              </TouchableOpacity>
+              {type === 'pickup' ? (
+                <TouchableOpacity
+                  style={[styles.primaryConfirmBtn, styles.bgPickup, isFinalizing && styles.btnDisabled]}
+                  disabled={isFinalizing}
+                  onPress={() => {
+                    setManualBarcode('');
+                    setScannerError('');
+                    setShowScannerModal(true);
+                  }}
+                >
+                  <Package size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={styles.primaryConfirmBtnText}>
+                    {isFinalizing ? 'Confirming...' : 'Scan Barcode to Verify Pickup'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.primaryConfirmBtn,
+                    styles.bgDrop,
+                    (isFinalizing || selectedGmuDropProductIds.length < displayProducts.length) && styles.btnDisabled
+                  ]}
+                  disabled={isFinalizing || selectedGmuDropProductIds.length < displayProducts.length}
+                  onPress={handleGmuConfirm}
+                >
+                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={styles.primaryConfirmBtnText}>
+                    {isFinalizing
+                      ? 'Confirming...'
+                      : selectedGmuDropProductIds.length < displayProducts.length
+                      ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
+                      : 'Confirm Delivery'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
@@ -978,6 +1050,73 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           </View>
         )}
       </VerificationBottomSheet>
+
+      {/* Barcode Scanner Simulator Modal */}
+      <Modal
+        visible={showScannerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowScannerModal(false)}
+      >
+        <SafeAreaView style={styles.scannerModalContainer}>
+          <View style={styles.scannerHeader}>
+            <Text style={styles.scannerTitle}>Barcode Scanner</Text>
+            <TouchableOpacity onPress={() => setShowScannerModal(false)} style={styles.scannerCloseBtn}>
+              <X size={scale(24)} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.scannerBody}>
+            <Text style={styles.scannerInstruction}>
+              Align the barcode of the parcel inside the frame below.
+            </Text>
+
+            <View style={styles.scannerWindow}>
+              {/* Corner brackets for target frame */}
+              <View style={[styles.cornerBracket, styles.topLeftBracket]} />
+              <View style={[styles.cornerBracket, styles.topRightBracket]} />
+              <View style={[styles.cornerBracket, styles.bottomLeftBracket]} />
+              <View style={[styles.cornerBracket, styles.bottomRightBracket]} />
+
+              {/* Animated laser line */}
+              <Animated.View style={[styles.scannerLaser, { transform: [{ translateY }] }]} />
+            </View>
+
+            <Text style={styles.expectedCodeText}>
+              Expected Barcode: {batch.handoverCode || 'N/A'}
+            </Text>
+
+            <View style={styles.scannerInputBox}>
+              <TextInput
+                style={styles.scannerInput}
+                placeholder="Enter barcode manually..."
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={manualBarcode}
+                onChangeText={setManualBarcode}
+              />
+              <TouchableOpacity
+                style={styles.simulateScanBtn}
+                onPress={() => setManualBarcode(batch.handoverCode || '')}
+              >
+                <Text style={styles.simulateScanBtnText}>Fill Barcode</Text>
+              </TouchableOpacity>
+            </View>
+
+            {scannerError ? (
+              <Text style={styles.scannerErrorText}>{scannerError}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.scannerVerifyBtn, !manualBarcode && styles.btnDisabled]}
+              disabled={!manualBarcode}
+              onPress={handleVerifyScannedBarcode}
+            >
+              <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.scannerVerifyBtnText}>Verify and Complete Pickup</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       {/* Handover Success and Failure Dialogs */}
       <VerificationSuccessDialog
@@ -1505,6 +1644,153 @@ const styles = StyleSheet.create({
   checkboxSelected: {
     borderColor: '#059669', // emerald-600
     backgroundColor: '#059669',
+  },
+  scannerModalContainer: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(16),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  scannerTitle: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(18),
+    color: '#FFFFFF',
+  },
+  scannerCloseBtn: {
+    padding: scale(4),
+  },
+  scannerBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: scale(24),
+    paddingBottom: verticalScale(40),
+  },
+  scannerInstruction: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(14),
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: verticalScale(30),
+  },
+  scannerWindow: {
+    width: scale(240),
+    height: scale(240),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    position: 'relative',
+    marginBottom: verticalScale(30),
+    alignItems: 'center',
+  },
+  cornerBracket: {
+    position: 'absolute',
+    width: scale(20),
+    height: scale(20),
+    borderColor: Colors.primary,
+  },
+  topLeftBracket: {
+    top: -2,
+    left: -2,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+  },
+  topRightBracket: {
+    top: -2,
+    right: -2,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+  },
+  bottomLeftBracket: {
+    bottom: -2,
+    left: -2,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+  },
+  bottomRightBracket: {
+    bottom: -2,
+    right: -2,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+  },
+  scannerLaser: {
+    width: '90%',
+    height: 3,
+    backgroundColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
+    elevation: 5,
+    top: 20,
+  },
+  expectedCodeText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(15),
+    color: '#FFFFFF',
+    marginBottom: verticalScale(20),
+  },
+  scannerInputBox: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: scale(10),
+    marginBottom: verticalScale(16),
+  },
+  scannerInput: {
+    flex: 1,
+    height: verticalScale(46),
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: scale(16),
+    color: '#FFFFFF',
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+  },
+  simulateScanBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: scale(16),
+    borderRadius: moderateScale(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  simulateScanBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(12),
+    color: '#FFFFFF',
+  },
+  scannerErrorText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: '#F87171',
+    marginBottom: verticalScale(16),
+    textAlign: 'center',
+  },
+  scannerVerifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scale(8),
+    width: '100%',
+    height: verticalScale(48),
+    backgroundColor: Colors.primary,
+    borderRadius: moderateScale(12),
+    marginTop: verticalScale(10),
+  },
+  scannerVerifyBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: '#073318',
   },
 });
 

@@ -631,6 +631,20 @@ async function main() {
   }
 
   // Seed 20 Pickup Orders
+  console.log('Cleaning up existing orders to prevent duplicates...');
+  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_tracking;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_order_items;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_orders;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public."VerificationRecord";`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public."ScanHistory";`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_tracking;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_order_items;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_orders;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.master_order_items;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public.master_orders;`);
+  await prisma.$executeRawUnsafe(`DELETE FROM gmu."OrderAssignment";`);
+  await prisma.$executeRawUnsafe(`DELETE FROM gmu."Order";`);
+
   console.log('Seeding 20 pickup orders in ORDER_PLACED status using the new logistics-catalog products...');
   for (let i = 1; i <= 20; i++) {
     const sellerIndex = (i - 1) % sellersData.length;

@@ -355,15 +355,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? o.dropShgDetails
         : o.pickupShgDetails) || o.shgDetails;
 
-    const shgDetails = apiShgDetails ? {
-      name: apiShgDetails.name,
-      mobile: apiShgDetails.mobile,
-      address: apiShgDetails.address,
-    } : (shgMember ? {
-      name: shgMember.name,
-      mobile: shgMember.mobile,
-      address: shgMember.address,
-    } : undefined);
+    const shgDetails = (isDropOrTransporterReturnFlow && !targetShgId)
+      ? undefined
+      : (apiShgDetails ? {
+          name: apiShgDetails.name,
+          mobile: apiShgDetails.mobile,
+          address: apiShgDetails.address,
+        } : (shgMember ? {
+          name: shgMember.name,
+          mobile: shgMember.mobile,
+          address: shgMember.address,
+        } : undefined));
 
     const targetTransporterId = isBuyerReturnFlow
       ? (o.returnTransporterId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId)
@@ -379,15 +381,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? o.dropTransporterDetails
         : o.pickupTransporterDetails) || o.transporterDetails;
 
-    const transporterDetails = apiTransDetails ? {
-      name: apiTransDetails.name,
-      mobile: apiTransDetails.mobile,
-      address: apiTransDetails.address,
-    } : (transMember ? {
-      name: transMember.name,
-      mobile: transMember.mobile,
-      address: transMember.address,
-    } : undefined);
+    const transporterDetails = (isDropOrTransporterReturnFlow && !targetTransporterId)
+      ? undefined
+      : (apiTransDetails ? {
+          name: apiTransDetails.name,
+          mobile: apiTransDetails.mobile,
+          address: apiTransDetails.address,
+        } : (transMember ? {
+          name: transMember.name,
+          mobile: transMember.mobile,
+          address: transMember.address,
+        } : undefined));
 
     const mappedShgStatus = isBuyerReturnFlow
       ? (

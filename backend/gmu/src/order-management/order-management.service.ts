@@ -24,7 +24,10 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: 'ORDER_PLACED',
-        pickupShgStatus: { not: 'NO_PARTNERS_FOUND' },
+        OR: [
+          { pickupShgStatus: null },
+          { pickupShgStatus: { not: 'NO_PARTNERS_FOUND' } }
+        ]
       },
       include: {
         assignments: {
@@ -53,7 +56,10 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: 'PARCEL_AT_SHG',
-        pickupTransporterStatus: { not: 'NO_PARTNERS_FOUND' },
+        OR: [
+          { pickupTransporterStatus: null },
+          { pickupTransporterStatus: { not: 'NO_PARTNERS_FOUND' } }
+        ]
       },
       include: {
         assignments: {
@@ -73,6 +79,38 @@ export class OrderManagementService implements OnModuleInit {
           await this.broadcastTransporter(order.id);
         } catch (err: any) {
           console.error(`[AutoBroadcastLoop] Transporter broadcast failed for order ${order.id}:`, err.message);
+        }
+      }
+    }
+
+    // 3. Check Drop SHG auto-broadcasts
+    const dropOrdersPlaced = await this.prisma.order.findMany({
+      where: {
+        phase: 'DROP',
+        mainStatus: { in: ['DROP_PENDING', 'DROP_CREATED'] },
+        OR: [
+          { dropShgStatus: null },
+          { dropShgStatus: { not: 'NO_PARTNERS_FOUND' } }
+        ]
+      },
+      include: {
+        assignments: {
+          where: {
+            role: 'DROP',
+            assigneeType: 'SHG',
+            status: { in: ['PENDING', 'ACCEPTED'] },
+          },
+        },
+      },
+    });
+
+    for (const order of dropOrdersPlaced) {
+      if (order.assignments.length === 0) {
+        console.log(`[AutoBroadcastLoop] Automatically triggering Drop SHG broadcast for order ${order.orderId} (${order.id})`);
+        try {
+          await this.broadcastDropShg(order.id);
+        } catch (err: any) {
+          console.error(`[AutoBroadcastLoop] Drop SHG broadcast failed for order ${order.id}:`, err.message);
         }
       }
     }
@@ -285,7 +323,10 @@ export class OrderManagementService implements OnModuleInit {
       return ['STORED', 'AT_HUB', 'PARCEL_AT_HUB'];
     }
     if (s === 'DROP_ASSIGNED' || s === 'DISPATCH' || s === 'DISPATCHED') {
-      return ['DROP_ASSIGNED', 'DISPATCHED', 'DISPATCH', 'PENDING_DROP', 'DROP_SHG_PENDING'];
+      return ['DROP_ASSIGNED', 'DISPATCHED', 'DISPATCH', 'PENDING_DROP', 'DROP_SHG_PENDING', 'DROP_PENDING'];
+    }
+    if (s === 'DROP_PENDING' || s === 'PENDING_DROP' || s === 'DROP_SHG_PENDING') {
+      return ['DROP_PENDING', 'PENDING_DROP', 'DROP_SHG_PENDING'];
     }
 
     // ── Phase 6: Drop Leg ─────────────────────────────────────────────────────
@@ -559,10 +600,14 @@ export class OrderManagementService implements OnModuleInit {
 
   // --- QUERY ENDPOINTS ---
 
-  async getOrderDetails(id: string): Promise<any> {
+  async getOrderDetails(id: string, phase?: string): Promise<any> {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    const whereClause: any = isUuid ? { id } : { orderId: id };
+    if (phase) {
+      whereClause.phase = phase;
+    }
     const order = await this.prisma.order.findFirst({
-      where: isUuid ? { OR: [{ id }, { orderId: id }] } : { orderId: id },
+      where: whereClause,
       include: { assignments: true },
     });
     if (!order) {
@@ -597,7 +642,7 @@ export class OrderManagementService implements OnModuleInit {
         phase: 'PICKUP',
         returnType: null,
         OR: [
-          { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING'] } },
+          { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING'] } },
           { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
         ]
       },
@@ -686,14 +731,14 @@ export class OrderManagementService implements OnModuleInit {
           },
           {
             OR: [
-              { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
+              { mainStatus: { in: ['DROP_PENDING', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
               { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
             ]
           }
         ]
       },
       filter,
-      ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
+      ['DROP_PENDING', 'DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,
@@ -934,13 +979,32 @@ export class OrderManagementService implements OnModuleInit {
       WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
     `) as any[];
 
-    // Match BOTH Pincode AND Village (exact, trimmed, case-insensitive)
-    const matchingShgs = approvedShgs.filter(shg => 
+    // Match approved SHGs with fallback layers (Priority 1: Pincode + Village, Priority 2: Pincode, Priority 3: Village)
+    const normalizeStr = (s: string) => {
+      if (!s) return '';
+      return s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    };
+
+    let matchingShgs = approvedShgs.filter(shg => 
       shg.pincode && order.sellerPincode && 
       shg.pincode.trim().toLowerCase() === order.sellerPincode.trim().toLowerCase() &&
       shg.village && order.sellerVillage && 
-      shg.village.trim().toLowerCase() === order.sellerVillage.trim().toLowerCase()
+      normalizeStr(shg.village) === normalizeStr(order.sellerVillage)
     );
+
+    if (matchingShgs.length === 0 && order.sellerPincode) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.pincode && 
+        shg.pincode.trim().toLowerCase() === order.sellerPincode.trim().toLowerCase()
+      );
+    }
+
+    if (matchingShgs.length === 0 && order.sellerVillage) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.village && 
+        normalizeStr(shg.village) === normalizeStr(order.sellerVillage)
+      );
+    }
 
     if (matchingShgs.length === 0) {
       console.log(`[SHG Broadcast]
@@ -949,7 +1013,7 @@ export class OrderManagementService implements OnModuleInit {
         Seller Pincode: ${order.sellerPincode}
         Matching SHG IDs: []
         Number of assignments created: 0
-        Reason: No approved and active SHG matches Seller Pincode and Village.
+        Reason: No approved and active SHG matches Seller Pincode or Village.
       `);
       return this.prisma.order.update({
         where: { id: order.id },
@@ -1435,7 +1499,29 @@ export class OrderManagementService implements OnModuleInit {
       `, masterOrder.id) as any[];
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const parseDate = (d: any) => {
+        if (!d) return null;
+        try {
+          if (d && typeof d === 'object') {
+            if ('prisma__value' in d && d.prisma__value) {
+              return new Date(d.prisma__value).toISOString();
+            }
+            if (d.prisma__value !== undefined && d.prisma__value) {
+              return new Date(d.prisma__value).toISOString();
+            }
+            if (d instanceof Date) {
+              return d.toISOString();
+            }
+          }
+          const parsed = new Date(d);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString();
+          }
+        } catch (e) {}
+        return null;
+      };
+
       if (masterOrder) {
         // Increment warehouse inventory
         let warehouse = await tx.warehouse.findFirst();
@@ -1450,28 +1536,28 @@ export class OrderManagementService implements OnModuleInit {
 
         // Synchronize products and seller users from public schema to gmu schema
         for (const item of items) {
-          const rawPubProducts = await this.prisma.$queryRawUnsafe(`
+          const rawPubProducts = await tx.$queryRawUnsafe(`
             SELECT * FROM public.products WHERE id = $1 LIMIT 1;
           `, item.product_id) as any[];
           const pubProduct = rawPubProducts?.[0];
 
           if (pubProduct) {
             // Check if seller exists in gmu."User"
-            const rawGmuUsers = await this.prisma.$queryRawUnsafe(`
+            const rawGmuUsers = await tx.$queryRawUnsafe(`
               SELECT id FROM gmu."User" WHERE id = $1 LIMIT 1;
             `, pubProduct.seller_id) as any[];
             const gmuUser = rawGmuUsers?.[0];
 
             if (!gmuUser) {
               // Fetch user from public."User"
-              const rawPubUsers = await this.prisma.$queryRawUnsafe(`
+              const rawPubUsers = await tx.$queryRawUnsafe(`
                 SELECT * FROM public."User" WHERE id = $1 LIMIT 1;
               `, pubProduct.seller_id) as any[];
               const pubUser = rawPubUsers?.[0];
 
               if (pubUser) {
                 // Insert into gmu."User"
-                await this.prisma.$executeRawUnsafe(`
+                await tx.$executeRawUnsafe(`
                   INSERT INTO gmu."User" (
                     id, "authId", role, "phoneNumber", email, "fullName", "profilePhoto", 
                     language, "isVerified", "currentStep", "profileCompletion", "applicationStatus", 
@@ -1479,33 +1565,33 @@ export class OrderManagementService implements OnModuleInit {
                   ) VALUES (
                     $1, $2::uuid, $3::"UserRole", $4, $5, $6, $7, 
                     $8, $9, $10, $11, $12::"ApplicationStatus", 
-                    $13, $14, $15, $16, $17, $18, $19
+                    $13, $14::timestamp, $15::timestamp, $16, $17::timestamp, $18::timestamp, $19::timestamp
                   ) ON CONFLICT (id) DO NOTHING;
                 `,
                   pubUser.id, pubUser.authId, pubUser.role, pubUser.phoneNumber, pubUser.email, pubUser.fullName, pubUser.profilePhoto,
                   pubUser.language, pubUser.isVerified, pubUser.currentStep, pubUser.profileCompletion, pubUser.applicationStatus,
-                  pubUser.uniqueCode, pubUser.approvedAt, pubUser.rejectedAt, pubUser.rejectionReason, pubUser.createdAt, pubUser.updatedAt, pubUser.deletedAt
+                  pubUser.uniqueCode, parseDate(pubUser.approvedAt), parseDate(pubUser.rejectedAt), pubUser.rejectionReason, parseDate(pubUser.createdAt), parseDate(pubUser.updatedAt), parseDate(pubUser.deletedAt)
                 );
               }
             }
 
             // Check if product exists in gmu.products
-            const rawGmuProducts = await this.prisma.$queryRawUnsafe(`
+            const rawGmuProducts = await tx.$queryRawUnsafe(`
               SELECT id FROM gmu.products WHERE id = $1 LIMIT 1;
             `, item.product_id) as any[];
             const gmuProduct = rawGmuProducts?.[0];
 
             if (!gmuProduct) {
               // Insert product into gmu.products
-              await this.prisma.$executeRawUnsafe(`
+              await tx.$executeRawUnsafe(`
                 INSERT INTO gmu.products (
                   id, seller_id, name, category, price, weight, image, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamp)
                 ON CONFLICT (id) DO NOTHING;
               `,
                 pubProduct.id, pubProduct.seller_id, pubProduct.name, pubProduct.category,
                 pubProduct.price, pubProduct.weight, pubProduct.image || pubProduct.image_uri || null,
-                pubProduct.createdAt || pubProduct.created_at || new Date()
+                parseDate(pubProduct.createdAt || pubProduct.created_at || new Date())
               );
             }
           }
@@ -1558,7 +1644,8 @@ export class OrderManagementService implements OnModuleInit {
           productCount: order.productCount,
           totalQty: order.totalQty,
           totalWeight: order.totalWeight,
-          mainStatus: 'DROP_CREATED',
+          mainStatus: 'DROP_PENDING',
+          dropShgStatus: 'PENDING',
           phase: 'DROP',
         }
       });
@@ -1603,8 +1690,18 @@ export class OrderManagementService implements OnModuleInit {
         }
       }
 
-      return updated;
+      return { updated, dropId };
+    }, {
+      timeout: 30000
     });
+
+    try {
+      await this.broadcastDropShg(result.dropId);
+    } catch (err: any) {
+      console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
+    }
+
+    return result.updated;
   }
 
   async scanInventory(id: string, barcode: string) {
@@ -1623,13 +1720,29 @@ export class OrderManagementService implements OnModuleInit {
       throw new BadRequestException(`Order must be in STORED or DROP_ASSIGNED status to perform inventory dispatch scan`);
     }
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id: order.id },
       data: {
         mainStatus: 'DISPATCHED',
         dispatchedAt: new Date(),
       },
     });
+
+    // Find and update corresponding DROP order
+    const dropOrder = await this.prisma.order.findFirst({
+      where: { orderId: order.orderId, phase: 'DROP' }
+    });
+    if (dropOrder) {
+      await this.prisma.order.update({
+        where: { id: dropOrder.id },
+        data: {
+          mainStatus: 'DROP_CREATED',
+          updatedAt: new Date(),
+        }
+      });
+    }
+
+    return updated;
   }
 
   // --- DROP FLOW WORKFLOWS ---
@@ -1637,38 +1750,97 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastDropShg(id: string) {
     const order = await this.getOrderDetails(id);
 
-    const matchingShgs = await this.prisma.communityMember.findMany({
-      where: {
-        type: 'SHG',
-        status: 'APPROVED',
-        village: order.buyerVillage,
-        pincode: order.buyerPincode,
-      },
-    });
+    // Find APPROVED & ACTIVE buyer-side SHGs matching exact Village + Pincode
+    const approvedShgs = await this.prisma.$queryRawUnsafe(`
+      SELECT cm.id, cm.pincode, cm.village
+      FROM gmu."CommunityMember" cm
+      JOIN public."User" u ON cm."mobileNumber" = u."phoneNumber"
+      WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+    `) as any[];
 
-    if (matchingShgs.length === 0) {
-      throw new BadRequestException(`No matching approved SHGs found for buyer village ${order.buyerVillage} and pincode ${order.buyerPincode}`);
+    const normalizeVillage = (v: string) => {
+      if (!v) return '';
+      return v.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    };
+
+    let matchingShgs = approvedShgs.filter(shg => 
+      shg.pincode && order.buyerPincode && 
+      shg.pincode.trim().toLowerCase() === order.buyerPincode.trim().toLowerCase() &&
+      shg.village && order.buyerVillage && 
+      normalizeVillage(shg.village) === normalizeVillage(order.buyerVillage)
+    );
+
+    if (matchingShgs.length === 0 && order.buyerPincode) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.pincode && 
+        shg.pincode.trim().toLowerCase() === order.buyerPincode.trim().toLowerCase()
+      );
     }
 
-    await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'DROP', assigneeType: 'SHG', status: 'PENDING' },
-    });
+    if (matchingShgs.length === 0 && order.buyerVillage) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.village && 
+        normalizeVillage(shg.village) === normalizeVillage(order.buyerVillage)
+      );
+    }
 
-    await this.prisma.orderAssignment.createMany({
-      data: matchingShgs.map((shg) => ({
-        orderId: order.id,
-        assigneeId: shg.id,
-        assigneeType: 'SHG',
-        role: 'DROP',
-        status: 'PENDING',
-      })),
-    });
+    if (matchingShgs.length === 0) {
+      console.log(`[Drop SHG Broadcast]
+        Order ID: ${order.orderId} (${order.id})
+        Buyer Village: ${order.buyerVillage}
+        Buyer Pincode: ${order.buyerPincode}
+        Matching SHG IDs: []
+        Number of assignments created: 0
+        Reason: No approved and active SHG matches Buyer Pincode or Village.
+      `);
+      return this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          mainStatus: 'DROP_PENDING',
+          dropShgStatus: 'NO_PARTNERS_FOUND',
+        },
+        include: { assignments: true },
+      });
+    }
+
+    // Create PENDING assignments with duplicate protection
+    let assignmentsCreatedCount = 0;
+    for (const shg of matchingShgs) {
+      const existing = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: shg.id,
+          assigneeType: 'SHG',
+          role: 'DROP',
+          status: 'PENDING',
+        },
+      });
+      if (!existing) {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: shg.id,
+            assigneeType: 'SHG',
+            role: 'DROP',
+            status: 'PENDING',
+          },
+        });
+        assignmentsCreatedCount++;
+      }
+    }
+
+    console.log(`[Drop SHG Broadcast]
+      Order ID: ${order.orderId} (${order.id})
+      Buyer Village: ${order.buyerVillage}
+      Buyer Pincode: ${order.buyerPincode}
+      Matching SHG IDs: ${JSON.stringify(matchingShgs.map(s => s.id))}
+      Number of assignments created: ${assignmentsCreatedCount}
+    `);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        // Phase 5: GMU broadcasts drop SHG → DROP_ASSIGNED (same status as dispatch)
-        mainStatus: 'DROP_ASSIGNED',
+        mainStatus: 'DROP_PENDING',
         dropShgStatus: 'PENDING',
       },
       include: { assignments: true },
@@ -1730,6 +1902,22 @@ export class OrderManagementService implements OnModuleInit {
         data: { status: 'ACCEPTED', shgId: shgUserId }
       });
 
+      // Update public.drop_tracking
+      const dropOrders = await tx.dropOrder.findMany({
+        where: { dropOrderNumber: `DRP-${order.orderId}` }
+      });
+      if (dropOrders && dropOrders[0]) {
+        const dropOrderId = dropOrders[0].id;
+        await tx.dropTracking.create({
+          data: {
+            dropOrderId: dropOrderId,
+            status: 'DROP_SHG_ACCEPTED',
+            remarks: 'Drop Order accepted by SHG Member.',
+          }
+        });
+      }
+
+      /*
       // Broadcast to matching transporters based on configured routes (priority: Pincode -> Village -> Taluka -> District)
       const buyerVillage = order.buyer?.village || order.buyerVillage;
       const buyerPincode = order.buyer?.pincode || order.buyerPincode;
@@ -1817,6 +2005,7 @@ export class OrderManagementService implements OnModuleInit {
           UPDATE gmu."Order" SET "dropTransporterStatus" = 'PENDING' WHERE id = $1;
         `, order.id);
       }
+      */
 
       return updated;
     });

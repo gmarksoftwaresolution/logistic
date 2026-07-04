@@ -495,7 +495,7 @@ export class OrderService {
         }
       }
       return updated;
-    });
+    }, { timeout: 30000 });
   }
 
   async acceptDrop(dropOrderId: number, shgId: number) {
@@ -701,7 +701,7 @@ export class OrderService {
       }
 
       return updated;
-    });
+    }, { timeout: 30000 });
   }
 
   async rejectPickup(pickupOrderId: number, shgId: number, reason: string = '') {
@@ -886,6 +886,10 @@ export class OrderService {
         return this.pickupDrop(pickupOrderId, shgId, code);
       }
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
+    }
+
+    if (pickupOrder.status === 'COMPLETED' || pickupOrder.status === 'RETURNED') {
+      return pickupOrder;
     }
 
     const masterOrder = await this.prisma.masterOrder.findUnique({
@@ -1293,13 +1297,21 @@ export class OrderService {
       where: {
         id: dropOrderId,
         shgId,
-        status: { in: ['ACCEPTED', 'RETURN_ACCEPTED'] },
       },
       include: { masterOrder: true }
     });
 
     if (!dropOrder) {
-      throw new NotFoundException(`Drop order with ID ${dropOrderId} not accepted by this SHG.`);
+      throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    if (dropOrder.status === 'PICKED_UP' || dropOrder.status === 'RETURNED' || dropOrder.status === 'COMPLETED') {
+      return dropOrder;
+    }
+
+    const allowedStatuses = ['ACCEPTED', 'RETURN_ACCEPTED'];
+    if (!allowedStatuses.includes(dropOrder.status)) {
+      throw new BadRequestException(`Cannot complete drop order in its current status (${dropOrder.status}).`);
     }
 
     const expectedBarcode = dropOrder.handoverCode;

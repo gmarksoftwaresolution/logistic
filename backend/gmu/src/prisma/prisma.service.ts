@@ -123,7 +123,7 @@ async function mapOrderToLegacy(prisma: any, order: any) {
       }
     }
 
-    if (!shgDetails && order.orderId) {
+    if (!shgDetails && order.orderId && !isDrop) {
       const masterOrder = await prisma.masterOrder.findUnique({
         where: { orderNumber: order.orderId },
         include: {
@@ -203,7 +203,7 @@ async function mapOrderToLegacy(prisma: any, order: any) {
       }
     }
 
-    if (!transporterDetails && order.orderId) {
+    if (!transporterDetails && order.orderId && !isDrop) {
       const masterOrder = await prisma.masterOrder.findUnique({
         where: { orderNumber: order.orderId },
         include: {

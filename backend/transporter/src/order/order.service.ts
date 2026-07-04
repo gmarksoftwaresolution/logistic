@@ -705,6 +705,13 @@ export class OrderService {
         createdAt: true,
         handoverCode: true,
         buyer: true,
+        shg: {
+          select: {
+            fullName: true,
+            phoneNumber: true,
+            address: true,
+          }
+        },
         items: {
           include: {
             product: true,
@@ -783,9 +790,22 @@ export class OrderService {
         }
       } : null;
 
+      const mappedShg = drop.shg ? {
+        fullName: drop.shg.fullName,
+        phoneNumber: drop.shg.phoneNumber,
+        address: drop.shg.address ? {
+          addressLine1: drop.shg.address.houseNo || drop.shg.address.deliveryAddress || '',
+          village: drop.shg.address.village || '',
+          taluka: drop.shg.address.taluka || '',
+          district: drop.shg.address.district || '',
+          pincode: drop.shg.address.pincode || '',
+        } : null
+      } : null;
+
       let finalDrop: any = {
         ...drop,
         buyer: mappedBuyer,
+        shg: mappedShg,
       };
 
       if (drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
