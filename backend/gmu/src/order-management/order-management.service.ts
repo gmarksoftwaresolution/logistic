@@ -115,6 +115,38 @@ export class OrderManagementService implements OnModuleInit {
         }
       }
     }
+
+    // 4. Check Drop Transporter auto-broadcasts
+    const dropOrdersForTransporter = await this.prisma.order.findMany({
+      where: {
+        phase: 'DROP',
+        mainStatus: { in: ['DROP_SHG_ACCEPTED', 'RETURN_SHG_ACCEPTED'] },
+        OR: [
+          { dropTransporterStatus: null },
+          { dropTransporterStatus: { not: 'NO_PARTNERS_FOUND' } }
+        ]
+      },
+      include: {
+        assignments: {
+          where: {
+            role: 'DROP',
+            assigneeType: 'TRANSPORTER',
+            status: { in: ['PENDING', 'ACCEPTED'] },
+          },
+        },
+      },
+    });
+
+    for (const order of dropOrdersForTransporter) {
+      if (order.assignments.length === 0) {
+        console.log(`[AutoBroadcastLoop] Automatically triggering Drop Transporter broadcast for order ${order.orderId} (${order.id})`);
+        try {
+          await this.broadcastDropTransporter(order.id);
+        } catch (err: any) {
+          console.error(`[AutoBroadcastLoop] Drop Transporter broadcast failed for order ${order.id}:`, err.message);
+        }
+      }
+    }
   }
 
   // Parse helper for transporter JSON fields safely
@@ -609,12 +641,22 @@ export class OrderManagementService implements OnModuleInit {
     }
     const order = await this.prisma.order.findFirst({
       where: whereClause,
-      include: { assignments: true },
+      include: { 
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
     });
     if (!order) {
       throw new NotFoundException(`Order with ID/OrderId ${id} not found`);
     }
-    return order as any;
+    return {
+      ...order,
+      sellerPincode: order.seller?.pincode || null,
+      sellerVillage: order.seller?.village || null,
+      buyerPincode: order.buyer?.pincode || null,
+      buyerVillage: order.buyer?.village || null,
+    } as any;
   }
 
   async getPickupNewOrders(filter?: OrderFilterDto) {
@@ -761,7 +803,7 @@ export class OrderManagementService implements OnModuleInit {
           },
           {
             OR: [
-              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER'] } },
+              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'] } },
               { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
             ]
           }
