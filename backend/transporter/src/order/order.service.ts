@@ -425,6 +425,8 @@ export class OrderService {
       });
 
       // Automatically accept and assign the associated pickup leg (PickupOrder) if it exists and is PENDING
+      // (Disabled in separated phase architecture)
+      /*
       const associatedPickups = await tx.pickupOrder.findMany({
         where: {
           masterOrderId: dropOrder.masterOrderId,
@@ -455,6 +457,7 @@ export class OrderService {
           });
         }
       }
+      */
 
       return updated;
     });
