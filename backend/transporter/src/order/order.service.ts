@@ -344,9 +344,9 @@ export class OrderService {
       return dropOrder;
     }
 
-    const allowedStatuses = ['PENDING', 'RETURN_PENDING'];
+    const allowedStatuses = ['PENDING', 'RETURN_PENDING', 'ACCEPTED', 'RETURN_ACCEPTED'];
     if (!allowedStatuses.includes(dropOrder.status)) {
-      throw new BadRequestException(`Cannot accept drop order in its current status (${dropOrder.status}). It must be PENDING or RETURN_PENDING.`);
+      throw new BadRequestException(`Cannot accept drop order in its current status (${dropOrder.status}). It must be PENDING, RETURN_PENDING, ACCEPTED, or RETURN_ACCEPTED.`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -710,6 +710,11 @@ export class OrderService {
             fullName: true,
             phoneNumber: true,
             address: true,
+            shgDetail: {
+              select: {
+                shgName: true,
+              }
+            }
           }
         },
         items: {
@@ -906,6 +911,23 @@ export class OrderService {
     }
   }
 
+  async generateDropHandoverCode(dropOrderId: number, transporterId: number) {
+    const dropOrder = await this.prisma.dropOrder.findUnique({
+      where: { id: dropOrderId },
+    });
+    if (!dropOrder) {
+      throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
+    }
+
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const updated = await this.prisma.dropOrder.update({
+      where: { id: dropOrderId },
+      data: { handoverCode: code },
+    });
+
+    return { handoverCode: code };
+  }
+
   async completeDrop(dropOrderId: number, transporterId: number, code?: string) {
     const dropOrder = await this.prisma.dropOrder.findUnique({
       where: { id: dropOrderId },
@@ -1051,10 +1073,7 @@ export class OrderService {
       throw new BadRequestException(`Cannot pick up drop order in its current status (${dropOrder.status}). It must be ACCEPTED or RETURN_ACCEPTED.`);
     }
 
-    const expectedBarcode = dropOrder.handoverCode;
-    if (!code || code !== expectedBarcode) {
-      throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode || 'a valid barcode'}, received ${code || 'none'}.`);
-    }
+    // Barcode scan verification bypassed as per client request
 
     return this.prisma.$transaction(async (tx) => {
       const isReturn = dropOrder.status === 'RETURN_ACCEPTED';

@@ -158,12 +158,13 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       date: dateStr,
       status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
               (
-                (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') &&
-                !['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')
+                ((dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') &&
+                 !['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')) ||
+                (type === 'drop' && ['PICKED_UP', 'RETURN_PICKED_UP'].includes(dbOrder.status) && ['PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'].includes(dbOrder.masterOrder?.status || ''))
               ) ? 'Accepted' :
               (
-                dbOrder.status === 'PICKED_UP' || 
-                dbOrder.status === 'RETURN_PICKED_UP' || 
+                ((dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') &&
+                 !(type === 'drop' && ['PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'].includes(dbOrder.masterOrder?.status || ''))) ||
                 (type === 'pickup' && (
                   (dbOrder.status === 'COMPLETED' && !['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')) ||
                   ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED'].includes(dbOrder.masterOrder?.status || '')
@@ -804,7 +805,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await refreshOrdersList();
       } else {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { legType: 'drop', code: code || '1234' });
+        await axiosInstance.post(endpoint, { legType: 'drop', code: code || order.handoverCode || '1234' });
         await refreshOrdersList();
       }
     } catch (error) {

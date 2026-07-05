@@ -1305,11 +1305,11 @@ export class OrderService {
       throw new NotFoundException(`Drop order with ID ${dropOrderId} not found.`);
     }
 
-    if (dropOrder.status === 'PICKED_UP' || dropOrder.status === 'RETURNED' || dropOrder.status === 'COMPLETED') {
+    if (dropOrder.status === 'RETURNED' || dropOrder.status === 'COMPLETED' || (dropOrder.status === 'PICKED_UP' && dropOrder.masterOrder?.status === 'PARCEL_AT_SHG')) {
       return dropOrder;
     }
 
-    const allowedStatuses = ['ACCEPTED', 'RETURN_ACCEPTED'];
+    const allowedStatuses = ['ACCEPTED', 'RETURN_ACCEPTED', 'PICKED_UP', 'RETURN_PICKED_UP'];
     if (!allowedStatuses.includes(dropOrder.status)) {
       throw new BadRequestException(`Cannot complete drop order in its current status (${dropOrder.status}).`);
     }

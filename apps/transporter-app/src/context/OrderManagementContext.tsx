@@ -64,6 +64,7 @@ export interface BatchOrder {
   isRTO?: boolean;
   shgContact: {
     name: string;
+    shgName?: string;
     phone: string;
     address: string;
     village: string;
@@ -105,6 +106,7 @@ interface OrderManagementContextType {
 
   finalizePickup: (batchId: string, code?: string) => Promise<void>;
   finalizeDrop: (batchId: string, code?: string) => Promise<void>;
+  generateDropHandoverCode?: (batchId: string) => Promise<string>;
 
   showToast: (message: string, type: NotificationType) => void;
   refreshBatchesList: () => Promise<void>;
@@ -313,6 +315,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         isRTO: o.isRTO || false,
         shgContact: {
           name: o.shg?.fullName || o.buyer?.fullName || 'Recipient',
+          shgName: o.shg?.shgDetail?.shgName || '',
           phone: o.shg?.phoneNumber || o.buyer?.phoneNumber || '',
           address: o.deliveryAddress || (o.shg?.address ? `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim() : ''),
           village: o.shg?.address?.village || o.buyer?.address?.village || 'Nesari',
@@ -951,11 +954,34 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     }
   };
 
+  const generateDropHandoverCode = async (batchId: string) => {
+    try {
+      let dropOrderId: number | undefined;
+      if (batchId.startsWith('drop-')) {
+        const rawDropId = batchId.replace('drop-', '');
+        dropOrderId = Number(rawDropId);
+      } else {
+        const batch = batchesRef.current.find(b => b.id === batchId);
+        dropOrderId = batch?.dropOrderId;
+      }
+      if (!dropOrderId) {
+        throw new Error('No dropOrderId found for batch');
+      }
+      const response = await api.post(`/orders/drop/${dropOrderId}/generate-code`);
+      await refreshBatchesList();
+      return response.data.handoverCode;
+    } catch (error) {
+      console.error('Error generating drop handover code:', error);
+      showToast('Failed to generate code.', 'error');
+      throw error;
+    }
+  };
+
   return (
     <OrderManagementContext.Provider value={{
       batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount,
       acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
-      finalizePickup, finalizeDrop,
+      finalizePickup, finalizeDrop, generateDropHandoverCode,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],
       acceptShg: () => {}, completeProduct: () => {}, rejectProduct: () => {}, acceptAreaAssignment: () => {}, rejectAreaAssignment: () => {}, acceptAllRouteShgs: () => {}
     }}>

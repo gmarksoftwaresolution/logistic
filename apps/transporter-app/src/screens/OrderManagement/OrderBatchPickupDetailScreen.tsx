@@ -37,7 +37,7 @@ import {
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
-  const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, showToast, refreshBatchesList } = useOrderManagement();
+  const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, generateDropHandoverCode, showToast, refreshBatchesList } = useOrderManagement();
   const { currentStep, isActive } = useOnboarding();
 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
@@ -96,7 +96,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       setScannerError('Barcode mismatch! Please scan or enter the correct barcode.');
       return;
     }
-    
+
     setScannerError('');
     setShowScannerModal(false);
     setIsFinalizing(true);
@@ -120,11 +120,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     const selectedProd = batch.products.find(p => p.id === selectedProductId);
     const expectedCode = selectedProd?.verificationCode || '1234';
     setVerifiedCode(expectedCode);
-    
+
     // Mark ALL products in the batch as verified
     const allProdIds = batch.products.map(p => p.id);
     setVerifiedProductIds(allProdIds);
-    
+
     setShowVerificationSheet(false);
     showToast('Batch verified successfully', 'success');
   };
@@ -135,11 +135,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     const expectedCode = batch.handoverCode || '1234';
     if (entered === expectedCode) {
       setVerifiedCode(entered);
-      
+
       // Mark ALL products in the batch as verified
       const allProdIds = batch.products.map(p => p.id);
       setVerifiedProductIds(allProdIds);
-      
+
       setShowVerificationSheet(false);
       showToast('Batch verified successfully', 'success');
     } else {
@@ -267,7 +267,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const handleConfirmReject = () => {
     if (!rejectingProductId) return;
-    
+
     const finalReason = rejectReasonText.trim();
 
     if (!finalReason) return;
@@ -353,7 +353,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         return type === 'pickup' ? (isPicked || isCompleted || isItemVerified) : (isCompleted || isItemVerified);
       })
       .map(p => p.id);
-    
+
     if (completedIds.length > 0) {
       setVerifiedProductIds(prev => {
         const hasNew = completedIds.some(id => !prev.includes(id));
@@ -475,6 +475,18 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name)}</Text>
                     </View>
                   </View>
+
+                  {!!(displayContact as any).shgName && (
+                    <View style={styles.contactGridItem}>
+                      <View style={styles.contactIconCircle}>
+                        <User size={scale(14)} color={Colors.primary} />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).shgName}</Text>
+                      </View>
+                    </View>
+                  )}
 
                   <View style={styles.contactGridItem}>
                     <View style={styles.contactIconCircle}>
@@ -750,15 +762,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 <TouchableOpacity
                   style={[styles.primaryConfirmBtn, styles.bgPickup, isFinalizing && styles.btnDisabled]}
                   disabled={isFinalizing}
-                  onPress={() => {
-                    setManualBarcode('');
-                    setScannerError('');
-                    setShowScannerModal(true);
-                  }}
+                  onPress={handleFinalBatchConfirm}
                 >
-                  <Package size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
                   <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing ? 'Confirming...' : 'Scan Barcode to Verify Pickup'}
+                    {isFinalizing ? 'Confirming...' : 'Confirm Pickup'}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -776,8 +784,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     {isFinalizing
                       ? 'Confirming...'
                       : selectedGmuDropProductIds.length < displayProducts.length
-                      ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
-                      : 'Confirm Delivery'}
+                        ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
+                        : 'Confirm Delivery'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -794,15 +802,24 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               {verifiedCount < displayProducts.length ? (
                 <TouchableOpacity
                   style={[styles.primaryConfirmBtn, type === 'pickup' ? styles.bgPickup : styles.bgDrop]}
-                  onPress={() => {
+                  onPress={async () => {
                     if (displayProducts.length > 0) {
                       setSelectedProductId(displayProducts[0].id);
                       setOtpCode(['', '', '', '']);
+                      if (type === 'drop' && !isHubPoint && generateDropHandoverCode) {
+                        try {
+                          await generateDropHandoverCode(batch.id);
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }
                       setShowVerificationSheet(true);
                     }
                   }}
                 >
-                  <Text style={styles.primaryConfirmBtnText}>View Verification Code</Text>
+                  <Text style={styles.primaryConfirmBtnText}>
+                    {type === 'drop' && !isHubPoint ? 'Generate Code' : 'View Verification Code'}
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -819,8 +836,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     {isFinalizing
                       ? 'Confirming...'
                       : type === 'pickup'
-                      ? 'Confirm Pickup'
-                      : 'Confirm Delivery'}
+                        ? 'Confirm Pickup'
+                        : 'Confirm Delivery'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -873,7 +890,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
               <View>
                 <Text style={styles.modalSubtitle}>Specify reason for failing this shipment action</Text>
-                
+
                 <View style={[styles.chipsContainer, { flexDirection: 'column', width: '100%' }]}>
                   {(() => {
                     let chips: string[] = [];
@@ -925,17 +942,17 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                   <View style={{ marginTop: verticalScale(10), gap: verticalScale(14) }}>
                     {/* Inline contact card for Hub Manager */}
                     <View style={[
-                      styles.masterSectionBox, 
-                      { 
-                        borderWidth: 1.5, 
-                        borderColor: rejectReasonText === 'Transporter Emergency' ? '#DC2626' : Colors.primary, 
-                        marginBottom: 0 
+                      styles.masterSectionBox,
+                      {
+                        borderWidth: 1.5,
+                        borderColor: rejectReasonText === 'Transporter Emergency' ? '#DC2626' : Colors.primary,
+                        marginBottom: 0
                       }
                     ]}>
                       <View style={[
-                        styles.boxHeaderRow, 
-                        { 
-                          backgroundColor: rejectReasonText === 'Transporter Emergency' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(178, 213, 52, 0.08)' 
+                        styles.boxHeaderRow,
+                        {
+                          backgroundColor: rejectReasonText === 'Transporter Emergency' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(178, 213, 52, 0.08)'
                         }
                       ]}>
                         <View style={styles.boxHeaderLeft}>
@@ -945,7 +962,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                             <User size={scale(18)} color={Colors.primary} strokeWidth={2.5} />
                           )}
                           <Text style={[
-                            styles.boxTitleText, 
+                            styles.boxTitleText,
                             rejectReasonText === 'Transporter Emergency' && { color: '#DC2626' }
                           ]}>
                             {rejectReasonText === 'Transporter Emergency' ? 'Emergency Support' : 'Hub Manager Contact'}
@@ -974,7 +991,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
                     <TouchableOpacity
                       style={[
-                        styles.confirmRejectBtn, 
+                        styles.confirmRejectBtn,
                         { backgroundColor: rejectReasonText === 'Transporter Emergency' ? '#DC2626' : Colors.primary }
                       ]}
                       onPress={() => {
@@ -1022,11 +1039,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           type === 'pickup'
             ? `Share this code with the ${isHubPoint ? 'Hub' : 'SHG'} to confirm pickup.`
             : isHubPoint
-            ? `Enter the 4-digit delivery code generated on the Hub app.`
-            : `Share this code with the SHG to confirm delivery.`
+              ? `Enter the 4-digit delivery code generated on the Hub app.`
+              : `Enter the 4-digit code shown on the SHG app.`
         }
       >
-        {type === 'pickup' || !isHubPoint ? (
+        {type === 'pickup' ? (
           <View style={{ gap: verticalScale(16) }}>
             <CodeDisplayCard code={batch.products.find(p => p.id === selectedProductId)?.verificationCode || ''} />
             {isHubPoint && type === 'pickup' && (

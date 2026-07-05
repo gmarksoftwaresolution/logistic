@@ -74,6 +74,15 @@ export class OrderController {
   async acceptDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.orderService.acceptDrop(id, req.user.id);
   }
+  @Post('drop/:id/generate-code')
+  @ApiOperation({ summary: 'Generate handover code for drop delivery' })
+  async generateDropHandoverCode(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    return this.orderService.generateDropHandoverCode(id, req.user.id);
+  }
+
   @Post('drop/:id/complete')
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
   @ApiBody({

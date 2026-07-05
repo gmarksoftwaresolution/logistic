@@ -541,14 +541,14 @@ export class OrderManagementService implements OnModuleInit {
               },
               {
                 OR: [
-                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG'] } },
+                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'] } },
                   { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
                 ]
               }
             ]
           },
           undefined,
-          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG']
+          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER']
         )
       }),
       // drop.completed — Phase 7-8
@@ -760,7 +760,7 @@ export class OrderManagementService implements OnModuleInit {
           },
           {
             OR: [
-              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG'] } },
+              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'] } },
               { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
             ]
           }
@@ -770,6 +770,7 @@ export class OrderManagementService implements OnModuleInit {
       [
         'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
         'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG',
+        'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
       ]
     );
     return this.prisma.order.findMany({
@@ -1728,7 +1729,8 @@ export class OrderManagementService implements OnModuleInit {
       },
     });
 
-    // Find and update corresponding DROP order
+    // Find and update corresponding DROP order (Bypassed to prevent moving drop order back to Drop New Orders)
+    /*
     const dropOrder = await this.prisma.order.findFirst({
       where: { orderId: order.orderId, phase: 'DROP' }
     });
@@ -1741,6 +1743,7 @@ export class OrderManagementService implements OnModuleInit {
         }
       });
     }
+    */
 
     return updated;
   }

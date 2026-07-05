@@ -157,6 +157,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     Linking.openURL(`tel:${phone}`);
   };
   const [tempPhotoUri, setTempPhotoUri] = useState<string | null>(null);
+  const [showShgCode, setShowShgCode] = useState<boolean>(false);
   const [dropItemCodes, setDropItemCodes] = useState<Record<number, string>>({});
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const [sellerEnteredCode, setSellerEnteredCode] = useState<string>('');
@@ -223,7 +224,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
   const isSubmitDisabled = isSubmitting || (
     activeType === 'transporter'
-      ? (isDeliveryPhase ? !deliveryCodeVerified : !pickupCodeVerified)
+      ? (isDeliveryPhase ? !deliveryCodeVerified : (order.legType === 'drop' ? !order.handoverCode : !pickupCodeVerified))
       : (activeType === 'buyer' ? !deliveryCodeVerified : !deliveryCodeVerified)
   );
 
@@ -812,7 +813,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
         {/* Verification Section */}
         {activeType === 'transporter' ? (
-          !codesGenerated ? (
+          order.legType === 'drop' ? (
             <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
               <View className="flex-row items-center mb-4">
                 <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
@@ -820,118 +821,161 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 </View>
                 <View className="flex-1">
                   <Text className="text-[15px] font-black text-[#111827]">
-                    {isDeliveryPhase ? "Generate Delivery Code" : "Generate Handover Code"}
+                    {isDeliveryPhase ? "Delivery Verification" : "Transporter Handover Code"}
                   </Text>
                   <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    Generate a 4-digit verification code.
+                    {isDeliveryPhase 
+                      ? "Delivery verification code for transporter." 
+                      : "Share this code with the transporter to confirm pickup."}
                   </Text>
                 </View>
               </View>
 
-              <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-                    await axiosInstance.post(`/orders/new/pickup/${rawId}/generate-code`);
-                    await refreshOrdersList();
-                    Toast.show({
-                      type: 'success',
-                      text1: 'Code Generated',
-                      text2: 'Verification code generated successfully'
-                    });
-                  } catch (err) {
-                    console.error('Error generating code:', err);
-                    Alert.alert('Error', 'Failed to generate verification code. Please try again.');
-                  }
-                }}
-                className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
-              >
-                <Text className="text-[14px] font-bold text-white">Generate Code</Text>
-              </TouchableOpacity>
+              {isDeliveryPhase ? (
+                <View className="bg-slate-50 border border-slate-200 rounded-[12px] py-4 items-center justify-center">
+                  <Text className="text-[28px] font-black text-[#073318] tracking-widest">
+                    {order.handoverCode || 'Waiting...'}
+                  </Text>
+                </View>
+              ) : (
+                !showShgCode ? (
+                  <TouchableOpacity
+                    onPress={() => setShowShgCode(true)}
+                    className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+                  >
+                    <Text className="text-[14px] font-bold text-white">View Verification Code</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View className="bg-slate-50 border border-slate-200 rounded-[12px] py-4 items-center justify-center">
+                    <Text className="text-[28px] font-black text-[#073318] tracking-widest">
+                      {order.handoverCode || 'Waiting for Transporter...'}
+                    </Text>
+                  </View>
+                )
+              )}
             </View>
           ) : (
-            <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
-              <View className="flex-row items-center mb-4">
-                <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
-                  <Ionicons name="keypad-outline" size={16} color="#073318" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[15px] font-black text-[#111827]">
-                    {isDeliveryPhase ? "Delivery Verification" : "Handover Verification"}
-                  </Text>
-                  <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
-                    Enter the 4-digit code from the transporter to confirm handover.
-                  </Text>
-                </View>
-              </View>
-
-              <View className="flex-col gap-3">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-[13px] font-black text-[#111827]">Verification Pending</Text>
-                  {deliveryCodeVerified ? (
-                    <View className="bg-[#ECFDF5] border border-[#D1FAE5] px-3 py-1.5 rounded-[8px] flex-row items-center">
-                      <Ionicons name="checkmark-circle" size={16} color="#059669" />
-                      <Text className="text-[12px] font-bold text-[#059669] ml-1">Verified</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                {!deliveryCodeVerified && (
-                  <View className="flex-row items-center justify-between mt-1">
-                    <View className="flex-row gap-2">
-                      {[0, 1, 2, 3].map((digitIdx) => {
-                        const val = (sellerEnteredCode || '')[digitIdx] || '';
-                        return (
-                          <TextInput
-                            key={digitIdx}
-                            ref={(ref) => { sellerInputRefs.current[digitIdx] = ref; }}
-                            value={val === ' ' ? '' : val}
-                            onChangeText={(text) => handleSellerCodeChange(digitIdx, text)}
-                            onKeyPress={({ nativeEvent }) => handleSellerKeyPress(digitIdx, nativeEvent.key)}
-                            keyboardType="numeric"
-                            maxLength={1}
-                            style={{ padding: 0, textAlignVertical: 'center', includeFontPadding: false }}
-                            className="w-12 h-12 bg-white border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-slate-800"
-                          />
-                        );
-                      })}
-                    </View>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-                        const entered = sellerEnteredCode.replace(/\s/g, '');
-                        if (!entered || entered.length !== 4) {
-                          Alert.alert("Error", "Please enter a 4-digit verification code.");
-                          return;
-                        }
-                        try {
-                          const codesMap: Record<number, string> = {};
-                          products.forEach((p: any) => {
-                            codesMap[p.itemId] = entered;
-                          });
-                          await axiosInstance.post(`/orders/new/pickup/${rawId}/verify-codes`, {
-                            codes: codesMap
-                          });
-                          await refreshOrdersList();
-                          Toast.show({
-                            type: 'success',
-                            text1: 'Verified Successfully',
-                            text2: 'Order verified successfully'
-                          });
-                        } catch (err: any) {
-                          console.error('Error verifying code:', err);
-                          const msg = err.response?.data?.message || 'Invalid code. Please try again.';
-                          Alert.alert('Verification Failed', msg);
-                        }
-                      }}
-                      className="bg-[#073318] px-4 py-2 rounded-[10px] items-center justify-center shadow-sm"
-                    >
-                      <Text className="text-[12px] font-bold text-white">Verify</Text>
-                    </TouchableOpacity>
+            !codesGenerated ? (
+              <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
+                <View className="flex-row items-center mb-4">
+                  <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+                    <Ionicons name="keypad-outline" size={16} color="#073318" />
                   </View>
-                )}
+                  <View className="flex-1">
+                    <Text className="text-[15px] font-black text-[#111827]">
+                      {isDeliveryPhase ? "Generate Delivery Code" : "Generate Handover Code"}
+                    </Text>
+                    <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                      Generate a 4-digit verification code.
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                      await axiosInstance.post(`/orders/new/pickup/${rawId}/generate-code`);
+                      await refreshOrdersList();
+                      Toast.show({
+                        type: 'success',
+                        text1: 'Code Generated',
+                        text2: 'Verification code generated successfully'
+                      });
+                    } catch (err) {
+                      console.error('Error generating code:', err);
+                      Alert.alert('Error', 'Failed to generate verification code. Please try again.');
+                    }
+                  }}
+                  className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
+                >
+                  <Text className="text-[14px] font-bold text-white">Generate Code</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            ) : (
+              <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
+                <View className="flex-row items-center mb-4">
+                  <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+                    <Ionicons name="keypad-outline" size={16} color="#073318" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[15px] font-black text-[#111827]">
+                      {isDeliveryPhase ? "Delivery Verification" : "Handover Verification"}
+                    </Text>
+                    <Text className="text-[11px] font-medium text-slate-500 mt-0.5">
+                      Enter the 4-digit code from the transporter to confirm handover.
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-col gap-3">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[13px] font-black text-[#111827]">Verification Pending</Text>
+                    {deliveryCodeVerified ? (
+                      <View className="bg-[#ECFDF5] border border-[#D1FAE5] px-3 py-1.5 rounded-[8px] flex-row items-center">
+                        <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                        <Text className="text-[12px] font-bold text-[#059669] ml-1">Verified</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {!deliveryCodeVerified && (
+                    <View className="flex-row items-center justify-between mt-1">
+                      <View className="flex-row gap-2">
+                        {[0, 1, 2, 3].map((digitIdx) => {
+                          const val = (sellerEnteredCode || '')[digitIdx] || '';
+                          return (
+                            <TextInput
+                              key={digitIdx}
+                              ref={(ref) => { sellerInputRefs.current[digitIdx] = ref; }}
+                              value={val === ' ' ? '' : val}
+                              onChangeText={(text) => handleSellerCodeChange(digitIdx, text)}
+                              onKeyPress={({ nativeEvent }) => handleSellerKeyPress(digitIdx, nativeEvent.key)}
+                              keyboardType="numeric"
+                              maxLength={1}
+                              style={{ padding: 0, textAlignVertical: 'center', includeFontPadding: false }}
+                              className="w-12 h-12 bg-white border border-slate-200 rounded-[12px] text-center text-[18px] font-black text-slate-800"
+                            />
+                          );
+                        })}
+                      </View>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+                          const entered = sellerEnteredCode.replace(/\s/g, '');
+                          if (!entered || entered.length !== 4) {
+                            Alert.alert("Error", "Please enter a 4-digit verification code.");
+                            return;
+                          }
+                          try {
+                            const codesMap: Record<number, string> = {};
+                            products.forEach((p: any) => {
+                              codesMap[p.itemId] = entered;
+                            });
+                            await axiosInstance.post(`/orders/new/pickup/${rawId}/verify-codes`, {
+                              codes: codesMap
+                            });
+                            await refreshOrdersList();
+                            Toast.show({
+                              type: 'success',
+                              text1: 'Verified Successfully',
+                              text2: 'Order verified successfully'
+                            });
+                          } catch (err: any) {
+                            console.error('Error verifying code:', err);
+                            const msg = err.response?.data?.message || 'Invalid code. Please try again.';
+                            Alert.alert('Verification Failed', msg);
+                          }
+                        }}
+                        className="bg-[#073318] px-4 py-2 rounded-[10px] items-center justify-center shadow-sm"
+                      >
+                        <Text className="text-[12px] font-bold text-white">Verify</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )
           )
         ) : (activeType === 'seller' || activeType === 'buyer') ? (
           <View className="bg-white border border-[#E2E8F0] rounded-[16px] p-4 mx-2 my-2 shadow-sm">
@@ -972,11 +1016,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
             ) : (
               <View className="flex-col gap-3">
                 <View className="flex-row items-center justify-between">
-                  {!isDeliveryPhase ? (
-                    <Text className="text-[13px] font-black text-[#111827]">Verification Code: {products[0]?.verificationCode || ''}</Text>
-                  ) : (
-                    <Text className="text-[13px] font-black text-[#111827]">Verification Pending</Text>
-                  )}
+                  <Text className="text-[13px] font-black text-[#111827]">Verification Code: {products[0]?.verificationCode || ''}</Text>
                   {deliveryCodeVerified ? (
                     <View className="bg-[#ECFDF5] border border-[#D1FAE5] px-3 py-1.5 rounded-[8px] flex-row items-center">
                       <Ionicons name="checkmark-circle" size={16} color="#059669" />

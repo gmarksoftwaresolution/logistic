@@ -45,13 +45,10 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
   if (!context || !user) return null;
   const { t } = context;
 
-  // Pickup orders: Accepted pickups that haven't been received from seller yet
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && o.legType === 'pickup');
-  // Delivery orders: PickedUp pickups OR Accepted drop orders (drops skip the pickup step)
-  const deliveryOrders = acceptedOrders.filter(o => 
-    o.status === 'PickedUp' || 
-    (o.status === 'Accepted' && o.legType === 'drop')
-  );
+  // Pickup orders: Accepted orders (waiting for receipt/pickup)
+  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
+  // Delivery orders: PickedUp orders (received and ready for delivery/drop)
+  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
   const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>('delivery');
