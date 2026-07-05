@@ -23,10 +23,11 @@ export class OrderManagementService implements OnModuleInit {
     const ordersPlaced = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
-        mainStatus: 'ORDER_PLACED',
+        mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
         OR: [
           { pickupShgStatus: null },
-          { pickupShgStatus: { not: 'NO_PARTNERS_FOUND' } }
+          { pickupShgStatus: { not: 'NO_PARTNERS_FOUND' } },
+          { pickupShgStatus: 'PENDING' }
         ]
       },
       include: {
@@ -541,18 +542,18 @@ export class OrderManagementService implements OnModuleInit {
               },
               {
                 OR: [
-                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'] } },
+                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER'] } },
                   { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
                 ]
               }
             ]
           },
           undefined,
-          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER']
+          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER']
         )
       }),
       // drop.completed — Phase 7-8
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) }),
       // drop.rejected
       this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
       // drop.rescheduled
@@ -771,6 +772,7 @@ export class OrderManagementService implements OnModuleInit {
         'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
         'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG',
         'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
+        'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER'
       ]
     );
     return this.prisma.order.findMany({
@@ -785,7 +787,7 @@ export class OrderManagementService implements OnModuleInit {
       { phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] },
       filter,
       // Phase 7-8: Delivered and Completed
-      ['DELIVERED', 'COMPLETED']
+      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']
     );
     return this.prisma.order.findMany({
       where,

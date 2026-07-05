@@ -377,10 +377,17 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }
 
       // Pickup Code Verification Rule (for transporter pickup)
-      if (activeType === 'transporter' && !isDeliveryPhase && !pickupCodeVerified) {
-        Alert.alert("Verification Required", "Please verify pickup code before submitting.");
-        setIsSubmitting(false);
-        return;
+      if (activeType === 'transporter' && !isDeliveryPhase) {
+        if (order.legType === 'pickup' && !pickupCodeVerified) {
+          Alert.alert("Verification Required", "Please verify pickup code before submitting.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (order.legType === 'drop' && !order.handoverCode) {
+          Alert.alert("Verification Required", "Please wait for transporter to generate code before submitting.");
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       if (order.id.startsWith('RTO-') && !isDeliveryPhase) {
@@ -840,7 +847,14 @@ const OrderDetailsScreen: React.FC<Props> = ({
               ) : (
                 !showShgCode ? (
                   <TouchableOpacity
-                    onPress={() => setShowShgCode(true)}
+                    onPress={async () => {
+                      try {
+                        await refreshOrdersList();
+                      } catch (err) {
+                        console.error('Error refreshing orders list:', err);
+                      }
+                      setShowShgCode(true);
+                    }}
                     className="bg-[#073318] h-12 rounded-[12px] flex-row items-center justify-center shadow-sm"
                   >
                     <Text className="text-[14px] font-bold text-white">View Verification Code</Text>
