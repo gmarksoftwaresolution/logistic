@@ -2153,13 +2153,15 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages);
-      const pincodes = this.parseJsonArray(t.assignedPincodes);
-      return villages.includes(order.buyerVillage) || pincodes.includes(order.buyerPincode);
+      const villages = this.parseJsonArray(t.assignedVillages).map((s) => s.trim().toLowerCase());
+      const pincodes = this.parseJsonArray(t.assignedPincodes).map((s) => s.trim().toLowerCase());
+      const bv = order.buyerVillage?.trim()?.toLowerCase();
+      const bp = order.buyerPincode?.trim()?.toLowerCase();
+      return (bv && villages.includes(bv)) || (bp && pincodes.includes(bp));
     });
 
     if (matchingTransporters.length === 0) {
-      throw new BadRequestException(`No matching approved transporters found for buyer village ${order.buyerVillage} or pincode ${order.buyerPincode}`);
+      throw new BadRequestException(`No matching approved transporters found for buyer village ${order.buyerVillage || 'N/A'} or pincode ${order.buyerPincode || 'N/A'}`);
     }
 
     await this.prisma.orderAssignment.deleteMany({

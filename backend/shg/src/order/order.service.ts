@@ -613,12 +613,11 @@ export class OrderService {
       });
 
       // Broadcast to matching transporters based on configured routes (priority: Pincode -> Village -> Taluka -> District)
-      const buyerVillage = gmuOrders[0].buyerVillage;
-      const buyerPincode = gmuOrders[0].buyerPincode;
-      
       const rawBuyer = await tx.$queryRawUnsafe(`
-        SELECT taluka, district FROM public.buyers WHERE id = $1 LIMIT 1;
+        SELECT village, pincode, taluka, district FROM public.buyers WHERE id = $1 LIMIT 1;
       `, dropOrder.buyerId) as any[];
+      const buyerVillage = rawBuyer?.[0]?.village || '';
+      const buyerPincode = rawBuyer?.[0]?.pincode || '';
       const buyerTaluka = rawBuyer?.[0]?.taluka || '';
       const buyerDistrict = rawBuyer?.[0]?.district || '';
 

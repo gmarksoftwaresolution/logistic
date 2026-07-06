@@ -755,7 +755,7 @@ export class OrderService {
       } else if (drop.transporterId === null) {
         // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
         const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "dropTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 LIMIT 1;
+          SELECT id, "dropTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
         `, drop.masterOrder.orderNumber) as any[];
         if (gmuOrders.length > 0) {
           const orderUuid = gmuOrders[0].id;

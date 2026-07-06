@@ -342,10 +342,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : ['PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN', 'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
 
     const targetShgId = isBuyerReturnFlow
-      ? (o.pickupReturnShgId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId)
+      ? (o.pickupReturnShgId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId)
       : isDropOrTransporterReturnFlow
-        ? (o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId)
-        : (o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status !== 'REJECTED')?.assigneeId);
+        ? (o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId)
+        : (o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId);
 
     const shgMember = shgList.find(s => s.id === targetShgId);
 
@@ -368,10 +368,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } : undefined));
 
     const targetTransporterId = isBuyerReturnFlow
-      ? (o.returnTransporterId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId)
+      ? (o.returnTransporterId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId)
       : isDropOrTransporterReturnFlow
-        ? (o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId)
-        : (o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status !== 'REJECTED')?.assigneeId);
+        ? (o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId)
+        : (o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId);
 
     const transMember = transporterList.find(t => t.id === targetTransporterId);
 
