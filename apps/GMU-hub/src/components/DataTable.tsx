@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, RefreshCcw, ChevronDown, Check } from 'lucide-react';
 import { TimeAgo } from './TimeAgo';
 
 export interface Column<T> {
@@ -20,6 +20,7 @@ interface DataTableProps<T> {
   selectedDate?: string;
   onDateChange?: (date: string) => void;
   onRefresh?: () => void;
+  extraControls?: React.ReactNode;
 }
 
 export function getStatusDisplayLabel(status: string): string {
@@ -126,6 +127,72 @@ export function isStatusMatching(rowValue: string, filterValue: string): boolean
   return false;
 }
 
+// Helper to extract text recursively from a React node
+function getTextFromReactNode(node: React.ReactNode): string {
+  if (node === null || node === undefined || node === false) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) {
+    return node.map(getTextFromReactNode).join(' ');
+  }
+  if (typeof node === 'object' && 'props' in node) {
+    const props = (node as any).props;
+    let text = '';
+    if (props.status) text += ' ' + String(props.status);
+    if (props.label) text += ' ' + String(props.label);
+    if (props.children) text += ' ' + getTextFromReactNode(props.children);
+    return text;
+  }
+  return '';
+}
+
+// Helper to recursively get simple string values from any item
+function getPrimitiveValues(val: any, visited = new Set<any>(), depth = 0): string[] {
+  if (depth > 8) return [];
+  if (val === null || val === undefined) return [];
+  
+  if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+    return [String(val).toLowerCase()];
+  }
+  
+  if (val instanceof Date) {
+    return [
+      val.toISOString().toLowerCase(),
+      val.toLocaleDateString().toLowerCase(),
+      String(val).toLowerCase()
+    ];
+  }
+  
+  if (typeof val === 'object') {
+    if (visited.has(val)) return [];
+    visited.add(val);
+    
+    if (Array.isArray(val)) {
+      return val.flatMap(item => getPrimitiveValues(item, visited, depth + 1));
+    }
+    
+    // Check if it's a special object that might have a custom toString, e.g. Dayjs, Moment, etc.
+    const values: string[] = [];
+    
+    // Try to get string representation directly if it's custom
+    if (val.constructor && val.constructor.name !== 'Object') {
+      try {
+        const str = String(val).toLowerCase();
+        if (str && str !== '[object object]') {
+          values.push(str);
+        }
+      } catch (e) {}
+    }
+
+    for (const key of Object.keys(val)) {
+      values.push(...getPrimitiveValues(val[key], visited, depth + 1));
+    }
+    return values;
+  }
+  
+  return [];
+}
+
+
 export function DataTable<T extends Record<string, any>>({
   columns,
   data,
@@ -138,10 +205,12 @@ export function DataTable<T extends Record<string, any>>({
   selectedDate: propSelectedDate,
   onDateChange,
   onRefresh,
+  extraControls,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [internalSelectedStatus, setInternalSelectedStatus] = useState<string>('all');
   const [internalSelectedDate, setInternalSelectedDate] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const selectedStatus = propSelectedStatus !== undefined ? propSelectedStatus : internalSelectedStatus;
   const setSelectedStatus = onStatusChange || setInternalSelectedStatus;
@@ -226,21 +295,33 @@ export function DataTable<T extends Record<string, any>>({
     if (searchTerm.trim() !== '') {
       const query = searchTerm.toLowerCase();
       result = result.filter((item) => {
-        return Object.values(item).some((val) => {
-          if (val === null || val === undefined) return false;
-          if (typeof val === 'string' || typeof val === 'number') {
-            return String(val).toLowerCase().includes(query);
+        // 1. Check all primitive fields in the item (recursively, excluding items & tracking)
+        const itemValues = getPrimitiveValues(item);
+        if (itemValues.some(val => val.includes(query))) return true;
+
+        // 2. Check all values rendered by columns
+        for (const col of enrichedColumns) {
+          let colText = '';
+          if (typeof col.accessor === 'function') {
+            try {
+              const node = col.accessor(item);
+              colText = getTextFromReactNode(node).toLowerCase();
+            } catch (e) {}
+          } else {
+            const val = item[col.accessor as string];
+            if (val !== null && val !== undefined) {
+              colText = String(val).toLowerCase();
+            }
           }
-          if (typeof val === 'object') {
-            return JSON.stringify(val).toLowerCase().includes(query);
-          }
-          return false;
-        });
+          if (colText.includes(query)) return true;
+        }
+
+        return false;
       });
     }
 
     return result;
-  }, [data, searchTerm, selectedStatus, selectedDate, statusFilterField, onStatusChange, onDateChange]);
+  }, [data, searchTerm, selectedStatus, selectedDate, statusFilterField, onStatusChange, onDateChange, enrichedColumns]);
 
   // Pagination calculations
   const totalItems = filteredData.length;
@@ -252,7 +333,7 @@ export function DataTable<T extends Record<string, any>>({
   return (
     <div className="space-y-5">
       {/* Controls: Search & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/60 p-4 rounded-2xl border border-slate-200/80 backdrop-blur-md shadow-sm transition-all duration-300">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-[20px] border border-slate-200/80 backdrop-blur-md shadow-sm transition-all duration-300">
         {/* Search */}
         <div className="flex items-center gap-3 flex-1 max-w-md">
           <div className="relative flex-1 group">
@@ -265,7 +346,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm transition-all duration-200 placeholder:text-slate-400 text-slate-700"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm transition-all duration-200 placeholder:text-slate-400 text-slate-700 hover:border-slate-300 focus:shadow-md"
             />
           </div>
           {searchTerm !== '' && (
@@ -274,7 +355,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSearchTerm('');
                 setCurrentPage(1);
               }}
-              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Search
             </button>
@@ -285,7 +366,7 @@ export function DataTable<T extends Record<string, any>>({
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
           {/* Date Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider whitespace-nowrap">Filter Date:</span>
+            <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Date:</span>
             <input
               type="date"
               value={selectedDate}
@@ -293,7 +374,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSelectedDate(e.target.value);
                 setCurrentPage(1);
               }}
-              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer font-extrabold text-slate-700 transition-all duration-200 hover:border-slate-300"
+              className="bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer font-extrabold text-slate-750 transition-all duration-200 hover:border-slate-300 focus:shadow-md"
             />
           </div>
           {selectedDate !== '' && (
@@ -302,7 +383,7 @@ export function DataTable<T extends Record<string, any>>({
                 setSelectedDate('');
                 setCurrentPage(1);
               }}
-              className="px-3.5 py-2 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              className="px-3.5 py-2 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
             >
               ✕ Clear Date
             </button>
@@ -310,25 +391,77 @@ export function DataTable<T extends Record<string, any>>({
 
           {/* Status Filter */}
           {statusFilterField && (statusFilterOptions || uniqueStatuses.length > 0) && (
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider whitespace-nowrap">Filter Status:</span>
-              <select
-                value={selectedStatus}
-                onChange={(e) => {
-                  setSelectedStatus(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer capitalize font-extrabold text-slate-700 transition-all duration-200 hover:border-slate-300"
-              >
-                <option value="all">All Statuses</option>
-                {(statusFilterOptions || uniqueStatuses).map((status) => (
-                  <option key={status} value={status}>
-                    {statusFilterOptions ? status : getStatusDisplayLabel(status)}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2.5 relative">
+              <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Status:</span>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 hover:border-slate-300 hover:bg-slate-50/50 transition-all duration-200 shadow-sm cursor-pointer min-w-[140px] focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5"
+                >
+                  <span className="capitalize">
+                    {selectedStatus === 'all' 
+                      ? 'All Statuses' 
+                      : (statusFilterOptions?.includes(selectedStatus) 
+                        ? selectedStatus 
+                        : getStatusDisplayLabel(selectedStatus))}
+                  </span>
+                  <ChevronDown className={`h-4.5 w-4.5 text-slate-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {isDropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40 cursor-default" 
+                      onClick={() => setIsDropdownOpen(false)} 
+                    />
+                    <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150 max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus('all');
+                          setCurrentPage(1);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer ${
+                          selectedStatus === 'all'
+                            ? 'bg-[#073318] text-white shadow-sm'
+                            : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
+                        }`}
+                      >
+                        <span>All Statuses</span>
+                        {selectedStatus === 'all' && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                      {(statusFilterOptions || uniqueStatuses).map((status) => {
+                        const isSelected = selectedStatus === status;
+                        const label = statusFilterOptions ? status : getStatusDisplayLabel(status);
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() => {
+                              setSelectedStatus(status);
+                              setCurrentPage(1);
+                              setIsDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer capitalize ${
+                              isSelected
+                                ? 'bg-[#073318] text-white shadow-sm'
+                                : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
+                            }`}
+                          >
+                            <span>{label}</span>
+                            {isSelected && <Check className="h-3.5 w-3.5" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
+
 
           {statusFilterField && selectedStatus !== 'all' && (
             <button
@@ -351,6 +484,8 @@ export function DataTable<T extends Record<string, any>>({
               <span>Refresh</span>
             </button>
           )}
+
+          {extraControls}
         </div>
       </div>
 

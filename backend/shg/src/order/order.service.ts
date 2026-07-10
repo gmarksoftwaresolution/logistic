@@ -203,7 +203,7 @@ export class OrderService {
             ]
           },
           { buyerId: { not: shgId } },
-          { status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'REJECTED'] } },
+          { status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'REJECTED', 'DELIVERED'] } },
           {
             NOT: {
               dropOrderNumber: { startsWith: 'RET-' }

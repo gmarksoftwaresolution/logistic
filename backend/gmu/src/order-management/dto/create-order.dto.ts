@@ -91,4 +91,33 @@ export class CreateOrderDto {
   @IsNumber()
   @IsNotEmpty()
   totalWeight: number;
+
+  @ApiProperty({ example: 'Medium', required: false })
+  @IsString()
+  @IsOptional()
+  priority?: string;
+
+  @ApiProperty({ example: '2026-06-22', required: false })
+  @IsString()
+  @IsOptional()
+  orderDate?: string;
+
+  @ApiProperty({ example: '2026-07-02', required: false })
+  @IsString()
+  @IsOptional()
+  expectedDeliveryDate?: string;
+
+  @ApiProperty({
+    example: [{ name: 'Organic Honey', category: 'FOOD', quantity: 5, unit: 'Bottle', weight: 0.5, price: 450.0 }],
+    required: false
+  })
+  @IsOptional()
+  products?: {
+    name: string;
+    category?: string;
+    quantity: number;
+    unit?: string;
+    weight?: number;
+    price?: number;
+  }[];
 }

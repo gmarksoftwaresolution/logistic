@@ -82,6 +82,8 @@ export const api = {
     reject: (id: string) => request(`/transporters/${id}/reject`, { method: 'PATCH' }),
   },
   orders: {
+    create: (data: any) => request('/orders', { method: 'POST', body: JSON.stringify(data) }),
+    createDrop: (data: any) => request('/orders/drop', { method: 'POST', body: JSON.stringify(data) }),
     getCounts: () => request('/orders/counts'),
     getDetails: (id: string) => request(`/orders/${id}`),
     getPickupNew: (status?: string, date?: string) => {

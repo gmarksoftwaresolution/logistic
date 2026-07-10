@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import logoImg from '../assets/logo.png';
+import { useAppContext } from '../context/AppContext';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -13,6 +14,8 @@ import {
   Bell,
   Search,
   User,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -24,6 +27,56 @@ interface LayoutProps {
 export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  const {
+    pickupNewOrders,
+    pickupAssignedOrders,
+    pickupWarehouseOrders,
+    pickupRejectedOrders,
+    pickupRescheduledOrders,
+    dropNewOrders,
+    dropAssignedOrders,
+    dropRejectedOrders,
+    dropRescheduledOrders,
+    dropCompletedOrders,
+    returnPickupNewOrders,
+    returnPickupCompletedOrders,
+    returnDropNewOrders,
+    returnDropCompletedOrders,
+  } = useAppContext();
+
+  const allOrders = [
+    ...pickupNewOrders,
+    ...pickupAssignedOrders,
+    ...pickupWarehouseOrders,
+    ...pickupRejectedOrders,
+    ...pickupRescheduledOrders,
+    ...dropNewOrders,
+    ...dropAssignedOrders,
+    ...dropRejectedOrders,
+    ...dropRescheduledOrders,
+    ...dropCompletedOrders,
+    ...returnPickupNewOrders,
+    ...returnPickupCompletedOrders,
+    ...returnDropNewOrders,
+    ...returnDropCompletedOrders,
+  ];
+
+  const newCount = allOrders.filter((o: any) => {
+    return ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+      (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
+  }).length;
+
+  const inTransitCount = allOrders.filter((o: any) => {
+    const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+      (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
+    const isCompleted = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus);
+    return !isNew && !isCompleted;
+  }).length;
+
+  const completedCount = allOrders.filter((o: any) =>
+    ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
+  ).length;
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

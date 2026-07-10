@@ -254,6 +254,7 @@ export interface AppContextType {
   dispatchInventory: (orderId: string) => void;
   intakePickupOrders: (orderIds: string[]) => void;
   intakeReturnOrder: (orderId: string, returnType: 'pickup' | 'drop') => void;
+  mapOrder: (o: any, flowType?: 'pickup' | 'drop' | 'return') => any;
   requestBuyerReturn: (dropOrderId: string) => void;
   generateOTP: (orderId: string) => string;
   generateBarcode: (orderId: string) => Promise<string>;
@@ -409,7 +410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : null
         )
       : isDropOrTransporterReturnFlow
-        ? (o.dropTransporterStatus === 'SHG_NOT_AVAILABLE' ? 'shg not available' : (o.dropShgStatus || 'pending'))
+        ? (o.dropTransporterStatus === 'SHG_NOT_AVAILABLE' ? 'shg not available' : (o.dropShgStatus === 'DROPPED' ? 'delivered' : (o.dropShgStatus || 'pending')))
         : (
             o.mainStatus === 'PICKUP_ASSIGNED' && o.pickupShgStatus
               ? o.pickupShgStatus
@@ -960,6 +961,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assignPickupOrder,
         simulateSHGAction,
         simulateTransporterAction,
+        mapOrder,
       }}
     >
       {children}

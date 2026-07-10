@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   variant?: 'modal' | 'drawer';
   size?: 'full' | 'lg' | 'md' | 'sm';
@@ -83,7 +83,7 @@ export const Modal: React.FC<ModalProps> = ({
             >
               {!hideHeader && (
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+                  <h3 className="text-lg font-bold text-[#073318]">{title}</h3>
                   <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
                     <X className="h-5 w-5" />
                   </button>

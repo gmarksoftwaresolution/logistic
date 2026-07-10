@@ -298,7 +298,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             const result = await query(args);
             if (result && ['findUnique', 'findFirst', 'findMany', 'create', 'update'].includes(operation)) {
               if (Array.isArray(result)) {
-                return Promise.all(result.map(o => mapOrderToLegacy(self._extendedClient, o)));
+                const mapped = [];
+                for (const o of result) {
+                  mapped.push(await mapOrderToLegacy(self._extendedClient, o));
+                }
+                return mapped;
               } else {
                 return mapOrderToLegacy(self._extendedClient, result);
               }

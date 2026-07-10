@@ -155,6 +155,12 @@ export class OrderManagementController {
     return this.service.createOrder(dto);
   }
 
+  @Post('drop')
+  @ApiOperation({ summary: 'Create a new drop order manually in GMU' })
+  async createDropOrder(@Body() dto: CreateOrderDto) {
+    return this.service.createDropOrder(dto);
+  }
+
   @Post(':id/broadcast-shg')
   @ApiOperation({ summary: 'Broadcast pickup request to matching SHGs' })
   async broadcastShg(@Param('id') id: string) {

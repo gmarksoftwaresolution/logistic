@@ -482,127 +482,120 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getCounts() {
-    const [
-      pickupNew,
-      pickupAssigned,
-      pickupWarehouse,
-      pickupRejected,
-      pickupRescheduled,
-      dropNew,
-      dropAssigned,
-      dropCompleted,
-      dropRejected,
-      dropRescheduled,
-      transporterReturn,
-      buyerReturn,
-      inventoryStored,
-      inventoryTransporterReturn,
-      inventoryBuyerReturn
-    ] = await Promise.all([
-      // pickup.new — Phase 1
-      this.prisma.order.count({
-        where: this.applyFilters(
-          {
-            phase: 'PICKUP',
-            returnType: null,
-            OR: [
-              { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
-              { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
-            ]
-          },
-          undefined,
-          ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
-        )
-      }),
-      // pickup.assigned — Phase 2-4
-      this.prisma.order.count({
-        where: this.applyFilters(
-          {
-            phase: 'PICKUP',
-            returnType: null,
-            OR: [
-              { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
-              { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
-            ]
-          },
-          undefined,
-          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
-        )
-      }),
-      // pickup.warehouse — Phase 5
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) }),
-      // pickup.rejected — orders with any rejected assignment
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
-      // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) }),
+    // pickup.new — Phase 1
+    const pickupNew = await this.prisma.order.count({
+      where: this.applyFilters(
+        {
+          phase: 'PICKUP',
+          returnType: null,
+          OR: [
+            { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
+            { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
+          ]
+        },
+        undefined,
+        ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
+      )
+    });
 
-      // drop.new — Phase 5 dispatch
-      this.prisma.order.count({
-        where: this.applyFilters(
-          {
-            phase: 'DROP',
-            AND: [
-              {
-                OR: [
-                  { returnType: null },
-                  { returnType: 'TRANSPORTER_RETURN' }
-                ]
-              },
-              {
-                OR: [
-                  { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
-                  { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
-                ]
-              }
-            ]
-          },
-          undefined,
-          ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
-        )
-      }),
-      // drop.assigned — Phase 6-7
-      this.prisma.order.count({
-        where: this.applyFilters(
-          {
-            phase: 'DROP',
-            AND: [
-              {
-                OR: [
-                  { returnType: null },
-                  { returnType: 'TRANSPORTER_RETURN' }
-                ]
-              },
-              {
-                OR: [
-                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER'] } },
-                  { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
-                ]
-              }
-            ]
-          },
-          undefined,
-          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER']
-        )
-      }),
-      // drop.completed — Phase 7-8
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) }),
-      // drop.rejected
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
-      // drop.rescheduled
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) }),
+    // pickup.assigned — Phase 2-4
+    const pickupAssigned = await this.prisma.order.count({
+      where: this.applyFilters(
+        {
+          phase: 'PICKUP',
+          returnType: null,
+          OR: [
+            { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
+            { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
+          ]
+        },
+        undefined,
+        ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
+      )
+    });
 
-      // return.transporter
-      this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) }),
-      // return.buyer
-      this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) }),
+    // pickup.warehouse — Phase 5
+    const pickupWarehouse = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) });
 
-      // inventory.stored
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) }),
-      // inventory.transporterReturn
-      this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['INVENTORY_TRANSPORTER_RETURN', 'DROP_ASSIGNED', 'DISPATCHED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']) }),
-      // inventory.buyerReturn
-      this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) })
-    ]);
+    // pickup.rejected — orders with any rejected assignment
+    const pickupRejected = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) });
+
+    // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
+    const pickupRescheduled = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) });
+
+    // drop.new — Phase 5 dispatch
+    const dropNew = await this.prisma.order.count({
+      where: this.applyFilters(
+        {
+          phase: 'DROP',
+          AND: [
+            {
+              OR: [
+                { returnType: null },
+                { returnType: 'TRANSPORTER_RETURN' }
+              ]
+            },
+            {
+              OR: [
+                { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
+                { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
+              ]
+            }
+          ]
+        },
+        undefined,
+        ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
+      )
+    });
+
+    // drop.assigned — Phase 6-7
+    const dropAssigned = await this.prisma.order.count({
+      where: this.applyFilters(
+        {
+          phase: 'DROP',
+          AND: [
+            {
+              OR: [
+                { returnType: null },
+                { returnType: 'TRANSPORTER_RETURN' }
+              ]
+            },
+            {
+              OR: [
+                { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } },
+                { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
+              ]
+            }
+          ]
+        },
+        undefined,
+        ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG']
+      )
+    });
+
+    // drop.completed — Phase 7-8
+    const dropCompleted = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) });
+
+    // drop.rejected
+    const dropRejected = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) });
+
+    // drop.rescheduled
+    const dropRescheduled = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) });
+
+    // return.transporter
+    const transporterReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) });
+
+    // return.buyer
+    const buyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) });
+
+    // inventory.stored
+    const inventoryStored = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) });
+
+    // inventory.transporterReturn
+    const inventoryTransporterReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['INVENTORY_TRANSPORTER_RETURN', 'DROP_ASSIGNED', 'DISPATCHED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']) });
+
+    // inventory.buyerReturn
+    const inventoryBuyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) });
 
     return {
       pickup: {
@@ -803,7 +796,7 @@ export class OrderManagementService implements OnModuleInit {
           },
           {
             OR: [
-              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'] } },
+              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } },
               { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
             ]
           }
@@ -814,7 +807,8 @@ export class OrderManagementService implements OnModuleInit {
         'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
         'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_SHG',
         'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
-        'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER'
+        'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER',
+        'RETURN_PARCEL_AT_SHG'
       ]
     );
     return this.prisma.order.findMany({
@@ -952,61 +946,486 @@ export class OrderManagementService implements OnModuleInit {
       throw new BadRequestException(`Order ID ${orderId} already exists`);
     }
 
-    // Find or create Seller
-    let seller = await this.prisma.seller.findFirst({
-      where: { mobileNumber: dto.sellerMobile },
-    });
-    if (!seller) {
-      seller = await this.prisma.seller.create({
+    const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      // 1. Find or create Seller in gmu.sellers
+      let seller = await tx.seller.findFirst({
+        where: { mobileNumber: dto.sellerMobile },
+      });
+      
+      const sellerCode = seller?.sellerCode || `SEL-${Math.floor(100000 + Math.random() * 900000)}`;
+      
+      if (!seller) {
+        seller = await tx.seller.create({
+          data: {
+            sellerCode,
+            sellerName: dto.sellerName,
+            mobileNumber: dto.sellerMobile,
+            village: dto.sellerVillage,
+            taluka: dto.sellerTaluka || 'Kolhapur',
+            district: dto.sellerDistrict || 'Kolhapur',
+            state: dto.sellerState || 'Maharashtra',
+            pincode: dto.sellerPincode,
+          },
+        });
+
+        // Insert into public.sellers raw SQL using the same ID
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Kolhapur', dto.sellerDistrict || 'Kolhapur', dto.sellerState || 'Maharashtra', dto.sellerPincode);
+
+        // Reset sequence for public.sellers and gmu.sellers
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
+      }
+
+      // 2. Ensure user account for logistics seller exists in public."User" table so products foreign key mapping works
+      const existingUser = await tx.$queryRawUnsafe(`
+        SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
+      `, seller.id) as any[];
+
+      if (existingUser.length === 0) {
+        const phoneUser = await tx.$queryRawUnsafe(`
+          SELECT id FROM public."User" WHERE "phoneNumber" = $1 LIMIT 1;
+        `, dto.sellerMobile) as any[];
+
+        if (phoneUser.length === 0) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
+            VALUES ($1, $2::uuid, 'SELLER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
+          `, seller.id, uuidv4(), dto.sellerMobile, dto.sellerName);
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
+        }
+      }
+
+      // 3. Find or create Buyer in gmu.buyers
+      let buyer = await tx.buyer.findFirst({
+        where: { mobileNumber: dto.buyerMobile },
+      });
+      
+      const buyerCode = buyer?.buyerCode || `BUY-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      if (!buyer) {
+        buyer = await tx.buyer.create({
+          data: {
+            buyerCode,
+            buyerName: dto.buyerName,
+            mobileNumber: dto.buyerMobile,
+            village: dto.buyerVillage,
+            taluka: dto.buyerTaluka || 'Kolhapur',
+            district: dto.buyerDistrict || 'Kolhapur',
+            state: dto.buyerState || 'Maharashtra',
+            pincode: dto.buyerPincode,
+          },
+        });
+
+        // Insert into public.buyers raw SQL using the same ID
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Kolhapur', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode);
+
+        // Reset sequence for public.buyers and gmu.buyers
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+      }
+
+      // Ensure user account for logistics buyer exists in public."User" table so master_orders foreign key works
+      const existingBuyerUser = await tx.$queryRawUnsafe(`
+        SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
+      `, buyer.id) as any[];
+
+      if (existingBuyerUser.length === 0) {
+        const phoneBuyerUser = await tx.$queryRawUnsafe(`
+          SELECT id FROM public."User" WHERE "phoneNumber" = $1 LIMIT 1;
+        `, dto.buyerMobile) as any[];
+
+        if (phoneBuyerUser.length === 0) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
+            VALUES ($1, $2::uuid, 'BUYER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
+          `, buyer.id, uuidv4(), dto.buyerMobile, dto.buyerName);
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
+        }
+      }
+
+      // 4. Handle products
+      const orderItems = (dto as any).products || [
+        { name: 'Organic Honey', category: 'FOOD', quantity: dto.totalQty || 1, unit: 'Bottle', weight: dto.totalWeight || 0.5, price: 100.0 }
+      ];
+
+      const resolvedItems: any[] = [];
+      let totalAmount = 0;
+
+      for (const item of orderItems) {
+        const price = Number(item.price || 100.0);
+        const weight = Number(item.weight || 0.5);
+        const quantity = Number(item.quantity || 1);
+
+        const rawProducts = await tx.$queryRawUnsafe(`
+          SELECT id FROM public.products WHERE seller_id = $1 AND name = $2 LIMIT 1;
+        `, seller.id, item.name) as any[];
+
+        let productId: number;
+        if (rawProducts.length > 0) {
+          productId = rawProducts[0].id;
+        } else {
+          const insertProd = await tx.$queryRawUnsafe(`
+            INSERT INTO public.products (seller_id, name, category, price, weight, "Unit", stock, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 100, NOW())
+            RETURNING id;
+          `, seller.id, item.name, item.category || 'FOOD', price, weight, item.unit || 'Packet') as any[];
+          productId = insertProd[0].id;
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.products', 'id'), COALESCE(MAX(id), 1)) FROM public.products;`);
+        }
+
+        resolvedItems.push({
+          productId,
+          qty: quantity,
+          price
+        });
+        totalAmount += quantity * price;
+      }
+
+      // 5. Create in public.master_orders
+      const insertMo = await tx.$queryRawUnsafe(`
+        INSERT INTO public.master_orders (order_number, buyer_id, total_amount, payment_status, status, created_at, updated_at)
+        VALUES ($1, $2, $3, 'PENDING', 'CREATED', NOW(), NOW())
+        RETURNING id;
+      `, orderId, buyer.id, totalAmount) as any[];
+      const masterOrderId = insertMo[0].id;
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.master_orders;`);
+
+      // 6. Create in public.master_order_items
+      for (const item of resolvedItems) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.master_order_items (master_order_id, product_id, seller_id, quantity, price)
+          VALUES ($1, $2, $3, $4, $5);
+        `, masterOrderId, item.productId, seller.id, item.qty, item.price);
+      }
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.master_order_items;`);
+
+      // 7. Create in public.pickup_orders
+      const insertPo = await tx.$queryRawUnsafe(`
+        INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
+        VALUES ($1, $2, $3, 'PENDING', NOW())
+        RETURNING id;
+      `, `PKP-${orderId}`, masterOrderId, seller.id) as any[];
+      const pickupOrderId = insertPo[0].id;
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
+
+      // 8. Create in public.pickup_order_items
+      for (const item of resolvedItems) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity)
+          VALUES ($1, $2, $3);
+        `, pickupOrderId, item.productId, item.qty);
+      }
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
+
+      // 9. Create in public.pickup_tracking
+      await tx.$executeRawUnsafe(`
+        INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
+        VALUES ($1, 'ORDER_PLACED', 'Order Created', NOW());
+      `, pickupOrderId);
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
+
+      // 10. Create in gmu."Order"
+      const productCount = resolvedItems.length;
+      const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
+      const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
+
+      return tx.order.create({
         data: {
-          sellerCode: `SEL-${Math.floor(100000 + Math.random() * 900000)}`,
-          sellerName: dto.sellerName,
-          mobileNumber: dto.sellerMobile,
-          village: dto.sellerVillage,
-          taluka: dto.sellerTaluka,
-          district: dto.sellerDistrict,
-          state: dto.sellerState,
-          pincode: dto.sellerPincode,
+          orderId,
+          barcode: null,
+          sellerId: seller.id,
+          buyerId: buyer.id,
+          productCount,
+          totalQty,
+          totalWeight,
+          pickupShgId: null,
+          pickupTransporterId: null,
+          mainStatus: 'ORDER_PLACED',
+          pickupShgStatus: null,
+          pickupTransporterStatus: null,
         },
       });
-    }
-
-    // Find or create Buyer
-    let buyer = await this.prisma.buyer.findFirst({
-      where: { mobileNumber: dto.buyerMobile },
-    });
-    if (!buyer) {
-      buyer = await this.prisma.buyer.create({
-        data: {
-          buyerCode: `BUY-${Math.floor(100000 + Math.random() * 900000)}`,
-          buyerName: dto.buyerName,
-          mobileNumber: dto.buyerMobile,
-          village: dto.buyerVillage,
-          taluka: dto.buyerTaluka,
-          district: dto.buyerDistrict,
-          state: dto.buyerState,
-          pincode: dto.buyerPincode,
-        },
-      });
-    }
-
-    const order = await this.prisma.order.create({
-      data: {
-        orderId,
-        sellerId: seller.id,
-        buyerId: buyer.id,
-        productCount: dto.productCount,
-        totalQty: dto.totalQty,
-        totalWeight: dto.totalWeight,
-        mainStatus: 'ORDER_PLACED',
-        phase: 'PICKUP',
-      },
+    }, {
+      maxWait: 15000,
+      timeout: 25000,
     });
 
     try {
       await this.broadcastShg(order.id);
     } catch (err: any) {
       console.warn(`[broadcastShg auto-run] Failed to broadcast order ${order.id}:`, err.message);
+    }
+
+    return order;
+  }
+
+  async createDropOrder(dto: CreateOrderDto) {
+    const orderId = dto.orderId || `ORD-DROP-${Math.floor(1000 + Math.random() * 9000)}`;
+    const barcode = `BAR-${orderId}`;
+
+    const existing = await this.prisma.order.findFirst({ where: { orderId, phase: 'DROP' } });
+    if (existing) {
+      throw new BadRequestException(`Order ID ${orderId} already exists`);
+    }
+
+    const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      // 1. Find or create Seller in gmu.sellers
+      let seller = await tx.seller.findFirst({
+        where: { mobileNumber: dto.sellerMobile },
+      });
+      
+      const sellerCode = seller?.sellerCode || `SEL-${Math.floor(100000 + Math.random() * 900000)}`;
+      
+      if (!seller) {
+        seller = await tx.seller.create({
+          data: {
+            sellerCode,
+            sellerName: dto.sellerName,
+            mobileNumber: dto.sellerMobile,
+            village: dto.sellerVillage,
+            taluka: dto.sellerTaluka || 'Kolhapur',
+            district: dto.sellerDistrict || 'Kolhapur',
+            state: dto.sellerState || 'Maharashtra',
+            pincode: dto.sellerPincode,
+          },
+        });
+
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Kolhapur', dto.sellerDistrict || 'Kolhapur', dto.sellerState || 'Maharashtra', dto.sellerPincode);
+
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
+      }
+
+      // 2. Ensure user account for logistics seller exists in public."User" table
+      const existingUser = await tx.$queryRawUnsafe(`
+        SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
+      `, seller.id) as any[];
+
+      if (existingUser.length === 0) {
+        const phoneUser = await tx.$queryRawUnsafe(`
+          SELECT id FROM public."User" WHERE "phoneNumber" = $1 LIMIT 1;
+        `, dto.sellerMobile) as any[];
+
+        if (phoneUser.length === 0) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
+            VALUES ($1, $2::uuid, 'SELLER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
+          `, seller.id, uuidv4(), dto.sellerMobile, dto.sellerName);
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
+        }
+      }
+
+      // 3. Find or create Buyer in gmu.buyers
+      let buyer = await tx.buyer.findFirst({
+        where: { mobileNumber: dto.buyerMobile },
+      });
+      
+      const buyerCode = buyer?.buyerCode || `BUY-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      if (!buyer) {
+        buyer = await tx.buyer.create({
+          data: {
+            buyerCode,
+            buyerName: dto.buyerName,
+            mobileNumber: dto.buyerMobile,
+            village: dto.buyerVillage,
+            taluka: dto.buyerTaluka || 'Kolhapur',
+            district: dto.buyerDistrict || 'Kolhapur',
+            state: dto.buyerState || 'Maharashtra',
+            pincode: dto.buyerPincode,
+          },
+        });
+
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Kolhapur', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode);
+
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+      }
+
+      // Ensure user account for logistics buyer exists in public."User" table so master_orders foreign key works
+      const existingBuyerUser = await tx.$queryRawUnsafe(`
+        SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
+      `, buyer.id) as any[];
+
+      if (existingBuyerUser.length === 0) {
+        const phoneBuyerUser = await tx.$queryRawUnsafe(`
+          SELECT id FROM public."User" WHERE "phoneNumber" = $1 LIMIT 1;
+        `, dto.buyerMobile) as any[];
+
+        if (phoneBuyerUser.length === 0) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
+            VALUES ($1, $2::uuid, 'BUYER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
+          `, buyer.id, uuidv4(), dto.buyerMobile, dto.buyerName);
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
+        }
+      }
+
+      // 4. Handle products
+      const orderItems = (dto as any).products || [
+        { name: 'Organic Honey', category: 'FOOD', quantity: dto.totalQty || 1, unit: 'Bottle', weight: dto.totalWeight || 0.5, price: 100.0 }
+      ];
+
+      const resolvedItems: any[] = [];
+      let totalAmount = 0;
+
+      for (const item of orderItems) {
+        const price = Number(item.price || 100.0);
+        const weight = Number(item.weight || 0.5);
+        const quantity = Number(item.quantity || 1);
+
+        const rawProducts = await tx.$queryRawUnsafe(`
+          SELECT id FROM public.products WHERE seller_id = $1 AND name = $2 LIMIT 1;
+        `, seller.id, item.name) as any[];
+
+        let productId: number;
+        if (rawProducts.length > 0) {
+          productId = rawProducts[0].id;
+        } else {
+          const insertProd = await tx.$queryRawUnsafe(`
+            INSERT INTO public.products (seller_id, name, category, price, weight, "Unit", stock, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 100, NOW())
+            RETURNING id;
+          `, seller.id, item.name, item.category || 'FOOD', price, weight, item.unit || 'Packet') as any[];
+          productId = insertProd[0].id;
+          
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.products', 'id'), COALESCE(MAX(id), 1)) FROM public.products;`);
+        }
+
+        resolvedItems.push({
+          productId,
+          qty: quantity,
+          price
+        });
+        totalAmount += quantity * price;
+      }
+
+      // 5. Create in public.master_orders
+      const insertMo = await tx.$queryRawUnsafe(`
+        INSERT INTO public.master_orders (order_number, buyer_id, total_amount, payment_status, status, created_at, updated_at)
+        VALUES ($1, $2, $3, 'PENDING', 'STORED', NOW(), NOW())
+        RETURNING id;
+      `, orderId, buyer.id, totalAmount) as any[];
+      const masterOrderId = insertMo[0].id;
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.master_orders;`);
+
+      // 6. Create in public.master_order_items
+      for (const item of resolvedItems) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.master_order_items (master_order_id, product_id, seller_id, quantity, price)
+          VALUES ($1, $2, $3, $4, $5);
+        `, masterOrderId, item.productId, seller.id, item.qty, item.price);
+      }
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.master_order_items;`);
+
+      // 7. Create in public.pickup_orders
+      const insertPo = await tx.$queryRawUnsafe(`
+        INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
+        VALUES ($1, $2, $3, 'COMPLETED', NOW())
+        RETURNING id;
+      `, `PKP-${orderId}`, masterOrderId, seller.id) as any[];
+      const pickupOrderId = insertPo[0].id;
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
+
+      // 8. Create in public.pickup_order_items
+      for (const item of resolvedItems) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity)
+          VALUES ($1, $2, $3);
+        `, pickupOrderId, item.productId, item.qty);
+      }
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
+
+      // 9. Create in public.pickup_tracking
+      await tx.$executeRawUnsafe(`
+        INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
+        VALUES ($1, 'STORED', 'Order Created and Stored directly in GMU Hub', NOW());
+      `, pickupOrderId);
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
+
+      // 10. Create in public.drop_orders
+      const deliveryAddress = [buyer.addressLine1, buyer.addressLine2, buyer.village, buyer.taluka, buyer.district, buyer.pincode]
+        .filter(Boolean)
+        .join(', ') || '';
+
+      const insertDo = await tx.$queryRawUnsafe(`
+        INSERT INTO public.drop_orders (master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number)
+        VALUES ($1, $2, 'PENDING', $3, NOW(), $4)
+        RETURNING id;
+      `, masterOrderId, buyer.id, deliveryAddress, `DRP-${orderId}`) as any[];
+      const dropOrderId = insertDo[0].id;
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_orders;`);
+
+      // 11. Create in public.drop_order_items
+      for (const item of resolvedItems) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.drop_order_items (drop_order_id, product_id, quantity, verification_status)
+          VALUES ($1, $2, $3, 'PENDING');
+        `, dropOrderId, item.productId, item.qty);
+      }
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_order_items;`);
+
+      // 12. Create in public.drop_tracking
+      await tx.$executeRawUnsafe(`
+        INSERT INTO public.drop_tracking (drop_order_id, status, remarks, updated_at)
+        VALUES ($1, 'PENDING', 'Delivery leg created upon manual GMU Hub Drop Order creation.', NOW());
+      `, dropOrderId);
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_tracking;`);
+
+      // 13. Create in gmu."Order" for DROP phase only (as DROP_PENDING)
+      const productCount = resolvedItems.length;
+      const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
+      const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
+
+      return tx.order.create({
+        data: {
+          id: uuidv4(),
+          orderId,
+          barcode,
+          sellerId: seller.id,
+          buyerId: buyer.id,
+          productCount,
+          totalQty,
+          totalWeight,
+          mainStatus: 'DROP_PENDING',
+          dropShgStatus: 'PENDING',
+          phase: 'DROP',
+        },
+      });
+    }, {
+      maxWait: 15000,
+      timeout: 25000,
+    });
+
+    try {
+      await this.broadcastDropShg(order.id);
+    } catch (err: any) {
+      console.warn(`[broadcastDropShg auto-run] Failed to broadcast manual drop order ${order.id}:`, err.message);
     }
 
     return order;

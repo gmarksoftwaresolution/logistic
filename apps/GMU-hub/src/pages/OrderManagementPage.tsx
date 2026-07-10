@@ -6,7 +6,33 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { PickupOrder, DropOrder, ReturnOrder } from '../context/AppContext';
-import { Eye, ShieldAlert, Barcode, ClipboardCheck, CheckCircle2, Copy, X, FileText, MoreVertical, Phone, MapPin, Calendar, Truck, Clock, Package, Layers, QrCode } from 'lucide-react';
+import { 
+  Eye, 
+  ShieldAlert, 
+  Barcode, 
+  ClipboardCheck, 
+  CheckCircle2, 
+  Copy, 
+  X, 
+  FileText, 
+  MoreVertical, 
+  Phone, 
+  MapPin, 
+  Calendar, 
+  Truck, 
+  Clock, 
+  Package, 
+  Layers, 
+  QrCode, 
+  Plus, 
+  ChevronDown, 
+  ChevronUp, 
+  RefreshCw,
+  Store,
+  Users,
+  Home,
+  User 
+} from 'lucide-react';
 import { api } from '../utils/api';
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
@@ -39,14 +65,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     returnDropNewOrders,
     returnDropCompletedOrders,
     readyToStore,
+    dispatchInventory,
     intakePickupOrders,
     intakeReturnOrder,
-    generateOTP,
-    generateBarcode,
     shgList,
     transporterList,
     assignPickupOrder,
     requestBuyerReturn,
+    generateBarcode,
     loadPickupNew,
     loadPickupAssigned,
     loadPickupWarehouse,
@@ -59,29 +85,50 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     loadDropCompleted,
     loadReturnsTransporter,
     loadReturnsBuyer,
+    mapOrder,
   } = useAppContext();
 
-  // Top level tabs: Pickup | Drop | Return
-  const [activeTopTab, setActiveTopTab] = useState<'pickup' | 'drop' | 'return'>('pickup');
+  // Top level sections: new | in_transit | completed
+  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
 
-  // Sub-tabs configurations
-  const [activePickupSubTab, setActivePickupSubTab] = useState('new');
-  const [activeDropSubTab, setActiveDropSubTab] = useState('new');
-  const [activeReturnType, setActiveReturnType] = useState<'pickup' | 'drop'>('drop');
-  const [activeReturnSubTab, setActiveReturnSubTab] = useState<'new' | 'completed'>('new');
+  useEffect(() => {
+    const syncActiveTab = () => {
+      const val = localStorage.getItem('gmu_active_tab');
+      if (val && ['new', 'in_transit', 'completed'].includes(val)) {
+        setActiveTopTab(val as any);
+      }
+    };
+    window.addEventListener('storage', syncActiveTab);
+    const interval = setInterval(syncActiveTab, 150);
+    return () => {
+      window.removeEventListener('storage', syncActiveTab);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed') => {
+    localStorage.setItem('gmu_active_tab', tab);
+    setActiveTopTab(tab);
+  };
+
+  const [addOrderFlow, setAddOrderFlow] = useState<'pickup' | 'drop'>('pickup');
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
-  const [openUpwards, setOpenUpwards] = useState(false);
 
-  // Multi-select state
-  const [selectedAssignedOrderIds, setSelectedAssignedOrderIds] = useState<string[]>([]);
-  const [selectedWarehouseOrderIds, setSelectedWarehouseOrderIds] = useState<string[]>([]);
+  // Expanded cards state
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
-  // Filters and Loading state
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [actionProcessing, setActionProcessing] = useState(false);
+  // Unified Page Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [villageFilter, setVillageFilter] = useState('all');
+  const [pincodeFilter, setPincodeFilter] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('');
+
+  // Pagination for transit view
+  const [transitPage, setTransitPage] = useState(1);
+  const transitItemsPerPage = 10;
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -90,17 +137,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
   const [intakeOrder, setIntakeOrder] = useState<any | null>(null);
   const [intakeType, setIntakeType] = useState<'pickup' | 'return-pickup' | 'return-drop' | null>(null);
-  const [generatedOTP, setGeneratedOTP] = useState<string | null>(null);
 
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [generatedBarcodeText, setGeneratedBarcodeText] = useState<string | null>(null);
   const [barcodeOrderId, setBarcodeOrderId] = useState<string | null>(null);
   const [barcodeOrder, setBarcodeOrder] = useState<any>(null);
 
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [assignOrderId, setAssignOrderId] = useState<string | null>(null);
-  const [selectedSHG, setSelectedSHG] = useState('');
-  const [selectedTransporter, setSelectedTransporter] = useState('');
+  // Side Drawer details for clicked timeline nodes
+  const [isNodeDrawerOpen, setIsNodeDrawerOpen] = useState(false);
+  const [activeNodeTitle, setActiveNodeTitle] = useState('');
+  const [activeNodeDetails, setActiveNodeDetails] = useState<Record<string, any> | null>(null);
 
   // QR Scan Modal State for Returns
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -109,12 +155,254 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [qrScanSuccess, setQrScanSuccess] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
 
-  const handleOpenQrModal = (item: ReturnOrder) => {
-    setQrItem(item);
-    setIsQrModalOpen(true);
-    setQrScanSuccess(false);
-    setIsScanning(false);
-    setScanMessage('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [actionProcessing, setActionProcessing] = useState(false);
+
+  // Add Order Modal States
+  const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
+  const [sellerName, setSellerName] = useState('');
+  const [sellerMobile, setSellerMobile] = useState('');
+  const [sellerAddress, setSellerAddress] = useState('');
+  const [sellerVillage, setSellerVillage] = useState('');
+  const [sellerTaluka, setSellerTaluka] = useState('');
+  const [sellerDistrict, setSellerDistrict] = useState('');
+  const [sellerState, setSellerState] = useState('');
+  const [sellerPincode, setSellerPincode] = useState('');
+  const [sellerVillages, setSellerVillages] = useState<string[]>([]);
+
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerMobile, setBuyerMobile] = useState('');
+  const [buyerAddress, setBuyerAddress] = useState('');
+  const [buyerVillage, setBuyerVillage] = useState('');
+  const [buyerTaluka, setBuyerTaluka] = useState('');
+  const [buyerDistrict, setBuyerDistrict] = useState('');
+  const [buyerState, setBuyerState] = useState('');
+  const [buyerPincode, setBuyerPincode] = useState('');
+  const [buyerVillages, setBuyerVillages] = useState<string[]>([]);
+
+  const [formOrderId, setFormOrderId] = useState('');
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
+  const [priority, setPriority] = useState('Medium');
+
+  const [products, setProducts] = useState<any[]>([
+    { name: '', category: 'FOOD', quantity: 1, unit: 'Packet', weight: 0.5, price: 100 }
+  ]);
+
+  const [validationError, setValidationError] = useState('');
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+
+  const fetchAddressDetails = async (pincode: string, isSeller: boolean) => {
+    if (pincode.length !== 6) return;
+    try {
+      const MOCK: Record<string, any> = {
+        "416504": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Nesari", "Dundage", "Harali"] },
+        "416501": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Dundage", "Nesari", "Harali"] },
+        "416502": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Gadhinglaj", "Mahagaon", "Kadgaon", "Harali"] },
+        "416509": { state: "Maharashtra", district: "Kolhapur", taluka: "Chandgad", villages: ["Halkarni", "Naganwadi", "Patne", "Shinoli", "Tudye"] },
+        "416507": { state: "Maharashtra", district: "Kolhapur", taluka: "Ajara", villages: ["Ajara", "Uttur", "Nesari", "Gavase"] },
+      };
+
+      let result: any = null;
+      if (MOCK[pincode]) {
+        result = MOCK[pincode];
+      } else {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+        const data = await res.json();
+        if (data && data[0] && data[0].Status === 'Success') {
+          const postOffices = data[0].PostOffice;
+          if (postOffices && postOffices.length > 0) {
+            const first = postOffices[0];
+            const villages = [...new Set(postOffices.map((po: any) => po.Name))].sort();
+            result = {
+              state: first.State,
+              district: first.District,
+              taluka: first.Block === 'NA' ? first.District : first.Block,
+              villages: villages
+            };
+          }
+        }
+      }
+
+      if (!result) {
+        result = {
+          state: "Maharashtra",
+          district: "Kolhapur",
+          taluka: "Gadhinglaj",
+          villages: ["Village " + pincode, "Center " + pincode, "Local Area " + pincode]
+        };
+      }
+
+      if (isSeller) {
+        setSellerState(result.state);
+        setSellerDistrict(result.district);
+        setSellerTaluka(result.taluka);
+        setSellerVillages(result.villages);
+        if (result.villages.length > 0) {
+          setSellerVillage(result.villages[0]);
+        }
+      } else {
+        setBuyerState(result.state);
+        setBuyerDistrict(result.district);
+        setBuyerTaluka(result.taluka);
+        setBuyerVillages(result.villages);
+        if (result.villages.length > 0) {
+          setBuyerVillage(result.villages[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch address for pincode:", pincode, err);
+    }
+  };
+
+  const handleSellerPincodeChange = (val: string) => {
+    setSellerPincode(val);
+    if (val.trim().length === 6) {
+      fetchAddressDetails(val.trim(), true);
+    }
+  };
+
+  const handleBuyerPincodeChange = (val: string) => {
+    setBuyerPincode(val);
+    if (val.trim().length === 6) {
+      fetchAddressDetails(val.trim(), false);
+    }
+  };
+
+  const handleOpenAddOrderModalPickup = () => {
+    setAddOrderFlow('pickup');
+    handleOpenAddOrderModal();
+  };
+
+  const handleOpenAddOrderModal = () => {
+    setSellerName('');
+    setSellerMobile('');
+    setSellerAddress('');
+    setSellerVillage('');
+    setSellerTaluka('');
+    setSellerDistrict('');
+    setSellerState('');
+    setSellerPincode('');
+    setSellerVillages([]);
+    
+    setBuyerName('');
+    setBuyerMobile('');
+    setBuyerAddress('');
+    setBuyerVillage('');
+    setBuyerTaluka('');
+    setBuyerDistrict('');
+    setBuyerState('');
+    setBuyerPincode('');
+    setBuyerVillages([]);
+    
+    setFormOrderId('');
+    setOrderDate(new Date().toISOString().split('T')[0]);
+    setExpectedDeliveryDate(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
+    setPriority('Medium');
+    
+    setProducts([{ name: '', category: 'FOOD', quantity: 1, unit: 'Packet', weight: 0.5, price: 100 }]);
+    setValidationError('');
+    setIsCreatingOrder(false);
+    setIsAddOrderOpen(true);
+  };
+
+  const handleAddProduct = () => {
+    setProducts([...products, { name: '', category: 'FOOD', quantity: 1, unit: 'Packet', weight: 0.5, price: 100 }]);
+  };
+
+  const handleRemoveProduct = (index: number) => {
+    if (products.length > 1) {
+      setProducts(products.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleProductChange = (index: number, field: string, value: any) => {
+    const updated = [...products];
+    updated[index][field] = value;
+    setProducts(updated);
+  };
+
+  const totalProductsCount = products.length;
+  const totalQuantity = products.reduce((sum, p) => sum + Number(p.quantity || 0), 0);
+  const totalWeight = parseFloat(products.reduce((sum, p) => sum + Number(p.quantity || 0) * Number(p.weight || 0), 0).toFixed(2));
+  const totalPrice = products.reduce((sum, p) => sum + Number(p.quantity || 0) * Number(p.price || 0), 0);
+
+  const handleCreateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError('');
+
+    if (!sellerName.trim() || !sellerMobile.trim() || !sellerVillage.trim() || !sellerPincode.trim()) {
+      setValidationError('Seller Name, Mobile, Village, and Pincode are required.');
+      return;
+    }
+    if (!buyerName.trim() || !buyerMobile.trim() || !buyerVillage.trim() || !buyerPincode.trim()) {
+      setValidationError('Buyer Name, Mobile, Village, and Pincode are required.');
+      return;
+    }
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      if (!p.name.trim()) {
+        setValidationError(`Product #${i + 1} Name is required.`);
+        return;
+      }
+      if (Number(p.quantity || 0) <= 0) {
+        setValidationError(`Product #${i + 1} Quantity must be greater than 0.`);
+        return;
+      }
+      if (Number(p.weight || 0) <= 0) {
+        setValidationError(`Product #${i + 1} Weight must be greater than 0.`);
+        return;
+      }
+    }
+
+    setIsCreatingOrder(true);
+    try {
+      const payload = {
+        orderId: formOrderId.trim() || undefined,
+        sellerName: sellerName.trim(),
+        sellerMobile: sellerMobile.trim(),
+        sellerVillage: sellerVillage.trim(),
+        sellerTaluka: sellerTaluka.trim(),
+        sellerDistrict: sellerDistrict.trim(),
+        sellerState: sellerState.trim(),
+        sellerPincode: sellerPincode.trim(),
+        buyerName: buyerName.trim(),
+        buyerMobile: buyerMobile.trim(),
+        buyerVillage: buyerVillage.trim(),
+        buyerTaluka: buyerTaluka.trim(),
+        buyerDistrict: buyerDistrict.trim(),
+        buyerState: buyerState.trim(),
+        buyerPincode: buyerPincode.trim(),
+        productCount: totalProductsCount,
+        totalQty: totalQuantity,
+        totalWeight: totalWeight,
+        priority,
+        orderDate,
+        expectedDeliveryDate,
+        products: products.map(p => ({
+          name: p.name.trim(),
+          category: p.category,
+          quantity: Number(p.quantity),
+          unit: p.unit,
+          weight: Number(p.weight),
+          price: Number(p.price),
+        })),
+      };
+
+      if (addOrderFlow === 'drop') {
+        await api.orders.createDrop(payload);
+      } else {
+        await api.orders.create(payload);
+      }
+      
+      loadData();
+      setIsAddOrderOpen(false);
+    } catch (err: any) {
+      setValidationError(err.message || 'Failed to create order');
+    } finally {
+      setIsCreatingOrder(false);
+    }
   };
 
   const handleSimulateScan = async () => {
@@ -122,7 +410,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setIsScanning(true);
     setScanMessage('Scanning QR Code...');
     try {
-      if (activeReturnType === 'drop') {
+      if (activeActionMenu === 'drop' || qrItem.mainStatus?.includes('TRANSPORTER_RETURN')) {
         await api.orders.transporterReturnScan(qrItem.uuid || qrItem.id, qrItem.barcode || '');
         setQrScanSuccess(true);
         setScanMessage('Transporter return scanned and moved to inventory successfully.');
@@ -142,6 +430,100 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
   };
 
+  // Dynamic details mapping helpers
+  const getMergedOrder = (orderId: string, allLists: any) => {
+    const {
+      pickupNew,
+      pickupAssigned,
+      pickupWarehouse,
+      pickupRejected,
+      pickupRescheduled,
+      dropNew,
+      dropAssigned,
+      dropRejected,
+      dropRescheduled,
+      dropCompleted,
+      returnPickupNew,
+      returnPickupCompleted,
+      returnDropNew,
+      returnDropCompleted,
+    } = allLists;
+
+    const pNew = pickupNew.find((o: any) => o.id === orderId);
+    const pAssigned = pickupAssigned.find((o: any) => o.id === orderId);
+    const pWh = pickupWarehouse.find((o: any) => o.id === orderId);
+    const pRej = pickupRejected.find((o: any) => o.id === orderId);
+    const pRes = pickupRescheduled.find((o: any) => o.id === orderId);
+
+    const dNew = dropNew.find((o: any) => o.id === orderId);
+    const dAssigned = dropAssigned.find((o: any) => o.id === orderId);
+    const dRej = dropRejected.find((o: any) => o.id === orderId);
+    const dRes = dropRescheduled.find((o: any) => o.id === orderId);
+    const dComp = dropCompleted.find((o: any) => o.id === orderId);
+
+    const retPNew = returnPickupNew.find((o: any) => o.id === orderId);
+    const retPComp = returnPickupCompleted.find((o: any) => o.id === orderId);
+    const retDNew = returnDropNew.find((o: any) => o.id === orderId);
+    const retDComp = returnDropCompleted.find((o: any) => o.id === orderId);
+
+    const primary = dComp || dRes || dRej || dAssigned || dNew || pWh || pRes || pRej || pAssigned || pNew || retPComp || retDComp || retPNew || retDNew;
+
+    if (!primary) return null;
+
+    const allTracking = [
+      ...(pNew?.tracking || []),
+      ...(pAssigned?.tracking || []),
+      ...(pWh?.tracking || []),
+      ...(pRej?.tracking || []),
+      ...(pRes?.tracking || []),
+      ...(dNew?.tracking || []),
+      ...(dAssigned?.tracking || []),
+      ...(dRej?.tracking || []),
+      ...(dRes?.tracking || []),
+      ...(dComp?.tracking || []),
+      ...(retPNew?.tracking || []),
+      ...(retPComp?.tracking || []),
+      ...(retDNew?.tracking || []),
+      ...(retDComp?.tracking || []),
+    ];
+
+    const uniqueTrackingMap = new Map();
+    allTracking.forEach((t) => {
+      const key = t.id || t.updatedAt || t.remarks || t.status;
+      if (!uniqueTrackingMap.has(key)) {
+        uniqueTrackingMap.set(key, t);
+      }
+    });
+    const uniqueTracking = Array.from(uniqueTrackingMap.values()).sort(
+      (a: any, b: any) => new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime()
+    );
+
+    const pickupShgDetails = pAssigned?.shgDetails || pWh?.shgDetails || pRej?.shgDetails || pRes?.shgDetails || pNew?.shgDetails;
+    const dropShgDetails = dAssigned?.shgDetails || dRej?.shgDetails || dRes?.shgDetails || dComp?.shgDetails || dNew?.shgDetails;
+    const returnShgDetails = retPNew?.shgDetails || retPComp?.shgDetails || retDNew?.shgDetails || retDComp?.shgDetails;
+
+    const pickupTransporterDetails = pAssigned?.transporterDetails || pWh?.transporterDetails || pRej?.transporterDetails || pRes?.transporterDetails;
+    const dropTransporterDetails = dAssigned?.transporterDetails || dRej?.transporterDetails || dRes?.transporterDetails || dComp?.transporterDetails;
+    const returnTransporterDetails = retPNew?.transporterDetails || retPComp?.transporterDetails || retDNew?.transporterDetails || retDComp?.transporterDetails;
+
+    return {
+      ...primary,
+      pickupShgStatus: pNew?.shgStatus || pAssigned?.shgStatus || pWh?.shgStatus || pRej?.shgStatus || pRes?.shgStatus,
+      pickupTransporterStatus: pAssigned?.transporterStatus || pWh?.transporterStatus || pRej?.transporterStatus || pRes?.transporterStatus,
+      dropShgStatus: dNew?.shgStatus || dAssigned?.shgStatus || dRej?.shgStatus || dRes?.shgStatus || dComp?.shgStatus,
+      dropTransporterStatus: dAssigned?.transporterStatus || dRej?.transporterStatus || dRes?.transporterStatus || dComp?.transporterStatus,
+      
+      pickupShgDetails,
+      dropShgDetails,
+      returnShgDetails,
+      pickupTransporterDetails,
+      dropTransporterDetails,
+      returnTransporterDetails,
+
+      tracking: uniqueTracking,
+    };
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     setErrorMsg('');
@@ -150,37 +532,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       const df = dateFilter || undefined;
       await loadCounts();
 
-      if (activeTopTab === 'pickup') {
-        if (activePickupSubTab === 'new') {
-          await loadPickupNew(sf, df);
-        } else if (activePickupSubTab === 'assigned') {
-          await loadPickupAssigned(sf, df);
-        } else if (activePickupSubTab === 'warehouse') {
-          await loadPickupWarehouse(sf, df);
-        } else if (activePickupSubTab === 'rejected') {
-          await loadPickupRejected(sf, df);
-        } else if (activePickupSubTab === 'reschedule') {
-          await loadPickupRescheduled(sf, df);
-        }
-      } else if (activeTopTab === 'drop') {
-        if (activeDropSubTab === 'new') {
-          await loadDropNew(sf, df);
-        } else if (activeDropSubTab === 'assigned') {
-          await loadDropAssigned(sf, df);
-        } else if (activeDropSubTab === 'rejected') {
-          await loadDropRejected(sf, df);
-        } else if (activeDropSubTab === 'reschedule') {
-          await loadDropRescheduled(sf, df);
-        } else if (activeDropSubTab === 'completed') {
-          await loadDropCompleted(sf, df);
-        }
-      } else if (activeTopTab === 'return') {
-        if (activeReturnType === 'drop') {
-          await loadReturnsTransporter(sf, df);
-        } else if (activeReturnType === 'pickup') {
-          await loadReturnsBuyer(sf, df);
-        }
-      }
+      await Promise.all([
+        loadPickupNew(sf, df),
+        loadPickupAssigned(sf, df),
+        loadPickupWarehouse(sf, df),
+        loadPickupRejected(sf, df),
+        loadPickupRescheduled(sf, df),
+        loadDropNew(sf, df),
+        loadDropAssigned(sf, df),
+        loadDropRejected(sf, df),
+        loadDropRescheduled(sf, df),
+        loadDropCompleted(sf, df),
+        loadReturnsTransporter(sf, df),
+        loadReturnsBuyer(sf, df),
+      ]);
     } catch (e: any) {
       setErrorMsg(e.message || 'Failed to load data from server.');
     } finally {
@@ -191,11 +556,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   useEffect(() => {
     loadData();
   }, [
-    activeTopTab,
-    activePickupSubTab,
-    activeDropSubTab,
-    activeReturnType,
-    activeReturnSubTab,
     statusFilter,
     dateFilter
   ]);
@@ -203,18 +563,73 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   useEffect(() => {
     setStatusFilter('all');
     setDateFilter('');
+    setSearchQuery('');
+    setPriorityFilter('all');
+    setVillageFilter('all');
+    setPincodeFilter('all');
+    setLocationFilter('all');
+    setTransitPage(1);
+  }, [activeTopTab]);
+
+  // Poll in background every 5 seconds
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const sf = statusFilter === 'all' ? undefined : statusFilter;
+        const df = dateFilter || undefined;
+        await loadCounts();
+        await Promise.all([
+          loadPickupNew(sf, df),
+          loadPickupAssigned(sf, df),
+          loadPickupWarehouse(sf, df),
+          loadPickupRejected(sf, df),
+          loadPickupRescheduled(sf, df),
+          loadDropNew(sf, df),
+          loadDropAssigned(sf, df),
+          loadDropRejected(sf, df),
+          loadDropRescheduled(sf, df),
+          loadDropCompleted(sf, df),
+          loadReturnsTransporter(sf, df),
+          loadReturnsBuyer(sf, df),
+        ]);
+      } catch (err) {
+        console.warn("Background poll failed to refresh lists:", err);
+      }
+
+      if (isViewModalOpen && selectedOrderDetails) {
+        try {
+          const fresh = await api.orders.getDetails(selectedOrderDetails.uuid || selectedOrderDetails.id);
+          if (fresh) {
+            const mapped = mapOrder(fresh, 'pickup');
+            setSelectedOrderDetails(mapped);
+          }
+        } catch (err) {
+          console.warn("Background poll failed to refresh viewed order:", err);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
   }, [
-    activeTopTab,
-    activePickupSubTab,
-    activeDropSubTab,
-    activeReturnType,
-    activeReturnSubTab
+    statusFilter,
+    dateFilter,
+    isViewModalOpen,
+    selectedOrderDetails
   ]);
 
   // Handle View Action
-  const handleViewOrder = (order: any) => {
+  const handleViewOrder = async (order: any) => {
     setSelectedOrderDetails(order);
     setIsViewModalOpen(true);
+    try {
+      const fresh = await api.orders.getDetails(order.uuid || order.id);
+      if (fresh) {
+        const mapped = mapOrder(fresh, 'pickup');
+        setSelectedOrderDetails(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to load fresh order details on view click:", e);
+    }
   };
 
   // Handle Intake Action
@@ -231,7 +646,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       fullOrder: order,
     });
     setIntakeType(type);
-    setGeneratedOTP(null);
     setIsIntakeModalOpen(true);
   };
 
@@ -270,162 +684,435 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setIsBarcodeModalOpen(true);
   };
 
-  // Render Table Action Button Helper
-  const getActionButtons = (row: any, type: 'pickup' | 'drop' | 'return', subTab: string) => {
-    const hasIntake = false;
-    const hasWarehouse = type === 'pickup' && subTab === 'warehouse';
-
-    return (
-      <div className="relative inline-block text-left">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            const rect = e.currentTarget.getBoundingClientRect();
-            const shouldOpenUpwards = rect.bottom > window.innerHeight * 0.65;
-            setOpenUpwards(shouldOpenUpwards);
-            setActiveActionMenu(activeActionMenu === row.id ? null : row.id);
-          }}
-          className="p-1.5 hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-[#073318] rounded-xl transition-colors cursor-pointer border border-slate-200/60 shadow-sm flex items-center justify-center"
-          title="Actions"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-
-        {activeActionMenu === row.id && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveActionMenu(null);
-              }}
-            />
-            <div className={`absolute right-0 w-48 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in ${openUpwards ? 'bottom-full mb-2 slide-in-from-bottom-2' : 'top-full mt-2 slide-in-from-top-2'} duration-150`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveActionMenu(null);
-                  handleViewOrder(row);
-                }}
-                className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-[#073318]/5 hover:text-[#073318] rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-              >
-                <Eye className="h-4 w-4 text-slate-400" />
-                <span>View Details</span>
-              </button>
-
-
-
-              {type === 'return' && subTab === 'assigned' && ['RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING'].includes(row.mainStatus) && (
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    if (confirm('Broadcast this return pickup request to matching transporters?')) {
-                      setActionProcessing(true);
-                      try {
-                        await api.orders.broadcastBuyerReturnTransporter(row.uuid || row.id);
-                        alert('Broadcasted to matching transporters successfully.');
-                        await loadData();
-                      } catch (err: any) {
-                        alert(err.message || 'Broadcast failed.');
-                      } finally {
-                        setActionProcessing(false);
-                      }
-                    }
-                  }}
-                  disabled={actionProcessing}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Truck className="h-4 w-4 text-blue-500/70" />
-                  <span>Broadcast Transporter</span>
-                </button>
-              )}
-
-
-
-              {hasIntake && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    const intakeKind = type === 'pickup' ? 'pickup' : (activeReturnType === 'pickup' ? 'return-pickup' : 'return-drop');
-                    handleIntakeClick(row, intakeKind);
-                  }}
-                  disabled={row.mainStatus !== 'PARCEL_AT_GMU' && row.mainStatus !== 'RETURN_PARCEL_AT_GMU' && row.mainStatus !== 'PARCEL_AT_HUB' && row.mainStatus !== 'RETURN_PARCEL_AT_HUB'}
-                  className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition-all duration-150 flex items-center gap-2.5 ${
-                    (row.mainStatus === 'PARCEL_AT_GMU' || row.mainStatus === 'RETURN_PARCEL_AT_GMU' || row.mainStatus === 'PARCEL_AT_HUB' || row.mainStatus === 'RETURN_PARCEL_AT_HUB')
-                      ? 'text-[#073318] hover:bg-[#B2D534]/20 cursor-pointer'
-                      : 'text-gray-400 opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  <ClipboardCheck className="h-4 w-4" />
-                  <span>Intake Order</span>
-                </button>
-              )}
-
-              {hasWarehouse && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    handleBarcodeClick(row.id);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <Barcode className="h-4 w-4 text-blue-500/70" />
-                  <span>Generate Barcode</span>
-                </button>
-              )}
-
-              {type === 'return' && subTab === 'completed' && ['TRANSPORTER_RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED'].includes(row.mainStatus) && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    handleOpenQrModal(row);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <QrCode className="h-4 w-4 text-[#073318]/70" />
-                  <span>Scan QR</span>
-                </button>
-              )}
-
-              {type === 'drop' && subTab === 'completed' && (
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    setActiveActionMenu(null);
-                    if (confirm('Are you sure you want to request a return for this buyer?')) {
-                      setActionProcessing(true);
-                      try {
-                        await requestBuyerReturn(row.uuid || row.id);
-                        alert('Buyer return request created successfully.');
-                        await loadData();
-                      } catch (err: any) {
-                        alert(err.message || 'Failed to request return.');
-                      } finally {
-                        setActionProcessing(false);
-                      }
-                    }
-                  }}
-                  disabled={actionProcessing}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-                >
-                  <ShieldAlert className="h-4 w-4 text-rose-500/70" />
-                  <span>Request Buyer Return</span>
-                </button>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    );
+  const handleOpenQrModal = (item: ReturnOrder) => {
+    setQrItem(item);
+    setIsQrModalOpen(true);
+    setQrScanSuccess(false);
+    setIsScanning(false);
+    setScanMessage('');
   };
 
-  // --- COLUMN SCHEMAS ---
+  const sortNewestFirst = (orders: any[]) => {
+    return [...orders].sort((a, b) => {
+      const timeA = a.rawUpdatedAt ? new Date(a.rawUpdatedAt).getTime() : (a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : 0);
+      const timeB = b.rawUpdatedAt ? new Date(b.rawUpdatedAt).getTime() : (b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : 0);
+      if (timeA !== timeB) return timeB - timeA;
+      const getNum = (idStr: string) => {
+        const match = idStr?.match(/\d+$/);
+        return match ? parseInt(match[0], 10) : 0;
+      };
+      return getNum(b.id) - getNum(a.id);
+    });
+  };
 
-  // Pickup: New
+  // Aggregate All Lists into unique Orders
+  const allMergedOrders = sortNewestFirst(
+    Array.from(
+      new Map(
+        [
+          ...pickupNewOrders,
+          ...pickupAssignedOrders,
+          ...pickupWarehouseOrders,
+          ...pickupRejectedOrders,
+          ...pickupRescheduledOrders,
+          ...dropNewOrders,
+          ...dropAssignedOrders,
+          ...dropRejectedOrders,
+          ...dropRescheduledOrders,
+          ...dropCompletedOrders,
+          ...returnPickupNewOrders,
+          ...returnPickupCompletedOrders,
+          ...returnDropNewOrders,
+          ...returnDropCompletedOrders,
+        ].map((o) => [o.id, o])
+      ).values()
+    ).map((o) => getMergedOrder(o.id, {
+      pickupNew: pickupNewOrders,
+      pickupAssigned: pickupAssignedOrders,
+      pickupWarehouse: pickupWarehouseOrders,
+      pickupRejected: pickupRejectedOrders,
+      pickupRescheduled: pickupRescheduledOrders,
+      dropNew: dropNewOrders,
+      dropAssigned: dropAssignedOrders,
+      dropRejected: dropRejectedOrders,
+      dropRescheduled: dropRescheduledOrders,
+      dropCompleted: dropCompletedOrders,
+      returnPickupNew: returnPickupNewOrders,
+      returnPickupCompleted: returnPickupCompletedOrders,
+      returnDropNew: returnDropNewOrders,
+      returnDropCompleted: returnDropCompletedOrders,
+    })).filter(Boolean)
+  );
+
+  // Dynamic filter values
+  const uniqueVillages = Array.from(new Set(
+    allMergedOrders.flatMap(o => [o.sellerVillage, o.buyerVillage].filter(Boolean))
+  )).sort();
+
+  const uniquePincodes = Array.from(new Set(
+    allMergedOrders.flatMap(o => [o.sellerPincode, o.buyerPincode].filter(Boolean))
+  )).sort();
+
+  // Search & Filter helper
+  const filterAndSearchOrders = (orders: any[]) => {
+    return orders.filter((order) => {
+      // 1. Search Query
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase().trim();
+        const matches =
+          order.id?.toLowerCase().includes(query) ||
+          order.barcode?.toLowerCase().includes(query) ||
+          order.sellerName?.toLowerCase().includes(query) ||
+          order.sellerMobile?.toLowerCase().includes(query) ||
+          order.buyerName?.toLowerCase().includes(query) ||
+          order.buyerMobile?.toLowerCase().includes(query) ||
+          order.shgDetails?.name?.toLowerCase().includes(query) ||
+          order.shgDetails?.mobile?.toLowerCase().includes(query) ||
+          order.transporterDetails?.name?.toLowerCase().includes(query) ||
+          order.transporterDetails?.mobile?.toLowerCase().includes(query);
+        if (!matches) return false;
+      }
+
+      // 2. Status Filter
+      if (statusFilter && statusFilter !== 'all') {
+        const sf = statusFilter.toLowerCase();
+        if (sf === 'delayed') {
+          if (!order.rescheduleType) return false;
+        } else {
+          if (order.mainStatus?.toLowerCase() !== sf && order.status?.toLowerCase() !== sf) return false;
+        }
+      }
+
+      // 3. Priority Filter
+      if (priorityFilter && priorityFilter !== 'all') {
+        if (order.priority?.toLowerCase() !== priorityFilter.toLowerCase()) return false;
+      }
+
+      // 4. Village Filter
+      if (villageFilter && villageFilter !== 'all') {
+        const vf = villageFilter.toLowerCase();
+        if (order.sellerVillage?.toLowerCase() !== vf && order.buyerVillage?.toLowerCase() !== vf) return false;
+      }
+
+      // 5. Pincode Filter
+      if (pincodeFilter && pincodeFilter !== 'all') {
+        if (order.sellerPincode !== pincodeFilter && order.buyerPincode !== pincodeFilter) return false;
+      }
+
+      // 6. Current Location Filter
+      if (locationFilter && locationFilter !== 'all') {
+        const loc = locationFilter.toLowerCase();
+        if (loc === 'shg') {
+          const isAtShg = ['PARCEL_AT_SHG', 'DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'RETURN_PARCEL_AT_SHG'].includes(order.mainStatus);
+          if (!isAtShg) return false;
+        } else if (loc === 'transporter') {
+          const isAtTrans = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_HUB', 'RETURN_PARCEL_AT_TRANSPORTER'].includes(order.mainStatus);
+          if (!isAtTrans) return false;
+        } else if (loc === 'gmu') {
+          const isAtGmu = ['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'RETURN_PARCEL_AT_GMU'].includes(order.mainStatus);
+          if (!isAtGmu) return false;
+        } else if (loc === 'seller') {
+          const isAtSeller = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED'].includes(order.mainStatus);
+          if (!isAtSeller) return false;
+        } else if (loc === 'buyer') {
+          const isAtBuyer = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'].includes(order.mainStatus);
+          if (!isAtBuyer) return false;
+        }
+      }
+
+      // 7. Date Filter (today / yesterday)
+      if (dateFilter) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const orderDateStr = order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : '');
+
+        if (dateFilter === 'today') {
+          if (orderDateStr !== todayStr) return false;
+        } else if (dateFilter === 'yesterday') {
+          if (orderDateStr !== yesterdayStr) return false;
+        } else if (dateFilter.length === 10) {
+          if (orderDateStr !== dateFilter) return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  // Section Partition
+  const newOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter(
+      (o: any) =>
+        ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'))
+    )
+  );
+
+  const inTransitOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => {
+      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
+      if (isNew) return false;
+
+      const isCompleted = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus);
+      if (isCompleted) return false;
+
+      return true;
+    })
+  );
+
+  const completedOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) =>
+      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
+    )
+  );
+
+  const delayedCount = allMergedOrders.filter((o: any) => 
+    o.rescheduleType || 
+    ['delayed', 'DELAYED'].includes(o.pickupShgStatus) || 
+    ['delayed', 'DELAYED'].includes(o.pickupTransporterStatus) || 
+    ['delayed', 'DELAYED'].includes(o.dropTransporterStatus) || 
+    ['delayed', 'DELAYED'].includes(o.dropShgStatus)
+  ).length;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayOrdersCount = allMergedOrders.filter((o: any) => {
+    const oDate = o.orderDate || (o.created_at ? o.created_at.split(' ')[0] : '');
+    return oDate && oDate.includes(todayStr);
+  }).length;
+
+  const calculateProgressWidth = (nodes: any[]) => {
+    const completedIndex = nodes.reduce((max: number, node: any, idx: number) => {
+      if (node.state === 'completed') return idx;
+      return max;
+    }, -1);
+    
+    if (completedIndex === -1) return '0%';
+    if (completedIndex === nodes.length - 1) return '100%';
+    
+    const basePercent = (completedIndex / (nodes.length - 1)) * 100;
+    const activeNext = nodes[completedIndex + 1]?.state === 'active';
+    const extra = activeNext ? (0.5 / (nodes.length - 1)) * 100 : 0;
+    return `${Math.min(basePercent + extra, 100)}%`;
+  };
+
+  // Graphical tracking nodes calculator
+  const getTimelineNodes = (order: any) => {
+    const isDirect = (order.dropShgId || ['DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) && !order.warehouseReceivedDate && !order.storedDate;
+
+    let sellerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'completed';
+    if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(order.mainStatus)) {
+      sellerState = 'active';
+    }
+
+    let shgPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    if (order.pickupShgStatus === 'PICKED' || ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+      shgPickupState = 'completed';
+    } else if (order.pickupShgStatus === 'ACCEPTED' || ['PICKUP_ASSIGNED', 'PARCEL_AT_SHG'].includes(order.mainStatus)) {
+      shgPickupState = 'active';
+    } else if (order.pickupShgStatus === 'REJECTED' || order.mainStatus === 'SHG_PICKUP_DECLINED') {
+      shgPickupState = 'rejected';
+    } else if (order.rescheduleType === 'PICKUP_SHG') {
+      shgPickupState = 'delayed';
+    }
+
+    let transPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+      transPickupState = 'completed';
+    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
+      transPickupState = 'active';
+    } else if (order.pickupTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
+      transPickupState = 'rejected';
+    } else if (order.rescheduleType === 'PICKUP_TRANSPORTER') {
+      transPickupState = 'delayed';
+    }
+
+    let gmuState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    let transDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+
+    if (!isDirect) {
+      if (['DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+        gmuState = 'completed';
+      } else if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'PARCEL_AT_HUB', 'AT_HUB'].includes(order.mainStatus)) {
+        gmuState = 'active';
+      }
+
+      if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED') {
+        transDropState = 'completed';
+      } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
+        transDropState = 'active';
+      } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
+        transDropState = 'rejected';
+      } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
+        transDropState = 'delayed';
+      }
+    }
+
+    let shgDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED') {
+      shgDropState = 'completed';
+    } else if (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED') {
+      shgDropState = 'active';
+    } else if (order.dropShgStatus === 'REJECTED' || order.mainStatus === 'SHG_DROP_DECLINED') {
+      shgDropState = 'rejected';
+    } else if (order.rescheduleType === 'DROP_SHG') {
+      shgDropState = 'delayed';
+    }
+
+    let buyerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+      buyerState = 'completed';
+    } else if (['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+      buyerState = 'active';
+    }
+
+    const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
+      { id: 'seller', label: 'Seller', state: sellerState, details: {
+        'Seller Name': order.sellerName || 'Rajesh Patil',
+        'Mobile Number': order.sellerMobile || '+91 98223 34455',
+        'Address': order.sellerAddress || 'Batkanangale, Kolhapur',
+        'Village': order.sellerVillage || 'Batkanangale',
+        'Pincode': order.sellerPincode || '416502',
+        'Order Placed Date': order.orderDate || '19 Jul 2026',
+        'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
+        'Verification Status': order.items?.[0]?.verificationStatus || 'VERIFIED',
+        'Packages Count': order.productCount || 1,
+        'Remarks': order.tracking?.[0]?.remarks || 'Order placed successfully.'
+      } },
+      { id: 'shg_pickup', label: 'Pickup SHG', state: shgPickupState, details: {
+        'SHG Name': order.pickupShgDetails?.name || 'Bhavani SHG Group',
+        'Mobile': order.pickupShgDetails?.mobile || '+91 91582 30129',
+        'Address': order.pickupShgDetails?.address || 'Batkanangale Main Road, Kolhapur',
+        'Schedule Details': order.shgPickupSchedule || '10:00 AM - 01:00 PM',
+        'Status': order.pickupShgStatus || 'ACCEPTED',
+      } },
+      { id: 'trans_pickup', label: 'Transporter', state: transPickupState, details: {
+        'Transporter Name': order.pickupTransporterDetails?.name || 'Vighnaharta Logistics',
+        'Mobile': order.pickupTransporterDetails?.mobile || '+91 88884 55562',
+        'Address': order.pickupTransporterDetails?.address || 'Kolhapur Bypass, MH',
+        'Vehicle': order.pickupTransporterDetails?.vehicle || 'Tata Ace (MH-09-EQ-4567)',
+        'Status': order.pickupTransporterStatus || 'PENDING',
+      } },
+    ];
+
+    if (!isDirect) {
+      nodes.push({ id: 'gmu', label: 'GMU Hub', state: gmuState, details: {
+        'Warehouse': 'GMU Hub Central Warehouse',
+        'Intake Time': order.warehouseReceivedDate || '19 Jul 2026 05:00 PM',
+        'Barcode Generated': order.barcode || `BAR-${order.id}`,
+        'Inventory Shelf': order.storedDate ? 'Shelf A-4' : 'Incoming Bay',
+        'Dispatch Time': order.dispatchedAt || 'N/A',
+        'Status': order.mainStatus || 'IN_PROCESS',
+      } });
+
+      nodes.push({ id: 'trans_drop', label: 'Transporter', state: transDropState, details: {
+        'Transporter Name': order.dropTransporterDetails?.name || 'Sai Transport Service',
+        'Mobile': order.dropTransporterDetails?.mobile || '+91 99214 77732',
+        'Address': order.dropTransporterDetails?.address || 'Gadhinglaj Road, MH',
+        'Vehicle': order.dropTransporterDetails?.vehicle || 'Mahindra Bolero Picker',
+        'Status': order.dropTransporterStatus || 'PENDING',
+      } });
+    }
+
+    nodes.push({ id: 'shg_drop', label: 'Drop SHG', state: shgDropState, details: {
+      'SHG Name': order.dropShgDetails?.name || 'Radhika Mahila Mandal',
+      'Mobile': order.dropShgDetails?.mobile || '+91 70201 99923',
+      'Address': order.dropShgDetails?.address || 'Gadhinglaj Center, Kolhapur',
+      'Schedule Details': order.shgPickupSchedule || '02:00 PM - 05:00 PM',
+      'Status': order.dropShgStatus || 'PENDING',
+    } });
+
+    nodes.push({ id: 'buyer', label: 'Buyer', state: buyerState, details: {
+      'Buyer Name': order.buyerName || 'Sunita Deshmukh',
+      'Mobile Number': order.buyerMobile || '+91 90112 33445',
+      'Address': order.buyerAddress || 'Main Bazaar Road, Gadhinglaj',
+      'Village': order.buyerVillage || 'Gadhinglaj',
+      'Pincode': order.buyerPincode || '416502',
+      'Delivery Completed Date': order.deliveredAt || 'N/A',
+      'Verification Status': order.items?.[0]?.verificationStatus || 'PENDING',
+    } });
+
+    return nodes;
+  };
+
+  const getNodeTimeAndDate = (order: any, nodeLabel: string) => {
+    const lbl = nodeLabel.toLowerCase();
+    
+    if (order.tracking && order.tracking.length > 0) {
+      let statusMatch = '';
+      if (lbl === 'seller') {
+        statusMatch = 'ORDER_PLACED';
+      } else if (lbl.includes('pickup shg')) {
+        statusMatch = 'PICKUP_SHG_ACCEPTED';
+      } else if (lbl.includes('transporter')) {
+        statusMatch = 'TRANSPORTER_ACCEPTED';
+      } else if (lbl.includes('gmu') || lbl.includes('hub')) {
+        statusMatch = 'PARCEL_AT_GMU';
+      } else if (lbl.includes('drop shg')) {
+        statusMatch = 'DROP_SHG_ACCEPTED';
+      } else if (lbl === 'buyer') {
+        statusMatch = 'DELIVERED';
+      }
+
+      const event = order.tracking.find((t: any) => 
+        t.status === statusMatch || 
+        t.status?.toUpperCase().includes(statusMatch) ||
+        t.remarks?.toUpperCase().includes(nodeLabel.toUpperCase())
+      );
+
+      if (event && event.updatedAt) {
+        const dt = new Date(event.updatedAt);
+        const time = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const date = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+        return { time, date };
+      }
+    }
+
+    const dateStr = order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : '2026-07-20');
+    let dayStr = '20 Jul';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+      dayStr = dateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+    } catch (e) {}
+
+    const nodes = getTimelineNodes(order);
+    const matchedNode = nodes.find(n => n.label.toLowerCase() === lbl);
+
+    if (matchedNode && (matchedNode.state === 'completed' || matchedNode.state === 'active')) {
+      if (lbl === 'seller') {
+        return { time: '10:30 AM', date: dayStr };
+      }
+      if (lbl.includes('pickup shg')) {
+        return { time: '11:15 AM', date: dayStr };
+      }
+      if (lbl.includes('transporter')) {
+        return { time: '12:40 PM', date: dayStr };
+      }
+      if (lbl.includes('gmu') || lbl.includes('hub')) {
+        return { time: '02:10 PM', date: dayStr };
+      }
+      if (lbl.includes('drop shg')) {
+        return { time: '04:30 PM', date: dayStr };
+      }
+      if (lbl === 'buyer') {
+        return { time: '06:15 PM', date: dayStr };
+      }
+    }
+
+    return null;
+  };
+
+  const handleNodeClick = (nodeLabel: string, nodeDetails: any) => {
+    if (!nodeDetails) return;
+    setActiveNodeTitle(nodeLabel);
+    setActiveNodeDetails(nodeDetails);
+    setIsNodeDrawerOpen(true);
+  };
+
+  // Redesign Columns for New & Completed sections
   const pickupNewColumns = [
     { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
     { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
@@ -435,491 +1122,746 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
     { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
     { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Action', accessor: (row: PickupOrder) => getActionButtons(row, 'pickup', 'new') },
-  ];
-
-  // Pickup: Assigned
-  const pickupAssignedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
-    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
-    { header: 'Seller Address', accessor: 'sellerAddress' as keyof PickupOrder },
-    { header: 'Seller Mobile', accessor: 'sellerMobile' as keyof PickupOrder },
-    { header: 'SHG Name', accessor: (row: PickupOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: PickupOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: PickupOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'Transporter Name', accessor: (row: PickupOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: PickupOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: PickupOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: PickupOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: PickupOrder) => getActionButtons(row, 'pickup', 'assigned') },
-  ];
-
-  const pickupAssignedColumnsWithSelection = [
-    {
-      header: '',
-      accessor: (row: PickupOrder) => (
-        <input
-          type="checkbox"
-          checked={selectedAssignedOrderIds.includes(row.id)}
-          disabled={row.mainStatus !== 'PARCEL_AT_GMU' && row.mainStatus !== 'RETURN_PARCEL_AT_GMU' && row.mainStatus !== 'PARCEL_AT_HUB' && row.mainStatus !== 'RETURN_PARCEL_AT_HUB'}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedAssignedOrderIds((prev) => [...prev, row.id]);
-            } else {
-              setSelectedAssignedOrderIds((prev) => prev.filter((id) => id !== row.id));
-            }
+    { header: 'Start Date', accessor: (row: any) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
+    { header: 'Expected Delivery Date', accessor: (row: any) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
+    { header: 'SHG Status', accessor: (row: any) => <StatusBadge status={row.pickupShgStatus || 'pending'} /> },
+    { header: 'Action', accessor: (row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewOrder(row);
           }}
-          className={`h-4 w-4 focus:ring-[#073318] border-slate-300 rounded ${
-            (row.mainStatus === 'PARCEL_AT_GMU' || row.mainStatus === 'RETURN_PARCEL_AT_GMU' || row.mainStatus === 'PARCEL_AT_HUB' || row.mainStatus === 'RETURN_PARCEL_AT_HUB')
-              ? 'text-[#073318] cursor-pointer'
-              : 'text-slate-200 cursor-not-allowed opacity-40'
-          }`}
-        />
-      ),
+          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span>View</span>
+        </button>
+      ) 
     },
-    ...pickupAssignedColumns,
   ];
 
-  // Pickup: Warehouse
-  const pickupWarehouseColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
-    { header: 'Barcode Number', accessor: (row: PickupOrder) => row.barcode || 'N/A' },
-    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
-    { header: 'Seller Mobile', accessor: 'sellerMobile' as keyof PickupOrder },
-    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
-    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
-    { header: 'Total Weight', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Warehouse Received Date', accessor: (row: PickupOrder) => row.warehouseReceivedDate || row.currentDate || (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
-    { header: 'Status', accessor: (row: PickupOrder) => <StatusBadge status={row.status} /> },
-    { header: 'Action', accessor: (row: PickupOrder) => getActionButtons(row, 'pickup', 'warehouse') },
-  ];
-
-  const pickupWarehouseColumnsWithSelection = [
-    {
-      header: '',
-      accessor: (row: PickupOrder) => (
-        <input
-          type="checkbox"
-          checked={selectedWarehouseOrderIds.includes(row.id)}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedWarehouseOrderIds((prev) => [...prev, row.id]);
-            } else {
-              setSelectedWarehouseOrderIds((prev) => prev.filter((id) => id !== row.id));
-            }
-          }}
-          className="h-4 w-4 text-[#073318] focus:ring-[#073318] border-slate-300 rounded cursor-pointer"
-        />
-      ),
-    },
-    ...pickupWarehouseColumns,
-  ];
-
-  // Pickup: Rejected
-  const pickupRejectedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
-    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
-    { header: 'Seller Mobile', accessor: 'sellerMobile' as keyof PickupOrder },
-    { header: 'Seller Address', accessor: 'sellerAddress' as keyof PickupOrder },
-    { header: 'Seller Village/City', accessor: 'sellerVillage' as keyof PickupOrder },
-    { header: 'Seller Pincode', accessor: 'sellerPincode' as keyof PickupOrder },
-    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
-    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
-    { header: 'Total Weight', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Rejected Date', accessor: (row: PickupOrder) => row.rejectedDate || (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
-    { header: 'Reason', accessor: 'rejectionReason' as keyof PickupOrder },
-    { header: 'Rejected By', accessor: 'rejectedBy' as keyof PickupOrder },
-    { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: PickupOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: PickupOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: PickupOrder) => getActionButtons(row, 'pickup', 'rejected') },
-  ];
-
-  // Drop: New
-  const dropNewColumns = [
+  const completedColumns = [
     { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof DropOrder },
+    { header: 'Barcode', accessor: (row: any) => row.barcode || 'N/A' },
     { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof DropOrder },
-    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof DropOrder },
-    { header: 'Buyer Pincode', accessor: 'buyerPincode' as keyof DropOrder },
+    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
+    { header: 'Completed Date', accessor: (row: any) => row.deliveredAt ? row.deliveredAt.split('T')[0] : (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
+    { header: 'Priority', accessor: (row: any) => <StatusBadge status={row.priority} /> },
     { header: 'Product Count', accessor: 'productCount' as keyof DropOrder },
     { header: 'Total Qty', accessor: 'totalQty' as keyof DropOrder },
-    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof DropOrder },
-    { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Action', accessor: (row: DropOrder) => getActionButtons(row, 'drop', 'new') },
+    { header: 'Action', accessor: (row: any) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewOrder(row);
+            }}
+            className="p-1.5 hover:bg-slate-150 text-[#073318] rounded-lg border border-slate-200 flex items-center justify-center gap-1 font-semibold text-xs cursor-pointer shadow-xs"
+          >
+            <Eye className="h-3 w-3" />
+            <span>View</span>
+          </button>
+          
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              alert(`Downloading logistics report for order ${row.id}`);
+            }}
+            className="p-1.5 hover:bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 flex items-center justify-center gap-1 font-semibold text-xs cursor-pointer shadow-xs"
+          >
+            <span>PDF</span>
+          </button>
+
+          {row.mainStatus !== 'RETURN_PENDING' && row.mainStatus !== 'RETURN_COMPLETED' && !row.returnType && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to request a return for this buyer?')) {
+                  setActionProcessing(true);
+                  try {
+                    await requestBuyerReturn(row.uuid || row.id);
+                    alert('Buyer return request created successfully.');
+                    await loadData();
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to request return.');
+                  } finally {
+                    setActionProcessing(false);
+                  }
+                }
+              }}
+              className="p-1.5 hover:bg-rose-50 text-rose-700 rounded-lg border border-rose-100 flex items-center justify-center gap-1 font-semibold text-xs cursor-pointer shadow-xs"
+            >
+              <span>Return</span>
+            </button>
+          )}
+        </div>
+      ) 
+    },
   ];
-
-  // Drop: Assigned
-  const dropAssignedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof DropOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof DropOrder },
-    { header: 'SHG Name', accessor: (row: DropOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: DropOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: DropOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof DropOrder },
-    { header: 'Transporter Name', accessor: (row: DropOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: DropOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof DropOrder },
-    { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: DropOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: DropOrder) => getActionButtons(row, 'drop', 'assigned') },
-  ];
-
-  // Drop: Rejected
-  const dropRejectedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof DropOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof DropOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
-    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof DropOrder },
-    { header: 'Buyer Pincode', accessor: 'buyerPincode' as keyof DropOrder },
-    { header: 'Product Count', accessor: 'productCount' as keyof DropOrder },
-    { header: 'Total Qty', accessor: 'totalQty' as keyof DropOrder },
-    { header: 'Total Weight', accessor: 'totalWeight' as keyof DropOrder },
-    { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Rejected Date', accessor: (row: DropOrder) => row.rejectedDate || (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
-    { header: 'Reason', accessor: 'rejectionReason' as keyof DropOrder },
-    { header: 'Rejected By', accessor: 'rejectedBy' as keyof DropOrder },
-    { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: DropOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: DropOrder) => getActionButtons(row, 'drop', 'rejected') },
-  ];
-
-  // Drop: Reschedule (same as assigned)
-  const dropRescheduledColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof DropOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof DropOrder },
-    { header: 'SHG Name', accessor: (row: DropOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: DropOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: DropOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof DropOrder },
-    { header: 'Transporter Name', accessor: (row: DropOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: DropOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof DropOrder },
-    { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Rescheduled By', accessor: 'rescheduledBy' as keyof DropOrder },
-    { header: 'SHG Status', accessor: (row: DropOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: DropOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: DropOrder) => getActionButtons(row, 'drop', 'reschedule') },
-  ];
-
-  // Drop: Completed
-  const dropCompletedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof DropOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof DropOrder },
-    { header: 'SHG Name', accessor: (row: DropOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: DropOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: DropOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof DropOrder },
-    { header: 'Transporter Name', accessor: (row: DropOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: DropOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof DropOrder },
-    { header: 'Start Date', accessor: (row: DropOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: DropOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Main Status', accessor: (row: DropOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: DropOrder) => getActionButtons(row, 'drop', 'completed') },
-  ];
-
-  // Pickup: Reschedule (same as assigned)
-  const pickupRescheduledColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
-    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
-    { header: 'Seller Address', accessor: 'sellerAddress' as keyof PickupOrder },
-    { header: 'Seller Mobile', accessor: 'sellerMobile' as keyof PickupOrder },
-    { header: 'SHG Name', accessor: (row: PickupOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: PickupOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: PickupOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof PickupOrder },
-    { header: 'Transporter Name', accessor: (row: PickupOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: PickupOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: PickupOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: PickupOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Rescheduled By', accessor: 'rescheduledBy' as keyof PickupOrder },
-    { header: 'SHG Status', accessor: (row: PickupOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: PickupOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: PickupOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: PickupOrder) => getActionButtons(row, 'pickup', 'reschedule') },
-  ];
-
-  // Return Pickup: New Columns
-  const returnPickupNewColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof ReturnOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof ReturnOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof ReturnOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof ReturnOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof ReturnOrder },
-    { header: 'SHG Name', accessor: (row: ReturnOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: ReturnOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: ReturnOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof ReturnOrder },
-    { header: 'Transporter Name', accessor: (row: ReturnOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: ReturnOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof ReturnOrder },
-    { header: 'Start Date', accessor: (row: ReturnOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: ReturnOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: ReturnOrder) => getActionButtons(row, 'return', 'assigned') },
-  ];
-
-  // Return Pickup: Completed Columns
-  const returnPickupCompletedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof ReturnOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof ReturnOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof ReturnOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof ReturnOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof ReturnOrder },
-    { header: 'SHG Name', accessor: (row: ReturnOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: ReturnOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: ReturnOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof ReturnOrder },
-    { header: 'Transporter Name', accessor: (row: ReturnOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: ReturnOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof ReturnOrder },
-    { header: 'Start Date', accessor: (row: ReturnOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: ReturnOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Main Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: ReturnOrder) => getActionButtons(row, 'return', 'completed') },
-  ];
-
-  // Return Drop: New Columns
-  const returnDropNewColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof ReturnOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof ReturnOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof ReturnOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof ReturnOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof ReturnOrder },
-    { header: 'SHG Name', accessor: (row: ReturnOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: ReturnOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: ReturnOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof ReturnOrder },
-    { header: 'Transporter Name', accessor: (row: ReturnOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: ReturnOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof ReturnOrder },
-    { header: 'Start Date', accessor: (row: ReturnOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: ReturnOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.shgStatus} /> },
-    { header: 'Transporter Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.transporterStatus} /> },
-    { header: 'Main Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: ReturnOrder) => getActionButtons(row, 'return', 'assigned') },
-  ];
-
-  // Return Drop: Completed Columns
-  const returnDropCompletedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof ReturnOrder },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof ReturnOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof ReturnOrder },
-    { header: 'Buyer Address', accessor: 'buyerAddress' as keyof ReturnOrder },
-    { header: 'Buyer Mobile', accessor: 'buyerMobile' as keyof ReturnOrder },
-    { header: 'SHG Name', accessor: (row: ReturnOrder) => row.shgDetails?.name || '-', sortKey: 'shgName' },
-    { header: 'SHG Address', accessor: (row: ReturnOrder) => row.shgDetails?.address || '-', sortKey: 'shgAddress' },
-    { header: 'SHG Mobile', accessor: (row: ReturnOrder) => row.shgDetails?.mobile || '-', sortKey: 'shgMobile' },
-    { header: 'SHG Pickup Schedule', accessor: 'shgPickupSchedule' as keyof ReturnOrder },
-    { header: 'Transporter Name', accessor: (row: ReturnOrder) => row.transporterDetails?.name || '-', sortKey: 'transporterName' },
-    { header: 'Transporter Mobile', accessor: (row: ReturnOrder) => row.transporterDetails?.mobile || '-', sortKey: 'transporterMobile' },
-    { header: 'Transporter Pickup Schedule', accessor: 'transporterPickupSchedule' as keyof ReturnOrder },
-    { header: 'Start Date', accessor: (row: ReturnOrder) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
-    { header: 'Delivery Expected Date', accessor: (row: ReturnOrder) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'Main Status', accessor: (row: ReturnOrder) => <StatusBadge status={row.mainStatus} /> },
-    { header: 'Action', accessor: (row: ReturnOrder) => getActionButtons(row, 'return', 'completed') },
-  ];
-
-
-  // Manual Partner Assignment Form Submit
-  const handleAssignSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (assignOrderId && selectedSHG && selectedTransporter) {
-      setActionProcessing(true);
-      try {
-        await assignPickupOrder(assignOrderId, selectedSHG, selectedTransporter);
-        alert('Partners assigned successfully.');
-        setIsAssignModalOpen(false);
-        setSelectedSHG('');
-        setSelectedTransporter('');
-        setAssignOrderId(null);
-        await loadData();
-      } catch (err: any) {
-        alert(err.message || 'Assignment failed.');
-      } finally {
-        setActionProcessing(false);
-      }
-    }
-  };
 
   return (
     <Layout currentPage="order-management" onNavigate={onNavigate}>
       <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
-            <p className="text-sm font-medium text-slate-500 mt-1">Manage Pickups, Drops, and Returns operations.</p>
+        {/* Modern Header Section */}
+        <div className="space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
+              <p className="text-xs font-semibold text-slate-500 mt-1">Track every parcel from Seller to Buyer.</p>
+            </div>
+          </div>
+
+          {/* Summary KPIs Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
+              <div className="p-3.5 rounded-2xl bg-[#E8F5E9] text-[#2E7D32] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
+                <Package className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">New Orders</span>
+                <span className="text-2xl font-black text-[#073318] block leading-tight">{newOrdersList.length}</span>
+                <span className="text-[10px] text-slate-400 font-semibold block">Waiting to start</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
+              <div className="p-3.5 rounded-2xl bg-[#E0F2F1] text-[#00695C] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
+                <Truck className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">In Transit</span>
+                <span className="text-2xl font-black text-[#073318] block leading-tight">{inTransitOrdersList.length}</span>
+                <span className="text-[10px] text-slate-400 font-semibold block">Active orders</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
+              <div className="p-3.5 rounded-2xl bg-[#E3F2FD] text-[#1565C0] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Completed</span>
+                <span className="text-2xl font-black text-[#073318] block leading-tight">{completedOrdersList.length}</span>
+                <span className="text-[10px] text-slate-400 font-semibold block">This month</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
+              <div className="p-3.5 rounded-2xl bg-[#FFF3E0] text-[#EF6C00] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
+                <Clock className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Delayed</span>
+                <span className="text-2xl font-black text-[#073318] block leading-tight">{delayedCount}</span>
+                <span className="text-[10px] text-slate-400 font-semibold block">Need attention</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
+              <div className="p-3.5 rounded-2xl bg-[#F3E5F5] text-[#6A1B9A] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
+                <Calendar className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Today's Orders</span>
+                <span className="text-2xl font-black text-[#073318] block leading-tight">{todayOrdersCount}</span>
+                <span className="text-[10px] text-slate-400 font-semibold block">Total orders</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Filter Toolbar */}
+          <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
+            {/* Search Bar */}
+            <div className="flex-1 min-w-[200px] relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+              <input
+                type="text"
+                placeholder="Search ID, Barcode, Seller, Buyer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#073318]/50"
+              />
+            </div>
+
+            {/* Date Select */}
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <option value="">All Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+            </select>
+
+            {/* Priority Select */}
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <option value="all">All Priorities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+
+            {/* Location Select */}
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <option value="all">All Locations</option>
+              <option value="seller">At Seller</option>
+              <option value="shg">At SHG Partner</option>
+              <option value="transporter">In Transit</option>
+              <option value="gmu">At GMU Warehouse</option>
+              <option value="buyer">At Buyer</option>
+            </select>
+
+            {/* Village Select */}
+            <select
+              value={villageFilter}
+              onChange={(e) => setVillageFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <option value="all">All Villages</option>
+              {uniqueVillages.map((v, i) => (
+                <option key={i} value={v}>{v}</option>
+              ))}
+            </select>
+
+            {/* Pincode Select */}
+            <select
+              value={pincodeFilter}
+              onChange={(e) => setPincodeFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <option value="all">All Pincodes</option>
+              {uniquePincodes.map((p, i) => (
+                <option key={i} value={p}>{p}</option>
+              ))}
+            </select>
+
+            {/* Divider */}
+            <div className="h-6 w-[1px] bg-slate-200 hidden lg:block" />
+
+            {/* Refresh & Add Manual Order Buttons */}
+            <button
+              onClick={loadData}
+              className="p-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-[#073318] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 text-xs font-bold"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleOpenAddOrderModalPickup}
+              className="px-3.5 py-1.5 bg-[#B2D534] hover:bg-[#B2D534]/90 text-[#073318] rounded-xl font-black text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer shadow-xs flex items-center gap-1"
+            >
+              <Plus className="h-3.5 w-3.5 stroke-[3px]" />
+              <span>Add Order</span>
+            </button>
           </div>
         </div>
 
-        {errorMsg && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-bold">
-            {errorMsg}
-          </div>
-        )}
-        {isLoading && (
-          <div className="flex items-center justify-center py-4 text-xs font-bold text-slate-500 gap-2">
-            <span className="w-4 h-4 border-2 border-[#073318] border-t-transparent rounded-full animate-spin" />
-            Loading live data from GMU APIs...
-          </div>
-        )}
+        {/* Section Tabs Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-lg">
+            <button
+              onClick={() => handleTabChange('new')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTopTab === 'new'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>New Orders</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'new' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {newOrdersList.length}
+              </span>
+            </button>
 
-        {/* Top-level Tabs */}
-        <Tabs
-          activeTab={activeTopTab}
-          onChange={(id) => {
-            setActiveTopTab(id as any);
-          }}
-          tabs={[
-            { id: 'pickup', label: 'Pickup' },
-            { id: 'drop', label: 'Drop' },
-            { id: 'return', label: 'Return' },
-          ]}
-        />
+            <button
+              onClick={() => handleTabChange('in_transit')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTopTab === 'in_transit'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>In Transit</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'in_transit' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {inTransitOrdersList.length}
+              </span>
+            </button>
 
-        {/* ---------------- PICKUP TAB ---------------- */}
-        {activeTopTab === 'pickup' && (
+            <button
+              onClick={() => handleTabChange('completed')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTopTab === 'completed'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>Completed</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'completed' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {completedOrdersList.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Sorting and Grid Toggle (Right Side) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Sort by:</span>
+            <select className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer">
+              <option>Latest Updated</option>
+              <option>Priority (High to Low)</option>
+              <option>Date Placed</option>
+            </select>
+
+            <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
+              <button className="p-1 hover:bg-white rounded-lg text-slate-600 shadow-xs cursor-pointer" title="List View">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <button className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer" title="Grid View">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h4v4H4V6zm10 0h4v4h-4V6zM4 16h4v4H4v-4zm10 0h4v4h-4v-4z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------- SECTION 1: NEW ORDERS ---------------- */}
+        {activeTopTab === 'new' && (
           <div className="space-y-4">
-            <Tabs
-              activeTab={activePickupSubTab}
-              onChange={setActivePickupSubTab}
-              variant="secondary"
-              tabs={[
-                { id: 'new', label: 'New Orders', count: counts.pickup.new },
-                { id: 'assigned', label: 'Assigned Orders', count: counts.pickup.assigned },
-                { id: 'warehouse', label: 'Warehouse Orders', count: counts.pickup.warehouse },
-                { id: 'rejected', label: 'Rejected Orders', count: counts.pickup.rejected },
-                { id: 'reschedule', label: 'Rescheduled Orders', count: counts.pickup.rescheduled },
-              ]}
-            />
-            {activePickupSubTab === 'new' && (
+            {newOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">📦</span>
+                <p className="text-sm">No new orders found matching the filter criteria.</p>
+              </div>
+            ) : (
               <DataTable
                 columns={pickupNewColumns}
-                data={pickupNewOrders}
-                statusFilterField="mainStatus"
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
+                data={newOrdersList}
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
                 onRefresh={loadData}
               />
             )}
-            {activePickupSubTab === 'assigned' && (
-              <div className="space-y-3">
-                {selectedAssignedOrderIds.length > 0 && (
-                  <div className="flex justify-end">
+          </div>
+        )}
+
+        {/* ---------------- SECTION 2: IN TRANSIT ORDERS ---------------- */}
+        {activeTopTab === 'in_transit' && (
+          <div className="space-y-6">
+            <style dangerouslySetInnerHTML={{__html: `
+              @keyframes activePulse {
+                0% {
+                  box-shadow: 0 0 0 0 rgba(178, 213, 52, 0.7);
+                }
+                70% {
+                  box-shadow: 0 0 0 10px rgba(178, 213, 52, 0);
+                }
+                100% {
+                  box-shadow: 0 0 0 0 rgba(178, 213, 52, 0);
+                }
+              }
+              @keyframes lineDraw {
+                from { width: 0%; }
+                to { width: var(--progress-width); }
+              }
+              .active-node-glow {
+                animation: activePulse 2s infinite;
+              }
+              .line-progress-animate {
+                animation: lineDraw 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+              }
+            `}} />
+            {inTransitOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">🚚</span>
+                <p className="text-sm">No orders currently in transit matching the filter criteria.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {inTransitOrdersList
+                    .slice((transitPage - 1) * transitItemsPerPage, transitPage * transitItemsPerPage)
+                    .map((order) => {
+                      const isExpanded = !!expandedOrders[order.id];
+                      const nodes = getTimelineNodes(order);
+
+                      const needsIntake = ['PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
+                      const needsBarcode = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
+
+                      return (
+                        <div 
+                          key={order.id} 
+                          className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
+                        >
+                          {/* Decorative Left Border based on Priority */}
+                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${
+                            order.priority?.toLowerCase() === 'high' 
+                              ? 'bg-[#EF4444]' 
+                              : order.priority?.toLowerCase() === 'medium'
+                                ? 'bg-[#F59E0B]'
+                                : 'bg-[#10B981]'
+                          }`} />
+
+                          {/* Left Column (Metadata) */}
+                          <div className="w-full lg:w-[260px] shrink-0 space-y-2 pr-1">
+                            <div className="space-y-0.5">
+                              {order.priority && (
+                                <span className="text-[9px] font-extrabold uppercase bg-amber-50 text-amber-705 border border-amber-100 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                                  ★ {order.priority}
+                                </span>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-md font-black text-slate-800 tracking-tight">{order.id}</h4>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(order.id);
+                                    alert(`Order ID ${order.id} copied to clipboard!`);
+                                  }}
+                                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-405 hover:text-slate-650 transition-colors cursor-pointer"
+                                  title="Copy Order ID"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div className="font-mono text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                                <span className="text-slate-350">|||</span>
+                                <span>{order.barcode || `BAR-${order.id}`}</span>
+                              </div>
+                            </div>
+
+                            {/* Details Grid */}
+                            <div className="space-y-1 text-xs text-slate-600 font-semibold">
+                              <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                <span className="flex items-center gap-1">
+                                  <Package className="h-3.5 w-3.5 text-slate-400" />
+                                  {order.items?.length || 1} Items
+                                </span>
+                                <span>•</span>
+                                <span>{order.totalWeight || order.weight || 0} kg</span>
+                                <span>•</span>
+                                <span>{order.totalQty || order.quantity || 1} Pkgs</span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-slate-600">
+                                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate text-[11px]" title={order.buyerVillage}>
+                                  {order.buyerVillage || 'N/A'}, {order.buyerPincode || ''}
+                                </span>
+                              </div>
+
+                              {/* ETA pill */}
+                              <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-md text-[10px] font-extrabold mt-0.5">
+                                <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>ETA: {getExpectedDeliveryDate(order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : ''))}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Center Column (Visual Journey Stepper) */}
+                          <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
+                            <div className="min-w-[650px] relative flex items-center justify-between h-12">
+                              
+                              {/* Horizontal Connecting Line Track */}
+                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
+                              
+                              {/* Segmented active/completed highlight line */}
+                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
+                                {nodes.slice(0, -1).map((node, idx) => {
+                                  const nextNode = nodes[idx + 1];
+                                  let segmentBg = 'bg-slate-200'; // Pending
+                                  
+                                  if (node.state === 'completed' && nextNode.state === 'completed') {
+                                    segmentBg = 'bg-[#073318]'; // completed (sidebar green)
+                                  } else if (
+                                    (node.state === 'completed' && nextNode.state === 'active') || 
+                                    node.state === 'active'
+                                  ) {
+                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-slate-200'; // active gradient
+                                  }
+                                  
+                                  return (
+                                    <div 
+                                      key={idx} 
+                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`} 
+                                    />
+                                  );
+                                })}
+                              </div>
+
+                              {/* Stepper Nodes */}
+                              {nodes.map((node, idx) => {
+                                let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
+                                let iconContent = null;
+                                let labelColor = 'text-slate-405';
+                                let ringClass = '';
+                                const isClickable = node.state !== 'pending' && !!node.details;
+                                
+                                // Node Labels & Icons mapping
+                                const getIconForNode = (label: string) => {
+                                  const lbl = label.toLowerCase();
+                                  if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
+                                  return <User className="h-3.5 w-3.5" />;
+                                };
+
+                                const iconElement = getIconForNode(node.label);
+
+                                if (node.state === 'completed') {
+                                  nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
+                                  iconContent = (
+                                    <div className="relative">
+                                      {iconElement}
+                                      <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
+                                    </div>
+                                  );
+                                  labelColor = 'text-[#073318] font-bold';
+                                } else if (node.state === 'active') {
+                                  nodeBg = 'bg-white border-[#073318] border-4 text-[#073318] shadow-md ring-4 ring-[#073318]/10';
+                                  iconContent = (
+                                    <div className="relative animate-pulse">
+                                      {iconElement}
+                                    </div>
+                                  );
+                                  labelColor = 'text-[#073318] font-black';
+                                  ringClass = 'active-node-ring';
+                                } else {
+                                  nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
+                                  iconContent = iconElement;
+                                }
+
+                                const dateDetails = getNodeTimeAndDate(order, node.label);
+
+                                return (
+                                  <div 
+                                    key={idx}
+                                    onClick={() => isClickable && handleNodeClick(node.label, node.details)}
+                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
+                                  >
+                                    {/* Current Location floating badge above active node */}
+                                    {node.state === 'active' && (
+                                      <div className="absolute -top-8 flex flex-col items-center gap-0.5 whitespace-nowrap z-50">
+                                        <span className="text-[9px] font-black text-[#073318] tracking-wide uppercase">Current Location</span>
+                                        <span className="text-[#073318] text-[8px] leading-none animate-bounce">▼</span>
+                                      </div>
+                                    )}
+
+                                    <div className={`h-[32px] w-[32px] rounded-full border-2 flex items-center justify-center font-bold transition-all relative ${nodeBg} ${ringClass} ${isClickable ? 'cursor-pointer' : ''}`}>
+                                      {iconContent}
+                                      {/* Orbiting Satellite Dots Radar Ring */}
+                                      {node.state === 'active' && (
+                                        <div className="absolute inset-0 -m-2.5 border border-[#073318]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
+                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#073318]" />
+                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#073318]" />
+                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#073318]" />
+                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#073318]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
+                                      {node.label}
+                                    </span>
+                                    {/* Timestamp underneath completed/active nodes */}
+                                    {node.state === 'active' ? (
+                                      <span className="text-[8px] font-extrabold text-[#073318] bg-emerald-50 border border-emerald-250 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
+                                    ) : dateDetails ? (
+                                      <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
+                                        <span className="block font-bold text-slate-600">{dateDetails.time}</span>
+                                        <span className="block">{dateDetails.date}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[8px] font-medium text-slate-305 mt-1">-</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Right Column (Status pill & Actions) */}
+                          <div className="w-full lg:w-[180px] shrink-0 flex flex-col items-start lg:items-end justify-between gap-2 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-4 self-stretch">
+                            <div className="text-left lg:text-right space-y-0.5">
+                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                                {order.mainStatus.replace(/[-_]/g, ' ')}
+                              </span>
+                              <span className="block text-[10px] text-slate-400 font-semibold">
+                                • Updated 2m ago
+                              </span>
+                            </div>
+
+                            {/* View action button */}
+                            <div className="flex flex-col sm:flex-row gap-2 w-full justify-start lg:justify-end">
+                              {needsBarcode && (
+                                <button
+                                  onClick={() => handleBarcodeClick(order.id)}
+                                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+                                >
+                                  <Barcode className="h-3.5 w-3.5" />
+                                  <span>Generate Barcode</span>
+                                </button>
+                              )}
+
+                              {needsIntake && (
+                                <button
+                                  onClick={() => {
+                                    const intakeKind = order.returnType 
+                                      ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                                      : 'pickup';
+                                    handleIntakeClick(order, intakeKind);
+                                  }}
+                                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+                                >
+                                  <ClipboardCheck className="h-3.5 w-3.5" />
+                                  <span>Intake Handover</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleViewOrder(order)}
+                                className="px-4 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Eye className="h-4 w-4 text-[#B2D534]" />
+                                <span>View Details</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expanded Details Section */}
+                          {isExpanded && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5 border-t border-slate-100 animate-in fade-in duration-200">
+                              {/* Product Details Table */}
+                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                  <Package className="h-3.5 w-3.5" />
+                                  Product Details
+                                </h5>
+
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                      <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[9px]">
+                                        <th className="pb-1.5">Item Name</th>
+                                        <th className="pb-1.5">Qty</th>
+                                        <th className="pb-1.5">Weight</th>
+                                        <th className="pb-1.5 text-right">Price</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
+                                      {order.items && order.items.length > 0 ? (
+                                        order.items.map((item: any, idx: number) => (
+                                          <tr key={idx}>
+                                            <td className="py-2 text-slate-800 font-bold">{item.name}</td>
+                                            <td className="py-2">{item.quantity}</td>
+                                            <td className="py-2">{item.weight} kg</td>
+                                            <td className="py-2 text-right">₹{item.price}</td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={4} className="py-2 text-center text-slate-400 italic">
+                                            No items specified.
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+
+                              {/* Chronological History Log */}
+                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                  <Layers className="h-3.5 w-3.5" />
+                                  Chronological History
+                                </h5>
+
+                                <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
+                                  {order.tracking && order.tracking.length > 0 ? (
+                                    order.tracking.map((t: any, idx: number) => {
+                                      const timeStr = t.updatedAt
+                                        ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                          })
+                                        : '08:30 AM';
+                                      return (
+                                        <div key={idx} className="flex gap-3 text-xs">
+                                          <span className="font-bold text-[#073318] shrink-0 font-mono">{timeStr}</span>
+                                          <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
+                                          <span className="text-slate-600 font-semibold font-sans">
+                                            {t.remarks || t.status.replace(/[-_]/g, ' ')}
+                                          </span>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="flex gap-3 text-xs">
+                                      <span className="font-bold text-[#073318] shrink-0 font-mono">08:30 AM</span>
+                                      <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
+                                      <span className="text-slate-655 font-semibold font-sans">Order Placed</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Pagination controls */}
+                {inTransitOrdersList.length > transitItemsPerPage && (
+                  <div className="flex justify-between items-center py-4 bg-slate-50 px-6 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600">
                     <button
-                      onClick={() => {
-                        const selectedOrders = pickupAssignedOrders.filter((o) => selectedAssignedOrderIds.includes(o.id));
-                        const totalQty = selectedOrders.reduce((sum, o) => sum + o.totalQty, 0);
-                        const totalWeight = selectedOrders.reduce((sum, o) => sum + o.totalWeight, 0);
-                        setIntakeOrder({
-                           id: selectedAssignedOrderIds.join(', '),
-                           qty: totalQty,
-                           weight: totalWeight,
-                           isBulk: true,
-                           selectedIds: selectedAssignedOrderIds,
-                        });
-                        setIntakeType('pickup');
-                        setGeneratedOTP(null);
-                        setIsIntakeModalOpen(true);
-                        setSelectedAssignedOrderIds([]);
-                      }}
-                      className="px-4 py-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-2"
+                      disabled={transitPage === 1}
+                      onClick={() => setTransitPage((prev) => prev - 1)}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <ClipboardCheck className="h-4 w-4" />
-                      Intake Selected ({selectedAssignedOrderIds.length})
+                      Previous
+                    </button>
+                    <span>Page {transitPage} of {Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}</span>
+                    <button
+                      disabled={transitPage >= Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}
+                      onClick={() => setTransitPage((prev) => prev + 1)}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
                     </button>
                   </div>
                 )}
-                <DataTable
-                  columns={pickupAssignedColumnsWithSelection}
-                  data={pickupAssignedOrders}
-                  statusFilterField="mainStatus"
-                  statusFilterOptions={['Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub', 'Parcel At Transporter', 'Parcel At GMU']}
-                  selectedStatus={statusFilter}
-                  onStatusChange={setStatusFilter}
-                  selectedDate={dateFilter}
-                  onDateChange={setDateFilter}
-                  onRowDoubleClick={handleViewOrder}
-                  onRefresh={loadData}
-                />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ---------------- SECTION 3: COMPLETED ORDERS ---------------- */}
+        {activeTopTab === 'completed' && (
+          <div className="space-y-4">
+            {completedOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">✓</span>
+                <p className="text-sm">No completed orders found matching the filter criteria.</p>
               </div>
-            )}
-            {activePickupSubTab === 'warehouse' && (
+            ) : (
               <DataTable
-                columns={pickupWarehouseColumns}
-                data={pickupWarehouseOrders}
-                statusFilterField="status"
-                statusFilterOptions={['Parcel At Hub', 'Barcode Generated']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activePickupSubTab === 'rejected' && (
-              <DataTable
-                columns={pickupRejectedColumns}
-                data={pickupRejectedOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Order Placed', 'Pickup Assigned', 'Pickup SHG Accepted', 'SHG Pickup Declined', 'Parcel At SHG', 'Transporter Accepted', 'Transporter Declined', 'In Transit To Hub']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activePickupSubTab === 'reschedule' && (
-              <DataTable
-                columns={pickupRescheduledColumns}
-                data={pickupRescheduledOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Reassigned', 'Pickup Assigned', 'Pickup SHG Accepted', 'Transporter Accepted']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
+                columns={completedColumns}
+                data={completedOrdersList}
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
@@ -929,165 +1871,49 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           </div>
         )}
 
-        {/* ---------------- DROP TAB ---------------- */}
-        {activeTopTab === 'drop' && (
-          <div className="space-y-4">
-            <Tabs
-              activeTab={activeDropSubTab}
-              onChange={setActiveDropSubTab}
-              variant="secondary"
-              tabs={[
-                { id: 'new', label: 'New Orders', count: counts.drop.new },
-                { id: 'assigned', label: 'Assigned Orders', count: counts.drop.assigned },
-                { id: 'completed', label: 'Completed Orders', count: counts.drop.completed },
-                { id: 'rejected', label: 'Rejected Orders', count: counts.drop.rejected },
-                { id: 'reschedule', label: 'Reschedule Options', count: counts.drop.rescheduled },
-              ]}
+        {/* --- DYNAMIC SIDE DRAWER FOR TIMELINE NODE CLICKS --- */}
+        {isNodeDrawerOpen && activeNodeDetails && (
+          <>
+            <div 
+              onClick={() => setIsNodeDrawerOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity duration-300"
             />
-            {activeDropSubTab === 'new' && (
-              <DataTable
-                columns={dropNewColumns}
-                data={dropNewOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Pending', 'Pending Acceptance', 'Pickuphub Receive', 'Barcode Generated', 'Stored', 'Drop Assigned', 'Dispatched', 'Pending Drop']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeDropSubTab === 'assigned' && (
-              <DataTable
-                columns={dropAssignedColumns}
-                data={dropAssignedOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Drop SHG Accepted', 'Drop Transporter Accepted', 'In Transit To Drop SHG', 'Parcel At Drop SHG']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeDropSubTab === 'rejected' && (
-              <DataTable
-                columns={dropRejectedColumns}
-                data={dropRejectedOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Drop Assigned', 'Drop SHG Accepted', 'Drop Transporter Accepted', 'Parcel At Drop SHG', 'In Transit To Drop SHG']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeDropSubTab === 'reschedule' && (
-              <DataTable
-                columns={dropRescheduledColumns}
-                data={dropRescheduledOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Reassigned', 'Drop Assigned', 'Drop SHG Accepted', 'Drop Transporter Accepted']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeDropSubTab === 'completed' && (
-              <DataTable
-                columns={dropCompletedColumns}
-                data={dropCompletedOrders}
-                statusFilterField="mainStatus"
-                statusFilterOptions={['Delivered', 'Completed']}
-                selectedStatus={statusFilter}
-                onStatusChange={setStatusFilter}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-          </div>
-        )}
+            <div className="fixed right-0 top-0 h-full w-[420px] max-w-full bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col p-6 animate-in slide-in-from-right duration-200 text-left">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+                <h4 className="text-lg font-black text-[#073318] uppercase tracking-wider flex items-center gap-2">
+                  <Package className="h-5 w-5 text-[#B2D534]" />
+                  {activeNodeTitle} Details
+                </h4>
+                <button 
+                  onClick={() => setIsNodeDrawerOpen(false)}
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-        {/* ---------------- RETURN TAB ---------------- */}
-        {activeTopTab === 'return' && (
-          <div className="space-y-4">
-            <Tabs
-              activeTab={activeReturnType}
-              onChange={(id) => {
-                setActiveReturnType(id as any);
-                setActiveReturnSubTab('new');
-              }}
-              tabs={[
-                { id: 'drop', label: 'Traspoter return orders', count: counts.return.transporter },
-                { id: 'pickup', label: 'Buyer return orders', count: counts.return.buyer },
-              ]}
-            />
-            <Tabs
-              activeTab={activeReturnSubTab}
-              onChange={(id) => setActiveReturnSubTab(id as any)}
-              variant="secondary"
-              tabs={
-                activeReturnType === 'pickup'
-                  ? [
-                      { id: 'new', label: 'New Orders', count: returnPickupNewOrders.length },
-                      { id: 'completed', label: 'Completed Orders', count: returnPickupCompletedOrders.length },
-                    ]
-                  : [
-                      { id: 'new', label: 'New Orders', count: returnDropNewOrders.length },
-                      { id: 'completed', label: 'Completed Orders', count: returnDropCompletedOrders.length },
-                    ]
-              }
-            />
-            {activeReturnType === 'pickup' && activeReturnSubTab === 'new' && (
-              <DataTable
-                columns={returnPickupNewColumns}
-                data={returnPickupNewOrders}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeReturnType === 'pickup' && activeReturnSubTab === 'completed' && (
-              <DataTable
-                columns={returnPickupCompletedColumns}
-                data={returnPickupCompletedOrders}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeReturnType === 'drop' && activeReturnSubTab === 'new' && (
-              <DataTable
-                columns={returnDropNewColumns}
-                data={returnDropNewOrders}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-            {activeReturnType === 'drop' && activeReturnSubTab === 'completed' && (
-              <DataTable
-                columns={returnDropCompletedColumns}
-                data={returnDropCompletedOrders}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-              />
-            )}
-          </div>
+              {/* Body Content */}
+              <div className="flex-1 overflow-y-auto py-6 space-y-4 pr-1">
+                {Object.entries(activeNodeDetails).map(([key, val]) => (
+                  <div key={key} className="space-y-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{key}</span>
+                    <span className="text-sm font-semibold text-slate-800 block leading-relaxed break-words">{val?.toString() || '-'}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="pt-4 border-t border-slate-100 shrink-0">
+                <button
+                  onClick={() => setIsNodeDrawerOpen(false)}
+                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer text-center"
+                >
+                  Close Drawer
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         {/* --- INTAKE MODAL --- */}
@@ -1106,7 +1932,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
                   <div className="col-span-2 bg-white p-3 rounded-xl border border-slate-150">
-                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Order ID(s)</p>
+                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Order ID(s)</p>
                     <p className="font-extrabold text-[#073318] text-sm font-mono mt-0.5">{intakeOrder.id}</p>
                   </div>
 
@@ -1116,24 +1942,24 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-150">
-                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Total Weight</p>
+                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Total Weight</p>
                     <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.weight} kg</p>
                   </div>
 
                   {!intakeOrder.isBulk && (
                     <>
                       <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Seller / Origin</p>
+                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Seller / Origin</p>
                         <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.sellerName || 'N/A'}</p>
                       </div>
 
                       <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Buyer / Destination</p>
+                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Buyer / Destination</p>
                         <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.buyerName || 'N/A'}</p>
                       </div>
 
                       <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Assigned SHG</p>
+                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned SHG</p>
                         <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.shgName || 'N/A'}</p>
                       </div>
 
@@ -1184,20 +2010,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Details</span>
                 </div>
 
-                {/* Seller & Buyer Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Seller Info */}
                   <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm space-y-1">
-                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Seller Information</p>
+                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Seller Information</p>
                     <h6 className="font-extrabold text-[#073318] text-xs">{barcodeOrder.sellerName || 'N/A'}</h6>
                     <div className="text-[10px] text-slate-600 font-semibold mt-0.5">
                       📞 {barcodeOrder.sellerMobile || 'N/A'}
                     </div>
                   </div>
 
-                  {/* Buyer Info */}
                   <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm space-y-1">
-                    <p className="text-[9px] text-slate-450 font-extrabold uppercase tracking-wider">Buyer Information</p>
+                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Buyer Information</p>
                     <h6 className="font-extrabold text-[#073318] text-xs">{barcodeOrder.buyerName || 'Gramin Mandi Mumbai'}</h6>
                     <div className="text-[10px] text-slate-600 font-semibold space-y-0.5 mt-0.5">
                       <div>📞 {barcodeOrder.buyerMobile || '+91 99887 11001'}</div>
@@ -1206,18 +2029,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </div>
                 </div>
 
-                {/* Product Info Indicator */}
                 <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm grid grid-cols-3 gap-2 text-center">
                   <div>
-                    <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Product Count</p>
+                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Product Count</p>
                     <p className="text-sm font-black text-[#073318] mt-0.5">{barcodeOrder.productCount || 2}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Total Qty</p>
+                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Total Qty</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{barcodeOrder.totalQty || barcodeOrder.quantity || 40}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Total Weight</p>
+                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Total Weight</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{barcodeOrder.totalWeight || barcodeOrder.weight || 160} KG</p>
                   </div>
                 </div>
@@ -1258,10 +2080,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               </p>
               {generatedBarcodeText && (
                 <div className="py-8 bg-slate-50 border border-dashed border-slate-300 rounded-3xl flex flex-col items-center gap-3">
-                  {/* Simulated barcode */}
                   <div className="flex items-center gap-[2px] h-16 w-64">
                     {Array.from({ length: 48 }).map((_, i) => {
-                      const width = (i % 3 === 0) ? 'w-[4px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
+                      const width = (i % 3 === 0) ? 'w-[3px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
                       const bg = (i % 7 === 0) ? 'bg-transparent' : 'bg-slate-900';
                       return <div key={i} className={`h-full ${width} ${bg}`} />;
                     })}
@@ -1290,74 +2111,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           )}
         </Modal>
 
-        {/* --- ASSIGN PARTNER MODAL --- */}
-        <Modal
-          isOpen={isAssignModalOpen}
-          onClose={() => setIsAssignModalOpen(false)}
-          title="Assign SHG & Transporter Partner"
-          variant="modal"
-        >
-          <form onSubmit={handleAssignSubmit} className="space-y-4">
-            <p className="text-xs text-slate-500">
-              Assign logistics partners to handle order <span className="font-bold text-[#073318]">{assignOrderId}</span>
-            </p>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-600 block">Select Self-Help Group (SHG)</label>
-              <select
-                required
-                value={selectedSHG}
-                onChange={(e) => setSelectedSHG(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#073318]/50"
-              >
-                <option value="">-- Choose SHG Partner --</option>
-                {shgList
-                  .filter((s) => s.status === 'Active')
-                  .map((shg) => (
-                    <option key={shg.id} value={shg.id}>
-                      {shg.name} ({shg.leader} - {shg.address})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-600 block">Select Transporter Partner</label>
-              <select
-                required
-                value={selectedTransporter}
-                onChange={(e) => setSelectedTransporter(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#073318]/50"
-              >
-                <option value="">-- Choose Transporter Partner --</option>
-                {transporterList
-                  .filter((t) => t.status === 'Available')
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.vehicle} - Route: {t.route})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="pt-2 flex gap-3">
-              <button
-                type="submit"
-                className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-sm shadow-md transition-colors cursor-pointer"
-              >
-                Confirm Assignment
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAssignModalOpen(false)}
-                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </Modal>
-
         {/* --- VIEW ORDER DETAILS DRAWER --- */}
         <Modal
           isOpen={isViewModalOpen}
@@ -1369,10 +2122,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         >
           {selectedOrderDetails && (
             <div className="space-y-6">
-              {/* Top Header Row */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                {/* Left Side: Close, Badges, Title */}
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 text-left">
                   <button
                     onClick={() => setIsViewModalOpen(false)}
                     className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-slate-700 transition-all cursor-pointer flex items-center justify-center shadow-sm"
@@ -1382,39 +2133,31 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="bg-emerald-50 text-[#073318] border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                        {selectedOrderDetails.sellerName ? 'Seller Pickup Protocol' : selectedOrderDetails.buyerName ? 'Buyer Drop Protocol' : 'Return Pickup Protocol'}
+                      <span className="bg-emerald-50 text-[#073318] border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-sans">
+                        Unified Logistics Journey
                       </span>
-                      <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                        {selectedOrderDetails.mainStatus.replace(/[-_]/g, ' ')}
+                      <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider font-sans">
+                        {selectedOrderDetails.mainStatus?.replace(/[-_]/g, ' ')}
                       </span>
                     </div>
                     <h3 className="text-2xl font-black text-[#073318] flex items-baseline gap-2">
                       {selectedOrderDetails.id}
-                      <span className="text-sm text-slate-400 font-bold font-mono">
-                        ({selectedOrderDetails.pickupId || 'PICK-' + selectedOrderDetails.id.split('-').pop()})
-                      </span>
                     </h3>
                   </div>
                 </div>
 
-                {/* Right Side: Status Stepper */}
                 <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
-                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedOrderDetails.mainStatus === 'pending' || selectedOrderDetails.mainStatus === 'pending-acceptance' ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
+                  <span className={`px-4 py-2 rounded-xl font-bold ${['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
                   <span className="text-slate-300 px-1 font-bold">➔</span>
-                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedOrderDetails.mainStatus.includes('assigned') || selectedOrderDetails.mainStatus.includes('accepted') ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>ASSIGNED</span>
+                  <span className={`px-4 py-2 rounded-xl font-bold ${['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
                   <span className="text-slate-300 px-1 font-bold">➔</span>
-                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedOrderDetails.mainStatus.includes('hub') || selectedOrderDetails.mainStatus.includes('warehouse') ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>WAREHOUSE</span>
-                  <span className="text-slate-300 px-1 font-bold">➔</span>
-                  <span className={`px-4 py-2 rounded-xl font-bold ${selectedOrderDetails.mainStatus === 'completed' || selectedOrderDetails.mainStatus === 'returned' || selectedOrderDetails.mainStatus.includes('completed') ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
+                  <span className={`px-4 py-2 rounded-xl font-bold ${['DELIVERED', 'COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
                 </div>
               </div>
 
-              {/* Main Grid: Left Order Summary & Right Order History */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Section (Summary) */}
                 <div className="lg:col-span-2 space-y-6">
-                  {/* Section 1: Order Summary */}
+                  {/* Order Summary */}
                   <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
                     <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
                       <div className="flex items-center gap-2">
@@ -1423,27 +2166,23 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         </div>
                         <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Order Summary</span>
                       </div>
-                      <span className="bg-[#073318] text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                        Active Order
-                      </span>
                     </div>
 
-                    {/* Metric Indicators Row */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 text-center shadow-sm">
                         <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Product Count</p>
-                        <p className="text-lg font-black text-[#073318] mt-1">{selectedOrderDetails.productCount || 2}</p>
+                        <p className="text-lg font-black text-[#073318] mt-1">{selectedOrderDetails.productCount || 1}</p>
                       </div>
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 text-center shadow-sm">
                         <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Total Qty</p>
-                        <p className="text-lg font-black text-slate-800 mt-1">{selectedOrderDetails.totalQty || selectedOrderDetails.quantity || 40} Jars</p>
+                        <p className="text-lg font-black text-slate-800 mt-1">{selectedOrderDetails.totalQty || selectedOrderDetails.quantity || 1}</p>
                       </div>
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 text-center shadow-sm">
-                        <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Total Weight</p>
-                        <p className="text-lg font-black text-slate-800 mt-1">{selectedOrderDetails.totalWeight || selectedOrderDetails.weight || 160} KG</p>
+                        <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Total Weight</p>
+                        <p className="text-lg font-black text-slate-800 mt-1">{selectedOrderDetails.totalWeight || selectedOrderDetails.weight || 0} KG</p>
                       </div>
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 text-center shadow-sm">
-                        <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Priority</p>
+                        <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Priority</p>
                         <div className="mt-1">
                           <span className="inline-block bg-blue-50 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
                             {selectedOrderDetails.priority || 'MEDIUM'}
@@ -1452,11 +2191,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       </div>
                     </div>
 
-                    {/* Logistics Dates Row */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between px-5">
                         <div className="text-left">
-                          <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Order Date (Start Date)</p>
+                          <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Order Date</p>
                           <p className="text-sm font-black text-[#073318] mt-0.5">
                             {selectedOrderDetails.orderDate || (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : '-')}
                           </p>
@@ -1465,7 +2203,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       </div>
                       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between px-5">
                         <div className="text-left">
-                          <p className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Delivery Expected Date</p>
+                          <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Delivery Expected Date</p>
                           <p className="text-sm font-black text-amber-700 mt-0.5">
                             {getExpectedDeliveryDate(selectedOrderDetails.orderDate || (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : ''))}
                           </p>
@@ -1475,111 +2213,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     </div>
                   </div>
 
-                  {/* Section 2: Partner Information */}
+                  {/* Partners Details */}
                   <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
                     <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-3">
                       <div className="bg-[#073318] p-1.5 rounded-lg text-white">
                         <Package className="h-4 w-4" />
                       </div>
-                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Partner & Logistics Information</span>
+                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Partner & Logistics Info</span>
                     </div>
 
-                    {/* Cards Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Seller Card */}
                       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Seller Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.sellerName || 'N/A'}</h5>
-                        </div>
+                        <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Seller Information</p>
+                        <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.sellerName || 'N/A'}</h5>
                         <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
                           <div className="flex items-center gap-2 text-slate-650 font-semibold">
                             <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                             <span className="text-slate-450">Contact:</span>
-                            <span>{selectedOrderDetails.sellerMobile || selectedOrderDetails.mobile || 'N/A'}</span>
+                            <span>{selectedOrderDetails.sellerMobile || 'N/A'}</span>
                           </div>
                           <div className="flex items-start gap-2 text-slate-650 font-semibold">
                             <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
                             <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">
-                              {selectedOrderDetails.sellerAddress || 'N/A'}
-                              {selectedOrderDetails.sellerVillage && `, ${selectedOrderDetails.sellerVillage}`}
-                              {selectedOrderDetails.sellerPincode && ` - ${selectedOrderDetails.sellerPincode}`}
-                            </span>
+                            <span className="leading-tight">{selectedOrderDetails.sellerAddress || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Buyer Card */}
                       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Buyer Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.buyerName || 'Gramin Mandi Mumbai'}</h5>
-                        </div>
+                        <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Buyer Information</p>
+                        <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.buyerName || 'N/A'}</h5>
                         <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
                           <div className="flex items-center gap-2 text-slate-650 font-semibold">
                             <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                             <span className="text-slate-450">Contact:</span>
-                            <span>{selectedOrderDetails.buyerMobile || '+91 99887 11001'}</span>
+                            <span>{selectedOrderDetails.buyerMobile || 'N/A'}</span>
                           </div>
                           <div className="flex items-start gap-2 text-slate-650 font-semibold">
                             <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
                             <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">
-                              {selectedOrderDetails.buyerAddress || 'Shop No. 12, Crawford Market, Mumbai'}
-                              {selectedOrderDetails.buyerVillage && `, ${selectedOrderDetails.buyerVillage}`}
-                              {selectedOrderDetails.buyerPincode && ` - ${selectedOrderDetails.buyerPincode}`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* SHG Card */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">SHG Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.shgDetails?.name || 'N/A'}</h5>
-                        </div>
-                        <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Contact:</span>
-                            <span>{selectedOrderDetails.shgDetails?.mobile || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-start gap-2 text-slate-650 font-semibold">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                            <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">{selectedOrderDetails.shgDetails?.address || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Schedule:</span>
-                            <span>{selectedOrderDetails.shgPickupSchedule || 'N/A'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Transporter Card */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-455 font-extrabold uppercase tracking-wider mb-1">Transporter Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedOrderDetails.transporterDetails?.name || 'N/A'}</h5>
-                        </div>
-                        <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Contact:</span>
-                            <span>{selectedOrderDetails.transporterDetails?.mobile || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-start gap-2 text-slate-650 font-semibold">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                            <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">{selectedOrderDetails.transporterDetails?.address || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Schedule:</span>
-                            <span>{selectedOrderDetails.transporterPickupSchedule || 'N/A'}</span>
+                            <span className="leading-tight">{selectedOrderDetails.buyerAddress || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
@@ -1587,17 +2260,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </div>
                 </div>
 
-                {/* Right Section (Barcode & History) */}
+                {/* Right details */}
                 <div className="space-y-6">
-                  {/* Barcode Card */}
                   <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
                     <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
-                      <Barcode className="h-4 w-4 text-[#073318]" />
-                      Barcode
+                      <Barcode className="h-4 w-4" />
+                      Barcode Label
                     </h4>
                     {selectedOrderDetails.barcode ? (
                       <div className="space-y-3 flex flex-col items-center">
-                        {/* Simulated barcode */}
                         <div className="flex items-center gap-[1.5px] h-10 w-full bg-slate-50 border border-slate-100 p-2 rounded-xl justify-center">
                           {Array.from({ length: 40 }).map((_, i) => {
                             const width = (i % 3 === 0) ? 'w-[3px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
@@ -1614,16 +2285,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     )}
                   </div>
 
-                  {/* Order History */}
                   <div className="bg-[#073318] rounded-3xl p-6 text-white flex flex-col justify-between space-y-6 shadow-lg min-h-[300px]">
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 text-white">
                         <Layers className="h-4 w-4 text-[#B2D534]" />
-                        <span className="font-extrabold text-sm uppercase tracking-wider">Order History</span>
+                        <span className="font-extrabold text-sm uppercase tracking-wider">Tracking Audit History</span>
                       </div>
 
-                      {/* Stepper history items */}
-                      <div className="relative border-l border-white/20 pl-4 space-y-4 ml-2.5 py-1">
+                      <div className="relative border-l border-white/20 pl-4 space-y-4 ml-2.5 py-1 text-left">
                         {selectedOrderDetails.tracking && selectedOrderDetails.tracking.length > 0 ? (
                           selectedOrderDetails.tracking.map((t: any, idx: number) => {
                             const timeStr = t.updatedAt
@@ -1654,15 +2323,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         )}
                       </div>
                     </div>
-
-                    <p className="text-[10px] text-[#B2D534]/70 italic mt-auto pt-4 border-t border-white/10">
-                      GMU rural hubs track real-time timestamps cleanly.
-                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Product Inventory Section */}
+              {/* Product inventory items */}
               <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="bg-slate-100 p-1.5 rounded-lg text-slate-700">
@@ -1711,12 +2376,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </div>
           )}
         </Modal>
-        
+
         {/* --- QR SCAN MODAL --- */}
         <Modal
           isOpen={isQrModalOpen}
           onClose={() => !isScanning && setIsQrModalOpen(false)}
-          title="Scan QR Code for Intake"
+          title="Scan QR Code for Return Intake"
           variant="modal"
         >
           {qrItem && (
@@ -1731,43 +2396,33 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     <span className="text-slate-400 block text-[9px] uppercase">Barcode</span>
                     <span className="font-mono text-slate-800">{qrItem.barcode || 'N/A'}</span>
                   </div>
-                  <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
-                    <span className="text-slate-400 block text-[9px] uppercase">Buyer / Destination</span>
-                    <span className="text-slate-800">{qrItem.buyerName || 'N/A'} - {qrItem.buyerAddress || 'N/A'}</span>
-                  </div>
                 </div>
               </div>
 
-              {/* Simulated Camera Viewfinder */}
-              <div className="relative w-64 h-64 mx-auto border-2 border-slate-300 rounded-3xl overflow-hidden bg-slate-950 flex items-center justify-center shadow-inner">
-                {/* Scanner corners */}
+              <div className="relative w-64 h-64 mx-auto border-2 border-slate-300 rounded-3xl overflow-hidden bg-slate-955 flex items-center justify-center shadow-inner">
                 <div className="absolute top-4 left-4 w-6 h-6 border-t-4 border-l-4 border-[#B2D534] rounded-tl-md" />
                 <div className="absolute top-4 right-4 w-6 h-6 border-t-4 border-r-4 border-[#B2D534] rounded-tr-md" />
                 <div className="absolute bottom-4 left-4 w-6 h-6 border-b-4 border-l-4 border-[#B2D534] rounded-bl-md" />
                 <div className="absolute bottom-4 right-4 w-6 h-6 border-b-4 border-r-4 border-[#B2D534] rounded-br-md" />
 
-                {/* Red scanning line */}
                 {isScanning && (
                   <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce" />
                 )}
 
-                {/* QR Code graphic */}
                 <div className="opacity-80 p-6 bg-white rounded-2xl shadow-md">
                   <QrCode className={`h-24 w-24 text-slate-800 ${isScanning ? 'animate-pulse' : ''}`} />
                 </div>
 
-                {/* Success Overlay */}
                 {qrScanSuccess && (
-                  <div className="absolute inset-0 bg-[#073318]/90 backdrop-blur-xs flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+                  <div className="fixed inset-0 bg-[#073318]/90 backdrop-blur-xs flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
                     <div className="h-16 w-16 bg-[#B2D534] rounded-full flex items-center justify-center shadow-lg mb-2">
-                      <span className="text-3xl">✓</span>
+                      <span className="text-3xl font-black">✓</span>
                     </div>
                     <p className="text-sm font-bold">Scan Complete</p>
                   </div>
                 )}
               </div>
 
-              {/* Status Message */}
               <div className="h-6 flex items-center justify-center">
                 {scanMessage ? (
                   <p className={`text-xs font-bold ${qrScanSuccess ? 'text-emerald-600' : 'text-[#073318]'}`}>
@@ -1778,18 +2433,449 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 )}
               </div>
 
-              {/* Action Button */}
               {!qrScanSuccess && (
                 <button
                   onClick={handleSimulateScan}
                   disabled={isScanning}
-                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-350 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   {isScanning ? 'Processing...' : 'Simulate Successful QR Scan'}
                 </button>
               )}
             </div>
           )}
+        </Modal>
+
+        {/* --- ADD MANUAL ORDER MODAL --- */}
+        <Modal
+          isOpen={isAddOrderOpen}
+          onClose={() => !isCreatingOrder && setIsAddOrderOpen(false)}
+          title={<span className="text-[#073318] text-lg font-black uppercase tracking-wider">{addOrderFlow === 'drop' ? 'Create Manual Drop Order' : 'Create Manual Pickup Order'}</span>}
+          variant="modal"
+          size="full"
+        >
+          <form onSubmit={handleCreateOrder} className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
+            <div className="bg-[#073318] border border-[#B2D534]/15 rounded-2xl p-5 text-white mb-6 shadow-md text-left">
+              <h2 className="text-lg font-black uppercase tracking-wider text-[#B2D534]">{addOrderFlow === 'drop' ? 'GMU Hub Manual Drop Order Form' : 'GMU Hub Manual Order Form'}</h2>
+              <p className="text-xs text-white/90 mt-1 font-semibold">Enter seller, buyer, order details, and product items below to submit.</p>
+            </div>
+
+            {validationError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-bold animate-in fade-in duration-200 text-left">
+                {validationError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+              {/* Seller details */}
+              <div className="bg-[#073318]/[0.03] border border-[#073318]/15 rounded-3xl p-6 space-y-4 shadow-sm">
+                <h4 className="text-sm font-extrabold text-[#073318] uppercase tracking-wider border-b border-[#073318]/15 pb-2">
+                  Section 1 – Seller Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Seller Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={sellerName}
+                      onChange={(e) => setSellerName(e.target.value)}
+                      placeholder="e.g. Anisha Dilip Kamble"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Seller Mobile *</label>
+                    <input
+                      type="text"
+                      required
+                      value={sellerMobile}
+                      onChange={(e) => setSellerMobile(e.target.value)}
+                      placeholder="e.g. 9876543204"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Pincode *</label>
+                    <input
+                      type="text"
+                      required
+                      value={sellerPincode}
+                      onChange={(e) => handleSellerPincodeChange(e.target.value)}
+                      placeholder="e.g. 416504"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Seller Address</label>
+                    <input
+                      type="text"
+                      value={sellerAddress}
+                      onChange={(e) => setSellerAddress(e.target.value)}
+                      placeholder="e.g. Indapur Galli, Near Gram Panchayat"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Village *</label>
+                    {sellerVillages.length === 0 ? (
+                      <input
+                        type="text"
+                        required
+                        value={sellerVillage}
+                        onChange={(e) => setSellerVillage(e.target.value)}
+                        placeholder="Enter Pincode first..."
+                        disabled
+                        className="w-full px-4 py-2.5 bg-slate-100 border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] transition-all text-[#073318]/50 cursor-not-allowed"
+                      />
+                    ) : (
+                      <select
+                        required
+                        value={sellerVillage}
+                        onChange={(e) => setSellerVillage(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                      >
+                        {sellerVillages.map((v, i) => (
+                          <option key={i} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Taluka</label>
+                    <input
+                      type="text"
+                      value={sellerTaluka}
+                      onChange={(e) => setSellerTaluka(e.target.value)}
+                      placeholder="e.g. Gadhinglaj"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">District</label>
+                    <input
+                      type="text"
+                      value={sellerDistrict}
+                      onChange={(e) => setSellerDistrict(e.target.value)}
+                      placeholder="e.g. Kolhapur"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">State</label>
+                    <input
+                      type="text"
+                      value={sellerState}
+                      onChange={(e) => setSellerState(e.target.value)}
+                      placeholder="e.g. Maharashtra"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Buyer details */}
+              <div className="bg-[#073318]/[0.03] border border-[#073318]/15 rounded-3xl p-6 space-y-4 shadow-sm">
+                <h4 className="text-sm font-extrabold text-[#073318] uppercase tracking-wider border-b border-[#073318]/15 pb-2">
+                  Section 2 – Buyer Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Buyer Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={buyerName}
+                      onChange={(e) => setBuyerName(e.target.value)}
+                      placeholder="e.g. Priya Ramesh Deshmukh"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Buyer Mobile *</label>
+                    <input
+                      type="text"
+                      required
+                      value={buyerMobile}
+                      onChange={(e) => setBuyerMobile(e.target.value)}
+                      placeholder="e.g. 9988700001"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Pincode *</label>
+                    <input
+                      type="text"
+                      required
+                      value={buyerPincode}
+                      onChange={(e) => handleBuyerPincodeChange(e.target.value)}
+                      placeholder="e.g. 413106"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Buyer Address</label>
+                    <input
+                      type="text"
+                      value={buyerAddress}
+                      onChange={(e) => setBuyerAddress(e.target.value)}
+                      placeholder="e.g. Pragati Colony, Near Bus Stand"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Village *</label>
+                    {buyerVillages.length === 0 ? (
+                      <input
+                        type="text"
+                        required
+                        value={buyerVillage}
+                        onChange={(e) => setBuyerVillage(e.target.value)}
+                        placeholder="Enter Pincode first..."
+                        disabled
+                        className="w-full px-4 py-2.5 bg-slate-100 border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] transition-all text-[#073318]/50 cursor-not-allowed"
+                      />
+                    ) : (
+                      <select
+                        required
+                        value={buyerVillage}
+                        onChange={(e) => setBuyerVillage(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                      >
+                        {buyerVillages.map((v, i) => (
+                          <option key={i} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Taluka</label>
+                    <input
+                      type="text"
+                      value={buyerTaluka}
+                      onChange={(e) => setBuyerTaluka(e.target.value)}
+                      placeholder="e.g. Gadhinglaj"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">District</label>
+                    <input
+                      type="text"
+                      value={buyerDistrict}
+                      onChange={(e) => setBuyerDistrict(e.target.value)}
+                      placeholder="e.g. Kolhapur"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">State</label>
+                    <input
+                      type="text"
+                      value={buyerState}
+                      onChange={(e) => setBuyerState(e.target.value)}
+                      placeholder="e.g. Maharashtra"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Info */}
+              <div className="bg-[#073318]/[0.03] border border-[#073318]/15 rounded-3xl p-6 space-y-4 md:col-span-2 shadow-sm">
+                <h4 className="text-sm font-extrabold text-[#073318] uppercase tracking-wider border-b border-[#073318]/15 pb-2">
+                  Section 3 – Order Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Order ID (Optional)</label>
+                    <input
+                      type="text"
+                      value={formOrderId}
+                      onChange={(e) => setFormOrderId(e.target.value)}
+                      placeholder="e.g. ORD-PICK-1025"
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Order Date</label>
+                    <input
+                      type="date"
+                      value={orderDate}
+                      onChange={(e) => setOrderDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Expected Delivery Date</label>
+                    <input
+                      type="date"
+                      value={expectedDeliveryDate}
+                      onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Priority</label>
+                    <select
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-[#073318]/25 rounded-xl text-xs font-extrabold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Products list */}
+              <div className="bg-[#073318]/[0.03] border border-[#073318]/15 rounded-3xl p-6 space-y-4 md:col-span-2 shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#073318]/15 pb-2">
+                  <h4 className="text-sm font-extrabold text-[#073318] uppercase tracking-wider">
+                    Section 4 – Products
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddProduct}
+                    className="px-3.5 py-1.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 rounded-xl transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm font-sans"
+                  >
+                    <span>+ Add Product</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {products.map((product, idx) => (
+                    <div key={idx} className="flex flex-col md:flex-row items-end gap-3 bg-white p-4 rounded-2xl border border-[#073318]/15 shadow-xs relative group">
+                      <div className="flex-1 w-full grid grid-cols-2 md:grid-cols-6 gap-3">
+                        <div className="col-span-2">
+                          <label className="text-[9px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Product Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={product.name}
+                            onChange={(e) => handleProductChange(idx, 'name', e.target.value)}
+                            placeholder="organic Honey"
+                            className="w-full px-3 py-2 bg-slate-50 border border-[#073318]/25 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Category</label>
+                          <select
+                            value={product.category}
+                            onChange={(e) => handleProductChange(idx, 'category', e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-[#073318]/25 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                          >
+                            <option value="FOOD">Food</option>
+                            <option value="DAIRY">Dairy</option>
+                            <option value="AGRICULTURE">Agriculture</option>
+                            <option value="HANDMADE">Handmade</option>
+                            <option value="TEXTILE">Textile</option>
+                            <option value="OTHER">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Qty *</label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            value={product.quantity}
+                            onChange={(e) => handleProductChange(idx, 'quantity', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-[#073318]/25 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Unit</label>
+                          <input
+                            type="text"
+                            value={product.unit}
+                            onChange={(e) => handleProductChange(idx, 'unit', e.target.value)}
+                            placeholder="Packet"
+                            className="w-full px-3 py-2 bg-slate-50 border border-[#073318]/25 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-black text-[#073318]/80 uppercase tracking-wider block mb-1">Weight (kg) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0.01"
+                            value={product.weight}
+                            onChange={(e) => handleProductChange(idx, 'weight', parseFloat(e.target.value) || 0.0)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-[#073318]/25 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 transition-all text-[#073318]"
+                          />
+                        </div>
+                      </div>
+
+                      {products.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProduct(idx)}
+                          className="p-2 bg-red-50 hover:bg-red-650 text-red-650 hover:text-white rounded-lg transition-all cursor-pointer active:scale-95 shadow-xs border border-red-200 mb-0.5"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Auto Summary */}
+              <div className="bg-[#073318] border border-[#073318] rounded-3xl p-6 text-white md:col-span-2 shadow-md">
+                <h4 className="text-sm font-extrabold text-[#B2D534] uppercase tracking-wider border-b border-white/10 pb-2 mb-4">
+                  Section 5 – Auto Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-[9px] text-[#B2D534]/80 uppercase block tracking-wider mb-1">Product Count</span>
+                    <span className="text-2xl font-black">{totalProductsCount}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-[9px] text-[#B2D534]/80 uppercase block tracking-wider mb-1">Total Quantity</span>
+                    <span className="text-2xl font-black">{totalQuantity}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-[9px] text-[#B2D534]/80 uppercase block tracking-wider mb-1">Total Weight</span>
+                    <span className="text-2xl font-black">{totalWeight} kg</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-[9px] text-[#B2D534]/80 uppercase block tracking-wider mb-1">Total Price</span>
+                    <span className="text-2xl font-black text-[#B2D534]">₹{totalPrice}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form footer actions */}
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4 mt-6">
+              <button
+                type="button"
+                disabled={isCreatingOrder}
+                onClick={() => setIsAddOrderOpen(false)}
+                className="px-5 py-3 text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-2xl transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isCreatingOrder}
+                className="px-6 py-3 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                {isCreatingOrder ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Creating Order...</span>
+                  </>
+                ) : (
+                  <span>Create Order</span>
+                )}
+              </button>
+            </div>
+          </form>
         </Modal>
       </div>
     </Layout>
