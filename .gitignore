@@ -50,3 +50,6 @@ backend/shg/uploads/
 
 # Scratch files
 scratch/
+
+#supabase backup
+supabase_backup.sql
