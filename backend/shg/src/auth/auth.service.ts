@@ -61,6 +61,12 @@ export class AuthService {
         rejectionReason: latestApp?.rejectionReason || null,
         role: user.role,
         shgUniqueId: user.uniqueCode,
+        pincode: user.address?.pincode || '',
+        stateName: user.address?.state || '',
+        district: user.address?.district || '',
+        taluka: user.address?.taluka || '',
+        village: user.address?.village || '',
+        homeAddress: user.address?.houseNo || '',
       },
     };
   }

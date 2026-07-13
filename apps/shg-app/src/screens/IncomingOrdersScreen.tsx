@@ -191,7 +191,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               text1: "Return Order Accepted",
               text2: "Pickup Return Created"
             });
-            navigation.navigate('ReturnOrders');
+            navigation.navigate('ReturnedOrders');
           } else {
             await acceptOrders(ordersToAccept);
             setSelectedIds([]);

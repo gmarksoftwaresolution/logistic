@@ -330,7 +330,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
         <WalkthroughElement stepId="completed_details_close" style={{ width: '100%', marginBottom: 40 }}>
           <TouchableOpacity onPress={() => {
             if (isActive && currentStep?.id === 'completed_details_close') {
-              navigation.navigate('OrdersOverview');
+              navigation.navigate('OrderManagement');
             } else {
               navigation.goBack();
             }

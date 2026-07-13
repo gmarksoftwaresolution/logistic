@@ -53,17 +53,45 @@ export class UserService {
       dataToUpdate.profilePhoto = updateData.profileImage;
     }
 
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: dataToUpdate,
-    });
+    const addressData: any = {};
+    if (updateData.pincode !== undefined) addressData.pincode = updateData.pincode;
+    if (updateData.stateName !== undefined) addressData.state = updateData.stateName;
+    if (updateData.district !== undefined) addressData.district = updateData.district;
+    if (updateData.taluka !== undefined) addressData.taluka = updateData.taluka;
+    if (updateData.village !== undefined) addressData.village = updateData.village;
+    if (updateData.homeAddress !== undefined) addressData.houseNo = updateData.homeAddress;
+
+    let user;
+    if (Object.keys(dataToUpdate).length > 0 || Object.keys(addressData).length === 0) {
+      user = await this.prisma.user.update({
+        where: { id: userId },
+        data: dataToUpdate,
+      });
+    } else {
+      user = await this.prisma.user.findUnique({ where: { id: userId } });
+    }
+
+    if (Object.keys(addressData).length > 0) {
+      await this.prisma.address.upsert({
+        where: { userId: userId },
+        update: addressData,
+        create: {
+          ...addressData,
+          userId: userId,
+          houseNo: addressData.houseNo || '',
+          district: addressData.district || '',
+          state: addressData.state || '',
+          pincode: addressData.pincode || '',
+        }
+      });
+    }
 
     return {
       success: true,
       message: 'Profile updated successfully',
       user: {
-        id: user.id,
-        name: user.fullName,
+        id: user?.id,
+        name: user?.fullName,
       }
     };
   }

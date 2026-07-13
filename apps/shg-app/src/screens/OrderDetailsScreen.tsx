@@ -413,7 +413,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('ReturnOrders' as never);
+          navigation.navigate('ReturnedOrders' as never);
         }
         return;
       }
@@ -439,7 +439,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('ReturnOrders' as never);
+          navigation.navigate('ReturnedOrders' as never);
         }
       } else {
         if (navigation.canGoBack()) {

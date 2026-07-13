@@ -85,9 +85,7 @@ export default function ProfileScreen({
                   <Text className="text-[#073318] font-bold text-3xl">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'M'}</Text>
                 )}
               </View>
-              <TouchableOpacity className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full border border-gray-100 items-center justify-center shadow-sm">
-                <Feather name="camera" size={14} color="#073318" />
-              </TouchableOpacity>
+
             </View>
 
             <View className="flex-row items-center mt-4">
