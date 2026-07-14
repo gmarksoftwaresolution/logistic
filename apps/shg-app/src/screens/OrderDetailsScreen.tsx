@@ -279,7 +279,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   };
 
   const allParcelsVerified = (order.products || []).length > 0 && (order.products || []).every((item: any) => {
-    return item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+    return isProductVerified(item);
   });
 
   const isSubmitDisabled = isSubmitting || !allParcelsVerified;
@@ -933,7 +933,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
       {/* Verification Progress Bar */}
       {(() => {
         const verifiedCount = (products || []).filter((item: any) => {
-          return item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+          return isProductVerified(item);
         }).length;
         const totalCount = products.length || 1;
         const percent = Math.round((verifiedCount / totalCount) * 100);
@@ -979,7 +979,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         {products.map((item: any, index: number) => {
           const isLast = index === products.length - 1;
           const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
-          const isVerified = item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+          const isVerified = isProductVerified(item);
 
           return <View key={item.code || String(index)} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
             {/* LEFT + CENTER Wrapper */}

@@ -2830,35 +2830,14 @@ export class OrderManagementService implements OnModuleInit {
 
     const ov = village;
     const op = pincode;
-    const opo = postOffice;
 
-    // Priority 1: Village + Pincode + Post Office
-    let matchingShgs = approvedShgs.filter(shg => 
+    // Match on Village and Pincode only
+    const matchingShgs = approvedShgs.filter(shg => 
       shg.pincode && op && 
       shg.pincode.trim().toLowerCase() === op.trim().toLowerCase() &&
       shg.village && ov && 
-      normalizeStr(shg.village) === normalizeStr(ov) &&
-      shg.postOffice && opo && 
-      normalizeStr(shg.postOffice) === normalizeStr(opo)
+      normalizeStr(shg.village) === normalizeStr(ov)
     );
-
-    // Priority 2: Village + Pincode
-    if (matchingShgs.length === 0) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.pincode && op && 
-        shg.pincode.trim().toLowerCase() === op.trim().toLowerCase() &&
-        shg.village && ov && 
-        normalizeStr(shg.village) === normalizeStr(ov)
-      );
-    }
-
-    // Priority 3: Village only
-    if (matchingShgs.length === 0 && ov) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.village && 
-        normalizeStr(shg.village) === normalizeStr(ov)
-      );
-    }
 
     return matchingShgs.map(shg => ({
       ...shg,
@@ -2889,7 +2868,6 @@ export class OrderManagementService implements OnModuleInit {
 
     const p = pincode?.trim()?.toLowerCase();
     const v = village?.trim()?.toLowerCase();
-    const po = postOffice?.trim()?.toLowerCase();
 
     const normalizeStr = (s: string) => {
       if (!s) return '';
@@ -2906,33 +2884,13 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, villages, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Priority 1: Village + Pincode + Post Office
-    let matchingTransporters = approvedTransporters.filter((tr) => {
-      const { areas, villages, pincodes, postOffice } = getTransporterInfo(tr);
+    // Match on Village and Pincode only
+    const matchingTransporters = approvedTransporters.filter((tr) => {
+      const { areas, villages, pincodes } = getTransporterInfo(tr);
       const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
       const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
-      const postOfficeMatched = po && postOffice && postOffice === normalizeStr(po);
-      return !!(villageMatched && pincodeMatched && postOfficeMatched);
+      return !!(villageMatched && pincodeMatched);
     });
-
-    // Priority 2: Village + Pincode
-    if (matchingTransporters.length === 0) {
-      matchingTransporters = approvedTransporters.filter((tr) => {
-        const { areas, villages, pincodes } = getTransporterInfo(tr);
-        const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
-        const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
-        return !!(villageMatched && pincodeMatched);
-      });
-    }
-
-    // Priority 3: Village only
-    if (matchingTransporters.length === 0) {
-      matchingTransporters = approvedTransporters.filter((tr) => {
-        const { areas, villages } = getTransporterInfo(tr);
-        const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
-        return !!villageMatched;
-      });
-    }
 
     return matchingTransporters.map(tr => ({
       ...tr,

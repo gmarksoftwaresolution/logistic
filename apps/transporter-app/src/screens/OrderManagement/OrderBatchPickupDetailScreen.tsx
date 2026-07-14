@@ -490,8 +490,49 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const isBatchRejected = batch.status === 'rejected';
 
   const canConfirm = displayProducts.length > 0 && !isCurrentLegCompleted && !isBatchRejected;
+  const isParcelVerifiedForTransporter = (product: any) => {
+    if (isCurrentLegCompleted) return true;
+    const matchingParcel = orderParcels.find((p: any) => p.productId === (product as any).productId);
+    if (!matchingParcel) return false;
+    
+    const status = matchingParcel.parcelStatus;
+    const isPickupFlow = batch.flowType !== 'gmu_to_shg';
+    
+    if (type === 'pickup') {
+      if (isPickupFlow) {
+        // Step 3: Transporter pickup from SHG
+        return status === 'IN_TRANSIT_TO_HUB' || 
+               status === 'HUB_RECEIVED' || 
+               status === 'DELIVERED' || 
+               status === 'COMPLETED' || 
+               status === 'VERIFIED';
+      } else {
+        // Step 7: Transporter pickup from GMU Hub
+        return status === 'IN_TRANSIT_TO_BUYER' || 
+               status === 'PARCEL_AT_DROP_SHG' || 
+               status === 'DELIVERED' || 
+               status === 'COMPLETED' || 
+               status === 'VERIFIED';
+      }
+    } else {
+      if (isPickupFlow) {
+        // Step 4: Transporter delivery to GMU Hub
+        return status === 'HUB_RECEIVED' || 
+               status === 'DELIVERED' || 
+               status === 'COMPLETED' || 
+               status === 'VERIFIED';
+      } else {
+        // Step 8: Transporter delivery to Drop SHG
+        return status === 'PARCEL_AT_DROP_SHG' || 
+               status === 'DELIVERED' || 
+               status === 'COMPLETED' || 
+               status === 'VERIFIED';
+      }
+    }
+  };
+
   const verifiedCount = displayProducts.filter(p => {
-    return verifiedProductIds.includes(p.id) || p.verificationStatus === 'VERIFIED';
+    return verifiedProductIds.includes(p.id) || isParcelVerifiedForTransporter(p);
   }).length;
 
   // Contextual Contact Logic matching precisely with user requirements
@@ -517,7 +558,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       .filter(p => {
         const isPicked = p.status === 'picked';
         const isCompleted = p.status === 'completed';
-        const isItemVerified = p.verificationStatus === 'VERIFIED';
+        const isItemVerified = isParcelVerifiedForTransporter(p);
         return type === 'pickup' ? (isPicked || isCompleted || isItemVerified) : (isCompleted || isItemVerified);
       })
       .map(p => p.id);
@@ -887,26 +928,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       {(() => {
                         const matchingParcel = orderParcels.find((p: any) => p.productId === (product as any).productId);
                         const getTransporterVerified = () => {
-                           if (isCurrentLegCompleted) return true;
-                           if (verifiedProductIds.includes(product.id)) return true;
-                           if (product.verificationStatus === 'VERIFIED') return true;
-                           if (!matchingParcel) return false;
-                           
-                           const status = matchingParcel.parcelStatus;
-                           if (type === 'pickup') {
-                             return status === 'IN_TRANSIT_TO_HUB' || 
-                                    status === 'HUB_RECEIVED' || 
-                                    status === 'DELIVERED' || 
-                                    status === 'COMPLETED' || 
-                                    status === 'VERIFIED';
-                           } else {
-                             return status === 'HUB_RECEIVED' || 
-                                    status === 'DELIVERED' || 
-                                    status === 'COMPLETED' || 
-                                    status === 'VERIFIED';
-                           }
-                         };
-                         const isVerified = getTransporterVerified();
+                          if (isCurrentLegCompleted) return true;
+                          if (verifiedProductIds.includes(product.id)) return true;
+                          return isParcelVerifiedForTransporter(product);
+                        };
+                        const isVerified = getTransporterVerified();
 
                         if (isBatchRejected) {
                           return (
