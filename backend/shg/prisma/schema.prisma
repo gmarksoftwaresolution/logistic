@@ -815,6 +815,7 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
+}
 
 model ScanHistory {
   id           Int       @id @default(autoincrement())
