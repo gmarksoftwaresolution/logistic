@@ -589,24 +589,33 @@ export class TransporterManagementService {
     const s7mv = stepData[7];
     const vehicleInfo = vehicleCategory === 'MILK_VAN' ? s7mv : s5p;
     if (vehicleInfo) {
+      const validVehicleTypes = ['TWO_WHEELER', 'THREE_WHEELER', 'FOUR_WHEELER', 'MILK_VAN', 'OTHER'];
+      const dbVehicleType = (vehicleInfo.type && validVehicleTypes.includes(vehicleInfo.type))
+        ? vehicleInfo.type
+        : (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER');
+
       if (existingVehicles.length > 0) {
         writePromises.push(
           this.prisma.$executeRawUnsafe(
             `UPDATE public."OtherDetails"
-             SET "vehicleType" = $1,
+             SET "vehicleType" = $1::public."VehicleType",
                  "vehicleName" = $2,
                  "registrationNumber" = $3,
                  "rcUrl" = $4,
                  "insuranceUrl" = $5,
                  "wheeler" = $6,
+                 "minWeight" = $7,
+                 "maxWeight" = $8,
                  "updatedAt" = NOW()
-             WHERE id = $7`,
-            vehicleInfo.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
+             WHERE id = $9`,
+            dbVehicleType,
             vehicleInfo.make || null,
             vehicleInfo.number || null,
             vehicleInfo.rcUpload || null,
             vehicleInfo.insuranceUpload || null,
             vehicleInfo.wheeler || null,
+            vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+            vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
             existingVehicles[0].id
           )
         );
@@ -614,15 +623,17 @@ export class TransporterManagementService {
         writePromises.push(
           this.prisma.$executeRawUnsafe(
             `INSERT INTO public."OtherDetails" (
-               "userId", "vehicleType", "vehicleName", "registrationNumber", "rcUrl", "insuranceUrl", "wheeler", "createdAt", "updatedAt"
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+               "userId", "vehicleType", "vehicleName", "registrationNumber", "rcUrl", "insuranceUrl", "wheeler", "minWeight", "maxWeight", "createdAt", "updatedAt"
+             ) VALUES ($1, $2::public."VehicleType", $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
             userId,
-            vehicleInfo.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
+            dbVehicleType,
             vehicleInfo.make || null,
             vehicleInfo.number || null,
             vehicleInfo.rcUpload || null,
             vehicleInfo.insuranceUpload || null,
-            vehicleInfo.wheeler || null
+            vehicleInfo.wheeler || null,
+            vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+            vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null
           )
         );
       }

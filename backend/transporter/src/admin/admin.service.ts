@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { ApplicationStatus, VehicleType } from '@prisma/client';
-import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AdminService {
@@ -236,28 +235,37 @@ export class AdminService {
     const vehicleInfo = vehicleCategory === 'MILK_VAN' ? s7mv : s5p;
     if (vehicleInfo) {
       const existingVehicles = await this.prisma.otherDetails.findMany({ where: { userId } });
+      const validVehicleTypes = ['TWO_WHEELER', 'THREE_WHEELER', 'FOUR_WHEELER', 'MILK_VAN', 'OTHER'];
+      const dbVehicleType = (vehicleInfo.type && validVehicleTypes.includes(vehicleInfo.type))
+        ? vehicleInfo.type
+        : (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER');
+
       if (existingVehicles.length > 0) {
         await this.prisma.otherDetails.update({
           where: { id: existingVehicles[0].id },
           data: {
-            vehicleType: vehicleInfo.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
+            vehicleType: dbVehicleType as VehicleType,
             vehicleName: vehicleInfo.make || null,
             registrationNumber: vehicleInfo.number || null,
             rcUrl: vehicleInfo.rcUpload || null,
             insuranceUrl: vehicleInfo.insuranceUpload || null,
             wheeler: vehicleInfo.wheeler || null,
+            minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+            maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
           },
         });
       } else {
         await this.prisma.otherDetails.create({
           data: {
             userId,
-            vehicleType: vehicleInfo.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
+            vehicleType: dbVehicleType as VehicleType,
             vehicleName: vehicleInfo.make || null,
             registrationNumber: vehicleInfo.number || null,
             rcUrl: vehicleInfo.rcUpload || null,
             insuranceUrl: vehicleInfo.insuranceUpload || null,
             wheeler: vehicleInfo.wheeler || null,
+            minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+            maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
           },
         });
       }

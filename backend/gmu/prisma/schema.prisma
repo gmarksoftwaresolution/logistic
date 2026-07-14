@@ -276,6 +276,8 @@ model OtherDetails {
   storageSpace          String?
   DLurl                 String?
   wheeler               String?
+  minWeight             Float?
+  maxWeight             Float?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
