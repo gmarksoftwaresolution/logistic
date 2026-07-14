@@ -162,56 +162,14 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async findMatchingShgs(address: { village?: string; pincode?: string; taluka?: string; district?: string }) {
-    try {
-      const approvedUsers = await this.prisma.$queryRawUnsafe(`
-        SELECT u.id, u."fullName", u."phoneNumber", sd."shgName", 
-               a.village, a.taluka, a.district, a.state, a.pincode, a."deliveryAddress"
-        FROM public."User" u
-        LEFT JOIN public."ShgDetail" sd ON u.id = sd."userId"
-        LEFT JOIN public."Address" a ON u.id = a."userId"
-        WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED';
-      `) as any[];
-
-      for (const u of approvedUsers) {
-        const shgUuid = '00000000-0000-0000-0000-' + String(u.id).padStart(12, '0');
-        await this.prisma.$executeRawUnsafe(`
-          INSERT INTO gmu."CommunityMember" (
-            id, "memberCode", type, status, "fullName", "mobileNumber", "shgName", 
-            village, taluka, district, state, pincode, "deliveryAddress", "createdAt"
-          ) VALUES ($1, $2, 'SHG', 'APPROVED', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
-          ON CONFLICT (id) DO UPDATE SET 
-            "mobileNumber" = EXCLUDED."mobileNumber",
-            "fullName" = EXCLUDED."fullName",
-            "shgName" = EXCLUDED."shgName",
-            village = EXCLUDED.village,
-            taluka = EXCLUDED.taluka,
-            district = EXCLUDED.district,
-            state = EXCLUDED.state,
-            pincode = EXCLUDED.pincode,
-            "deliveryAddress" = EXCLUDED."deliveryAddress",
-            status = 'APPROVED';
-        `,
-          shgUuid,
-          `CM-SHG-${u.id}`,
-          u.fullName || 'SHG Member',
-          u.phoneNumber,
-          u.shgName || 'Local SHG',
-          u.village || '',
-          u.taluka || '',
-          u.district || '',
-          u.state || '',
-          u.pincode || '',
-          u.deliveryAddress || ''
-        );
-      }
-    } catch (err) {
-      console.error('Error synchronizing approved SHGs in findMatchingShgs:', err.message);
-    }
-
-    const shgs = await this.prisma.communityMember.findMany({
+    const shgs = await this.prisma.user.findMany({
       where: {
-        type: 'SHG',
-        status: 'APPROVED',
+        role: 'SHG',
+        applicationStatus: 'APPROVED',
+      },
+      include: {
+        shgDetail: true,
+        address: true,
       }
     });
 
@@ -223,9 +181,9 @@ export class OrderManagementService implements OnModuleInit {
     const targetVillage = normalizeVillage(address.village);
     const targetPincode = address.pincode ? address.pincode.toLowerCase().trim() : '';
 
-    return shgs.filter(shg => {
-      const shgVillage = normalizeVillage(shg.village);
-      const shgPincode = shg.pincode ? shg.pincode.toLowerCase().trim() : '';
+    const matchedShgUsers = shgs.filter((shg: any) => {
+      const shgVillage = normalizeVillage(shg.address?.village);
+      const shgPincode = shg.address?.pincode ? shg.address.pincode.toLowerCase().trim() : '';
 
       // BOTH village and pincode must match
       const villageMatches = !targetVillage || shgVillage === targetVillage;
@@ -233,15 +191,31 @@ export class OrderManagementService implements OnModuleInit {
 
       return villageMatches && pincodeMatches;
     });
+
+    return matchedShgUsers.map((shg: any) => ({
+      id: String(shg.id),
+      memberCode: shg.uniqueCode || `SHG-${shg.id}`,
+      type: 'SHG',
+      status: shg.applicationStatus,
+      fullName: shg.fullName || '',
+      mobileNumber: shg.phoneNumber,
+      shgName: shg.shgDetail?.shgName || '',
+      village: shg.address?.village || '',
+      taluka: shg.address?.taluka || '',
+      district: shg.address?.district || '',
+      state: shg.address?.state || '',
+      pincode: shg.address?.pincode || '',
+      deliveryAddress: shg.address?.deliveryAddress || '',
+    }));
   }
 
   async findMatchingTransporters(address: { village?: string; pincode?: string; taluka?: string; district?: string }) {
     const transporters = await this.prisma.$queryRawUnsafe(`
-      SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd."operatingArea"
-      FROM gmu."TransporterMember" tm
-      JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
+      SELECT u.id, rd."operatingArea", rd."pickupLocations" as "assignedPincodes", mv."assignedVillages"
+      FROM public."User" u
       LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
-      WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED';
+      LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+      WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
     `) as any[];
 
     const parseJsonArray = (val: any) => {
@@ -270,36 +244,36 @@ export class OrderManagementService implements OnModuleInit {
     if (p) {
       const matches = transporters.filter(tr => {
         const { areas, pincodes } = getTransporterLocations(tr);
-        return pincodes.includes(p) || areas.includes(p);
+        return pincodes.some((po: string) => po.split(' (')[0] === p) || areas.some((a: string) => a.split(' (')[0] === p);
       });
-      if (matches.length > 0) return matches;
+      if (matches.length > 0) return matches.map(tr => ({ ...tr, id: String(tr.id) }));
     }
 
     // Priority 2: Village
     if (v) {
       const matches = transporters.filter(tr => {
         const { areas, villages } = getTransporterLocations(tr);
-        return villages.includes(v) || areas.includes(v);
+        return villages.some((vi: string) => vi.split(' (')[0] === v) || areas.some((a: string) => a.split(' (')[0] === v);
       });
-      if (matches.length > 0) return matches;
+      if (matches.length > 0) return matches.map(tr => ({ ...tr, id: String(tr.id) }));
     }
 
     // Priority 3: Taluka
     if (t) {
       const matches = transporters.filter(tr => {
         const { areas } = getTransporterLocations(tr);
-        return areas.includes(t);
+        return areas.some((a: string) => a.split(' (')[0] === t);
       });
-      if (matches.length > 0) return matches;
+      if (matches.length > 0) return matches.map(tr => ({ ...tr, id: String(tr.id) }));
     }
 
     // Priority 4: District
     if (d) {
       const matches = transporters.filter(tr => {
         const { areas } = getTransporterLocations(tr);
-        return areas.includes(d);
+        return areas.some((a: string) => a.split(' (')[0] === d);
       });
-      if (matches.length > 0) return matches;
+      if (matches.length > 0) return matches.map(tr => ({ ...tr, id: String(tr.id) }));
     }
 
     return [];
@@ -647,8 +621,10 @@ export class OrderManagementService implements OnModuleInit {
       ...order,
       sellerPincode: order.seller?.pincode || null,
       sellerVillage: order.seller?.village || null,
+      sellerPostOffice: order.seller?.postOffice || null,
       buyerPincode: order.buyer?.pincode || null,
       buyerVillage: order.buyer?.village || null,
+      buyerPostOffice: order.buyer?.postOffice || null,
     } as any;
   }
 
@@ -949,7 +925,7 @@ export class OrderManagementService implements OnModuleInit {
     const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
     const order = await this.prisma.$transaction(async (tx) => {
-      // 1. Find or create Seller in gmu.sellers
+      // 1. Find or create Seller in public.sellers
       let seller = await tx.seller.findFirst({
         where: { mobileNumber: dto.sellerMobile },
       });
@@ -963,23 +939,24 @@ export class OrderManagementService implements OnModuleInit {
             sellerName: dto.sellerName,
             mobileNumber: dto.sellerMobile,
             village: dto.sellerVillage,
-            taluka: dto.sellerTaluka || 'Kolhapur',
-            district: dto.sellerDistrict || 'Kolhapur',
+            taluka: dto.sellerTaluka || 'Indapur',
+            district: dto.sellerDistrict || 'Pune',
             state: dto.sellerState || 'Maharashtra',
             pincode: dto.sellerPincode,
+            postOffice: dto.sellerPostOffice || null,
           },
         });
 
         // Insert into public.sellers raw SQL using the same ID
         await tx.$executeRawUnsafe(`
-          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, post_office, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING;
-        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Kolhapur', dto.sellerDistrict || 'Kolhapur', dto.sellerState || 'Maharashtra', dto.sellerPincode);
+        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Indapur', dto.sellerDistrict || 'Pune', dto.sellerState || 'Maharashtra', dto.sellerPincode, dto.sellerPostOffice || null);
 
-        // Reset sequence for public.sellers and gmu.sellers
+        // Reset sequence for public.sellers and public.sellers
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
-        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
       }
 
       // 2. Ensure user account for logistics seller exists in public."User" table so products foreign key mapping works
@@ -1002,7 +979,7 @@ export class OrderManagementService implements OnModuleInit {
         }
       }
 
-      // 3. Find or create Buyer in gmu.buyers
+      // 3. Find or create Buyer in public.buyers
       let buyer = await tx.buyer.findFirst({
         where: { mobileNumber: dto.buyerMobile },
       });
@@ -1016,23 +993,24 @@ export class OrderManagementService implements OnModuleInit {
             buyerName: dto.buyerName,
             mobileNumber: dto.buyerMobile,
             village: dto.buyerVillage,
-            taluka: dto.buyerTaluka || 'Kolhapur',
+            taluka: dto.buyerTaluka || 'Nesari',
             district: dto.buyerDistrict || 'Kolhapur',
             state: dto.buyerState || 'Maharashtra',
             pincode: dto.buyerPincode,
+            postOffice: dto.buyerPostOffice || null,
           },
         });
 
         // Insert into public.buyers raw SQL using the same ID
         await tx.$executeRawUnsafe(`
-          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, post_office, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING;
-        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Kolhapur', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode);
+        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Nesari', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode, dto.buyerPostOffice || null);
 
-        // Reset sequence for public.buyers and gmu.buyers
+        // Reset sequence for public.buyers and public.buyers
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
-        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
       }
 
       // Ensure user account for logistics buyer exists in public."User" table so master_orders foreign key works
@@ -1137,7 +1115,7 @@ export class OrderManagementService implements OnModuleInit {
       `, pickupOrderId);
       await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
 
-      // 10. Create in gmu."Order"
+      // 10. Create in public."Order"
       const productCount = resolvedItems.length;
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
@@ -1184,7 +1162,7 @@ export class OrderManagementService implements OnModuleInit {
     const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
     const order = await this.prisma.$transaction(async (tx) => {
-      // 1. Find or create Seller in gmu.sellers
+      // 1. Find or create Seller in public.sellers
       let seller = await tx.seller.findFirst({
         where: { mobileNumber: dto.sellerMobile },
       });
@@ -1198,21 +1176,22 @@ export class OrderManagementService implements OnModuleInit {
             sellerName: dto.sellerName,
             mobileNumber: dto.sellerMobile,
             village: dto.sellerVillage,
-            taluka: dto.sellerTaluka || 'Kolhapur',
-            district: dto.sellerDistrict || 'Kolhapur',
+            taluka: dto.sellerTaluka || 'Indapur',
+            district: dto.sellerDistrict || 'Pune',
             state: dto.sellerState || 'Maharashtra',
             pincode: dto.sellerPincode,
+            postOffice: dto.sellerPostOffice || null,
           },
         });
 
         await tx.$executeRawUnsafe(`
-          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, village, taluka, district, state, pincode, post_office, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING;
-        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Kolhapur', dto.sellerDistrict || 'Kolhapur', dto.sellerState || 'Maharashtra', dto.sellerPincode);
+        `, seller.id, sellerCode, dto.sellerName, dto.sellerMobile, dto.sellerVillage, dto.sellerTaluka || 'Indapur', dto.sellerDistrict || 'Pune', dto.sellerState || 'Maharashtra', dto.sellerPincode, dto.sellerPostOffice || null);
 
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
-        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
       }
 
       // 2. Ensure user account for logistics seller exists in public."User" table
@@ -1235,7 +1214,7 @@ export class OrderManagementService implements OnModuleInit {
         }
       }
 
-      // 3. Find or create Buyer in gmu.buyers
+      // 3. Find or create Buyer in public.buyers
       let buyer = await tx.buyer.findFirst({
         where: { mobileNumber: dto.buyerMobile },
       });
@@ -1249,21 +1228,22 @@ export class OrderManagementService implements OnModuleInit {
             buyerName: dto.buyerName,
             mobileNumber: dto.buyerMobile,
             village: dto.buyerVillage,
-            taluka: dto.buyerTaluka || 'Kolhapur',
+            taluka: dto.buyerTaluka || 'Nesari',
             district: dto.buyerDistrict || 'Kolhapur',
             state: dto.buyerState || 'Maharashtra',
             pincode: dto.buyerPincode,
+            postOffice: dto.buyerPostOffice || null,
           },
         });
 
         await tx.$executeRawUnsafe(`
-          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, post_office, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING;
-        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Kolhapur', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode);
+        `, buyer.id, buyerCode, dto.buyerName, dto.buyerMobile, dto.buyerVillage, dto.buyerTaluka || 'Nesari', dto.buyerDistrict || 'Kolhapur', dto.buyerState || 'Maharashtra', dto.buyerPincode, dto.buyerPostOffice || null);
 
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
-        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+        await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
       }
 
       // Ensure user account for logistics buyer exists in public."User" table so master_orders foreign key works
@@ -1397,7 +1377,7 @@ export class OrderManagementService implements OnModuleInit {
       `, dropOrderId);
       await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_tracking;`);
 
-      // 13. Create in gmu."Order" for DROP phase only (as DROP_PENDING)
+      // 13. Create in public."Order" for DROP phase only (as DROP_PENDING)
       const productCount = resolvedItems.length;
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
@@ -1434,41 +1414,11 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastShg(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Find APPROVED & ACTIVE SHGs
-    // Join public."User" u to make sure the account is active/approved
-    const approvedShgs = await this.prisma.$queryRawUnsafe(`
-      SELECT cm.id, cm.pincode, cm.village
-      FROM gmu."CommunityMember" cm
-      JOIN public."User" u ON cm."mobileNumber" = u."phoneNumber"
-      WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
-    `) as any[];
-
-    // Match approved SHGs with fallback layers (Priority 1: Pincode + Village, Priority 2: Pincode, Priority 3: Village)
-    const normalizeStr = (s: string) => {
-      if (!s) return '';
-      return s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    };
-
-    let matchingShgs = approvedShgs.filter(shg => 
-      shg.pincode && order.sellerPincode && 
-      shg.pincode.trim().toLowerCase() === order.sellerPincode.trim().toLowerCase() &&
-      shg.village && order.sellerVillage && 
-      normalizeStr(shg.village) === normalizeStr(order.sellerVillage)
+    const matchingShgs = await this.getMatchingShgs(
+      order.sellerVillage,
+      order.sellerPincode,
+      order.sellerPostOffice || ''
     );
-
-    if (matchingShgs.length === 0 && order.sellerPincode) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.pincode && 
-        shg.pincode.trim().toLowerCase() === order.sellerPincode.trim().toLowerCase()
-      );
-    }
-
-    if (matchingShgs.length === 0 && order.sellerVillage) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.village && 
-        normalizeStr(shg.village) === normalizeStr(order.sellerVillage)
-      );
-    }
 
     if (matchingShgs.length === 0) {
       console.log(`[SHG Broadcast]
@@ -1602,15 +1552,12 @@ export class OrderManagementService implements OnModuleInit {
     });
     const rejectedIds = rejections.map((r) => r.assigneeId);
 
-    const matchingShgs = await this.prisma.communityMember.findMany({
-      where: {
-        type: 'SHG',
-        status: 'APPROVED',
-        village: order.sellerVillage,
-        pincode: order.sellerPincode,
-        id: { notIn: rejectedIds },
-      },
-    });
+    const matchingShgs = await this.getMatchingShgs(
+      order.sellerVillage,
+      order.sellerPincode,
+      order.sellerPostOffice || '',
+      rejectedIds
+    );
 
     if (matchingShgs.length > 0) {
       // Delete existing pending ones
@@ -1679,41 +1626,11 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastTransporter(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Get all approved and active transporters joining route details and user accounts
-    const approvedTransporters = await this.prisma.$queryRawUnsafe(`
-      SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd.id AS "routeDetailId", rd."operatingArea", rd."pickupLocations"
-      FROM gmu."TransporterMember" tm
-      JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
-      LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
-      WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
-    `) as any[];
-
-    const parseJsonArray = (val: any) => {
-      if (Array.isArray(val)) return val;
-      if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch(e) {}
-      }
-      return [];
-    };
-
-    const p = order.sellerPincode?.trim()?.toLowerCase();
-    const v = order.sellerVillage?.trim()?.toLowerCase();
-
-    // Match only Transporters whose assigned routes contain the same Village AND Pincode
-    const matchingTransporters = approvedTransporters.filter((tr) => {
-      const areas = tr.operatingArea
-        ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
-        : [];
-      const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).trim().toLowerCase());
-      const pincodes = [
-        ...parseJsonArray(tr.assignedPincodes),
-        ...parseJsonArray(tr.pickupLocations)
-      ].map((s: any) => String(s).trim().toLowerCase());
-
-      const villageMatched = v && (villages.includes(v) || areas.includes(v));
-      const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
-      return !!(villageMatched && pincodeMatched);
-    });
+    const matchingTransporters = await this.getMatchingTransporters(
+      order.sellerVillage,
+      order.sellerPincode,
+      order.sellerPostOffice || ''
+    );
 
     if (matchingTransporters.length === 0) {
       console.log(`[Transporter Broadcast]
@@ -1842,15 +1759,12 @@ export class OrderManagementService implements OnModuleInit {
     });
     const rejectedIds = rejections.map((r) => r.assigneeId);
 
-    const approvedTransporters = await this.prisma.transporterMember.findMany({
-      where: { status: 'APPROVED', id: { notIn: rejectedIds } },
-    });
-
-    const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages);
-      const pincodes = this.parseJsonArray(t.assignedPincodes);
-      return villages.includes(order.sellerVillage) || pincodes.includes(order.sellerPincode);
-    });
+    const matchingTransporters = await this.getMatchingTransporters(
+      order.sellerVillage,
+      order.sellerPincode,
+      order.sellerPostOffice || '',
+      rejectedIds
+    );
 
     if (matchingTransporters.length > 0) {
       await this.prisma.orderAssignment.deleteMany({
@@ -1925,20 +1839,7 @@ export class OrderManagementService implements OnModuleInit {
     });
   }
 
-  async generateBarcode(id: string) {
-    const order = await this.getOrderDetails(id);
-    const barcode = `BAR-ORD-${order.orderId.replace('ORD-', '')}`;
 
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        barcode,
-        // Phase 5: Barcode generated → HUB_RECEIVED
-        mainStatus: 'HUB_RECEIVED',
-        barcodeGeneratedAt: new Date(),
-      },
-    });
-  }
 
   async storeInventory(id: string) {
     const order = await this.getOrderDetails(id);
@@ -2006,9 +1907,9 @@ export class OrderManagementService implements OnModuleInit {
           const pubProduct = rawPubProducts?.[0];
 
           if (pubProduct) {
-            // Check if seller exists in gmu."User"
+            // Check if seller exists in public."User"
             const rawGmuUsers = await tx.$queryRawUnsafe(`
-              SELECT id FROM gmu."User" WHERE id = $1 LIMIT 1;
+              SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
             `, pubProduct.seller_id) as any[];
             const gmuUser = rawGmuUsers?.[0];
 
@@ -2020,9 +1921,9 @@ export class OrderManagementService implements OnModuleInit {
               const pubUser = rawPubUsers?.[0];
 
               if (pubUser) {
-                // Insert into gmu."User"
+                // Insert into public."User"
                 await tx.$executeRawUnsafe(`
-                  INSERT INTO gmu."User" (
+                  INSERT INTO public."User" (
                     id, "authId", role, "phoneNumber", email, "fullName", "profilePhoto", 
                     language, "isVerified", "currentStep", "profileCompletion", "applicationStatus", 
                     "uniqueCode", "approvedAt", "rejectedAt", "rejectionReason", "createdAt", "updatedAt", "deletedAt"
@@ -2039,16 +1940,16 @@ export class OrderManagementService implements OnModuleInit {
               }
             }
 
-            // Check if product exists in gmu.products
+            // Check if product exists in public.products
             const rawGmuProducts = await tx.$queryRawUnsafe(`
-              SELECT id FROM gmu.products WHERE id = $1 LIMIT 1;
+              SELECT id FROM public.products WHERE id = $1 LIMIT 1;
             `, item.product_id) as any[];
             const gmuProduct = rawGmuProducts?.[0];
 
             if (!gmuProduct) {
-              // Insert product into gmu.products
+              // Insert product into public.products
               await tx.$executeRawUnsafe(`
-                INSERT INTO gmu.products (
+                INSERT INTO public.products (
                   id, seller_id, name, category, price, weight, image, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamp)
                 ON CONFLICT (id) DO NOTHING;
@@ -2095,7 +1996,7 @@ export class OrderManagementService implements OnModuleInit {
         data: { status: 'STORED' }
       });
 
-      // 2. Create the new Phase 2 Drop Order in gmu."Order"
+      // 2. Create the new Phase 2 Drop Order in public."Order"
       const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
       const dropId = dropOrderUuid();
       await tx.order.create({
@@ -2168,87 +2069,17 @@ export class OrderManagementService implements OnModuleInit {
     return result.updated;
   }
 
-  async scanInventory(id: string, barcode: string) {
-    const order = await this.getOrderDetails(id);
-
-    if (order.barcode !== barcode) {
-      throw new BadRequestException(`Scanned barcode ${barcode} does not match order barcode ${order.barcode}`);
-    }
-
-    if (
-      order.mainStatus !== 'STORED' &&
-      order.mainStatus !== 'DROP_ASSIGNED' &&
-      order.mainStatus !== 'HUB_RECEIVED' &&
-      order.mainStatus !== 'BARCODE_GENERATED'
-    ) {
-      throw new BadRequestException(`Order must be in STORED or DROP_ASSIGNED status to perform inventory dispatch scan`);
-    }
-
-    const updated = await this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        mainStatus: 'DISPATCHED',
-        dispatchedAt: new Date(),
-      },
-    });
-
-    // Find and update corresponding DROP order (Bypassed to prevent moving drop order back to Drop New Orders)
-    /*
-    const dropOrder = await this.prisma.order.findFirst({
-      where: { orderId: order.orderId, phase: 'DROP' }
-    });
-    if (dropOrder) {
-      await this.prisma.order.update({
-        where: { id: dropOrder.id },
-        data: {
-          mainStatus: 'DROP_CREATED',
-          updatedAt: new Date(),
-        }
-      });
-    }
-    */
-
-    return updated;
-  }
 
   // --- DROP FLOW WORKFLOWS ---
 
   async broadcastDropShg(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Find APPROVED & ACTIVE buyer-side SHGs matching exact Village + Pincode
-    const approvedShgs = await this.prisma.$queryRawUnsafe(`
-      SELECT cm.id, cm.pincode, cm.village
-      FROM gmu."CommunityMember" cm
-      JOIN public."User" u ON cm."mobileNumber" = u."phoneNumber"
-      WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
-    `) as any[];
-
-    const normalizeVillage = (v: string) => {
-      if (!v) return '';
-      return v.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    };
-
-    let matchingShgs = approvedShgs.filter(shg => 
-      shg.pincode && order.buyerPincode && 
-      shg.pincode.trim().toLowerCase() === order.buyerPincode.trim().toLowerCase() &&
-      shg.village && order.buyerVillage && 
-      normalizeVillage(shg.village) === normalizeVillage(order.buyerVillage)
+    const matchingShgs = await this.getMatchingShgs(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
     );
-
-    if (matchingShgs.length === 0 && order.buyerPincode) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.pincode && 
-        shg.pincode.trim().toLowerCase() === order.buyerPincode.trim().toLowerCase()
-      );
-    }
-
-    if (matchingShgs.length === 0 && order.buyerVillage) {
-      matchingShgs = approvedShgs.filter(shg => 
-        shg.village && 
-        normalizeVillage(shg.village) === normalizeVillage(order.buyerVillage)
-      );
-    }
 
     if (matchingShgs.length === 0) {
       console.log(`[Drop SHG Broadcast]
@@ -2356,12 +2187,7 @@ export class OrderManagementService implements OnModuleInit {
       });
 
       // Update public.drop_orders status
-      const cmUser = await tx.$queryRawUnsafe(`
-        SELECT u.id FROM public."User" u
-        JOIN gmu."CommunityMember" cm ON u."phoneNumber" = cm."mobileNumber"
-        WHERE cm.id = $1 LIMIT 1;
-      `, shgId) as any[];
-      const shgUserId = cmUser?.[0]?.id || null;
+      const shgUserId = parseInt(shgId, 10);
 
       await tx.dropOrder.updateMany({
         where: { dropOrderNumber: `DRP-${order.orderId}` },
@@ -2382,96 +2208,6 @@ export class OrderManagementService implements OnModuleInit {
           }
         });
       }
-
-      /*
-      // Broadcast to matching transporters based on configured routes (priority: Pincode -> Village -> Taluka -> District)
-      const buyerVillage = order.buyer?.village || order.buyerVillage;
-      const buyerPincode = order.buyer?.pincode || order.buyerPincode;
-      
-      const rawBuyer = await tx.$queryRawUnsafe(`
-        SELECT taluka, district FROM public.buyers WHERE id = $1 LIMIT 1;
-      `, order.buyerId) as any[];
-      const buyerTaluka = rawBuyer?.[0]?.taluka || '';
-      const buyerDistrict = rawBuyer?.[0]?.district || '';
-
-      const approvedTransporters = await tx.$queryRawUnsafe(`
-        SELECT tm.id, tm."assignedVillages", tm."assignedPincodes", u.id AS "userId", rd."operatingArea"
-        FROM gmu."TransporterMember" tm
-        JOIN public."User" u ON tm."mobileNumber" = u."phoneNumber"
-        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
-        WHERE tm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED';
-      `) as any[];
-
-      const parseJsonArray = (val: any) => {
-        if (Array.isArray(val)) return val;
-        if (typeof val === 'string') {
-          try { return JSON.parse(val); } catch(e) {}
-        }
-        return [];
-      };
-
-      const p = buyerPincode?.toLowerCase();
-      const v = buyerVillage?.toLowerCase();
-      const t = buyerTaluka?.toLowerCase();
-      const d = buyerDistrict?.toLowerCase();
-
-      const getTransporterLocations = (tr: any) => {
-        const areas = tr.operatingArea
-          ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
-          : [];
-        const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
-        const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
-        return { areas, villages, pincodes };
-      };
-
-      // Priority 1: Pincode
-      let matchingTransporters = approvedTransporters.filter(tr => {
-        const { areas, pincodes } = getTransporterLocations(tr);
-        return p && (pincodes.includes(p) || areas.includes(p));
-      });
-
-      // Priority 2: Village
-      if (matchingTransporters.length === 0 && v) {
-        matchingTransporters = approvedTransporters.filter(tr => {
-          const { areas, villages } = getTransporterLocations(tr);
-          return villages.includes(v) || areas.includes(v);
-        });
-      }
-
-      // Priority 3: Taluka
-      if (matchingTransporters.length === 0 && t) {
-        matchingTransporters = approvedTransporters.filter(tr => {
-          const { areas } = getTransporterLocations(tr);
-          return areas.includes(t);
-        });
-      }
-
-      // Priority 4: District
-      if (matchingTransporters.length === 0 && d) {
-        matchingTransporters = approvedTransporters.filter(tr => {
-          const { areas } = getTransporterLocations(tr);
-          return areas.includes(d);
-        });
-      }
-
-      if (matchingTransporters.length > 0) {
-        await tx.$executeRawUnsafe(`
-          DELETE FROM gmu."OrderAssignment" WHERE "orderId" = $1 AND role = 'DROP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
-        `, order.id);
-
-        for (const tr of matchingTransporters) {
-          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-          await tx.$executeRawUnsafe(`
-            INSERT INTO gmu."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
-            VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW());
-          `, uuidv4(), order.id, tr.id);
-        }
-
-        await tx.$executeRawUnsafe(`
-          UPDATE gmu."Order" SET "dropTransporterStatus" = 'PENDING' WHERE id = $1;
-        `, order.id);
-      }
-      */
 
       return updated;
     });
@@ -2506,15 +2242,12 @@ export class OrderManagementService implements OnModuleInit {
     });
     const rejectedIds = rejections.map((r) => r.assigneeId);
 
-    const matchingShgs = await this.prisma.communityMember.findMany({
-      where: {
-        type: 'SHG',
-        status: 'APPROVED',
-        village: order.buyerVillage,
-        pincode: order.buyerPincode,
-        id: { notIn: rejectedIds },
-      },
-    });
+    const matchingShgs = await this.getMatchingShgs(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+      rejectedIds,
+    );
 
     if (matchingShgs.length > 0) {
       await this.prisma.orderAssignment.deleteMany({
@@ -2567,17 +2300,11 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastDropTransporter(id: string) {
     const order = await this.getOrderDetails(id);
 
-    const approvedTransporters = await this.prisma.transporterMember.findMany({
-      where: { status: 'APPROVED' },
-    });
-
-    const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages).map((s) => s.trim().toLowerCase());
-      const pincodes = this.parseJsonArray(t.assignedPincodes).map((s) => s.trim().toLowerCase());
-      const bv = order.buyerVillage?.trim()?.toLowerCase();
-      const bp = order.buyerPincode?.trim()?.toLowerCase();
-      return (bv && villages.includes(bv)) || (bp && pincodes.includes(bp));
-    });
+    const matchingTransporters = await this.getMatchingTransporters(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+    );
 
     if (matchingTransporters.length === 0) {
       throw new BadRequestException(`No matching approved transporters found for buyer village ${order.buyerVillage || 'N/A'} or pincode ${order.buyerPincode || 'N/A'}`);
@@ -2684,15 +2411,12 @@ export class OrderManagementService implements OnModuleInit {
     });
     const rejectedIds = rejections.map((r) => r.assigneeId);
 
-    const approvedTransporters = await this.prisma.transporterMember.findMany({
-      where: { status: 'APPROVED', id: { notIn: rejectedIds } },
-    });
-
-    const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages);
-      const pincodes = this.parseJsonArray(t.assignedPincodes);
-      return villages.includes(order.buyerVillage) || pincodes.includes(order.buyerPincode);
-    });
+    const matchingTransporters = await this.getMatchingTransporters(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+      rejectedIds,
+    );
 
     if (matchingTransporters.length > 0) {
       await this.prisma.orderAssignment.deleteMany({
@@ -2820,76 +2544,6 @@ export class OrderManagementService implements OnModuleInit {
     });
   }
 
-  async scanTransporterReturn(id: string, barcode: string) {
-    const order = await this.getOrderDetails(id);
-
-    if (order.barcode && order.barcode !== barcode) {
-      throw new BadRequestException(`Scanned barcode ${barcode} does not match order barcode ${order.barcode}`);
-    }
-
-    if (order.mainStatus !== 'TRANSPORTER_RETURN_COMPLETED') {
-      throw new BadRequestException(`Order must be in TRANSPORTER_RETURN_COMPLETED status to scan transporter return`);
-    }
-
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        mainStatus: 'INVENTORY_TRANSPORTER_RETURN',
-        storedAt: new Date(),
-        barcodeGeneratedAt: new Date(),
-      },
-    });
-  }
-
-  async scanBuyerReturn(id: string, barcode: string) {
-    const order = await this.getOrderDetails(id);
-
-    if (order.barcode && order.barcode !== barcode) {
-      throw new BadRequestException(`Scanned barcode ${barcode} does not match order barcode ${order.barcode}`);
-    }
-
-    if (order.mainStatus !== 'BUYER_RETURN_COMPLETED') {
-      throw new BadRequestException(`Order must be in BUYER_RETURN_COMPLETED status to scan buyer return`);
-    }
-
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        mainStatus: 'INVENTORY_BUYER_RETURN',
-        storedAt: new Date(),
-        barcodeGeneratedAt: new Date(),
-        warehouseReceivedAt: new Date(),
-      },
-    });
-  }
-
-  async dispatchTransporterReturn(id: string, barcode: string) {
-    const order = await this.getOrderDetails(id);
-
-    if (order.barcode && order.barcode !== barcode) {
-      throw new BadRequestException(`Scanned barcode ${barcode} does not match order barcode ${order.barcode}`);
-    }
-
-    if (order.mainStatus !== 'INVENTORY_TRANSPORTER_RETURN') {
-      throw new BadRequestException(`Order must be in INVENTORY_TRANSPORTER_RETURN status to dispatch transporter return`);
-    }
-
-    await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'DROP' },
-    });
-
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        dropShgId: null,
-        dropShgStatus: null,
-        dropTransporterStatus: null,
-        returnType: 'TRANSPORTER_RETURN',
-        mainStatus: 'DROP_ASSIGNED',
-        dispatchedAt: new Date(),
-      },
-    });
-  }
 
   // --- NEW BUYER RETURN FLOW ---
 
@@ -2983,15 +2637,11 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastBuyerReturnTransporter(id: string) {
     const order = await this.getOrderDetails(id);
 
-    const approvedTransporters = await this.prisma.transporterMember.findMany({
-      where: { status: 'APPROVED' },
-    });
-
-    const matchingTransporters = approvedTransporters.filter((t) => {
-      const villages = this.parseJsonArray(t.assignedVillages);
-      const pincodes = this.parseJsonArray(t.assignedPincodes);
-      return villages.includes(order.buyerVillage) || pincodes.includes(order.buyerPincode);
-    });
+    const matchingTransporters = await this.getMatchingTransporters(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+    );
 
     if (matchingTransporters.length === 0) {
       throw new BadRequestException(`No matching approved transporters found for buyer village ${order.buyerVillage} or pincode ${order.buyerPincode}`);
@@ -3159,5 +2809,134 @@ export class OrderManagementService implements OnModuleInit {
       where: { id: order.id },
       data: { mainStatus: 'SLA_BREACHED' },
     });
+  }
+
+  async getMatchingShgs(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
+    const whereExcluded = excludedIds.length > 0 
+      ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
+      : '';
+      
+    const approvedShgs = await this.prisma.$queryRawUnsafe(`
+      SELECT u.id, a.pincode, a.village, a."postOffice"
+      FROM public."User" u
+      JOIN public."Address" a ON u.id = a."userId"
+      WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
+    `) as any[];
+
+    const normalizeStr = (s: string) => {
+      if (!s) return '';
+      return s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    };
+
+    const ov = village;
+    const op = pincode;
+    const opo = postOffice;
+
+    // Priority 1: Village + Pincode + Post Office
+    let matchingShgs = approvedShgs.filter(shg => 
+      shg.pincode && op && 
+      shg.pincode.trim().toLowerCase() === op.trim().toLowerCase() &&
+      shg.village && ov && 
+      normalizeStr(shg.village) === normalizeStr(ov) &&
+      shg.postOffice && opo && 
+      normalizeStr(shg.postOffice) === normalizeStr(opo)
+    );
+
+    // Priority 2: Village + Pincode
+    if (matchingShgs.length === 0) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.pincode && op && 
+        shg.pincode.trim().toLowerCase() === op.trim().toLowerCase() &&
+        shg.village && ov && 
+        normalizeStr(shg.village) === normalizeStr(ov)
+      );
+    }
+
+    // Priority 3: Village only
+    if (matchingShgs.length === 0 && ov) {
+      matchingShgs = approvedShgs.filter(shg => 
+        shg.village && 
+        normalizeStr(shg.village) === normalizeStr(ov)
+      );
+    }
+
+    return matchingShgs.map(shg => ({
+      ...shg,
+      id: String(shg.id)
+    }));
+  }
+
+  async getMatchingTransporters(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
+    const whereExcluded = excludedIds.length > 0 
+      ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
+      : '';
+
+    const approvedTransporters = await this.prisma.$queryRawUnsafe(`
+      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations"
+      FROM public."User" u
+      JOIN public."Address" a ON u.id = a."userId"
+      LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+      WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
+    `) as any[];
+
+    const parseJsonArray = (val: any) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch(e) {}
+      }
+      return [];
+    };
+
+    const p = pincode?.trim()?.toLowerCase();
+    const v = village?.trim()?.toLowerCase();
+    const po = postOffice?.trim()?.toLowerCase();
+
+    const normalizeStr = (s: string) => {
+      if (!s) return '';
+      return s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    };
+
+    const getTransporterInfo = (tr: any) => {
+      const areas = tr.operatingArea
+        ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+        : [];
+      const villages = areas;
+      const pincodes = parseJsonArray(tr.pickupLocations).map((s: any) => String(s).trim().toLowerCase());
+      const transporterPostOffice = tr.postOffice ? normalizeStr(tr.postOffice) : '';
+      return { areas, villages, pincodes, postOffice: transporterPostOffice };
+    };
+
+    // Priority 1: Village + Pincode + Post Office
+    let matchingTransporters = approvedTransporters.filter((tr) => {
+      const { areas, villages, pincodes, postOffice } = getTransporterInfo(tr);
+      const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
+      const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
+      const postOfficeMatched = po && postOffice && postOffice === normalizeStr(po);
+      return !!(villageMatched && pincodeMatched && postOfficeMatched);
+    });
+
+    // Priority 2: Village + Pincode
+    if (matchingTransporters.length === 0) {
+      matchingTransporters = approvedTransporters.filter((tr) => {
+        const { areas, villages, pincodes } = getTransporterInfo(tr);
+        const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
+        const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
+        return !!(villageMatched && pincodeMatched);
+      });
+    }
+
+    // Priority 3: Village only
+    if (matchingTransporters.length === 0) {
+      matchingTransporters = approvedTransporters.filter((tr) => {
+        const { areas, villages } = getTransporterInfo(tr);
+        const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
+        return !!villageMatched;
+      });
+    }
+
+    return matchingTransporters.map(tr => ({
+      ...tr,
+      id: String(tr.id)
+    }));
   }
 }

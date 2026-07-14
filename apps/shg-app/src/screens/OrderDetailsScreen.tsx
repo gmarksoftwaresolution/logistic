@@ -18,6 +18,7 @@ import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../api/axiosInstance';
 
+
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
   route,
@@ -213,6 +214,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [orderParcels, setOrderParcels] = useState<any[]>([]);
+  const [activeScanningParcel, setActiveScanningParcel] = useState<any>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
 
   // Delivery Scanner states
   const [scannedItems, setScannedItems] = useState<Record<string, boolean>>({});
@@ -229,37 +234,56 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
   const pickupCodeVisible = codesGenerated;
 
-  const allRequiredProductsVerifiedByQR = (order.products || []).length > 0 && (order.products || []).every((item: any) => scannedItems[item.code]);
 
-  const isSubmitDisabled = isSubmitting || !allRequiredProductsVerifiedByQR;
-
-  const handleBarcodeScanned = async () => {
-    if (scanningStatus === 'success') return;
-    try {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      console.log("Haptics error:", e);
-    }
-    setScanningStatus('success');
+  const isProductVerified = (item: any) => {
+    const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
+    if (!matchingParcel) return false;
     
-    // Enable the Submit Order button immediately when all items are scanned
-    if (activeScanItem) {
-      setScannedItems(prev => ({ ...prev, [activeScanItem]: true }));
-    }
-
-    Toast.show({
-      type: 'success',
-      text1: 'Verification Successful',
-      text2: 'Product verified successfully!'
-    });
-    setTimeout(() => {
-      setScannerModalVisible(false);
-      setActiveScanItem(null);
-      if (isActive && currentStep?.id === 'scan_products_button') {
-        nextStep();
+    const status = matchingParcel.parcelStatus;
+    const phase = order.phase || 'PICKUP';
+    
+    if (phase === 'PICKUP') {
+      if (isDeliveryPhase) {
+        // Step 2: SHG delivery handover to Transporter
+        return status === 'SHG_HANDOVER_VERIFIED' ||
+               status === 'IN_TRANSIT_TO_HUB' ||
+               status === 'HUB_RECEIVED' ||
+               status === 'DELIVERED' ||
+               status === 'COMPLETED' ||
+               status === 'VERIFIED';
+      } else {
+        // Step 1: SHG pickup from Seller
+        return status === 'PARCEL_AT_SHG' ||
+               status === 'SHG_HANDOVER_VERIFIED' ||
+               status === 'IN_TRANSIT_TO_HUB' ||
+               status === 'HUB_RECEIVED' ||
+               status === 'DELIVERED' ||
+               status === 'COMPLETED' ||
+               status === 'VERIFIED';
       }
-    }, 1200);
+    } else {
+      // phase === 'DROP'
+      if (isDeliveryPhase) {
+        // Step 10: Drop SHG delivery to Buyer
+        return status === 'DELIVERED' ||
+               status === 'COMPLETED' ||
+               status === 'VERIFIED';
+      } else {
+        // Step 9: Drop SHG pickup from Transporter
+        return status === 'PARCEL_AT_DROP_SHG' ||
+               status === 'DELIVERED' ||
+               status === 'COMPLETED' ||
+               status === 'VERIFIED';
+      }
+    }
   };
+
+  const allParcelsVerified = (order.products || []).length > 0 && (order.products || []).every((item: any) => {
+    return item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+  });
+
+  const isSubmitDisabled = isSubmitting || !allParcelsVerified;
+
 
   // Reschedule state hooks
   const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
@@ -269,6 +293,30 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [rescheduleTimeLeft, setRescheduleTimeLeft] = useState<number | null>(null);
   const [rescheduleProgress, setRescheduleProgress] = useState<number>(100);
   const [rescheduleExpired, setRescheduleExpired] = useState<boolean>(false);
+
+
+  const fetchOrderParcels = async () => {
+    try {
+      let res = await axiosInstance.get(`/qr/order/${order.orderId}`);
+      if (!res.data || res.data.length === 0) {
+        try {
+          await axiosInstance.post('/qr/generate', { orderId: order.orderId });
+          res = await axiosInstance.get(`/qr/order/${order.orderId}`);
+        } catch (genErr) {
+          console.warn("Auto-generating QR codes failed:", genErr);
+        }
+      }
+      if (res.data) {
+        setOrderParcels(res.data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch parcels for order:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrderParcels();
+  }, [order.id]);
 
   const isPickupAccepted = !isDeliveryPhase && order.status === 'Accepted' && !order.id.startsWith('RTO-');
   const isReturnPickup = !isDeliveryPhase && order.id.startsWith('RTO-') && order.legType === 'pickup';
@@ -338,9 +386,91 @@ const OrderDetailsScreen: React.FC<Props> = ({
   }, [scannerModalVisible]);
   useEffect(() => {
     if (scannerModalVisible) {
+      setScanned(false);
+      setScanningStatus('scanning');
+      if (!permission || !permission.granted) {
+        requestPermission();
+      }
+    }
+  }, [scannerModalVisible, permission]);
+
+  const handleBarcodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+    setScanningStatus('success');
+
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      console.log("Haptics error:", e);
+    }
+
+    try {
+      let parcelId = "";
+      let verificationToken = "";
+      
+      if (data.trim().startsWith("{")) {
+        const parsed = JSON.parse(data.trim());
+        parcelId = parsed.parcelId;
+        verificationToken = parsed.verificationToken;
+      } else {
+        const parts = data.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          parcelId = parts[0];
+          verificationToken = parts[1];
+        }
+      }
+
+      if (!parcelId || !verificationToken) {
+        Alert.alert("Invalid QR Code", "This QR code does not contain a valid parcel ID and verification token.");
+        setScanned(false);
+        setScanningStatus('scanning');
+        return;
+      }
+
+      // Verify that the scanned parcel belongs to the product we clicked on
+      if (activeScanningParcel && activeScanningParcel.parcelId !== parcelId) {
+        Alert.alert(
+          "Wrong Product Scanned",
+          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`
+        );
+        setScanned(false);
+        setScanningStatus('scanning');
+        return;
+      }
+
+      const res = await axiosInstance.post('/qr/verify', {
+        parcelId,
+        verificationToken,
+        userRole: 'SHG'
+      });
+
+      await fetchOrderParcels();
+      await refreshOrdersList();
+
+      Toast.show({
+        type: 'success',
+        text1: 'Verification Successful',
+        text2: res.data?.message || 'Product verified successfully via QR!'
+      });
+
+      setTimeout(() => {
+        setScannerModalVisible(false);
+        setActiveScanningParcel(null);
+        setScanned(false);
+        if (isActive && currentStep?.id === 'scan_products_button') {
+          nextStep();
+        }
+      }, 1200);
+
+    } catch (err: any) {
+      console.error("Verification error:", err);
+      const msg = err.response?.data?.message || err.message || "Failed to verify QR code.";
+      Alert.alert("Verification Failed", msg);
+      setScanned(false);
       setScanningStatus('scanning');
     }
-  }, [scannerModalVisible]);
+  };
   const translateY = scanLaserAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 240]
@@ -370,10 +500,19 @@ const OrderDetailsScreen: React.FC<Props> = ({
     try {
       setIsSubmitting(true);
 
-      if (!allRequiredProductsVerifiedByQR) {
-        // Code Verification Rule
-        if (activeType === 'seller' && !deliveryCodeGenerated) {
-          Alert.alert("Verification Required", "Please generate delivery code before submitting.");
+
+
+      // Delivery Code Verification Rule (for transporter delivery)
+      if (activeType === 'transporter' && isDeliveryPhase && !deliveryCodeVerified) {
+        Alert.alert("Verification Required", "Please verify delivery code before submitting.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Pickup Code Verification Rule (for transporter pickup)
+      if (activeType === 'transporter' && !isDeliveryPhase) {
+        if (order.legType === 'pickup' && !pickupCodeVerified) {
+          Alert.alert("Verification Required", "Please verify pickup code before submitting.");
           setIsSubmitting(false);
           return;
         }
@@ -790,6 +929,41 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         </View>
       </View>
+      
+      {/* Verification Progress Bar */}
+      {(() => {
+        const verifiedCount = (products || []).filter((item: any) => {
+          return item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+        }).length;
+        const totalCount = products.length || 1;
+        const percent = Math.round((verifiedCount / totalCount) * 100);
+        return (
+          <View className="bg-white rounded-2xl p-4 border border-[#F1F5F9] mb-4 flex-row items-center justify-between mx-1" style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.03,
+            shadowRadius: 4,
+            elevation: 2
+          }}>
+            <View className="flex-1 mr-4">
+              <View className="flex-row justify-between items-center mb-1.5">
+                <Text className="text-[12px] font-extrabold text-[#073318]">Handover Progress</Text>
+                <Text className="text-[12px] font-black text-[#073318]">{verifiedCount} of {totalCount} verified</Text>
+              </View>
+              <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <View className="h-full bg-[#10B981] rounded-full" style={{ width: `${percent}%` }} />
+              </View>
+            </View>
+            <View className={`p-2 rounded-lg flex-row items-center justify-center ${verifiedCount === totalCount ? 'bg-[#ECFDF5]' : 'bg-[#FFFBEB]'}`}>
+              <Ionicons 
+                name={verifiedCount === totalCount ? "checkmark-circle" : "alert-circle"} 
+                size={16} 
+                color={verifiedCount === totalCount ? "#10B981" : "#D97706"} 
+              />
+            </View>
+          </View>
+        );
+      })()}
 
       {/* Task Card Container */}
       <View className="bg-white rounded-[28px] p-2 border border-[#F1F5F9] mb-6" style={{
@@ -804,7 +978,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }}>
         {products.map((item: any, index: number) => {
           const isLast = index === products.length - 1;
-          return <View key={item.code} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
+          const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
+          const isVerified = item.verificationStatus === 'VERIFIED' || isProductVerified(item);
+
+          return <View key={item.code || String(index)} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
             {/* LEFT + CENTER Wrapper */}
             <View className="flex-1 flex-row items-center pr-2">
               {/* LEFT: Square Badge */}
@@ -817,31 +994,48 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 <Text className="text-[14px] font-bold text-[#111827] mb-1 leading-tight">
                   {item.name}
                 </Text>
-                <Text className="text-[12px] font-medium text-[#64748B]">
-                  {item.details}
-                </Text>
+                <View className="flex-row items-center mt-1">
+                  <Text className="text-[11px] font-medium text-[#64748B] mr-2">
+                    {item.details}
+                  </Text>
+                  {/* Status Badge */}
+                  <View className={`px-1.5 py-0.5 rounded-md flex-row items-center ${isVerified ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                    <Ionicons 
+                      name={isVerified ? "checkmark-circle-outline" : "ellipse-outline"} 
+                      size={10} 
+                      color={isVerified ? "#10B981" : "#F59E0B"} 
+                      style={{ marginRight: 3 }}
+                    />
+                    <Text className={`text-[9px] font-black uppercase ${isVerified ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {isVerified ? "Verified" : "Pending"}
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
 
-            {/* RIGHT: QR Scanner */}
-            <TouchableOpacity onPress={() => {
-              if (!scannedItems[item.code]) {
-                setActiveScanItem(item.code);
-                setScannerModalVisible(true);
-              }
-            }}>
-              <View>
-                <Ionicons name="qr-code-outline" size={20} color="#111827" />
-                {scannedItems[item.code] && (
-                  <View className="absolute -top-1.5 -right-1.5 bg-white rounded-full">
-                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
+            {/* RIGHT: Scanner Action Button or checkmark */}
+            {(!isVerified && matchingParcel) ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setActiveScanningParcel(matchingParcel);
+                  setScannerModalVisible(true);
+                }}
+                className="bg-[#073318] px-3 py-1.5 rounded-lg flex-row items-center"
+              >
+                <Ionicons name="scan-outline" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text className="text-[11px] font-extrabold text-white">Scan QR</Text>
+              </TouchableOpacity>
+            ) : isVerified ? (
+              <Ionicons name="checkmark-done" size={16} color="#10B981" />
+            ) : (
+              <Text className="text-[10px] font-bold text-slate-400">Awaiting QR</Text>
+            )}
           </View>;
         })}
       </View>
+
+
 
       {/* Action Buttons Row */}
         {(!order.isRejectedDelivery && order.status !== 'REJECTED') && (
@@ -915,6 +1109,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
           <View className="h-32" />
         </ScrollView>
 
+
+
         {/* Photo Preview Modal */}
         <Modal visible={previewVisible} transparent={false} animationType="slide" onRequestClose={() => setPreviewVisible(false)}>
           <SafeAreaView className="flex-1 bg-black justify-between p-6">
@@ -973,7 +1169,24 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 <View className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#059669] rounded-br-[12px]" />
 
                 {/* Central scanning grid area / transparent frame */}
-                <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center">
+                <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center relative">
+                  {(permission && permission.granted) ? (
+                    <CameraView
+                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                      facing="back"
+                      barcodeScannerSettings={{
+                        barcodeTypes: ['qr'],
+                      }}
+                      onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                    />
+                  ) : (
+                    <View className="p-4 items-center">
+                      <Text className="text-white text-center text-[12px] mb-2">Camera permission required</Text>
+                      <TouchableOpacity onPress={requestPermission} className="bg-emerald-600 px-3 py-1.5 rounded-lg">
+                        <Text className="text-white font-extrabold text-[11px]">Grant</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   {scanningStatus === 'scanning' ? <>
                     {cameraPermission?.granted ? (
                       <CameraView
@@ -1007,10 +1220,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
                       shadowRadius: 5,
                       elevation: 5
                     }} />
-                    <Ionicons name="qr-code-outline" size={80} color="rgba(255,255,255,0.15)" pointerEvents="none" />
-                  </> : <View className="items-center justify-center">
-                    <View className="w-16 h-16 bg-[#059669]/20 rounded-full items-center justify-center mb-3">
-                      <Ionicons name="checkmark" size={32} color="#10B981" />
+                  </> : <View className="absolute inset-0 bg-[#059669]/90 items-center justify-center">
+                    <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
+                      <Ionicons name="checkmark" size={32} color="#FFFFFF" />
                     </View>
                     <Text className="text-white text-[16px] font-black">{t("su_scan_successful_361")}</Text>
                   </View>}

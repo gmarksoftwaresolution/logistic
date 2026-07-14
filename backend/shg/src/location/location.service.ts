@@ -42,19 +42,21 @@ export class LocationService {
 
       // 1. Try Local Database
       try {
-        const records = await (this.prisma as any).pincodeDirectory.findMany({
+        const records = await this.prisma.pincode.findMany({
           where: { pincode },
         });
 
         if (records && records.length > 0) {
           const first = records[0];
           const villages = [...new Set(records.map((r: any) => r.village))].sort();
+          const postOffices = [...new Set(records.map((r: any) => r.name))].sort();
 
           return {
             state: first.state,
             district: first.district,
-            taluka: first.taluka,
+            taluka: first.block || first.district || 'N/A',
             villages: villages,
+            postOffices: postOffices,
             source: 'local_db'
           };
         }
@@ -78,6 +80,7 @@ export class LocationService {
               district: first.District,
               taluka: first.Block === 'NA' ? first.District : first.Block,
               villages: villages,
+              postOffices: villages,
               source: 'api_primary'
             };
           }
@@ -98,6 +101,7 @@ export class LocationService {
             district: first['place name'],
             taluka: first['place name'],
             villages: fbData.places.map((p: any) => p['place name']),
+            postOffices: fbData.places.map((p: any) => p['place name']),
             source: 'api_fallback'
           };
         }
@@ -110,6 +114,7 @@ export class LocationService {
         console.log(`Using Local Mock data for pincode: ${pincode}`);
         return {
           ...MOCK_PINCODES[pincode],
+          postOffices: MOCK_PINCODES[pincode].villages || ["Post Office " + pincode],
           source: 'local_mock'
         };
       }
@@ -121,6 +126,7 @@ export class LocationService {
         district: "Kolhapur",
         taluka: "Gadhinglaj",
         villages: ["Village " + pincode, "Center " + pincode, "Local Area " + pincode],
+        postOffices: ["Post Office " + pincode],
         source: 'dynamic_mock'
       };
     } catch (error) {

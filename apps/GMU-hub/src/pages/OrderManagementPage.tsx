@@ -9,10 +9,10 @@ import type { PickupOrder, DropOrder, ReturnOrder } from '../context/AppContext'
 import { 
   Eye, 
   ShieldAlert, 
-  Barcode, 
   ClipboardCheck, 
   CheckCircle2, 
   Copy, 
+  Download,
   X, 
   FileText, 
   MoreVertical, 
@@ -46,6 +46,27 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
   }
 };
 
+const getUpdatedTimeAgo = (order: any) => {
+  const updatedTime = order.rawUpdatedAt || order.updatedAt;
+  if (!updatedTime) return 'Updated 1 min ago';
+  
+  const diffMs = Date.now() - new Date(updatedTime).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins <= 1) {
+    return 'Updated 1 min ago';
+  }
+  if (diffMins < 60) {
+    return `Updated ${diffMins} mins ago`;
+  }
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) {
+    return `Updated ${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
+  }
+  const diffDays = Math.floor(diffHours / 24);
+  return `Updated ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+};
+
 export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const {
     counts,
@@ -72,7 +93,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     transporterList,
     assignPickupOrder,
     requestBuyerReturn,
-    generateBarcode,
+    generateQr,
     loadPickupNew,
     loadPickupAssigned,
     loadPickupWarehouse,
@@ -138,15 +159,60 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [intakeOrder, setIntakeOrder] = useState<any | null>(null);
   const [intakeType, setIntakeType] = useState<'pickup' | 'return-pickup' | 'return-drop' | null>(null);
 
-  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
-  const [generatedBarcodeText, setGeneratedBarcodeText] = useState<string | null>(null);
-  const [barcodeOrderId, setBarcodeOrderId] = useState<string | null>(null);
-  const [barcodeOrder, setBarcodeOrder] = useState<any>(null);
+  const [isParcelQrModalOpen, setIsParcelQrModalOpen] = useState(false);
+  const [parcelQrList, setParcelQrList] = useState<any[]>([]);
+  const [parcelQrOrderId, setParcelQrOrderId] = useState<string | null>(null);
+  const [parcelQrOrder, setParcelQrOrder] = useState<any>(null);
 
   // Side Drawer details for clicked timeline nodes
   const [isNodeDrawerOpen, setIsNodeDrawerOpen] = useState(false);
   const [activeNodeTitle, setActiveNodeTitle] = useState('');
   const [activeNodeDetails, setActiveNodeDetails] = useState<Record<string, any> | null>(null);
+
+  // Intake QR Verification state
+  const [intakeParcels, setIntakeParcels] = useState<any[]>([]);
+  const [loadingIntakeParcels, setLoadingIntakeParcels] = useState(false);
+  const [scanningParcel, setScanningParcel] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (isIntakeModalOpen && intakeOrder) {
+      setLoadingIntakeParcels(true);
+      const loadParcels = async () => {
+        try {
+          const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
+          let list: any[] = [];
+          for (const id of orderIds) {
+            const res = await api.orders.generateQr(id, false);
+            if (res) list = [...list, ...res];
+          }
+          setIntakeParcels(list);
+        } catch (e) {
+          console.error("Error loading intake parcels:", e);
+        } finally {
+          setLoadingIntakeParcels(false);
+        }
+      };
+      loadParcels();
+    } else {
+      setIntakeParcels([]);
+    }
+  }, [isIntakeModalOpen, intakeOrder]);
+
+  const handleSimulatedIntakeScan = async (parcel: any) => {
+    setScanningParcel(parcel);
+    setTimeout(async () => {
+      try {
+        await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
+        setIntakeParcels(prev => 
+          prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'HUB_RECEIVED' } : p)
+        );
+      } catch (err: any) {
+        alert(err.message || 'Verification failed');
+      } finally {
+        setScanningParcel(null);
+      }
+    }, 2000);
+  };
 
   // QR Scan Modal State for Returns
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -158,6 +224,48 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [actionProcessing, setActionProcessing] = useState(false);
+
+  // Parcel & QR states
+  const [selectedParcel, setSelectedParcel] = useState<any>(null);
+  const [isParcelPreviewOpen, setIsParcelPreviewOpen] = useState(false);
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+
+  const handleGenerateAllQr = async (orderId: string) => {
+    setIsGeneratingQr(true);
+    try {
+      const res = await api.qr.generate(orderId, false);
+      if (res && res.length > 0) {
+        const fresh = await api.orders.getDetails(selectedOrderDetails.uuid || selectedOrderDetails.id);
+        if (fresh) {
+          const mapped = mapOrder(fresh, 'pickup');
+          setSelectedOrderDetails(mapped);
+        }
+      }
+    } catch (err: any) {
+      alert("Failed to generate QR codes: " + (err.message || err));
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  const handleDownloadAllQr = (parcelsList: any[]) => {
+    if (!parcelsList || parcelsList.length === 0) return;
+    parcelsList.forEach((p, idx) => {
+      setTimeout(() => {
+        const link = document.createElement('a');
+        link.href = p.qrImage;
+        link.download = `QR_${p.orderId}_Parcel_${p.parcelNumber}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }, idx * 300);
+    });
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    alert(`${label} copied to clipboard!`);
+  };
 
   // Add Order Modal States
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
@@ -675,13 +783,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
   };
 
-  // Handle Barcode Action
-  const handleBarcodeClick = (orderId: string) => {
-    const order = pickupWarehouseOrders.find((o) => o.id === orderId);
-    setBarcodeOrder(order || null);
-    setBarcodeOrderId(orderId);
-    setGeneratedBarcodeText(null);
-    setIsBarcodeModalOpen(true);
+  // Handle QR Codes Action
+  const handleParcelQrClick = async (orderId: string) => {
+    const order = pickupWarehouseOrders.find((o) => o.id === orderId) || 
+                  pickupNewOrders.find((o) => o.id === orderId) || 
+                  pickupAssignedOrders.find((o) => o.id === orderId) || 
+                  dropNewOrders.find((o) => o.id === orderId) || 
+                  dropAssignedOrders.find((o) => o.id === orderId) || 
+                  dropCompletedOrders.find((o) => o.id === orderId);
+    setParcelQrOrder(order || null);
+    setParcelQrOrderId(orderId);
+    setIsParcelQrModalOpen(true);
+    setParcelQrList([]);
+    try {
+      setActionProcessing(true);
+      const res = await generateQr(orderId, false);
+      setParcelQrList(res || []);
+    } catch (err: any) {
+      alert(err.message || 'Failed to fetch QR codes.');
+    } finally {
+      setActionProcessing(false);
+    }
   };
 
   const handleOpenQrModal = (item: ReturnOrder) => {
@@ -900,7 +1022,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Graphical tracking nodes calculator
   const getTimelineNodes = (order: any) => {
-    const isDirect = (order.dropShgId || ['DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) && !order.warehouseReceivedDate && !order.storedDate;
+    const isDirect = false;
+
+    const getLogsForStage = (stageKeywords: string[]) => {
+      if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
+      const matching = order.tracking.filter((t: any) => 
+        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw))
+      );
+      if (matching.length === 0) return 'No scan events logged yet for this stage.';
+      return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
+    };
 
     let sellerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'completed';
     if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(order.mainStatus)) {
@@ -932,22 +1063,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     let gmuState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
     let transDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
 
-    if (!isDirect) {
-      if (['DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
-        gmuState = 'completed';
-      } else if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'PARCEL_AT_HUB', 'AT_HUB'].includes(order.mainStatus)) {
-        gmuState = 'active';
-      }
+    if (['DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+      gmuState = 'completed';
+    } else if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'PARCEL_AT_HUB', 'AT_HUB'].includes(order.mainStatus)) {
+      gmuState = 'active';
+    }
 
-      if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED') {
-        transDropState = 'completed';
-      } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
-        transDropState = 'active';
-      } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
-        transDropState = 'rejected';
-      } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
-        transDropState = 'delayed';
-      }
+    if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED') {
+      transDropState = 'completed';
+    } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
+      transDropState = 'active';
+    } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
+      transDropState = 'rejected';
+    } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
+      transDropState = 'delayed';
     }
 
     let shgDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
@@ -970,138 +1099,143 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
       { id: 'seller', label: 'Seller', state: sellerState, details: {
-        'Seller Name': order.sellerName || 'Rajesh Patil',
-        'Mobile Number': order.sellerMobile || '+91 98223 34455',
-        'Address': order.sellerAddress || 'Batkanangale, Kolhapur',
-        'Village': order.sellerVillage || 'Batkanangale',
-        'Pincode': order.sellerPincode || '416502',
-        'Order Placed Date': order.orderDate || '19 Jul 2026',
+        'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
+        'Role': 'Seller / Farmer',
+        'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
+        'Address': order.sellerAddress || order.seller?.address || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+        'Order Placed Date': order.orderDate || 'N/A',
         'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
-        'Verification Status': order.items?.[0]?.verificationStatus || 'VERIFIED',
-        'Packages Count': order.productCount || 1,
-        'Remarks': order.tracking?.[0]?.remarks || 'Order placed successfully.'
+        'Status': 'PICKUP SCHEDULED',
+        'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
       } },
-      { id: 'shg_pickup', label: 'Pickup SHG', state: shgPickupState, details: {
-        'SHG Name': order.pickupShgDetails?.name || 'Bhavani SHG Group',
-        'Mobile': order.pickupShgDetails?.mobile || '+91 91582 30129',
-        'Address': order.pickupShgDetails?.address || 'Batkanangale Main Road, Kolhapur',
-        'Schedule Details': order.shgPickupSchedule || '10:00 AM - 01:00 PM',
+      { id: 'shg_pickup', label: 'Pickup SHG', state: shgPickupState, details: (shgPickupState !== 'pending' && order.pickupShgDetails) ? {
+        'Person Name': order.pickupShgDetails.name || 'N/A',
+        'Role': 'Pickup Self Help Group',
+        'Mobile': order.pickupShgDetails.mobile || 'N/A',
+        'Address': order.pickupShgDetails.address || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+        'Schedule Details': order.shgPickupSchedule || 'N/A',
         'Status': order.pickupShgStatus || 'ACCEPTED',
-      } },
-      { id: 'trans_pickup', label: 'Transporter', state: transPickupState, details: {
-        'Transporter Name': order.pickupTransporterDetails?.name || 'Vighnaharta Logistics',
-        'Mobile': order.pickupTransporterDetails?.mobile || '+91 88884 55562',
-        'Address': order.pickupTransporterDetails?.address || 'Kolhapur Bypass, MH',
-        'Vehicle': order.pickupTransporterDetails?.vehicle || 'Tata Ace (MH-09-EQ-4567)',
+        'Full Scan History': getLogsForStage(['SHG_PICKUP', 'PARCEL_AT_SHG', 'PICKED'])
+      } : null },
+      { id: 'trans_pickup', label: 'Transporter', state: transPickupState, details: (transPickupState !== 'pending' && order.pickupTransporterDetails) ? {
+        'Person Name': order.pickupTransporterDetails.name || 'N/A',
+        'Role': 'Pickup Transporter',
+        'Mobile': order.pickupTransporterDetails.mobile || 'N/A',
+        'Address': order.pickupTransporterDetails.address || 'N/A',
+        'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Status': order.pickupTransporterStatus || 'PENDING',
-      } },
-    ];
-
-    if (!isDirect) {
-      nodes.push({ id: 'gmu', label: 'GMU Hub', state: gmuState, details: {
+        'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'])
+      } : null },
+      { id: 'gmu', label: 'GMU Hub', state: gmuState, details: (gmuState !== 'pending') ? {
+        'Person Name': 'Main GMU Hub Staff',
+        'Role': 'GMU Hub Central Warehouse Admin',
         'Warehouse': 'GMU Hub Central Warehouse',
-        'Intake Time': order.warehouseReceivedDate || '19 Jul 2026 05:00 PM',
-        'Barcode Generated': order.barcode || `BAR-${order.id}`,
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+        'Intake Time': order.warehouseReceivedDate || 'N/A',
         'Inventory Shelf': order.storedDate ? 'Shelf A-4' : 'Incoming Bay',
         'Dispatch Time': order.dispatchedAt || 'N/A',
         'Status': order.mainStatus || 'IN_PROCESS',
-      } });
-
-      nodes.push({ id: 'trans_drop', label: 'Transporter', state: transDropState, details: {
-        'Transporter Name': order.dropTransporterDetails?.name || 'Sai Transport Service',
-        'Mobile': order.dropTransporterDetails?.mobile || '+91 99214 77732',
-        'Address': order.dropTransporterDetails?.address || 'Gadhinglaj Road, MH',
-        'Vehicle': order.dropTransporterDetails?.vehicle || 'Mahindra Bolero Picker',
+        'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'STORED', 'DISPATCHED'])
+      } : null },
+      { id: 'trans_drop', label: 'Transporter', state: transDropState, details: (transDropState !== 'pending' && order.dropTransporterDetails) ? {
+        'Person Name': order.dropTransporterDetails.name || 'N/A',
+        'Role': 'Drop Transporter',
+        'Mobile': order.dropTransporterDetails.mobile || 'N/A',
+        'Address': order.dropTransporterDetails.address || 'N/A',
+        'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Status': order.dropTransporterStatus || 'PENDING',
-      } });
-    }
-
-    nodes.push({ id: 'shg_drop', label: 'Drop SHG', state: shgDropState, details: {
-      'SHG Name': order.dropShgDetails?.name || 'Radhika Mahila Mandal',
-      'Mobile': order.dropShgDetails?.mobile || '+91 70201 99923',
-      'Address': order.dropShgDetails?.address || 'Gadhinglaj Center, Kolhapur',
-      'Schedule Details': order.shgPickupSchedule || '02:00 PM - 05:00 PM',
-      'Status': order.dropShgStatus || 'PENDING',
-    } });
-
-    nodes.push({ id: 'buyer', label: 'Buyer', state: buyerState, details: {
-      'Buyer Name': order.buyerName || 'Sunita Deshmukh',
-      'Mobile Number': order.buyerMobile || '+91 90112 33445',
-      'Address': order.buyerAddress || 'Main Bazaar Road, Gadhinglaj',
-      'Village': order.buyerVillage || 'Gadhinglaj',
-      'Pincode': order.buyerPincode || '416502',
-      'Delivery Completed Date': order.deliveredAt || 'N/A',
-      'Verification Status': order.items?.[0]?.verificationStatus || 'PENDING',
-    } });
+        'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
+      } : null },
+      { id: 'shg_drop', label: 'Drop SHG', state: shgDropState, details: (shgDropState !== 'pending' && order.dropShgDetails) ? {
+        'Person Name': order.dropShgDetails.name || 'N/A',
+        'Role': 'Drop Self Help Group',
+        'Mobile': order.dropShgDetails.mobile || 'N/A',
+        'Address': order.dropShgDetails.address || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+        'Schedule Details': order.shgPickupSchedule || 'N/A',
+        'Status': order.dropShgStatus || 'PENDING',
+        'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
+      } : null },
+      { id: 'buyer', label: 'Buyer', state: buyerState, details: (buyerState === 'completed') ? {
+        'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
+        'Role': 'Consignee / Buyer',
+        'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
+        'Address': order.buyerAddress || order.buyer?.address || 'N/A',
+        'Order ID': order.id,
+        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+        'Delivery Completed Date': order.deliveredAt || 'N/A',
+        'Status': order.mainStatus === 'DELIVERED' || order.mainStatus === 'COMPLETED' ? 'DELIVERED' : 'PENDING',
+        'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
+      } : null }
+    ];
 
     return nodes;
   };
 
   const getNodeTimeAndDate = (order: any, nodeLabel: string) => {
     const lbl = nodeLabel.toLowerCase();
+    let timestamp: string | null = null;
     
+    // 1. Try finding actual tracking event
     if (order.tracking && order.tracking.length > 0) {
-      let statusMatch = '';
+      let statusKeywords: string[] = [];
       if (lbl === 'seller') {
-        statusMatch = 'ORDER_PLACED';
+        statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
       } else if (lbl.includes('pickup shg')) {
-        statusMatch = 'PICKUP_SHG_ACCEPTED';
+        statusKeywords = ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP', 'PARCEL_AT_SHG', 'PICKED'];
       } else if (lbl.includes('transporter')) {
-        statusMatch = 'TRANSPORTER_ACCEPTED';
+        statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'SHG_HANDOVER_VERIFY'];
       } else if (lbl.includes('gmu') || lbl.includes('hub')) {
-        statusMatch = 'PARCEL_AT_GMU';
+        statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
       } else if (lbl.includes('drop shg')) {
-        statusMatch = 'DROP_SHG_ACCEPTED';
+        statusKeywords = ['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'];
       } else if (lbl === 'buyer') {
-        statusMatch = 'DELIVERED';
+        statusKeywords = ['DELIVERED', 'COMPLETED'];
       }
 
       const event = order.tracking.find((t: any) => 
-        t.status === statusMatch || 
-        t.status?.toUpperCase().includes(statusMatch) ||
-        t.remarks?.toUpperCase().includes(nodeLabel.toUpperCase())
+        statusKeywords.some(kw => t.status === kw || t.status?.toUpperCase().includes(kw))
       );
-
-      if (event && event.updatedAt) {
-        const dt = new Date(event.updatedAt);
-        const time = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        const date = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      if (event) {
+        timestamp = event.updatedAt || event.scanTime || event.createdAt;
+      }
+    }
+    
+    // 2. Fallback to order fields if tracking event not found
+    if (!timestamp) {
+      if (lbl === 'seller') {
+        timestamp = order.createdAt || order.orderDate;
+      } else if (lbl.includes('pickup shg')) {
+        timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
+      } else if (lbl.includes('transporter')) {
+        timestamp = order.pickupTransporterDetails?.acceptedAt;
+      } else if (lbl.includes('gmu') || lbl.includes('hub')) {
+        timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
+      } else if (lbl.includes('drop shg')) {
+        timestamp = order.dropShgDetails?.acceptedAt;
+      } else if (lbl === 'buyer') {
+        timestamp = order.deliveredAt || order.completedAt;
+      }
+    }
+    
+    if (timestamp) {
+      const dt = new Date(timestamp);
+      if (!isNaN(dt.getTime())) {
+        const time = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        const date = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         return { time, date };
       }
     }
-
-    const dateStr = order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : '2026-07-20');
-    let dayStr = '20 Jul';
-    try {
-      const [y, m, d] = dateStr.split('-');
-      const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
-      dayStr = dateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-    } catch (e) {}
-
-    const nodes = getTimelineNodes(order);
-    const matchedNode = nodes.find(n => n.label.toLowerCase() === lbl);
-
-    if (matchedNode && (matchedNode.state === 'completed' || matchedNode.state === 'active')) {
-      if (lbl === 'seller') {
-        return { time: '10:30 AM', date: dayStr };
-      }
-      if (lbl.includes('pickup shg')) {
-        return { time: '11:15 AM', date: dayStr };
-      }
-      if (lbl.includes('transporter')) {
-        return { time: '12:40 PM', date: dayStr };
-      }
-      if (lbl.includes('gmu') || lbl.includes('hub')) {
-        return { time: '02:10 PM', date: dayStr };
-      }
-      if (lbl.includes('drop shg')) {
-        return { time: '04:30 PM', date: dayStr };
-      }
-      if (lbl === 'buyer') {
-        return { time: '06:15 PM', date: dayStr };
-      }
-    }
-
     return null;
   };
 
@@ -1142,7 +1276,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   const completedColumns = [
     { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Barcode', accessor: (row: any) => row.barcode || 'N/A' },
+    { header: 'QR Codes', accessor: (row: any) => (
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          handleParcelQrClick(row.id);
+        }}
+        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#073318] rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+      >
+        <QrCode className="h-2.5 w-2.5" />
+        <span>View QRs</span>
+      </button>
+    ) },
     { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
     { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
     { header: 'Completed Date', accessor: (row: any) => row.deliveredAt ? row.deliveredAt.split('T')[0] : (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
@@ -1535,38 +1680,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                   <Copy className="h-3.5 w-3.5" />
                                 </button>
                               </div>
-                              <div className="font-mono text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                                <span className="text-slate-350">|||</span>
-                                <span>{order.barcode || `BAR-${order.id}`}</span>
-                              </div>
+
                             </div>
 
-                            {/* Details Grid */}
-                            <div className="space-y-1 text-xs text-slate-600 font-semibold">
-                              <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                <span className="flex items-center gap-1">
-                                  <Package className="h-3.5 w-3.5 text-slate-400" />
-                                  {order.items?.length || 1} Items
-                                </span>
-                                <span>•</span>
-                                <span>{order.totalWeight || order.weight || 0} kg</span>
-                                <span>•</span>
-                                <span>{order.totalQty || order.quantity || 1} Pkgs</span>
-                              </div>
 
-                              <div className="flex items-center gap-1.5 text-slate-600">
-                                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate text-[11px]" title={order.buyerVillage}>
-                                  {order.buyerVillage || 'N/A'}, {order.buyerPincode || ''}
-                                </span>
-                              </div>
-
-                              {/* ETA pill */}
-                              <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-md text-[10px] font-extrabold mt-0.5">
-                                <Calendar className="h-3.5 w-3.5 text-emerald-600" />
-                                <span>ETA: {getExpectedDeliveryDate(order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : ''))}</span>
-                              </div>
-                            </div>
                           </div>
 
                           {/* Center Column (Visual Journey Stepper) */}
@@ -1588,7 +1705,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                     (node.state === 'completed' && nextNode.state === 'active') || 
                                     node.state === 'active'
                                   ) {
-                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-slate-200'; // active gradient
+                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
                                   }
                                   
                                   return (
@@ -1606,7 +1723,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 let iconContent = null;
                                 let labelColor = 'text-slate-405';
                                 let ringClass = '';
-                                const isClickable = node.state !== 'pending' && !!node.details;
+                                const isClickable = !!node.details;
                                 
                                 // Node Labels & Icons mapping
                                 const getIconForNode = (label: string) => {
@@ -1630,14 +1747,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                   );
                                   labelColor = 'text-[#073318] font-bold';
                                 } else if (node.state === 'active') {
-                                  nodeBg = 'bg-white border-[#073318] border-4 text-[#073318] shadow-md ring-4 ring-[#073318]/10';
+                                  nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
                                   iconContent = (
                                     <div className="relative animate-pulse">
                                       {iconElement}
                                     </div>
                                   );
-                                  labelColor = 'text-[#073318] font-black';
-                                  ringClass = 'active-node-ring';
+                                  labelColor = 'text-[#0284C7] font-black';
+                                  ringClass = 'active-node-ring-blue';
                                 } else {
                                   nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
                                   iconContent = iconElement;
@@ -1663,11 +1780,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       {iconContent}
                                       {/* Orbiting Satellite Dots Radar Ring */}
                                       {node.state === 'active' && (
-                                        <div className="absolute inset-0 -m-2.5 border border-[#073318]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
-                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#073318]" />
-                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#073318]" />
-                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#073318]" />
-                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#073318]" />
+                                        <div className="absolute inset-0 -m-2.5 border border-[#0284C7]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
+                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
                                         </div>
                                       )}
                                     </div>
@@ -1676,7 +1793,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
                                     {node.state === 'active' ? (
-                                      <span className="text-[8px] font-extrabold text-[#073318] bg-emerald-50 border border-emerald-250 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
+                                      <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
                                     ) : dateDetails ? (
                                       <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
                                         <span className="block font-bold text-slate-600">{dateDetails.time}</span>
@@ -1699,45 +1816,43 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 {order.mainStatus.replace(/[-_]/g, ' ')}
                               </span>
                               <span className="block text-[10px] text-slate-400 font-semibold">
-                                • Updated 2m ago
+                                • {getUpdatedTimeAgo(order)}
                               </span>
                             </div>
 
-                            {/* View action button */}
-                            <div className="flex flex-col sm:flex-row gap-2 w-full justify-start lg:justify-end">
-                              {needsBarcode && (
-                                <button
-                                  onClick={() => handleBarcodeClick(order.id)}
-                                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-                                >
-                                  <Barcode className="h-3.5 w-3.5" />
-                                  <span>Generate Barcode</span>
-                                </button>
-                              )}
+                             {/* View action button */}
+                             <div className="flex flex-row gap-2 justify-start lg:justify-end items-center">
+                               <button
+                                 onClick={() => handleParcelQrClick(order.id)}
+                                 title="Parcel QR Codes"
+                                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs shrink-0"
+                               >
+                                 <QrCode className="h-4 w-4" />
+                               </button>
 
-                              {needsIntake && (
-                                <button
-                                  onClick={() => {
-                                    const intakeKind = order.returnType 
-                                      ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
-                                      : 'pickup';
-                                    handleIntakeClick(order, intakeKind);
-                                  }}
-                                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-                                >
-                                  <ClipboardCheck className="h-3.5 w-3.5" />
-                                  <span>Intake Handover</span>
-                                </button>
-                              )}
+                               {needsIntake && (
+                                 <button
+                                   onClick={() => {
+                                     const intakeKind = order.returnType 
+                                       ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                                       : 'pickup';
+                                     handleIntakeClick(order, intakeKind);
+                                   }}
+                                   title="Intake Handover"
+                                   className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs shrink-0"
+                                 >
+                                   <ClipboardCheck className="h-4 w-4" />
+                                 </button>
+                               )}
 
-                              <button
-                                onClick={() => handleViewOrder(order)}
-                                className="px-4 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                              >
-                                <Eye className="h-4 w-4 text-[#B2D534]" />
-                                <span>View Details</span>
-                              </button>
-                            </div>
+                               <button
+                                 onClick={() => handleViewOrder(order)}
+                                 title="View Details"
+                                 className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
+                               >
+                                 <Eye className="h-4 w-4 text-[#B2D534]" />
+                               </button>
+                             </div>
                           </div>
 
                           {/* Expanded Details Section */}
@@ -1923,192 +2038,258 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           title="Verification & Intake Portal"
           variant="modal"
         >
-          {intakeOrder && (
-            <div className="space-y-5">
-              <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-2xl p-5 space-y-4 text-left">
-                <div className="flex items-center gap-2 text-[#073318] border-b border-[#073318]/10 pb-2">
-                  <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Information</span>
+          {intakeOrder && (() => {
+            const verifiedCount = intakeParcels.filter(p => ['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'VERIFIED'].includes(p.parcelStatus)).length;
+            const allVerified = intakeParcels.length > 0 && verifiedCount === intakeParcels.length;
+
+            return (
+              <div className="space-y-5 relative min-h-[300px]">
+                {/* Simulated Scanning Viewfinder Overlay */}
+                {scanningParcel && (
+                  <div className="absolute inset-0 bg-slate-950/95 rounded-2xl z-50 flex flex-col items-center justify-center text-white p-6">
+                    <div className="relative w-40 h-40 border-2 border-dashed border-[#B2D534] rounded-3xl flex items-center justify-center bg-slate-900 overflow-hidden shadow-inner">
+                      <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce top-1/2" />
+                      <QrCode className="h-16 w-16 text-[#B2D534] animate-pulse" />
+                    </div>
+                    <p className="mt-4 font-bold text-xs tracking-wide text-[#B2D534] animate-pulse">Scanning QR for {scanningParcel.productName}...</p>
+                    <p className="text-[9px] text-slate-400 mt-1">Simulating 2-second GMU Hub intake scanner verify</p>
+                  </div>
+                )}
+
+                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-2xl p-5 space-y-4 text-left">
+                  <div className="flex items-center gap-2 text-[#073318] border-b border-[#073318]/10 pb-2">
+                    <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Information</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
+                    <div className="col-span-2 bg-white p-3 rounded-xl border border-slate-150">
+                      <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Order ID(s)</p>
+                      <p className="font-extrabold text-[#073318] text-sm font-mono mt-0.5">{intakeOrder.id}</p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-slate-150">
+                      <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider">Total Quantity</p>
+                      <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.qty} units</p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-slate-150">
+                      <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Total Weight</p>
+                      <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.weight} kg</p>
+                    </div>
+
+                    {!intakeOrder.isBulk && (
+                      <>
+                        <div className="bg-white p-3 rounded-xl border border-slate-150">
+                          <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Seller / Origin</p>
+                          <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.sellerName || 'N/A'}</p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-slate-150">
+                          <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Buyer / Destination</p>
+                          <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.buyerName || 'N/A'}</p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-slate-150">
+                          <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned SHG</p>
+                          <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.shgName || 'N/A'}</p>
+                        </div>
+
+                        <div className="bg-white p-3 rounded-xl border border-slate-150">
+                          <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned Transporter</p>
+                          <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.transporterName || 'N/A'}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
-                  <div className="col-span-2 bg-white p-3 rounded-xl border border-slate-150">
-                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Order ID(s)</p>
-                    <p className="font-extrabold text-[#073318] text-sm font-mono mt-0.5">{intakeOrder.id}</p>
+                {/* Product Checklist Card */}
+                <div className="border border-slate-200 rounded-2xl p-5 space-y-4 text-left bg-white shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="font-extrabold text-xs text-[#073318] uppercase tracking-wider">Parcels Handover Verification</span>
+                    <span className="text-[11px] font-black text-slate-500">{verifiedCount} of {intakeParcels.length} verified</span>
                   </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-150">
-                    <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider">Total Quantity</p>
-                    <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.qty} units</p>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-150">
-                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Total Weight</p>
-                    <p className="font-extrabold text-[#073318] text-sm mt-0.5">{intakeOrder.weight} kg</p>
-                  </div>
-
-                  {!intakeOrder.isBulk && (
-                    <>
-                      <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Seller / Origin</p>
-                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.sellerName || 'N/A'}</p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Buyer / Destination</p>
-                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.buyerName || 'N/A'}</p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned SHG</p>
-                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.shgName || 'N/A'}</p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-xl border border-slate-150">
-                        <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Assigned Transporter</p>
-                        <p className="font-extrabold text-slate-800 mt-0.5">{intakeOrder.transporterName || 'N/A'}</p>
-                      </div>
-                    </>
+                  
+                  {loadingIntakeParcels ? (
+                    <p className="text-xs text-slate-400 italic">Loading parcels information...</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {intakeParcels.map((parcel, idx) => {
+                        const isItemVerified = ['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'VERIFIED'].includes(parcel.parcelStatus);
+                        return (
+                          <div key={parcel.parcelId || idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-150 rounded-xl">
+                            <div>
+                              <p className="font-bold text-xs text-slate-800">{parcel.productName}</p>
+                              <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Parcel #{parcel.parcelNumber} of {parcel.totalParcels} | {parcel.weight}</p>
+                            </div>
+                            
+                            {isItemVerified ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
+                                ✓ Verified
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleSimulatedIntakeScan(parcel)}
+                                className="px-3 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                              >
+                                Scan QR
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setIsIntakeModalOpen(false);
-                    setIntakeOrder(null);
-                    setIntakeType(null);
-                  }}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmIntake}
-                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <ClipboardCheck className="h-4 w-4" />
-                  Intake Order
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setIsIntakeModalOpen(false);
+                      setIntakeOrder(null);
+                      setIntakeType(null);
+                    }}
+                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmIntake}
+                    disabled={actionProcessing || !allVerified || loadingIntakeParcels}
+                    className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ClipboardCheck className="h-4 w-4" />
+                    Intake Order
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </Modal>
 
-        {/* --- BARCODE GENERATOR MODAL --- */}
+        {/* --- PARCEL QR CODES MODAL --- */}
         <Modal
-          isOpen={isBarcodeModalOpen}
-          onClose={() => setIsBarcodeModalOpen(false)}
-          title="Warehouse Barcode Generation"
+          isOpen={isParcelQrModalOpen}
+          onClose={() => setIsParcelQrModalOpen(false)}
+          title="Order Parcel QR Codes"
           variant="modal"
         >
-          {!generatedBarcodeText && barcodeOrder ? (
-            <div className="space-y-4 text-left">
+          {parcelQrOrder ? (
+            <div className="space-y-6 text-left">
+              {/* Order Information Card */}
               <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-2xl p-4 space-y-4">
-                <div className="flex items-center gap-2 text-[#073318] border-b border-[#073318]/10 pb-2">
-                  <span className="text-sm">📋</span>
-                  <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Details</span>
+                <div className="flex items-center justify-between border-b border-[#073318]/10 pb-2">
+                  <div className="flex items-center gap-2 text-[#073318]">
+                    <span className="text-sm">📋</span>
+                    <span className="font-extrabold text-xs uppercase tracking-wider">Order Handover Details</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (parcelQrOrderId && window.confirm("Are you sure you want to regenerate all QR codes for this order? This will invalidate previous codes.")) {
+                        try {
+                          setActionProcessing(true);
+                          const res = await generateQr(parcelQrOrderId, true);
+                          setParcelQrList(res || []);
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to regenerate QR codes.');
+                        } finally {
+                          setActionProcessing(false);
+                        }
+                      }
+                    }}
+                    className="px-2.5 py-1 text-[10px] font-black text-emerald-700 bg-white border border-emerald-300 hover:bg-emerald-50 rounded-lg shadow-sm cursor-pointer transition-all"
+                  >
+                    Regenerate QRs
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm space-y-1">
-                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Seller Information</p>
-                    <h6 className="font-extrabold text-[#073318] text-xs">{barcodeOrder.sellerName || 'N/A'}</h6>
-                    <div className="text-[10px] text-slate-600 font-semibold mt-0.5">
-                      📞 {barcodeOrder.sellerMobile || 'N/A'}
+                    <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider">Seller Information</p>
+                    <h6 className="font-extrabold text-[#073318] text-xs">{parcelQrOrder.sellerName || 'N/A'}</h6>
+                    <div className="text-[10px] text-slate-650 font-semibold mt-0.5">
+                      📞 {parcelQrOrder.sellerMobile || 'N/A'}
                     </div>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm space-y-1">
-                    <p className="text-[9px] text-slate-455 font-extrabold uppercase tracking-wider">Buyer Information</p>
-                    <h6 className="font-extrabold text-[#073318] text-xs">{barcodeOrder.buyerName || 'Gramin Mandi Mumbai'}</h6>
-                    <div className="text-[10px] text-slate-600 font-semibold space-y-0.5 mt-0.5">
-                      <div>📞 {barcodeOrder.buyerMobile || '+91 99887 11001'}</div>
-                      <div className="line-clamp-1">📍 {barcodeOrder.buyerAddress || 'Shop No. 12, Crawford Market, Mumbai'}</div>
+                    <p className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider">Buyer Information</p>
+                    <h6 className="font-extrabold text-[#073318] text-xs">{parcelQrOrder.buyerName || 'Gramin Mandi Mumbai'}</h6>
+                    <div className="text-[10px] text-slate-650 font-semibold space-y-0.5 mt-0.5">
+                      <div>📞 {parcelQrOrder.buyerMobile || '+91 99887 11001'}</div>
+                      <div className="line-clamp-1">📍 {parcelQrOrder.buyerAddress || 'Shop No. 12, Crawford Market, Mumbai'}</div>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="bg-white p-3 rounded-xl border border-slate-150 shadow-sm grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Product Count</p>
-                    <p className="text-sm font-black text-[#073318] mt-0.5">{barcodeOrder.productCount || 2}</p>
+              {/* Parcels list */}
+              <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+                {parcelQrList.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 font-semibold">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#073318] mx-auto mb-3"></div>
+                    <p className="text-xs">Loading/Generating Parcel QR Codes...</p>
                   </div>
-                  <div>
-                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Total Qty</p>
-                    <p className="text-sm font-black text-slate-800 mt-0.5">{barcodeOrder.totalQty || barcodeOrder.quantity || 40}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Total Weight</p>
-                    <p className="text-sm font-black text-slate-800 mt-0.5">{barcodeOrder.totalWeight || barcodeOrder.weight || 160} KG</p>
-                  </div>
-                </div>
+                ) : (
+                  parcelQrList.map((parcel) => (
+                    <div key={parcel.parcelId} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                      <div className="md:col-span-1 text-center border-r md:border-r border-slate-150 pr-4 flex flex-col justify-center items-center">
+                        {parcel.qrImage ? (
+                          <img src={parcel.qrImage} alt={`Parcel ${parcel.parcelNumber}`} className="h-32 w-32 object-contain" />
+                        ) : (
+                          <div className="h-32 w-32 bg-slate-100 flex items-center justify-center rounded-xl text-slate-400 font-bold text-xs">No QR Code</div>
+                        )}
+                        <span className="text-[10px] font-bold text-slate-400 mt-2 block">
+                          Parcel {parcel.parcelNumber} of {parcel.totalParcels}
+                        </span>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h6 className="font-extrabold text-[#073318] text-xs uppercase tracking-wide leading-none">{parcel.productName}</h6>
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full border ${
+                            parcel.parcelStatus === 'PENDING' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-250'
+                          }`}>
+                            {parcel.parcelStatus}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-650 font-medium">
+                          <div><span className="text-slate-400 font-semibold">Quantity:</span> {parcel.quantity} units</div>
+                          <div><span className="text-slate-400 font-semibold">Weight:</span> {parcel.weight}</div>
+                          <div><span className="text-slate-400 font-semibold">Token:</span> <span className="font-mono font-bold text-slate-800">{parcel.verificationToken}</span></div>
+                          <div><span className="text-slate-400 font-semibold">Phase:</span> {parcel.flowType}</div>
+                        </div>
+
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-150 font-mono text-[9px] text-slate-600 break-all select-all flex items-start justify-between gap-2">
+                          <span className="line-clamp-2 select-all">{parcel.qrCodeValue}</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(parcel.qrCodeValue);
+                              alert("Copied scanner JSON to clipboard!");
+                            }}
+                            className="p-1 hover:bg-slate-200 text-[#073318] rounded-md border border-slate-300 bg-white shrink-0 cursor-pointer shadow-sm active:scale-90 transition-all"
+                            title="Copy QR Value"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={async () => {
-                    if (barcodeOrderId) {
-                      try {
-                        setActionProcessing(true);
-                        const code = await generateBarcode(barcodeOrderId);
-                        setGeneratedBarcodeText(code);
-                        await loadData();
-                      } catch (err: any) {
-                        alert(err.message || 'Failed to generate barcode.');
-                      } finally {
-                        setActionProcessing(false);
-                      }
-                    }
-                  }}
-                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-sm shadow-md transition-colors cursor-pointer text-center"
-                >
-                  Generate Barcode
-                </button>
-                <button
-                  onClick={() => setIsBarcodeModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-5 text-center">
-              <p className="text-xs text-slate-500">
-                Generated unique label for Order ID: <span className="font-bold text-[#073318]">{barcodeOrderId}</span>
-              </p>
-              {generatedBarcodeText && (
-                <div className="py-8 bg-slate-50 border border-dashed border-slate-300 rounded-3xl flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-[2px] h-16 w-64">
-                    {Array.from({ length: 48 }).map((_, i) => {
-                      const width = (i % 3 === 0) ? 'w-[3px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
-                      const bg = (i % 7 === 0) ? 'bg-transparent' : 'bg-slate-900';
-                      return <div key={i} className={`h-full ${width} ${bg}`} />;
-                    })}
-                  </div>
-                  <p className="text-xs font-mono font-bold tracking-widest text-slate-700">{generatedBarcodeText}</p>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    alert('Sending print job to zebra labels printer...');
-                    setIsBarcodeModalOpen(false);
-                  }}
-                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-2xl font-bold text-sm shadow-md transition-colors cursor-pointer"
-                >
-                  Print Label
-                </button>
-                <button
-                  onClick={() => setIsBarcodeModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition-colors cursor-pointer"
+                  onClick={() => setIsParcelQrModalOpen(false)}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer text-center"
                 >
                   Close
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
         </Modal>
 
         {/* --- VIEW ORDER DETAILS DRAWER --- */}
@@ -2262,25 +2443,90 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                 {/* Right details */}
                 <div className="space-y-6">
+
+
+                  {/* Parcels & QR Codes Card */}
                   <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
-                    <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
-                      <Barcode className="h-4 w-4" />
-                      Barcode Label
-                    </h4>
-                    {selectedOrderDetails.barcode ? (
-                      <div className="space-y-3 flex flex-col items-center">
-                        <div className="flex items-center gap-[1.5px] h-10 w-full bg-slate-50 border border-slate-100 p-2 rounded-xl justify-center">
-                          {Array.from({ length: 40 }).map((_, i) => {
-                            const width = (i % 3 === 0) ? 'w-[3px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
-                            const bg = (i % 7 === 0) ? 'bg-transparent' : 'bg-slate-900';
-                            return <div key={i} className={`h-full ${width} ${bg}`} />;
-                          })}
-                        </div>
-                        <p className="text-xs font-mono font-bold tracking-widest text-slate-700">{selectedOrderDetails.barcode}</p>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
+                        <QrCode className="h-4 w-4" />
+                        Parcels & QR Codes
+                      </h4>
+                      {selectedOrderDetails.parcels && selectedOrderDetails.parcels.length > 0 && (
+                        <button
+                          onClick={() => handleDownloadAllQr(selectedOrderDetails.parcels)}
+                          className="text-[10px] bg-[#073318] hover:bg-[#073318]/90 text-white font-bold px-2 py-1 rounded-lg transition-all cursor-pointer"
+                        >
+                          Download All
+                        </button>
+                      )}
+                    </div>
+
+                    {!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0 ? (
+                      <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-3">
+                        <p className="text-xs font-semibold text-slate-500">No QR codes generated for this order yet.</p>
+                        <button
+                          onClick={() => handleGenerateAllQr(selectedOrderDetails.uuid || selectedOrderDetails.id)}
+                          disabled={isGeneratingQr}
+                          className="bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-350 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer"
+                        >
+                          {isGeneratingQr ? 'Generating...' : 'Generate QRs'}
+                        </button>
                       </div>
                     ) : (
-                      <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
-                        <span className="text-sm font-bold text-slate-400">N/A</span>
+                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                        {selectedOrderDetails.parcels.map((parcel: any) => (
+                          <div key={parcel.parcelId} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-xl transition-all">
+                            <img
+                              src={parcel.qrImage}
+                              alt={`Parcel ${parcel.parcelNumber}`}
+                              onClick={() => {
+                                setSelectedParcel(parcel);
+                                setIsParcelPreviewOpen(true);
+                              }}
+                              className="h-12 w-12 rounded-lg bg-white p-0.5 border border-slate-200 cursor-pointer hover:scale-105 transition-all shadow-sm shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">{parcel.productName}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-slate-500 font-semibold">
+                                  Parcel {parcel.parcelNumber}/{parcel.totalParcels}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">|</span>
+                                <span className="text-[10px] text-slate-500 font-semibold">
+                                  Qty: {parcel.quantity} ({parcel.weight})
+                                </span>
+                              </div>
+                              <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${
+                                parcel.parcelStatus === 'DELIVERED' || parcel.parcelStatus === 'COMPLETED'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : parcel.parcelStatus.includes('IN_TRANSIT') || parcel.parcelStatus === 'DISPATCHED'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}>
+                                {parcel.parcelStatus.replace(/[-_]/g, ' ')}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1.5 text-right">
+                              <a
+                                href={parcel.qrImage}
+                                download={`QR_${parcel.orderId}_Parcel_${parcel.parcelNumber}.png`}
+                                className="text-[10px] font-bold text-[#073318] hover:underline"
+                              >
+                                Download
+                              </a>
+                              <button
+                                onClick={() => {
+                                  setSelectedParcel(parcel);
+                                  setIsParcelPreviewOpen(true);
+                                }}
+                                className="text-[10px] font-bold text-slate-500 hover:underline hover:bg-transparent cursor-pointer"
+                              >
+                                Preview
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -2377,6 +2623,93 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           )}
         </Modal>
 
+        {/* --- PARCEL QR PREVIEW MODAL --- */}
+        <Modal
+          isOpen={isParcelPreviewOpen}
+          onClose={() => setIsParcelPreviewOpen(false)}
+          title={`Parcel QR Preview: ${selectedParcel?.productName || ''}`}
+          variant="modal"
+        >
+          {selectedParcel && (
+            <div className="space-y-6 text-center text-slate-800">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left text-xs font-semibold space-y-2.5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Order ID</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="font-mono text-sm text-[#073318] font-bold">{selectedParcel.orderId}</span>
+                      <button onClick={() => copyToClipboard(selectedParcel.orderId, 'Order ID')} className="text-slate-400 hover:text-[#073318] transition-all cursor-pointer bg-transparent border-0 p-0">
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Parcel ID</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="font-mono text-xs text-slate-700 font-bold truncate max-w-[120px]" title={selectedParcel.parcelId}>
+                        {selectedParcel.parcelId}
+                      </span>
+                      <button onClick={() => copyToClipboard(selectedParcel.parcelId, 'Parcel ID')} className="text-slate-400 hover:text-[#073318] transition-all cursor-pointer bg-transparent border-0 p-0">
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-1.5 border-t border-slate-200/60">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Product Name</span>
+                    <span className="font-bold text-slate-700 mt-0.5 block">{selectedParcel.productName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Parcel Number</span>
+                    <span className="font-bold text-slate-700 mt-0.5 block">
+                      {selectedParcel.parcelNumber} / {selectedParcel.totalParcels}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-1.5 border-t border-slate-200/60">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Quantity / Weight</span>
+                    <span className="font-bold text-slate-700 mt-0.5 block">
+                      {selectedParcel.quantity} ({selectedParcel.weight})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider">Verification Token</span>
+                    <span className="font-mono font-bold text-amber-700 mt-0.5 block">{selectedParcel.verificationToken}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-60 h-60 mx-auto border-2 border-slate-200 rounded-3xl overflow-hidden bg-white flex items-center justify-center p-3 shadow-md">
+                <img
+                  src={selectedParcel.qrImage}
+                  alt={`QR for ${selectedParcel.productName}`}
+                  className="max-h-full max-w-full"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => copyToClipboard(selectedParcel.qrCodeValue, 'QR Metadata')}
+                  className="flex-1 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer bg-transparent"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy Metadata
+                </button>
+                <a
+                  href={selectedParcel.qrImage}
+                  download={`QR_${selectedParcel.orderId}_Parcel_${selectedParcel.parcelNumber}.png`}
+                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white transition-all rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm text-center"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download PNG
+                </a>
+              </div>
+            </div>
+          )}
+        </Modal>
+
         {/* --- QR SCAN MODAL --- */}
         <Modal
           isOpen={isQrModalOpen}
@@ -2392,10 +2725,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     <span className="text-slate-400 block text-[9px] uppercase">Order ID</span>
                     <span className="font-mono text-sm text-[#073318] font-bold">{qrItem.id}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Barcode</span>
-                    <span className="font-mono text-slate-800">{qrItem.barcode || 'N/A'}</span>
-                  </div>
+
                 </div>
               </div>
 

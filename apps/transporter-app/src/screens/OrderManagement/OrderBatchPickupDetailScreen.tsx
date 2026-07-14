@@ -12,7 +12,11 @@ import {
   Image,
   Linking,
   Animated,
+  Alert,
+  Vibration,
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
@@ -43,6 +47,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [orderParcels, setOrderParcels] = useState<any[]>([]);
+  const [activeScanningParcel, setActiveScanningParcel] = useState<any>(null);
+  const [scannerModalVisible, setScannerModalVisible] = useState(false);
+  const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
+  const scanLaserAnim = useRef(new Animated.Value(0)).current;
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
 
   // Code-based Handover state
   const [showVerificationSheet, setShowVerificationSheet] = useState(false);
@@ -56,6 +67,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [verifiedProductIds, setVerifiedProductIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedGmuDropProductIds, setSelectedGmuDropProductIds] = useState<string[]>([]);
+
+
 
   // Scanner state variables
   const [showScannerModal, setShowScannerModal] = useState(false);
@@ -148,6 +161,20 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     }
   };
 
+  const handleQrScanSimulated = () => {
+    // Find the first matching parcel that is not yet verified
+    const pendingParcel = (displayProducts || [])
+      .map(p => orderParcels.find(op => op.productId === (p as any).productId))
+      .find(op => op && op.parcelStatus !== 'VERIFIED');
+    
+    if (pendingParcel) {
+      setActiveScanningParcel(pendingParcel);
+      setScannerModalVisible(true);
+    } else {
+      Alert.alert("All Products Verified", "There are no pending products left to verify in this batch.");
+    }
+  };
+
   const handleFinalBatchConfirm = async () => {
     if (!batch) return;
     setIsFinalizing(true);
@@ -223,6 +250,147 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   }, []);
 
   const batch = localBatch;
+
+
+
+  const fetchOrderParcels = async () => {
+    if (!batch || !batch.displayId) return;
+    try {
+      let res = await api.get(`/qr/order/${batch.displayId}`);
+      if (!res.data || res.data.length === 0) {
+        try {
+          await api.post('/qr/generate', { orderId: batch.displayId });
+          res = await api.get(`/qr/order/${batch.displayId}`);
+        } catch (genErr) {
+          console.warn("Auto-generating QR codes failed:", genErr);
+        }
+      }
+      if (res.data) {
+        setOrderParcels(res.data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch parcels for order:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrderParcels();
+  }, [batch?.displayId]);
+
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+    if (scannerModalVisible) {
+      scanLaserAnim.setValue(0);
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanLaserAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanLaserAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+    } else {
+      scanLaserAnim.setValue(0);
+    }
+    return () => {
+      if (animation) animation.stop();
+    };
+  }, [scannerModalVisible]);
+
+  useEffect(() => {
+    if (scannerModalVisible) {
+      setScanned(false);
+      setScanningStatus('scanning');
+      if (!permission || !permission.granted) {
+        requestPermission();
+      }
+    }
+  }, [scannerModalVisible, permission]);
+
+  const handleBarcodeScanned = async ({ type: qrType, data }: { type: string; data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+    setScanningStatus('success');
+
+    // Play haptic feedback
+    try {
+      Vibration.vibrate(100);
+    } catch (e) {
+      console.log('Vibration error:', e);
+    }
+
+    try {
+      let parcelId = '';
+      let verificationToken = '';
+
+      if (data.trim().startsWith('{')) {
+        const parsed = JSON.parse(data.trim());
+        parcelId = parsed.parcelId;
+        verificationToken = parsed.verificationToken;
+      } else {
+        const parts = data.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          parcelId = parts[0];
+          verificationToken = parts[1];
+        }
+      }
+
+      if (!parcelId || !verificationToken) {
+        Alert.alert('Invalid QR Code', 'This QR code does not contain a valid parcel ID and verification token.');
+        setScanned(false);
+        setScanningStatus('scanning');
+        return;
+      }
+
+      // Verify that the scanned parcel belongs to the product we clicked on
+      if (activeScanningParcel && activeScanningParcel.parcelId !== parcelId) {
+        Alert.alert(
+          'Wrong Product Scanned',
+          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`
+        );
+        setScanned(false);
+        setScanningStatus('scanning');
+        return;
+      }
+
+      const res = await api.post('/qr/verify', {
+        parcelId,
+        verificationToken,
+        userRole: 'TRANSPORTER',
+      });
+
+      showToast(res.data?.message || 'Product verified successfully via QR!', 'success');
+      await fetchOrderParcels();
+      if (refreshBatchesList) {
+        await refreshBatchesList();
+      }
+
+      setTimeout(() => {
+        setScannerModalVisible(false);
+        setActiveScanningParcel(null);
+        setScanned(false);
+      }, 1200);
+
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      const msg = err.response?.data?.message || err.message || 'Failed to verify QR code.';
+      Alert.alert('Verification Failed', msg);
+      setScanned(false);
+      setScanningStatus('scanning');
+    }
+  };
+
+  const laserTranslateY = scanLaserAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 240],
+  });
 
   // Preserve the original context type so the user stays in the pickup/drop flow they navigated from
   const type = initialType;
@@ -579,15 +747,39 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           </View>
 
-          <View style={styles.boxContentPadding}>
-            <View style={styles.productsWrapper}>
+            {/* Handover Progress Bar */}
+            <View style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: scale(12),
+              padding: scale(12),
+              marginHorizontal: scale(16),
+              marginBottom: scale(16),
+              borderWidth: 1,
+              borderColor: '#F1F5F9',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.03,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: scale(6) }}>
+                <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>Handover Progress</Text>
+                <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>{verifiedCount} of {displayProducts.length} verified</Text>
+              </View>
+              <View style={{ height: scale(6), backgroundColor: '#F1F5F9', borderRadius: scale(3), overflow: 'hidden' }}>
+                <View style={{ height: '100%', backgroundColor: '#10B981', borderRadius: scale(3), width: `${(verifiedCount / Math.max(1, displayProducts.length)) * 100}%` }} />
+              </View>
+            </View>
+
+            <View style={styles.boxContentPadding}>
+              <View style={styles.productsWrapper}>
               {displayProducts.map((product) => {
                 const isPicked = product.status === 'picked';
                 const isCompleted = product.status === 'completed';
                 const isRejected = product.status === 'rejected';
                 const isActionDone = type === 'pickup' ? (isPicked || isCompleted) : isCompleted;
 
-                const isGmuDrop = type === 'drop' && isHubPoint;
+                const isGmuDrop = false;
 
                 return (
                   <View
@@ -692,38 +884,105 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
 
                     <View style={styles.sideActionStrip}>
-                      {isBatchRejected ? (
-                        <View style={styles.successIconBox}>
-                          <XCircle size={scale(24)} color="#EF4444" strokeWidth={2.5} />
-                        </View>
-                      ) : (isCurrentLegCompleted || verifiedProductIds.includes(product.id) || product.verificationStatus === 'VERIFIED') ? (
-                        <View style={styles.verifiedBadge}>
-                          <CheckCircle size={scale(14)} color="#059669" strokeWidth={2.5} />
-                          <Text style={styles.verifiedBadgeText}>Verified</Text>
-                        </View>
-                      ) : isRejected ? (
-                        <View style={styles.successIconBox}>
-                          <XCircle size={scale(24)} color="#EF4444" />
-                        </View>
-                      ) : !isHubPoint ? (
-                        <View style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: scale(4),
-                          backgroundColor: '#F1F5F9',
-                          paddingHorizontal: scale(8),
-                          paddingVertical: verticalScale(4),
-                          borderRadius: scale(8),
-                          borderWidth: 1,
-                          borderColor: '#E2E8F0',
-                        }}>
-                          <Text style={{
-                            fontFamily: Fonts.bold,
-                            fontSize: moderateScale(11),
-                            color: '#64748B',
-                          }}>Pending</Text>
-                        </View>
-                      ) : null}
+                      {(() => {
+                        const matchingParcel = orderParcels.find((p: any) => p.productId === (product as any).productId);
+                        const getTransporterVerified = () => {
+                           if (isCurrentLegCompleted) return true;
+                           if (verifiedProductIds.includes(product.id)) return true;
+                           if (product.verificationStatus === 'VERIFIED') return true;
+                           if (!matchingParcel) return false;
+                           
+                           const status = matchingParcel.parcelStatus;
+                           if (type === 'pickup') {
+                             return status === 'IN_TRANSIT_TO_HUB' || 
+                                    status === 'HUB_RECEIVED' || 
+                                    status === 'DELIVERED' || 
+                                    status === 'COMPLETED' || 
+                                    status === 'VERIFIED';
+                           } else {
+                             return status === 'HUB_RECEIVED' || 
+                                    status === 'DELIVERED' || 
+                                    status === 'COMPLETED' || 
+                                    status === 'VERIFIED';
+                           }
+                         };
+                         const isVerified = getTransporterVerified();
+
+                        if (isBatchRejected) {
+                          return (
+                            <View style={styles.successIconBox}>
+                              <XCircle size={scale(24)} color="#EF4444" strokeWidth={2.5} />
+                            </View>
+                          );
+                        }
+
+                        if (isVerified) {
+                          return (
+                            <View style={styles.verifiedBadge}>
+                              <CheckCircle size={scale(14)} color="#059669" strokeWidth={2.5} />
+                              <Text style={styles.verifiedBadgeText}>Verified</Text>
+                            </View>
+                          );
+                        }
+
+                        if (isRejected) {
+                          return (
+                            <View style={styles.successIconBox}>
+                              <XCircle size={scale(24)} color="#EF4444" />
+                            </View>
+                          );
+                        }
+
+                        if (matchingParcel) {
+                          return (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setActiveScanningParcel(matchingParcel);
+                                setScannerModalVisible(true);
+                              }}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: scale(4),
+                                backgroundColor: '#073318',
+                                paddingHorizontal: scale(10),
+                                paddingVertical: verticalScale(6),
+                                borderRadius: scale(8),
+                              }}
+                            >
+                              <Text style={{
+                                fontFamily: Fonts.bold,
+                                fontSize: moderateScale(11),
+                                color: '#FFFFFF',
+                              }}>Scan QR</Text>
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        if (true) {
+                          return (
+                            <View style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: scale(4),
+                              backgroundColor: '#F1F5F9',
+                              paddingHorizontal: scale(8),
+                              paddingVertical: verticalScale(4),
+                              borderRadius: scale(8),
+                              borderWidth: 1,
+                              borderColor: '#E2E8F0',
+                            }}>
+                              <Text style={{
+                                fontFamily: Fonts.bold,
+                                fontSize: moderateScale(11),
+                                color: '#64748B',
+                              }}>Pending</Text>
+                            </View>
+                          );
+                        }
+
+                        return null;
+                      })()}
                     </View>
                   </View>
                 );
@@ -756,72 +1015,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             <View style={styles.rejectedBannerContainer}>
               <Text style={styles.rejectedBannerTextHeader}>Batch Rejected</Text>
             </View>
-          ) : isHubPoint ? (
-            <View style={{ gap: verticalScale(12) }}>
-              {type === 'pickup' ? (
-                <TouchableOpacity
-                  style={[styles.primaryConfirmBtn, styles.bgPickup, isFinalizing && styles.btnDisabled]}
-                  disabled={isFinalizing}
-                  onPress={handleFinalBatchConfirm}
-                >
-                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing ? 'Confirming...' : 'Confirm Pickup'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.primaryConfirmBtn,
-                    styles.bgDrop,
-                    (isFinalizing || selectedGmuDropProductIds.length < displayProducts.length) && styles.btnDisabled
-                  ]}
-                  disabled={isFinalizing || selectedGmuDropProductIds.length < displayProducts.length}
-                  onPress={handleGmuConfirm}
-                >
-                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing
-                      ? 'Confirming...'
-                      : selectedGmuDropProductIds.length < displayProducts.length
-                        ? `Confirm Delivery (${selectedGmuDropProductIds.length}/${displayProducts.length} Selected)`
-                        : 'Confirm Delivery'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.bottomRejectBtn}
-                onPress={() => setRejectingProductId('all')}
-              >
-                <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
-                <Text style={styles.bottomRejectBtnText}>{type === 'pickup' ? 'Reject Collection' : 'Reject Delivery'}</Text>
-              </TouchableOpacity>
-            </View>
           ) : (
             <View style={{ gap: verticalScale(12) }}>
-              {verifiedCount < displayProducts.length ? (
-                <TouchableOpacity
-                  style={[styles.primaryConfirmBtn, type === 'pickup' ? styles.bgPickup : styles.bgDrop]}
-                  onPress={async () => {
-                    if (displayProducts.length > 0) {
-                      setSelectedProductId(displayProducts[0].id);
-                      setOtpCode(['', '', '', '']);
-                      if (type === 'drop' && !isHubPoint && generateDropHandoverCode) {
-                        try {
-                          await generateDropHandoverCode(batch.id);
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      }
-                      setShowVerificationSheet(true);
-                    }
-                  }}
-                >
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {type === 'drop' && !isHubPoint ? 'Generate Code' : 'View Verification Code'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
+              {verifiedCount >= displayProducts.length && (
                 <TouchableOpacity
                   style={[
                     styles.primaryConfirmBtn,
@@ -841,13 +1037,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                   </Text>
                 </TouchableOpacity>
               )}
-              {type === 'pickup' && verifiedCount < displayProducts.length && (
-                <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(4) }}>
-                  <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center' }}>
-                    Awaiting SHG verification...
-                  </Text>
-                </View>
-              )}
+              <TouchableOpacity
+                style={[styles.primaryConfirmBtn, { backgroundColor: '#073318', marginTop: verticalScale(4) }]}
+                onPress={handleQrScanSimulated}
+              >
+                <Text style={styles.primaryConfirmBtnText}>Scan QR Code (Simulated)</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
@@ -859,6 +1054,120 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           )}
         </View>
       </ScrollView>
+
+      {/* Scanner Modal */}
+      <Modal
+        visible={scannerModalVisible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setScannerModalVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'space-between', padding: scale(24) }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: verticalScale(8) }}>
+            <TouchableOpacity
+              onPress={() => setScannerModalVisible(false)}
+              style={{
+                width: scale(44),
+                height: scale(44),
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderRadius: scale(22),
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.2)',
+              }}
+            >
+              <X size={scale(24)} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text
+              style={{
+                fontFamily: Fonts.bold,
+                fontSize: moderateScale(18),
+                color: '#FFFFFF',
+                textAlign: 'center',
+                flex: 1,
+                marginRight: scale(44),
+              }}
+            >
+              Verify Products
+            </Text>
+          </View>
+
+          {/* Viewfinder Area */}
+          <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, marginVertical: verticalScale(16) }}>
+            <View style={{ width: scale(260), height: scale(260), position: 'relative', justifyContent: 'center', alignItems: 'center' }}>
+              {/* Corner brackets */}
+              <View style={{ position: 'absolute', top: 0, left: 0, width: scale(32), height: scale(32), borderTopWidth: 4, borderLeftWidth: 4, borderColor: '#059669', borderTopLeftRadius: scale(12) }} />
+              <View style={{ position: 'absolute', top: 0, right: 0, width: scale(32), height: scale(32), borderTopWidth: 4, borderRightWidth: 4, borderColor: '#059669', borderTopRightRadius: scale(12) }} />
+              <View style={{ position: 'absolute', bottom: 0, left: 0, width: scale(32), height: scale(32), borderBottomWidth: 4, borderLeftWidth: 4, borderColor: '#059669', borderBottomLeftRadius: scale(12) }} />
+              <View style={{ position: 'absolute', bottom: 0, right: 0, width: scale(32), height: scale(32), borderBottomWidth: 4, borderRightWidth: 4, borderColor: '#059669', borderBottomRightRadius: scale(12) }} />
+
+              {/* Central scanning grid area / transparent frame */}
+              <View style={{ width: scale(240), height: scale(240), backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: scale(8), overflow: 'hidden', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+                {(permission && permission.granted) ? (
+                  <CameraView
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                    facing="back"
+                    barcodeScannerSettings={{
+                      barcodeTypes: ['qr'],
+                    }}
+                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                  />
+                ) : (
+                  <View style={{ padding: scale(16), alignItems: 'center' }}>
+                    <Text style={{ color: '#FFFFFF', textAlign: 'center', fontSize: moderateScale(12), marginBottom: verticalScale(8) }}>Camera permission required</Text>
+                    <TouchableOpacity onPress={requestPermission} style={{ backgroundColor: '#059669', paddingHorizontal: scale(12), paddingVertical: verticalScale(6), borderRadius: scale(8) }}>
+                      <Text style={{ color: '#FFFFFF', fontFamily: Fonts.bold, fontSize: moderateScale(11) }}>Grant</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {scanningStatus === 'scanning' ? (
+                  <>
+                    <Animated.View
+                      style={{
+                        transform: [{ translateY: laserTranslateY }],
+                        width: '100%',
+                        height: 3,
+                        backgroundColor: '#EF4444',
+                        position: 'absolute',
+                        top: 0,
+                        elevation: 5,
+                      }}
+                    />
+                  </>
+                ) : (
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5,150,105,0.9)', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: scale(64), height: scale(64), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: scale(32), alignItems: 'center', justifyContent: 'center', marginBottom: verticalScale(12) }}>
+                      <Check size={scale(32)} color="#FFFFFF" strokeWidth={3} />
+                    </View>
+                    <Text style={{ color: '#FFFFFF', fontSize: moderateScale(16), fontFamily: Fonts.bold }}>Scan Successful</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Instruction Text */}
+            <Text style={{ fontSize: moderateScale(14), fontFamily: Fonts.medium, color: 'rgba(255,255,255,0.7)', marginTop: verticalScale(32), textAlign: 'center', paddingHorizontal: scale(24) }}>
+              {scanningStatus === 'scanning' ? 'Align the barcode/QR code within the frame to verify products' : 'Product verified successfully!'}
+            </Text>
+          </View>
+
+          {/* Bottom actions */}
+          <View style={{ paddingBottom: verticalScale(32), alignItems: 'center', justifyContent: 'center' }}>
+            {scanningStatus === 'scanning' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(24), borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                <Text style={{ fontSize: moderateScale(13), fontFamily: Fonts.bold, color: '#FFFFFF' }}>Scanning Products...</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5EC', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(24), borderWidth: 1, borderColor: '#D5EFE0' }}>
+                <CheckCircle size={scale(16)} color="#073318" />
+                <Text style={{ fontSize: moderateScale(13), fontFamily: Fonts.bold, color: '#073318', marginLeft: scale(4) }}>Verification Completed</Text>
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={!!rejectingProductId}

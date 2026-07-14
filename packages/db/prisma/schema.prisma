@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -56,6 +57,78 @@ enum ShgRole {
   CRP
   LEADER
   MEMBER
+}
+
+model AdminUser {
+  id            String   @id @default(uuid())
+  mobileNumber  String   @unique
+  name          String
+  role          String
+  createdAt     DateTime @default(now())
+}
+
+model Order {
+  id                      String            @id @default(uuid())
+  orderId                 String
+  barcode                 String?
+  phase                   String            @default("PICKUP")
+  
+  sellerId                Int
+  seller                  Seller            @relation(fields: [sellerId], references: [id])
+  buyerId                 Int
+  buyer                   Buyer             @relation(fields: [buyerId], references: [id])
+  
+  // Package dimensions
+  productCount            Int               @default(1)
+  totalQty                Int               @default(1)
+  totalWeight             Float             @default(0.0)
+  
+  // SHG & Transporter assignments
+  pickupShgId             String?
+  pickupTransporterId     String?
+  dropShgId               String?
+  dropTransporterId       String?
+  pickupReturnShgId       String?
+  returnTransporterId     String?
+  
+  // Statuses
+  mainStatus              String            // Enum values like PENDING_PICKUP, HUB_RECEIVED, etc.
+  pickupShgStatus         String?           // PENDING, ACCEPTED, REJECTED, PICKED
+  pickupTransporterStatus String?           // PENDING, TRANSPORTER_ACCEPTED, IN_TRANSIT_TO_HUB
+  dropShgStatus           String?           // PENDING, ACCEPTED, REJECTED, DROP_SHG_DELIVERED
+  dropTransporterStatus   String?           // PENDING, TRANSPORTER_ACCEPTED, PARCEL_AT_DROP_SHG
+  
+  // Return & Reschedule indicators
+  returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
+  rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
+  rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
+  
+  // Timestamps
+  warehouseReceivedAt     DateTime?
+  barcodeGeneratedAt      DateTime?
+  storedAt                DateTime?
+  dispatchedAt            DateTime?
+  deliveredAt             DateTime?
+  rescheduledAt           DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  assignments             OrderAssignment[]
+
+  @@index([orderId])
+  @@index([barcode])
+}
+
+model OrderAssignment {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  assigneeId   String
+  assigneeType String   // SHG, TRANSPORTER
+  role         String   // PICKUP, DROP, RETURN
+  status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 //////////////////////////////////////////////////////
@@ -145,6 +218,7 @@ model Address {
   district      String
   state         String
   pincode       String
+  postOffice    String?
 
   landmark      String?
 
@@ -203,7 +277,7 @@ model OtherDetails {
   userId                Int
   user                  User        @relation(fields: [userId], references: [id])
 
-  vehicleType           String
+  vehicleType           VehicleType
 
   vehicleName           String?
   registrationNumber    String?
@@ -529,6 +603,11 @@ model PickupOrderItem {
   product       Product     @relation(fields: [productId], references: [id])
   quantity      Int
 
+  verificationCode String?   @map("verification_code")
+  generatedTime    DateTime? @map("generated_time")
+  verifiedTime     DateTime? @map("verified_time")
+  verificationStatus String?  @default("PENDING") @map("verification_status")
+
   @@index([pickupOrderId])
   @@index([productId])
   @@map("pickup_order_items")
@@ -631,6 +710,7 @@ model DropTracking {
 model Pincode {
   id             Int      @id @default(autoincrement())
   name           String
+  village        String
   description    String?
   branchType     String?
   deliveryStatus String?
@@ -640,13 +720,14 @@ model Pincode {
   region         String?
   block          String?
   state          String?
-  country        String?
+  country        String?  @default("India")
   pincode        String
-
   createdAt      DateTime @default(now()) @map("created_at")
 
-  @@unique([pincode, name])
+  @@unique([pincode, name, village])
   @@index([pincode])
+  @@index([village])
+  @@index([name])
   @@map("pincodes")
 }
 
@@ -676,11 +757,13 @@ model Seller {
   district     String
   state        String
   pincode      String
+  postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
   masterOrderItems  MasterOrderItem[]
   pickupOrders      PickupOrder[]
+  orders            Order[]
 
   @@map("sellers")
 }
@@ -698,72 +781,18 @@ model Buyer {
   district     String
   state        String
   pincode      String
+  postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
   masterOrders     MasterOrder[]     @relation("BuyerOrders")
   dropOrders       DropOrder[]
+  orders           Order[]
 
   @@map("buyers")
 }
 
-model TransporterMember {
-  id              String   @id @default(uuid())
-  transporterCode String?  @unique
-  type            String   // ROUTE_PARTNER, PERSONAL
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt       DateTime @default(now())
-  approvedAt      DateTime?
-  rejectedAt      DateTime?
 
-  // Personal Details
-  profilePhoto    String?
-  firstName       String
-  lastName        String
-  mobileNumber    String
-  email           String?
-
-  // Address Details
-  residentialAddress String?
-  village            String?
-  taluka             String?
-  district           String?
-  state              String?
-  pincode            String?
-
-  // Driving Details
-  licenseNumber      String?
-  licensePhoto       String?
-  licenseExpiryDate  DateTime?
-  experienceYears    Int?
-
-  // Bank Details
-  accountHolderName  String?
-  accountNumber      String?
-  ifscCode           String?
-  bankName           String?
-  branchName         String?
-  upiId              String?
-
-  // Vehicle Details
-  vehicleCategory       String?
-  vehicleType           String?
-  vehicleMake           String?
-  vehicleNumber         String?
-  vehicleRcPhoto        String?
-  vehicleInsurancePhoto String?
-
-  // Route Details
-  assignedPincodes   Json?
-  assignedVillages   Json?
-  morningShift       String?
-  eveningShift       String?
-  workingDays        Json?
-
-  // Milk Organization Details
-  milkOrganizationName String?
-  milkCenterName       String?
-}
 
 model VerificationRecord {
   id               Int       @id @default(autoincrement())
@@ -788,26 +817,6 @@ model VerificationRecord {
   @@map("VerificationRecord")
 }
 
-model BarcodeRecord {
-  id           Int       @id @default(autoincrement())
-  orderId      String
-  pickupOrderId Int?
-  dropOrderId   Int?
-  inventoryId   Int?
-  barcodeValue String    @unique
-  barcodeType  String
-  status       String    @default("GENERATED")
-  generatedTime DateTime? @default(now())
-  printedTime  DateTime?
-  scannedTime  DateTime?
-  dispatchTime DateTime?
-  intakeTime   DateTime?
-  returnType   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@map("BarcodeRecord")
-}
 
 model ScanHistory {
   id           Int       @id @default(autoincrement())
@@ -823,6 +832,53 @@ model ScanHistory {
 
   @@map("ScanHistory")
 }
+
+model Parcel {
+  parcelId           String   @id @default(uuid())
+  orderId            String
+  productId          Int
+  productName        String
+  parcelNumber       Int
+  totalParcels       Int
+  quantity           Int
+  weight             String
+  flowType           String
+  parcelStatus       String
+  currentHolderId    String?
+  currentHolderType  String?
+  verificationToken  String
+  qrCodeValue        String
+  qrImage            String   @db.Text
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  scanHistories      ParcelScanHistory[]
+
+  @@map("Parcel")
+}
+
+model ParcelScanHistory {
+  id            String   @id @default(uuid())
+  parcelId      String
+  parcel        Parcel   @relation(fields: [parcelId], references: [parcelId], onDelete: Cascade)
+  orderId       String
+  productId     Int
+  productName   String
+  userRole      String?
+  userId        String?
+  action        String
+  currentHolder String?
+  currentStage  String?
+  scanResult    String
+  scanTime      DateTime @default(now())
+  remarks       String?
+  latitude      Float?
+  longitude     Float?
+
+  @@map("ParcelScanHistory")
+}
+
 
 
 

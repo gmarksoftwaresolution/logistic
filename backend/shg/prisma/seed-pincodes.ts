@@ -50,20 +50,34 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+function parseBranchType(name: string): string {
+  const upper = name.toUpperCase().trim();
+  if (upper.endsWith(' H.O') || upper.endsWith(' H.O.') || upper.endsWith(' HO')) {
+    return 'Head Office';
+  }
+  if (upper.endsWith(' S.O') || upper.endsWith(' S.O.') || upper.endsWith(' SO')) {
+    return 'Sub Office';
+  }
+  if (upper.endsWith(' B.O') || upper.endsWith(' B.O.') || upper.endsWith(' BO')) {
+    return 'Branch Office';
+  }
+  return 'Sub Office'; // Default
+}
+
 async function main() {
-  const csvPath = path.join(__dirname, '../pincode/India_pincodes (1).csv');
+  const csvPath = path.join(__dirname, '../../gmu/pincode_file.csv');
   
   if (!fs.existsSync(csvPath)) {
     console.error(`CSV file not found at path: ${csvPath}`);
     process.exit(1);
   }
 
-  console.log('Starting pincode_directory database seeding...');
+  console.log('Starting pincodes database seeding...');
   console.log(`Reading CSV from: ${csvPath}`);
 
-  // Truncate existing pincode_directory data before seeding to avoid duplicates
-  console.log('Clearing existing pincode_directory table...');
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE public.pincode_directory RESTART IDENTITY CASCADE;');
+  // Truncate existing pincodes data before seeding to avoid duplicates
+  console.log('Clearing existing pincodes table...');
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE public.pincodes RESTART IDENTITY CASCADE;');
 
   const fileStream = fs.createReadStream(csvPath, 'utf8');
   const rl = readline.createInterface({
@@ -76,12 +90,12 @@ async function main() {
   const BATCH_SIZE = 5000;
   
   // Dynamic header indexing
-  let nameIdx = 0;
-  let pincodeIdx = 11;
-  let blockIdx = 8;
-  let districtIdx = 5;
-  let stateIdx = 9;
-  let countryIdx = 10;
+  let villageIdx = 0;      // Village/Locality name
+  let nameIdx = 1;         // Officename ( BO/SO/HO)
+  let pincodeIdx = 2;      // Pincode
+  let blockIdx = 3;        // Sub-distname
+  let districtIdx = 4;     // Districtname
+  let stateIdx = 5;        // StateName
 
   const seenInBatch = new Set<string>();
 
@@ -95,36 +109,36 @@ async function main() {
     if (isHeader) {
       isHeader = false;
       const headers = parseCSVLine(line);
-      nameIdx = headers.indexOf('Name') !== -1 ? headers.indexOf('Name') : 0;
-      pincodeIdx = headers.indexOf('Pincode') !== -1 ? headers.indexOf('Pincode') : 11;
-      blockIdx = headers.indexOf('Block') !== -1 ? headers.indexOf('Block') : 8;
-      districtIdx = headers.indexOf('District') !== -1 ? headers.indexOf('District') : 5;
-      stateIdx = headers.indexOf('State') !== -1 ? headers.indexOf('State') : 9;
-      countryIdx = headers.indexOf('Country') !== -1 ? headers.indexOf('Country') : 10;
-      console.log(`Detected header mappings -> Name: ${nameIdx}, Pincode: ${pincodeIdx}, Block: ${blockIdx}, District: ${districtIdx}, State: ${stateIdx}, Country: ${countryIdx}`);
+      villageIdx = headers.indexOf('Village/Locality name') !== -1 ? headers.indexOf('Village/Locality name') : 0;
+      nameIdx = headers.indexOf('Officename ( BO/SO/HO)') !== -1 ? headers.indexOf('Officename ( BO/SO/HO)') : 1;
+      pincodeIdx = headers.indexOf('Pincode') !== -1 ? headers.indexOf('Pincode') : 2;
+      blockIdx = headers.indexOf('Sub-distname') !== -1 ? headers.indexOf('Sub-distname') : 3;
+      districtIdx = headers.indexOf('Districtname') !== -1 ? headers.indexOf('Districtname') : 4;
+      stateIdx = headers.indexOf('StateName') !== -1 ? headers.indexOf('StateName') : 5;
+      console.log(`Detected header mappings -> Village: ${villageIdx}, Officename: ${nameIdx}, Pincode: ${pincodeIdx}, Block: ${blockIdx}, District: ${districtIdx}, State: ${stateIdx}`);
       continue;
     }
 
     const columns = parseCSVLine(line);
-    if (columns.length < 12) {
+    if (columns.length < 6) {
       skippedCount++;
       continue;
     }
 
     const pincode = columns[pincodeIdx];
-    const village = columns[nameIdx];
-    const taluka = columns[blockIdx] || columns[districtIdx] || 'N/A';
+    const name = columns[nameIdx];
+    const village = columns[villageIdx];
+    const block = columns[blockIdx];
     const district = columns[districtIdx];
     const state = columns[stateIdx];
-    const country = columns[countryIdx] || 'India';
 
-    if (!pincode || !village) {
+    if (!pincode || !name || !village) {
       skippedCount++;
       continue;
     }
 
-    // In-memory deduplication for identical village + pincode
-    const uniqueKey = `${pincode}_${village}`;
+    // In-memory deduplication for identical village + pincode + officename
+    const uniqueKey = `${pincode}_${name}_${village}`;
     if (seenInBatch.has(uniqueKey)) {
       skippedCount++;
       continue;
@@ -133,17 +147,23 @@ async function main() {
 
     batch.push({
       pincode,
+      name,
       village,
-      taluka,
+      block,
       district,
       state,
-      country
+      branchType: parseBranchType(name),
+      deliveryStatus: 'Delivery',
+      circle: 'N/A',
+      division: 'N/A',
+      region: 'N/A',
+      country: 'India'
     });
 
     processedCount++;
 
     if (batch.length >= BATCH_SIZE) {
-      const result = await (prisma as any).pincodeDirectory.createMany({
+      const result = await prisma.pincode.createMany({
         data: batch,
         skipDuplicates: true
       });
@@ -155,7 +175,7 @@ async function main() {
 
   // Insert remaining records
   if (batch.length > 0) {
-    const result = await (prisma as any).pincodeDirectory.createMany({
+    const result = await prisma.pincode.createMany({
       data: batch,
       skipDuplicates: true
     });

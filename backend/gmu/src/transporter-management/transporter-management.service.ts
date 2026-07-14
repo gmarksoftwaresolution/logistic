@@ -59,8 +59,8 @@ export class TransporterManagementService {
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
         COALESCE(rd."pickupLocations", st6.data->'pickupLocations') as "assignedPincodes",
-        tm."assignedVillages" as "tmAssignedVillages",
-        tm."assignedPincodes" as "tmAssignedPincodes",
+        null as "tmAssignedVillages",
+        null as "tmAssignedPincodes",
         rd."operatingArea" as "operatingArea",
         rd."pickupLocations" as "pickupLocations",
         COALESCE(rd."workingDays", st6.data->'workingDays') as "workingDays",
@@ -74,7 +74,6 @@ export class TransporterManagementService {
         addr.pincode
       FROM public."User" u
       LEFT JOIN public."TransporterDetail" td ON u.id = td."userId"
-      LEFT JOIN gmu."TransporterMember" tm ON tm."transporterCode" = COALESCE(td."transporterCode", u."uniqueCode")
       LEFT JOIN public."DrivingDetail" dd ON u.id = dd."userId"
       LEFT JOIN public."Document" doc ON u.id = doc."userId"
       LEFT JOIN public."Address" addr ON u.id = addr."userId"
@@ -208,21 +207,16 @@ export class TransporterManagementService {
     if (/^[0-9]+$/.test(id)) {
       return parseInt(id, 10);
     }
-    const member = await this.prisma.transporterMember.findUnique({
-      where: { id }
-    });
-    if (member && member.transporterCode) {
-      const userRows = await this.prisma.$queryRawUnsafe<any[]>(
-        `SELECT u.id 
-         FROM public."User" u
-         LEFT JOIN public."TransporterDetail" td ON u.id = td."userId"
-         WHERE u."uniqueCode" = $1 OR td."transporterCode" = $1 
-         LIMIT 1`,
-        member.transporterCode
-      );
-      if (userRows && userRows.length > 0) {
-        return userRows[0].id;
-      }
+    const userRows = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT u.id 
+       FROM public."User" u
+       LEFT JOIN public."TransporterDetail" td ON u.id = td."userId"
+       WHERE u."uniqueCode" = $1 OR td."transporterCode" = $1 OR u."phoneNumber" = $1
+       LIMIT 1`,
+      id
+    );
+    if (userRows && userRows.length > 0) {
+      return userRows[0].id;
     }
     throw new NotFoundException(`Transporter with ID ${id} not found`);
   }
@@ -265,8 +259,8 @@ export class TransporterManagementService {
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
         COALESCE(rd."pickupLocations", st6.data->'pickupLocations') as "assignedPincodes",
-        tm."assignedVillages" as "tmAssignedVillages",
-        tm."assignedPincodes" as "tmAssignedPincodes",
+        null as "tmAssignedVillages",
+        null as "tmAssignedPincodes",
         rd."operatingArea" as "operatingArea",
         rd."pickupLocations" as "pickupLocations",
         COALESCE(rd."workingDays", st6.data->'workingDays') as "workingDays",
@@ -280,7 +274,6 @@ export class TransporterManagementService {
         addr.pincode
       FROM public."User" u
       LEFT JOIN public."TransporterDetail" td ON u.id = td."userId"
-      LEFT JOIN gmu."TransporterMember" tm ON tm."transporterCode" = COALESCE(td."transporterCode", u."uniqueCode")
       LEFT JOIN public."DrivingDetail" dd ON u.id = dd."userId"
       LEFT JOIN public."Document" doc ON u.id = doc."userId"
       LEFT JOIN public."Address" addr ON u.id = addr."userId"
@@ -634,96 +627,6 @@ export class TransporterManagementService {
         );
       }
     }
-
-    // 6. Also populate the TransporterMember table in the gmu schema!
-    const [firstName, ...lastNameParts] = (user.fullName || '').split(' ');
-    const lastName = lastNameParts.join(' ');
-    const transporterCode = userRow.tdTransporterCode || user.uniqueCode || `TR-${userId}`;
-
-    writePromises.push(
-      this.prisma.transporterMember.upsert({
-        where: { transporterCode: transporterCode },
-        update: {
-          type: vehicleCategory === 'MILK_VAN' ? 'ROUTE_PARTNER' : 'PERSONAL',
-          status: 'APPROVED',
-          approvedAt: new Date(),
-          profilePhoto: user.profilePhoto || null,
-          firstName: firstName || '',
-          lastName: lastName || '',
-          mobileNumber: user.phoneNumber,
-          email: user.email || null,
-          residentialAddress: address?.houseNo || null,
-          village: address?.village || null,
-          taluka: address?.taluka || null,
-          district: address?.district || null,
-          state: address?.state || null,
-          pincode: address?.pincode || null,
-          licenseNumber: s2?.licenseNumber || null,
-          licensePhoto: s2?.licensePhoto || null,
-          licenseExpiryDate: s2?.expiryDate ? new Date(s2.expiryDate) : null,
-          experienceYears: s2?.experienceYears || null,
-          accountHolderName: bank?.accountHolderName || null,
-          accountNumber: bank?.accountNumber || null,
-          ifscCode: bank?.ifscCode || null,
-          bankName: bank?.bankName || null,
-          branchName: bank?.branchName || null,
-          upiId: bank?.upiId || null,
-          vehicleCategory: vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'PERSONAL',
-          vehicleType: vehicleInfo?.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
-          vehicleMake: vehicleInfo?.make || null,
-          vehicleNumber: vehicleInfo?.number || null,
-          vehicleRcPhoto: vehicleInfo?.rcUpload || null,
-          vehicleInsurancePhoto: vehicleInfo?.insuranceUpload || null,
-          assignedPincodes: s6p?.pickupLocations || null,
-          assignedVillages: s6mv?.assignedVillages || null,
-          morningShift: s6mv?.morningShiftTime || null,
-          eveningShift: s6mv?.eveningShiftTime || null,
-          workingDays: vehicleCategory === 'MILK_VAN' ? (s6mv?.workingDays || null) : (s6p?.workingDays || null),
-          milkOrganizationName: s5mv?.sangathanName || null,
-          milkCenterName: s5mv?.centerName || null,
-        },
-        create: {
-          transporterCode: transporterCode,
-          type: vehicleCategory === 'MILK_VAN' ? 'ROUTE_PARTNER' : 'PERSONAL',
-          status: 'APPROVED',
-          approvedAt: new Date(),
-          profilePhoto: user.profilePhoto || null,
-          firstName: firstName || '',
-          lastName: lastName || '',
-          mobileNumber: user.phoneNumber,
-          email: user.email || null,
-          residentialAddress: address?.houseNo || null,
-          village: address?.village || null,
-          taluka: address?.taluka || null,
-          district: address?.district || null,
-          state: address?.state || null,
-          pincode: address?.pincode || null,
-          licenseNumber: s2?.licenseNumber || null,
-          licensePhoto: s2?.licensePhoto || null,
-          licenseExpiryDate: s2?.expiryDate ? new Date(s2.expiryDate) : null,
-          experienceYears: s2?.experienceYears || null,
-          accountHolderName: bank?.accountHolderName || null,
-          accountNumber: bank?.accountNumber || null,
-          ifscCode: bank?.ifscCode || null,
-          bankName: bank?.bankName || null,
-          branchName: bank?.branchName || null,
-          upiId: bank?.upiId || null,
-          vehicleCategory: vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'PERSONAL',
-          vehicleType: vehicleInfo?.type || (vehicleCategory === 'MILK_VAN' ? 'MILK_VAN' : 'OTHER'),
-          vehicleMake: vehicleInfo?.make || null,
-          vehicleNumber: vehicleInfo?.number || null,
-          vehicleRcPhoto: vehicleInfo?.rcUpload || null,
-          vehicleInsurancePhoto: vehicleInfo?.insuranceUpload || null,
-          assignedPincodes: s6p?.pickupLocations || null,
-          assignedVillages: s6mv?.assignedVillages || null,
-          morningShift: s6mv?.morningShiftTime || null,
-          eveningShift: s6mv?.eveningShiftTime || null,
-          workingDays: vehicleCategory === 'MILK_VAN' ? (s6mv?.workingDays || null) : (s6p?.workingDays || null),
-          milkOrganizationName: s5mv?.sangathanName || null,
-          milkCenterName: s5mv?.centerName || null,
-        }
-      })
-    );
 
     await Promise.all(writePromises);
   }

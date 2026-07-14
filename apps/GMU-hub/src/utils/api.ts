@@ -190,9 +190,9 @@ export const api = {
     transporterPicked: (id: string) => request(`/orders/${id}/transporter-picked`, { method: 'POST' }),
 
     warehouseIntake: (id: string) => request(`/orders/${id}/warehouse-intake`, { method: 'POST' }),
-    generateBarcode: (id: string) => request(`/orders/${id}/generate-barcode`, { method: 'POST' }),
+    generateQr: (orderId: string, regenerate?: boolean) => request('/qr/generate', { method: 'POST', body: JSON.stringify({ orderId, regenerate }) }),
+    verifyQr: (parcelId: string, verificationToken: string, userRole: string, scannedByUserId?: string, latitude?: number, longitude?: number, remarks?: string) => request('/qr/verify', { method: 'POST', body: JSON.stringify({ parcelId, verificationToken, userRole, scannedByUserId, latitude, longitude, remarks }) }),
     store: (id: string) => request(`/orders/${id}/store`, { method: 'POST' }),
-    scan: (id: string, barcode: string) => request(`/orders/${id}/scan`, { method: 'POST', body: JSON.stringify({ barcode }) }),
 
     dropShgBroadcast: (id: string) => request(`/orders/${id}/drop-shg-broadcast`, { method: 'POST' }),
     dropShgAccept: (id: string, shgId: string) => request(`/orders/${id}/drop-shg-accept`, { method: 'POST', body: JSON.stringify({ shgId }) }),
@@ -229,6 +229,15 @@ export const api = {
     cancelOrder: (id: string) => request(`/orders/${id}/cancel`, { method: 'POST' }),
     slaBreachOrder: (id: string) => request(`/orders/${id}/sla-breach`, { method: 'POST' }),
     simulateRescheduleTimeout: (id: string) => request(`/orders/${id}/simulate-reschedule-timeout`, { method: 'POST' }),
+  },
+  qr: {
+    generate: (orderId: string, regenerate?: boolean) => request('/qr/generate', { method: 'POST', body: JSON.stringify({ orderId, regenerate }) }),
+    getDetails: (parcelId: string) => request(`/qr/${parcelId}`),
+    verify: (data: any) => request('/qr/verify', { method: 'POST', body: JSON.stringify(data) }),
+  },
+  parcel: {
+    getDetails: (parcelId: string) => request(`/parcel/${parcelId}`),
+    getHistory: (parcelId: string) => request(`/parcel/${parcelId}/history`),
   },
 };
 export default api;

@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { LocationModule } from './location/location.module';
 import { OrderModule } from './order/order.module';
 import { OrderHistoryModule } from './modules/order-history/order-history.module';
+import { QrModule } from './qr/qr.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { OrderHistoryModule } from './modules/order-history/order-history.module
     LocationModule,
     OrderModule,
     OrderHistoryModule,
+    QrModule,
   ],
   controllers: [AppController],
   providers: [AppService],

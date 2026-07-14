@@ -17,140 +17,6 @@ model AdminUser {
   createdAt     DateTime @default(now())
 }
 
-model CommunityMember {
-  id            String   @id @default(uuid())
-  memberCode    String?  @unique
-  type          String   // SHG, INDIVIDUAL
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt     DateTime @default(now())
-  approvedAt    DateTime?
-  rejectedAt    DateTime?
-
-  // Personal Details
-  profilePhoto      String?
-  fullName          String
-  mobileNumber      String
-  age               Int?
-  occupation        String?
-
-  // SHG Details
-  roleInShg         String?
-  shgName           String?
-  crpName           String?
-  crpMobile         String?
-  crpEmail          String?
-  leaderName        String?
-  leaderMobile      String?
-  groupSize         Int?
-  activeSince       String?
-
-  // Business Details
-  producesProducts  Boolean? @default(false)
-  businessTeamSize  Int?
-  productName       String?
-  productCategory   String?
-  dailyProduction   Float?
-  weeklyProduction  Float?
-  productionUnit    String?
-  pricePerUnit      Float?
-
-  // Address Details
-  houseNo           String?
-  deliveryAddress   String?
-  village           String?
-  taluka            String?
-  district          String?
-  state             String?
-  pincode           String?
-
-  // Document Details
-  aadhaarNumber     String?
-  panNumber         String?
-  aadhaarFrontPhoto String?
-  aadhaarBackPhoto  String?
-  panCardPhoto      String?
-
-  // Bank Details
-  accountHolderName String?
-  accountNumber     String?
-  ifscCode          String?
-  bankName          String?
-  branchName        String?
-  upiId             String?
-
-  // Storage Details
-  storageSpace      String?
-  storageWidth      Float?
-  storageHeight     Float?
-  storageDescription String?
-
-  // Vehicle Details
-  vehicleAvailable          Boolean? @default(false)
-  vehicleType               String?
-  vehicleRegistrationNumber String?
-  drivingLicenseNumber      String?
-  drivingLicensePhoto       String?
-  vehiclePhoto              String?
-}
-
-model TransporterMember {
-  id              String   @id @default(uuid())
-  transporterCode String?  @unique
-  type            String   // ROUTE_PARTNER, PERSONAL
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt       DateTime @default(now())
-  approvedAt      DateTime?
-  rejectedAt      DateTime?
-
-  // Personal Details
-  profilePhoto    String?
-  firstName       String
-  lastName        String
-  mobileNumber    String
-  email           String?
-
-  // Address Details
-  residentialAddress String?
-  village            String?
-  taluka             String?
-  district           String?
-  state              String?
-  pincode            String?
-
-  // Driving Details
-  licenseNumber      String?
-  licensePhoto       String?
-  licenseExpiryDate  DateTime?
-  experienceYears    Int?
-
-  // Bank Details
-  accountHolderName  String?
-  accountNumber      String?
-  ifscCode           String?
-  bankName           String?
-  branchName         String?
-  upiId              String?
-
-  // Vehicle Details
-  vehicleCategory       String?
-  vehicleType           String?
-  vehicleMake           String?
-  vehicleNumber         String?
-  vehicleRcPhoto        String?
-  vehicleInsurancePhoto String?
-
-  // Route Details
-  assignedPincodes   Json?
-  assignedVillages   Json?
-  morningShift       String?
-  eveningShift       String?
-  workingDays        Json?
-
-  // Milk Organization Details
-  milkOrganizationName String?
-  milkCenterName       String?
-}
-
 model Order {
   id                      String            @id @default(uuid())
   orderId                 String
@@ -334,8 +200,9 @@ model Address {
   village       String?
   taluka        String?
   district      String
-  state         String
+  state         String   @default("Maharashtra")
   pincode       String
+  postOffice    String?
 
   landmark      String?
 
@@ -394,7 +261,7 @@ model OtherDetails {
   userId                Int
   user                  User        @relation(fields: [userId], references: [id])
 
-  vehicleType           String
+  vehicleType           VehicleType
 
   vehicleName           String?
   registrationNumber    String?
@@ -807,19 +674,24 @@ model DropTracking {
 model Pincode {
   id             Int      @id @default(autoincrement())
   name           String
+  village        String
   description    String?
+  branchType     String?
+  deliveryStatus String?
   circle         String?
   district       String?
   division       String?
   region         String?
   block          String?
   state          String?
-  country        String?
+  country        String?  @default("India")
   pincode        String
   createdAt      DateTime @default(now()) @map("created_at")
 
-  @@unique([pincode, name])
+  @@unique([pincode, name, village])
   @@index([pincode])
+  @@index([village])
+  @@index([name])
   @@map("pincodes")
 }
 
@@ -847,8 +719,9 @@ model Seller {
   village      String
   taluka       String
   district     String
-  state        String
+  state        String   @default("Maharashtra")
   pincode      String
+  postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -870,8 +743,9 @@ model Buyer {
   village      String
   taluka       String
   district     String
-  state        String
+  state        String   @default("Maharashtra")
   pincode      String
+  postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -903,28 +777,6 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
-}
-
-model BarcodeRecord {
-  id           Int       @id @default(autoincrement())
-  orderId      String
-  pickupOrderId Int?
-  dropOrderId   Int?
-  inventoryId   Int?
-  barcodeValue String    @unique
-  barcodeType  String
-  status       String    @default("GENERATED")
-  generatedTime DateTime? @default(now())
-  printedTime  DateTime?
-  scannedTime  DateTime?
-  dispatchTime DateTime?
-  intakeTime   DateTime?
-  returnType   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@map("BarcodeRecord")
-}
 
 model ScanHistory {
   id           Int       @id @default(autoincrement())
@@ -939,4 +791,50 @@ model ScanHistory {
   timestamp    DateTime  @default(now())
 
   @@map("ScanHistory")
+}
+
+model Parcel {
+  parcelId           String   @id @default(uuid())
+  orderId            String
+  productId          Int
+  productName        String
+  parcelNumber       Int
+  totalParcels       Int
+  quantity           Int
+  weight             String
+  flowType           String
+  parcelStatus       String
+  currentHolderId    String?
+  currentHolderType  String?
+  verificationToken  String
+  qrCodeValue        String
+  qrImage            String   @db.Text
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  scanHistories      ParcelScanHistory[]
+
+  @@map("Parcel")
+}
+
+model ParcelScanHistory {
+  id            String   @id @default(uuid())
+  parcelId      String
+  parcel        Parcel   @relation(fields: [parcelId], references: [parcelId], onDelete: Cascade)
+  orderId       String
+  productId     Int
+  productName   String
+  userRole      String?
+  userId        String?
+  action        String
+  currentHolder String?
+  currentStage  String?
+  scanResult    String
+  scanTime      DateTime @default(now())
+  remarks       String?
+  latitude      Float?
+  longitude     Float?
+
+  @@map("ParcelScanHistory")
 }

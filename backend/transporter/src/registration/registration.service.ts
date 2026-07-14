@@ -264,6 +264,7 @@ export class RegistrationService {
         taluka: dto.taluka,
         village: dto.village,
         pincode: dto.pinCode,
+        postOffice: dto.postOffice || null,
       },
       create: {
         userId: user.id,
@@ -273,6 +274,7 @@ export class RegistrationService {
         taluka: dto.taluka,
         village: dto.village,
         pincode: dto.pinCode,
+        postOffice: dto.postOffice || null,
       },
     });
 
@@ -410,7 +412,7 @@ export class RegistrationService {
 
   async getPincodeInfo(pincode: string) {
     const records: any[] = await this.prisma.$queryRaw`
-      SELECT state, district, taluka FROM public.pincode_directory WHERE pincode = ${pincode} LIMIT 1
+      SELECT state, district, block AS taluka FROM public.pincodes WHERE pincode = ${pincode} LIMIT 1
     `;
     if (!records || records.length === 0) {
       throw new NotFoundException('Pincode details not found');
@@ -426,11 +428,12 @@ export class RegistrationService {
 
   async getPincodeVillages(pincode: string) {
     const records: any[] = await this.prisma.$queryRaw`
-      SELECT DISTINCT village, taluka, district FROM public.pincode_directory WHERE pincode = ${pincode} ORDER BY village ASC
+      SELECT DISTINCT village, block AS taluka, district, name AS "postOffice" FROM public.pincodes WHERE pincode = ${pincode} ORDER BY village ASC
     `;
     return records.map(r => ({
       name: r.village,
       taluka: r.taluka || r.district || '',
+      postOffice: r.postOffice || '',
     }));
   }
 

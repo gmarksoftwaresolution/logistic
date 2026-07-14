@@ -42,6 +42,11 @@ export class CreateOrderDto {
   @IsNotEmpty()
   sellerPincode: string;
 
+  @ApiProperty({ example: 'Indapur S.O', required: false })
+  @IsString()
+  @IsOptional()
+  sellerPostOffice?: string;
+
   @ApiProperty({ example: 'Buyer Name' })
   @IsString()
   @IsNotEmpty()
@@ -76,6 +81,11 @@ export class CreateOrderDto {
   @IsString()
   @IsNotEmpty()
   buyerPincode: string;
+
+  @ApiProperty({ example: 'Nesari S.O', required: false })
+  @IsString()
+  @IsOptional()
+  buyerPostOffice?: string;
 
   @ApiProperty({ example: 1 })
   @IsNumber()

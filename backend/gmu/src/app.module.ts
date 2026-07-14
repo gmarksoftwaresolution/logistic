@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { CommunityManagementModule } from './community-management/community-management.module';
 import { TransporterManagementModule } from './transporter-management/transporter-management.module';
 import { OrderManagementModule } from './order-management/order-management.module';
+import { QrModule } from './qr/qr.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -21,6 +22,7 @@ import { AppController } from './app.controller';
     CommunityManagementModule,
     TransporterManagementModule,
     OrderManagementModule,
+    QrModule,
   ],
   controllers: [AppController],
 })
