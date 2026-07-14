@@ -268,6 +268,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             isRTO: o.isRTO || false,
             verificationCode: item.verificationCode || '',
             verificationStatus: item.verificationStatus || 'PENDING',
+            productId: item.productId,
           };
         }) || [],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -339,6 +340,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             isRTO: o.isRTO || false,
             verificationCode: item.verificationCode || '',
             verificationStatus: item.verificationStatus || 'PENDING',
+            productId: item.productId,
           };
         }) || [],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),

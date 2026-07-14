@@ -27,11 +27,11 @@ export class OrderService {
       where: { userId: transporterId }
     });
 
-    const tm = await this.prisma.$queryRawUnsafe(`
-      SELECT id, "assignedVillages", "assignedPincodes" FROM gmu."TransporterMember" WHERE "mobileNumber" = $1 LIMIT 1;
-    `, user.phoneNumber) as any[];
-    const transporterMember = tm?.[0] || null;
-    const transporterUuid = transporterMember?.id || null;
+    const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
+      where: { userId: transporterId }
+    });
+
+    const transporterUuid = String(transporterId);
 
     const parseJsonArray = (val: any) => {
       if (Array.isArray(val)) return val;
@@ -44,19 +44,25 @@ export class OrderService {
     const areas = routeDetail?.operatingArea
       ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
       : [];
-    const assignedVillages = transporterMember
-      ? parseJsonArray(transporterMember.assignedVillages).map((s: string) => s.toLowerCase())
-      : [];
+
+    const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
+    const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+
     const assignedPincodes = [
-      ...(transporterMember ? parseJsonArray(transporterMember.assignedPincodes) : []),
       ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
     ].map((s: string) => s.toLowerCase());
 
     const matchesRoute = (pincode: string, village: string) => {
       const p = pincode?.trim()?.toLowerCase();
       const v = village?.trim()?.toLowerCase();
-      const villageMatched = v && (assignedVillages.includes(v) || areas.includes(v));
-      const pincodeMatched = p && (assignedPincodes.includes(p) || areas.includes(p));
+      const villageMatched = v && (
+        assignedVillages.some(av => av.split(' (')[0] === v) || 
+        areas.some(a => a.split(' (')[0] === v)
+      );
+      const pincodeMatched = p && (
+        assignedPincodes.some(ap => ap.split(' (')[0] === p) || 
+        areas.some(a => a.split(' (')[0] === p)
+      );
       return !!(villageMatched && pincodeMatched);
     };
 
@@ -64,8 +70,8 @@ export class OrderService {
     if (transporterUuid) {
       const transporterAssignments = await this.prisma.$queryRawUnsafe(`
         SELECT o."orderId" 
-        FROM gmu."OrderAssignment" oa
-        JOIN gmu."Order" o ON oa."orderId" = o.id
+        FROM public."OrderAssignment" oa
+        JOIN public."Order" o ON oa."orderId" = o.id
         WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') AND o.phase = 'PICKUP';
       `, transporterUuid) as any[];
       assignedPickupOrderIds = transporterAssignments.map(a => a.orderId);
@@ -131,7 +137,7 @@ export class OrderService {
         if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED') {
           // Check gmu.Order mainStatus
           const gmuOrders = await this.prisma.$queryRawUnsafe(`
-            SELECT id, "mainStatus", "pickupTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+            SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
           `, pickup.masterOrder.orderNumber) as any[];
           if (gmuOrders.length > 0) {
             const orderUuid = gmuOrders[0].id;
@@ -144,7 +150,7 @@ export class OrderService {
 
             // Check if there is a PENDING assignment for this transporter
             const assignments = await this.prisma.$queryRawUnsafe(`
-              SELECT id FROM gmu."OrderAssignment"
+              SELECT id FROM public."OrderAssignment"
               WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
             `, orderUuid, transporterUuid) as any[];
 
@@ -163,7 +169,7 @@ export class OrderService {
     const updatedPickups = [];
     for (const p of filteredPickups) {
       const gmuOrders = await this.prisma.$queryRawUnsafe(`
-        SELECT "pickupTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
       `, p.masterOrder.orderNumber) as any[];
       const pickupTransporterStatus = gmuOrders?.[0]?.pickupTransporterStatus || null;
 
@@ -214,10 +220,7 @@ export class OrderService {
     return this.prisma.$transaction(async (tx) => {
       // Find Transporter UUID from gmu schema
       const user = await tx.user.findUnique({ where: { id: transporterId } });
-      const tm = await tx.$queryRawUnsafe(`
-        SELECT id FROM gmu."TransporterMember" WHERE "mobileNumber" = $1 LIMIT 1;
-      `, user.phoneNumber) as any[];
-      const transporterUuid = tm?.[0]?.id || null;
+      const transporterUuid = String(transporterId);
 
       // Find order number
       const masterOrder = await tx.masterOrder.findUnique({
@@ -226,7 +229,7 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT id, "pickupTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -259,14 +262,14 @@ export class OrderService {
       // Update OrderAssignment of this transporter to ACCEPTED for all roles
       if (transporterUuid) {
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."OrderAssignment"
+          UPDATE public."OrderAssignment"
           SET status = 'ACCEPTED', "updatedAt" = NOW()
           WHERE "orderId" = $1 AND "assigneeId" = $2 AND "assigneeType" = 'TRANSPORTER';
         `, orderUuid, transporterUuid);
 
         // Cancel other pending Transporter assignments for this order (both roles)
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."OrderAssignment"
+          UPDATE public."OrderAssignment"
           SET status = 'CANCELLED', "updatedAt" = NOW()
           WHERE "orderId" = $1 AND "assigneeType" = 'TRANSPORTER' AND "assigneeId" <> $2 AND status = 'PENDING';
         `, orderUuid, transporterUuid);
@@ -275,7 +278,7 @@ export class OrderService {
       // Update gmu.Order status
       const nextGmuStatus = isReturn ? 'RETURN_TRANSPORTER_ACCEPTED' : 'PICKUP_TRANSPORTER_ACCEPTED';
       await tx.$executeRawUnsafe(`
-        UPDATE gmu."Order"
+        UPDATE public."Order"
         SET "pickupTransporterId" = $1, "pickupTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
         WHERE id = $4;
       `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
@@ -352,10 +355,7 @@ export class OrderService {
     return this.prisma.$transaction(async (tx) => {
       // Find Transporter UUID from gmu schema
       const user = await tx.user.findUnique({ where: { id: transporterId } });
-      const tm = await tx.$queryRawUnsafe(`
-        SELECT id FROM gmu."TransporterMember" WHERE "mobileNumber" = $1 LIMIT 1;
-      `, user.phoneNumber) as any[];
-      const transporterUuid = tm?.[0]?.id || null;
+      const transporterUuid = String(transporterId);
 
       // Find order number
       const masterOrder = await tx.masterOrder.findUnique({
@@ -364,7 +364,7 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT id, "dropTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -397,14 +397,14 @@ export class OrderService {
       // Update OrderAssignment of this transporter to ACCEPTED for all roles
       if (transporterUuid) {
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."OrderAssignment"
+          UPDATE public."OrderAssignment"
           SET status = 'ACCEPTED', "updatedAt" = NOW()
           WHERE "orderId" = $1 AND "assigneeId" = $2 AND "assigneeType" = 'TRANSPORTER';
         `, orderUuid, transporterUuid);
 
         // Cancel other pending Transporter assignments for this order (both roles)
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."OrderAssignment"
+          UPDATE public."OrderAssignment"
           SET status = 'CANCELLED', "updatedAt" = NOW()
           WHERE "orderId" = $1 AND "assigneeType" = 'TRANSPORTER' AND "assigneeId" <> $2 AND status = 'PENDING';
         `, orderUuid, transporterUuid);
@@ -413,7 +413,7 @@ export class OrderService {
       // Update gmu.Order status
       const nextGmuStatus = isReturn ? 'RETURN_TRANSPORTER_ACCEPTED' : 'DROP_TRANSPORTER_ACCEPTED';
       await tx.$executeRawUnsafe(`
-        UPDATE gmu."Order"
+        UPDATE public."Order"
         SET "dropTransporterId" = $1, "dropTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
         WHERE id = $4;
       `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
@@ -500,7 +500,7 @@ export class OrderService {
       });
 
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id, "pickupShgStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT id, "pickupShgStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       let shgDropped = false;
@@ -532,7 +532,7 @@ export class OrderService {
         });
 
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."Order"
+          UPDATE public."Order"
           SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
           WHERE "orderId" = $2 AND phase = 'PICKUP';
         `, nextGmuStatus, masterOrder.orderNumber);
@@ -544,7 +544,7 @@ export class OrderService {
 
         if (orderUuid) {
           await tx.$executeRawUnsafe(`
-            UPDATE gmu."OrderAssignment"
+            UPDATE public."OrderAssignment"
             SET status = 'COMPLETED', "updatedAt" = NOW()
             WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
           `, orderUuid);
@@ -570,7 +570,7 @@ export class OrderService {
         });
 
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."Order"
+          UPDATE public."Order"
           SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
           WHERE "orderId" = $2 AND phase = 'PICKUP';
         `, nextGmuStatus, masterOrder.orderNumber);
@@ -637,11 +637,11 @@ export class OrderService {
       where: { userId: transporterId }
     });
 
-    const tm = await this.prisma.$queryRawUnsafe(`
-      SELECT id, "assignedVillages", "assignedPincodes" FROM gmu."TransporterMember" WHERE "mobileNumber" = $1 LIMIT 1;
-    `, user.phoneNumber) as any[];
-    const transporterMember = tm?.[0] || null;
-    const transporterUuid = transporterMember?.id || null;
+    const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
+      where: { userId: transporterId }
+    });
+
+    const transporterUuid = String(transporterId);
 
     const parseJsonArray = (val: any) => {
       if (Array.isArray(val)) return val;
@@ -654,18 +654,19 @@ export class OrderService {
     const areas = routeDetail?.operatingArea
       ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
       : [];
-    const assignedVillages = transporterMember
-      ? parseJsonArray(transporterMember.assignedVillages).map((s: string) => s.toLowerCase())
-      : [];
-    const assignedPincodes = transporterMember
-      ? parseJsonArray(transporterMember.assignedPincodes).map((s: string) => s.toLowerCase())
-      : [];
+
+    const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
+    const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+
+    const assignedPincodes = [
+      ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
+    ].map((s: string) => s.toLowerCase());
 
     const matchesRoute = (pincode: string, village: string, taluka: string, district: string) => {
-      if (pincode && (assignedPincodes.includes(pincode.toLowerCase()) || areas.includes(pincode.toLowerCase()))) return true;
-      if (village && (assignedVillages.includes(village.toLowerCase()) || areas.includes(village.toLowerCase()))) return true;
-      if (taluka && areas.includes(taluka.toLowerCase())) return true;
-      if (district && areas.includes(district.toLowerCase())) return true;
+      if (pincode && (assignedPincodes.some(ap => ap.split(' (')[0] === pincode.toLowerCase()) || areas.some(a => a.split(' (')[0] === pincode.toLowerCase()))) return true;
+      if (village && (assignedVillages.some(av => av.split(' (')[0] === village.toLowerCase()) || areas.some(a => a.split(' (')[0] === village.toLowerCase()))) return true;
+      if (taluka && areas.some(a => a.split(' (')[0] === taluka.toLowerCase())) return true;
+      if (district && areas.some(a => a.split(' (')[0] === district.toLowerCase())) return true;
       return false;
     };
     const pendingCodesDrops = await this.prisma.dropOrder.findMany({
@@ -755,7 +756,7 @@ export class OrderService {
       } else if (drop.transporterId === null) {
         // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
         const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "dropTransporterStatus" FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
         `, drop.masterOrder.orderNumber) as any[];
         if (gmuOrders.length > 0) {
           const orderUuid = gmuOrders[0].id;
@@ -769,7 +770,7 @@ export class OrderService {
           const role = isReturn ? 'RETURN' : 'DROP';
 
           const assignments = await this.prisma.$queryRawUnsafe(`
-            SELECT id FROM gmu."OrderAssignment"
+            SELECT id FROM public."OrderAssignment"
             WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = $3 AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
           `, orderUuid, transporterUuid, role) as any[];
 
@@ -1005,7 +1006,7 @@ export class OrderService {
       const dropTransporterStatus = isToGmuHub ? 'DROPPED' : (isReturnDrop ? 'DELIVERED_TO_GMU' : 'DELIVERED');
 
       await tx.$executeRawUnsafe(`
-        UPDATE gmu."Order"
+        UPDATE public."Order"
         SET "pickupTransporterStatus" = $1, 
             "dropTransporterStatus" = $2, 
             "mainStatus" = CASE WHEN "mainStatus" = 'DELIVERED' THEN 'DELIVERED' ELSE $3 END, 
@@ -1020,13 +1021,13 @@ export class OrderService {
 
       // Find the gmu.Order UUID and update assignments
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM gmu."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
         const orderUuid = rawGmuOrder[0].id;
         await tx.$executeRawUnsafe(`
-          UPDATE gmu."OrderAssignment"
+          UPDATE public."OrderAssignment"
           SET status = 'COMPLETED', "updatedAt" = NOW()
           WHERE "orderId" = $1 AND "assigneeType" = 'TRANSPORTER';
         `, orderUuid);
@@ -1096,7 +1097,7 @@ export class OrderService {
       });
 
       await tx.$executeRawUnsafe(`
-        UPDATE gmu."Order"
+        UPDATE public."Order"
         SET "dropTransporterStatus" = 'PICKED', 
             "mainStatus" = $1, 
             "updatedAt" = NOW()
@@ -1310,7 +1311,7 @@ export class OrderService {
       const pickupTransporterStatus = 'DROPPED';
 
       await tx.$executeRawUnsafe(`
-        UPDATE gmu."Order"
+        UPDATE public."Order"
         SET "pickupTransporterStatus" = $1, 
             "mainStatus" = $2, 
             "updatedAt" = NOW()

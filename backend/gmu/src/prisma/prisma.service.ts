@@ -105,21 +105,28 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     }
 
     if (activeShgId) {
-      const shg = await prisma.communityMember.findUnique({
-        where: { id: activeShgId }
-      });
-      if (shg) {
-        shgDetails = {
-          id: shg.id,
-          name: shg.fullName,
-          mobile: shg.mobileNumber,
-          village: shg.village || '',
-          pincode: shg.pincode || '',
-          address: shg.deliveryAddress || `${shg.houseNo || ''} ${shg.village || ''} ${shg.taluka || ''} ${shg.district || ''}`.trim(),
-          shgName: shg.shgName || '',
-          role: activeShgRole,
-          status: shg.status,
-        };
+      const numericId = parseInt(activeShgId, 10);
+      if (!isNaN(numericId)) {
+        const shgUser = await prisma.user.findUnique({
+          where: { id: numericId },
+          include: {
+            shgDetail: true,
+            address: true,
+          }
+        });
+        if (shgUser) {
+          shgDetails = {
+            id: String(shgUser.id),
+            name: shgUser.fullName || '',
+            mobile: shgUser.phoneNumber,
+            village: shgUser.address?.village || '',
+            pincode: shgUser.address?.pincode || '',
+            address: shgUser.address?.deliveryAddress || `${shgUser.address?.village || ''} ${shgUser.address?.taluka || ''} ${shgUser.address?.district || ''}`.trim(),
+            shgName: shgUser.shgDetail?.shgName || '',
+            role: activeShgRole,
+            status: shgUser.applicationStatus,
+          };
+        }
       }
     }
 
@@ -188,18 +195,26 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     }
 
     if (activeTransporterId) {
-      const transporter = await prisma.transporterMember.findUnique({
-        where: { id: activeTransporterId }
-      });
-      if (transporter) {
-        transporterDetails = {
-          id: transporter.id,
-          name: `${transporter.firstName} ${transporter.lastName}`.trim(),
-          mobile: transporter.mobileNumber,
-          address: transporter.residentialAddress || `${transporter.village || ''} ${transporter.taluka || ''} ${transporter.district || ''}`.trim(),
-          vehicleNumber: transporter.vehicleNumber || '',
-          vehicleType: transporter.vehicleType || '',
-        };
+      const numericId = parseInt(activeTransporterId, 10);
+      if (!isNaN(numericId)) {
+        const transporterUser = await prisma.user.findUnique({
+          where: { id: numericId },
+          include: {
+            address: true,
+            transporterDetail: true,
+            otherDetails: true,
+          }
+        });
+        if (transporterUser) {
+          transporterDetails = {
+            id: String(transporterUser.id),
+            name: transporterUser.fullName || '',
+            mobile: transporterUser.phoneNumber,
+            address: transporterUser.address?.residentialAddress || `${transporterUser.address?.village || ''} ${transporterUser.address?.taluka || ''} ${transporterUser.address?.district || ''}`.trim(),
+            vehicleNumber: transporterUser.otherDetails?.[0]?.registrationNumber || '',
+            vehicleType: transporterUser.otherDetails?.[0]?.vehicleType || '',
+          };
+        }
       }
     }
 
@@ -253,6 +268,16 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     console.error('Error fetching Transporter details in middleware:', e);
   }
 
+  // 5. Fetch Parcels dynamically
+  let parcels = [];
+  try {
+    parcels = await prisma.parcel.findMany({
+      where: { orderId: order.orderId }
+    });
+  } catch (e) {
+    console.error('Error fetching parcels in middleware:', e);
+  }
+
   return {
     ...rest,
     sellerName: seller?.sellerName || '',
@@ -274,7 +299,8 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     items,
     tracking,
     shgDetails,
-    transporterDetails
+    transporterDetails,
+    parcels
   };
 }
 

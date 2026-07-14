@@ -14,24 +14,18 @@ async function getVillageLocation(prisma: any, villageName: string) {
     });
     if (addr) return addr;
 
-    // 2. Check CommunityMember table in gmu schema
-    const cm = await prisma.communityMember.findFirst({
-      where: { village: { equals: name, mode: 'insensitive' } },
-      select: { village: true, pincode: true, taluka: true, district: true, state: true }
-    });
-    if (cm) return cm;
-
-    // 3. Check PincodeDirectory table in public schema
-    const pd = await prisma.pincodeDirectory.findFirst({
+    // 2. Check Pincode table in public schema
+    const pd = await prisma.pincode.findFirst({
       where: { village: { equals: name, mode: 'insensitive' } }
     });
     if (pd) {
       return {
         village: pd.village,
         pincode: pd.pincode,
-        taluka: pd.taluka,
+        taluka: pd.block || pd.district || 'N/A',
         district: pd.district,
-        state: pd.state
+        state: pd.state,
+        postOffice: pd.name
       };
     }
   }
@@ -56,6 +50,7 @@ async function ensurePublicTablesExist(prisma: any) {
       district VARCHAR(255) NOT NULL,
       state VARCHAR(255) NOT NULL,
       pincode VARCHAR(255) NOT NULL,
+      post_office VARCHAR(255),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
     );
@@ -76,6 +71,7 @@ async function ensurePublicTablesExist(prisma: any) {
       district VARCHAR(255) NOT NULL,
       state VARCHAR(255) NOT NULL,
       pincode VARCHAR(255) NOT NULL,
+      post_office VARCHAR(255),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
     );
@@ -133,6 +129,26 @@ async function ensurePublicTablesExist(prisma: any) {
 async function main() {
   // Ensure public schema tables exist first
   await ensurePublicTablesExist(prisma);
+
+  // Clear orders, products, and inventory tables first for a clean slate
+  console.log('Clearing database tables for fresh seed...');
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_tracking RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_tracking RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_order_items RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_orders RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.warehouse_inventory RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.products RESTART IDENTITY CASCADE;`);
+
+  await prisma.orderAssignment.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.seller.deleteMany({});
+  await prisma.buyer.deleteMany({});
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.sellers RESTART IDENTITY CASCADE;`);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.buyers RESTART IDENTITY CASCADE;`);
 
   console.log('Resolving dynamic locations for allowed villages...');
   const allowedVillagesList = ['Gadhinglaj', 'Nesari', 'Dundage', 'Mahagaon', 'Batkanangale', 'Inchnal'];
@@ -213,184 +229,11 @@ async function main() {
     'Goat Rearing', 'Vegetable Vending', 'Apiculture (Honey)'
   ];
 
-  // Seeding Community Members if empty
-  const cmCount = await prisma.communityMember.count();
-  if (cmCount === 0) {
-    console.log('Seeding Community Members...');
-    
-    // Seed SHG Leaders/Members (Female)
-    for (let i = 0; i < 15; i++) {
-      const loc = getLocation(i);
-      await prisma.communityMember.create({
-        data: {
-          fullName: shgNames[i],
-          mobileNumber: randomMobile(),
-          type: 'SHG',
-          status: 'APPROVED',
-          village: loc.village,
-          taluka: loc.taluka,
-          district: loc.district,
-          state: loc.state,
-          pincode: loc.pincode,
-          memberCode: `CM-SHG-${1000 + i}`,
-          shgName: `${shgNames[i].split(' ')[0]} Mahila Bachat Gat`,
-          groupSize: 10 + (i % 6),
-          leaderName: shgNames[i],
-          occupation: occupations[i % occupations.length],
-        },
-      });
-    }
-
-    // Seed Individual Members (Male)
-    for (let i = 0; i < 15; i++) {
-      const loc = getLocation(i + 5);
-      await prisma.communityMember.create({
-        data: {
-          fullName: individualNames[i],
-          mobileNumber: randomMobile(),
-          type: 'INDIVIDUAL',
-          status: 'APPROVED',
-          village: loc.village,
-          taluka: loc.taluka,
-          district: loc.district,
-          state: loc.state,
-          pincode: loc.pincode,
-          memberCode: `CM-IND-${1000 + i}`,
-          occupation: occupations[(i + 3) % occupations.length],
-        },
-      });
-    }
-
-    // Ensure a specific SHG exists for testing login/assignments (phone: 7777777777)
-    const testLoc = locations[0];
-    await prisma.communityMember.create({
-      data: {
-        fullName: 'Tara Bai Shinde',
-        mobileNumber: '7777777777',
-        type: 'SHG',
-        status: 'APPROVED',
-        village: testLoc.village,
-        taluka: testLoc.taluka,
-        district: testLoc.district,
-        state: testLoc.state,
-        pincode: testLoc.pincode,
-        memberCode: 'CM-SHG-TEST',
-        shgName: 'Tara Mahila Bachat Gat',
-        groupSize: 12,
-        leaderName: 'Tara Bai Shinde',
-        occupation: 'Spices & Masala Making',
-      },
-    });
-
-    console.log('Seeded 31 Community Members successfully.');
-  } else {
-    console.log('Community Members already exist, skipping...');
-  }
-
-  // Seeding Transporters if empty
-  const tmCount = await prisma.transporterMember.count();
-  if (tmCount === 0) {
-    console.log('Seeding Transporters...');
-    const vehicleTypes = ['Mini Truck (Tata Ace)', 'Pickup Van (Bolero)', 'Auto Rickshaw Cargo', 'Two Wheeler'];
-    
-    // Seed Route Partners
-    const routePartnerNames = [
-      'Ramesh Jadhav', 'Suresh Kadam', 'Vijay Patil', 'Anil Chavan', 'Dilip Shinde',
-      'Sunil Lohar', 'Prakash Desai', 'Sanjay More', 'Vikas Patil', 'Rajendra Jadhav'
-    ];
-    for (let i = 0; i < 10; i++) {
-      const loc = getLocation(i + 2);
-      await prisma.transporterMember.create({
-        data: {
-          firstName: routePartnerNames[i].split(' ')[0],
-          lastName: routePartnerNames[i].split(' ')[1],
-          mobileNumber: randomMobile(),
-          type: 'ROUTE_PARTNER',
-          status: 'APPROVED',
-          residentialAddress: `Near Main Road, ${loc.village}`,
-          village: loc.village,
-          taluka: loc.taluka,
-          district: loc.district,
-          state: loc.state,
-          pincode: loc.pincode,
-          transporterCode: `TM-RP-${1000 + i}`,
-          vehicleType: vehicleTypes[i % 3], // Mini Truck, Bolero, Auto Rickshaw
-          licenseNumber: `MH-09-L-${1000 + i}`,
-        },
-      });
-    }
-
-    // Seed Personal Transporters
-    const personalNames = [
-      'Sachin Sawant', 'Rahul Kulkarni', 'Sandip Patil', 'Amol Joshi', 'Prasad Desai'
-    ];
-    for (let i = 0; i < 5; i++) {
-      const loc = getLocation(i + 4);
-      await prisma.transporterMember.create({
-        data: {
-          firstName: personalNames[i].split(' ')[0],
-          lastName: personalNames[i].split(' ')[1],
-          mobileNumber: randomMobile(),
-          type: 'PERSONAL',
-          status: 'APPROVED',
-          residentialAddress: `Galli No. ${i + 1}, ${loc.village}`,
-          village: loc.village,
-          taluka: loc.taluka,
-          district: loc.district,
-          state: loc.state,
-          pincode: loc.pincode,
-          transporterCode: `TM-PR-${1000 + i}`,
-          vehicleType: 'Two Wheeler',
-          licenseNumber: `MH-09-L-${2000 + i}`,
-        },
-      });
-    }
-
-    // Ensure a specific Transporter exists for testing login/assignments (phone: 9999999999)
-    const testLoc = locations[1];
-    await prisma.transporterMember.create({
-      data: {
-        firstName: 'Balasaheb',
-        lastName: 'Patil',
-        mobileNumber: '9999999999',
-        type: 'ROUTE_PARTNER',
-        status: 'APPROVED',
-        residentialAddress: `Opposite Bus Stand, ${testLoc.village}`,
-        village: testLoc.village,
-        taluka: testLoc.taluka,
-        district: testLoc.district,
-        state: testLoc.state,
-        pincode: testLoc.pincode,
-        transporterCode: 'TM-RP-TEST',
-        vehicleType: 'Pickup Van (Bolero)',
-        licenseNumber: 'MH-09-L-TEST',
-      },
-    });
-
-    console.log('Seeded 16 Transporters successfully.');
-  } else {
-    console.log('Transporters already exist, skipping...');
-  }
+  // Seed Transporters as real User profiles
+  await seedTransporterUsers(prisma, locations);
 
   // Clear orders and reseed them
   console.log('Seeding Orders...');
-  await prisma.orderAssignment.deleteMany({});
-  await prisma.order.deleteMany({});
-  await prisma.seller.deleteMany({});
-  await prisma.buyer.deleteMany({});
-
-  console.log('Clearing public schema order and inventory tables...');
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_tracking RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_tracking RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_order_items RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_order_items RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.drop_orders RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.pickup_orders RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_order_items RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.master_orders RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.warehouse_inventory RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.sellers RESTART IDENTITY CASCADE;`);
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.buyers RESTART IDENTITY CASCADE;`);
 
   const sellersData = [
     {
@@ -520,14 +363,10 @@ async function main() {
         taluka: seller.taluka,
         district: seller.district,
         state: seller.state,
-        pincode: seller.pincode
+        pincode: seller.pincode,
+        postOffice: seller.postOffice || null,
       }
     });
-
-    await prisma.$executeRaw`
-      INSERT INTO public.sellers (id, seller_code, seller_name, mobile_number, email, address_line1, village, taluka, district, state, pincode, created_at, updated_at)
-      VALUES (${seller.id}, ${seller.sellerCode}, ${seller.sellerName}, ${seller.mobileNumber}, ${seller.email}, ${seller.addressLine1}, ${seller.village}, ${seller.taluka}, ${seller.district}, ${seller.state}, ${seller.pincode}, NOW(), NOW());
-    `;
   }
 
   console.log('Inserting Buyers...');
@@ -544,20 +383,16 @@ async function main() {
         taluka: buyer.taluka,
         district: buyer.district,
         state: buyer.state,
-        pincode: buyer.pincode
+        pincode: buyer.pincode,
+        postOffice: buyer.postOffice || null,
       }
     });
-
-    await prisma.$executeRaw`
-      INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, email, address_line1, village, taluka, district, state, pincode, created_at, updated_at)
-      VALUES (${buyer.id}, ${buyer.buyerCode}, ${buyer.buyerName}, ${buyer.mobileNumber}, ${buyer.email}, ${buyer.addressLine1}, ${buyer.village}, ${buyer.taluka}, ${buyer.district}, ${buyer.state}, ${buyer.pincode}, NOW(), NOW());
-    `;
   }
 
   // Reset auto-increment sequences for sellers and buyers
-  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.sellers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.sellers;`);
   await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
-  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('gmu.buyers', 'id'), COALESCE(MAX(id), 1)) FROM gmu.buyers;`);
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
+  await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
   await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
 
   // Ensure matching User IDs 1 to 6 exist in the public."User" table to satisfy the products foreign key mapping
@@ -577,7 +412,7 @@ async function main() {
 
       if (phoneUser.length === 0) {
         await prisma.$executeRawUnsafe(`
-          INSERT INTO public."User" (id, "authId", role, "phoneNumber", email, "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", created_at, updated_at)
+          INSERT INTO public."User" (id, "authId", role, "phoneNumber", email, "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
           VALUES ($1, $2::uuid, 'SELLER', $3, $4, $5, true, 4, 100, 'APPROVED', NOW(), NOW());
         `, i, uuidv4(), seller.mobileNumber, seller.email, seller.sellerName);
       }
@@ -642,8 +477,8 @@ async function main() {
   await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_orders;`);
   await prisma.$executeRawUnsafe(`DELETE FROM public.master_order_items;`);
   await prisma.$executeRawUnsafe(`DELETE FROM public.master_orders;`);
-  await prisma.$executeRawUnsafe(`DELETE FROM gmu."OrderAssignment";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM gmu."Order";`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public."OrderAssignment";`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public."Order";`);
 
   console.log('Seeding 20 pickup orders in ORDER_PLACED status using the new logistics-catalog products...');
   for (let i = 1; i <= 20; i++) {
@@ -697,10 +532,10 @@ async function main() {
 
     // Auto-broadcast logic in seed.ts for SHGs:
     const approvedShgs = await prisma.$queryRawUnsafe(`
-      SELECT cm.id, cm.pincode, cm.village
-      FROM gmu."CommunityMember" cm
-      JOIN public."User" u ON cm."mobileNumber" = u."phoneNumber"
-      WHERE cm.type = 'SHG' AND cm.status = 'APPROVED' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+      SELECT u.id, a.pincode, a.village
+      FROM public."User" u
+      JOIN public."Address" a ON u.id = a."userId"
+      WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
     `) as any[];
 
     // Match BOTH Pincode AND Village (exact, trimmed, case-insensitive)
@@ -716,9 +551,9 @@ async function main() {
       const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
       for (const shg of matchingShgs) {
         await prisma.$executeRawUnsafe(`
-          INSERT INTO gmu."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+          INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
           VALUES ($1, $2, $3, 'SHG', 'PICKUP', 'PENDING', NOW(), NOW());
-        `, uuidv4(), createdGmuOrder.id, shg.id);
+        `, uuidv4(), createdGmuOrder.id, String(shg.id));
       }
 
       // Update Order Status to PICKUP_ASSIGNED in gmu schema Order table
@@ -773,9 +608,6 @@ async function main() {
   // Seed additional SHG registrations
   await seedAdditionalSHGs(prisma);
 
-  // Seed Transporter route details and user accounts
-  await seedTransporterRouteDetails(prisma);
-
   console.log('Database Seeding Completed Successfully!');
 }
 
@@ -784,6 +616,19 @@ async function seedAdditionalSHGs(prisma: any) {
   const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
   const additionalShgs = [
+    // Test SHG
+    {
+      village: 'Gadhinglaj',
+      shgName: 'Tara Mahila Bachat Gat',
+      contactPerson: 'Tara Bai Shinde',
+      mobileNumber: '7777777777',
+      email: 'tara.shinde@test.com',
+      houseNo: 'House No. 10',
+      landmark: 'Near Temple',
+      bankAccount: '33333333330',
+      aadhaar: '111122223330',
+      pan: 'ABCDE0000Z'
+    },
     // Batkanangale
     {
       village: 'Batkanangale',
@@ -880,11 +725,6 @@ async function seedAdditionalSHGs(prisma: any) {
       await prisma.$executeRawUnsafe(`DELETE FROM public."User" WHERE id = $1;`, uId);
     }
 
-    // Clean up community member in GMU schema
-    await prisma.$executeRawUnsafe(`
-      DELETE FROM gmu."CommunityMember" WHERE "mobileNumber" = $1;
-    `, shg.mobileNumber);
-
     // Get dynamic location matching correct pincode from pincode directory
     let loc;
     try {
@@ -924,9 +764,9 @@ async function seedAdditionalSHGs(prisma: any) {
 
     // 3. Create Address
     await prisma.$executeRawUnsafe(`
-      INSERT INTO public."Address" ("userId", "houseNo", landmark, village, taluka, district, state, pincode, "createdAt", "updatedAt")
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW());
-    `, userId, shg.houseNo, shg.landmark, loc.village, loc.taluka, loc.district, loc.state, loc.pincode);
+      INSERT INTO public."Address" ("userId", "houseNo", landmark, village, taluka, district, state, pincode, "postOffice", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW());
+    `, userId, shg.houseNo, shg.landmark, loc.village, loc.taluka, loc.district, loc.state, loc.pincode, loc.postOffice || null);
 
     // 4. Create Document
     await prisma.$executeRawUnsafe(`
@@ -970,36 +810,60 @@ async function seedAdditionalSHGs(prisma: any) {
       VALUES ($1, 'APPROVED'::public."ApplicationStatus", NOW(), NOW(), NOW());
     `, userId);
 
-    // 9. Create CommunityMember in gmu schema
-    const shgUuid = '00000000-0000-0000-0000-' + String(userId).padStart(12, '0');
-    await prisma.communityMember.create({
-      data: {
-        id: shgUuid,
-        fullName: shg.contactPerson,
-        mobileNumber: shg.mobileNumber,
-        type: 'SHG',
-        status: 'APPROVED',
-        village: loc.village,
-        taluka: loc.taluka,
-        district: loc.district,
-        state: loc.state,
-        pincode: loc.pincode,
-        memberCode: `CM-SHG-${userId}`,
-        shgName: shg.shgName,
-        groupSize: 10,
-        leaderName: shg.contactPerson,
-        occupation: 'Dairy Farming',
-      }
-    });
+
 
     console.log(`Successfully seeded SHG: ${shg.shgName} in ${loc.village} (${loc.pincode})`);
   }
 }
 
-async function seedTransporterRouteDetails(prisma: any) {
-  console.log('Seeding Route Details and User accounts for all approved transporters...');
-  const transporters = await prisma.transporterMember.findMany({
-    where: { status: 'APPROVED' }
+async function seedTransporterUsers(prisma: any, locations: any[]) {
+  console.log('Seeding Transporters as real User profiles...');
+  const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+  const randomMobile = () => '9' + Math.floor(100000000 + Math.random() * 900000000).toString();
+  const vehicleTypes = ['Mini Truck (Tata Ace)', 'Pickup Van (Bolero)', 'Auto Rickshaw Cargo', 'Two Wheeler'];
+
+  const routePartnerNames = [
+    'Ramesh Jadhav', 'Suresh Kadam', 'Vijay Patil', 'Anil Chavan', 'Dilip Shinde',
+    'Sunil Lohar', 'Prakash Desai', 'Sanjay More', 'Vikas Patil', 'Rajendra Jadhav'
+  ];
+
+  const personalNames = [
+    'Sachin Sawant', 'Rahul Kulkarni', 'Sandip Patil', 'Amol Joshi', 'Prasad Desai'
+  ];
+
+  const list = [];
+  for (let i = 0; i < 10; i++) {
+    const name = routePartnerNames[i];
+    list.push({
+      firstName: name.split(' ')[0],
+      lastName: name.split(' ')[1],
+      mobileNumber: randomMobile(),
+      type: 'ROUTE_PARTNER',
+      vehicleType: vehicleTypes[i % 3],
+      villageIndex: i + 2
+    });
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const name = personalNames[i];
+    list.push({
+      firstName: name.split(' ')[0],
+      lastName: name.split(' ')[1],
+      mobileNumber: randomMobile(),
+      type: 'PERSONAL',
+      vehicleType: 'Two Wheeler',
+      villageIndex: i + 4
+    });
+  }
+
+  // Specific Test Transporter
+  list.push({
+    firstName: 'Balasaheb',
+    lastName: 'Patil',
+    mobileNumber: '9999999999',
+    type: 'ROUTE_PARTNER',
+    vehicleType: 'Pickup Van (Bolero)',
+    villageIndex: 1
   });
 
   const villageToPincode = (villageName: string) => {
@@ -1007,91 +871,100 @@ async function seedTransporterRouteDetails(prisma: any) {
     if (v === 'nesari') return '416504';
     if (v === 'dundage') return '416501';
     if (v === 'mahagaon' || v === 'mahagaon (kolhapur)') return '416503';
-    if (v === 'inchnal' || v === 'gadhinglaj' || v === 'batkanangale' || v === 'batkangale' || v === 'bhadgaon' || v === 'hitni' || v === 'atyal') return '416502';
     return '416502';
   };
 
-  const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-
-  for (const tr of transporters) {
-    // 1. Ensure public.User account exists
-    let existingUser = await prisma.$queryRawUnsafe(`
+  for (const tr of list) {
+    const loc = locations[tr.villageIndex % locations.length];
+    
+    // Clean up existing records for this phone number to ensure fresh seed
+    const existing = await prisma.$queryRawUnsafe(`
       SELECT id FROM public."User" WHERE "phoneNumber" = $1 LIMIT 1;
     `, tr.mobileNumber) as any[];
 
-    let userId;
-    if (existingUser.length === 0) {
-      const insertUser = await prisma.$queryRawUnsafe(`
-        INSERT INTO public."User" ("authId", role, "phoneNumber", email, "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
-        VALUES ($1::uuid, 'TRANSPORTER', $2, $3, $4, true, 7, 100, 'APPROVED', NOW(), NOW())
-        RETURNING id;
-      `, uuidv4(), tr.mobileNumber, `${tr.firstName.toLowerCase()}@test.com`, `${tr.firstName} ${tr.lastName}`) as any[];
-      userId = insertUser[0].id;
-    } else {
-      userId = existingUser[0].id;
-      // Make sure role is TRANSPORTER and status is APPROVED
-      await prisma.$executeRawUnsafe(`
-        UPDATE public."User"
-        SET role = 'TRANSPORTER', "applicationStatus" = 'APPROVED', "deletedAt" = NULL
-        WHERE id = $1;
-      `, userId);
+    if (existing.length > 0) {
+      const uId = existing[0].id;
+      await prisma.$executeRawUnsafe(`DELETE FROM public."TransporterDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."DrivingDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."Address" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."BankDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."RouteDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."OtherDetails" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."StepTracking" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."Application" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."MilkVanDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."AuditLog" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."ShgDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."BusinessDetail" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."Document" WHERE "userId" = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public.products WHERE seller_id = $1;`, uId);
+      await prisma.$executeRawUnsafe(`DELETE FROM public."User" WHERE id = $1;`, uId);
     }
+    
+    // 1. Create User
+    const authId = uuidv4();
+    const insertUser = await prisma.$queryRawUnsafe(`
+      INSERT INTO public."User" ("authId", role, "phoneNumber", email, "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
+      VALUES ($1::uuid, 'TRANSPORTER', $2, $3, $4, true, 7, 100, 'APPROVED', NOW(), NOW())
+      RETURNING id;
+    `, authId, tr.mobileNumber, `${tr.firstName.toLowerCase()}.${tr.mobileNumber}@test.com`, `${tr.firstName} ${tr.lastName}`) as any[];
+    const userId = insertUser[0].id;
 
-    // 2. Parse villages from transporter home village and any other source
-    const villages = [tr.village];
-    // If they have operatingArea or assignedVillages, add them
-    const areas = tr.village ? [tr.village] : [];
-    if (tr.village === 'Nesari') {
+    // Unique Code
+    const uniqueCode = `LOG-TR-${1000 + userId}`;
+    await prisma.$executeRawUnsafe(`
+      UPDATE public."User" SET "uniqueCode" = $1 WHERE id = $2;
+    `, uniqueCode, userId);
+
+    // 2. Create Address
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public."Address" ("userId", "houseNo", landmark, village, taluka, district, state, pincode, "postOffice", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW());
+    `, userId, 'Galli No. 1', 'Near Chowk', loc.village, loc.taluka, loc.district, loc.state, loc.pincode, loc.postOffice || null);
+
+    // 3. Create TransporterDetail
+    const vehicleCategory = tr.type === 'ROUTE_PARTNER' ? 'MILK_VAN' : 'OTHER';
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public."TransporterDetail" ("userId", "transporterCode", "vehicleCategory", "experienceYears", "availableFullTime", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3::public."VehicleType", $4, true, NOW(), NOW());
+    `, userId, uniqueCode, vehicleCategory, 5);
+
+    // 4. Create DrivingDetail
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public."DrivingDetail" ("userId", "licenseNumber", "expiryDate", "drivingLicenseUrl", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, NOW(), NOW());
+    `, userId, `MH-09-L-${1000 + userId}`, new Date(Date.now() + 365*24*60*60*1000), 'http://dummy.url/license.jpg');
+
+    // 5. Create RouteDetail
+    const areas = [loc.village];
+    if (loc.village === 'Nesari') {
       areas.push('Gadhinglaj', 'Batkangale', 'Nesari');
-    } else if (tr.village === 'Dundage') {
+    } else if (loc.village === 'Dundage') {
       areas.push('Dundage', 'Gadhinglaj', 'Batkangale', 'Nesari');
     } else {
       areas.push('Gadhinglaj', 'Inchnal', 'Atyal');
     }
-
     const uniqueVillages = Array.from(new Set(areas.map(v => v.trim())));
     const pincodes = Array.from(new Set(uniqueVillages.map(v => villageToPincode(v))));
 
-    // 3. Update TransporterMember assignedVillages and assignedPincodes columns
-    await prisma.transporterMember.update({
-      where: { id: tr.id },
-      data: {
-        assignedVillages: JSON.stringify(uniqueVillages),
-        assignedPincodes: JSON.stringify(pincodes),
-      }
-    });
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public."RouteDetail" ("userId", "operatingArea", "pickupLocations", "dropLocations", "workingDays", "workingSchedule", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW(), NOW());
+    `, 
+      userId, 
+      uniqueVillages.join(', '), 
+      JSON.stringify(pincodes), 
+      JSON.stringify(pincodes),
+      JSON.stringify(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
+      JSON.stringify([])
+    );
 
-    // 4. Ensure public.RouteDetail exists
-    const existingRoute = await prisma.$queryRawUnsafe(`
-      SELECT id FROM public."RouteDetail" WHERE "userId" = $1 LIMIT 1;
-    `, userId) as any[];
-
-    if (existingRoute.length === 0) {
-      await prisma.$queryRawUnsafe(`
-        INSERT INTO public."RouteDetail" ("userId", "operatingArea", "pickupLocations", "dropLocations", "workingDays", "workingSchedule", "createdAt", "updatedAt")
-        VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW(), NOW());
-      `, 
-        userId, 
-        uniqueVillages.join(', '), 
-        JSON.stringify(pincodes), 
-        JSON.stringify(pincodes),
-        JSON.stringify(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']),
-        JSON.stringify([])
-      );
-    } else {
-      await prisma.$queryRawUnsafe(`
-        UPDATE public."RouteDetail"
-        SET "operatingArea" = $1, "pickupLocations" = $2::jsonb, "dropLocations" = $3::jsonb, "updatedAt" = NOW()
-        WHERE "userId" = $4;
-      `, 
-        uniqueVillages.join(', '), 
-        JSON.stringify(pincodes), 
-        JSON.stringify(pincodes),
-        userId
-      );
-    }
+    // 6. Create BankDetail
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public."BankDetail" ("userId", "accountHolderName", "bankName", "accountNumber", "ifscCode", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW());
+    `, userId, `${tr.firstName} ${tr.lastName}`, 'State Bank of India', '1122334455', 'SBIN0001234');
   }
-  console.log('Seeded transporter route details and users successfully.');
 }
 
 main()

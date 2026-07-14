@@ -227,23 +227,10 @@ export class OrderManagementController {
     return this.service.warehouseIntake(id);
   }
 
-  @Post(':id/generate-barcode')
-  @ApiOperation({ summary: 'Generate unique barcode for a warehouse order' })
-  async generateBarcode(@Param('id') id: string) {
-    return this.service.generateBarcode(id);
-  }
-
   @Post(':id/store')
   @ApiOperation({ summary: 'Store order in warehouse inventory' })
   async storeInventory(@Param('id') id: string) {
     return this.service.storeInventory(id);
-  }
-
-  @Post(':id/scan')
-  @ApiOperation({ summary: 'Scan inventory barcode to dispatch it' })
-  @ApiBody({ schema: { type: 'object', properties: { barcode: { type: 'string', example: 'BAR-ORD-1001' } } } })
-  async scanInventory(@Param('id') id: string, @Body('barcode') barcode: string) {
-    return this.service.scanInventory(id, barcode);
   }
 
   @Post(':id/drop-shg-broadcast')
@@ -324,23 +311,7 @@ export class OrderManagementController {
     return this.service.transporterReturnIntake(id);
   }
 
-  @Post(':id/transporter-return-scan')
-  @ApiOperation({ summary: 'GMU Transporter Return Scan' })
-  async scanTransporterReturn(@Param('id') id: string, @Body('barcode') barcode: string) {
-    return this.service.scanTransporterReturn(id, barcode);
-  }
 
-  @Post(':id/buyer-return-scan')
-  @ApiOperation({ summary: 'GMU Buyer Return Scan' })
-  async scanBuyerReturn(@Param('id') id: string, @Body('barcode') barcode: string) {
-    return this.service.scanBuyerReturn(id, barcode);
-  }
-
-  @Post(':id/transporter-return-dispatch')
-  @ApiOperation({ summary: 'GMU Transporter Return Dispatch' })
-  async dispatchTransporterReturn(@Param('id') id: string, @Body('barcode') barcode: string) {
-    return this.service.dispatchTransporterReturn(id, barcode);
-  }
 
   // --- NEW BUYER RETURN FLOW ENDPOINTS ---
 

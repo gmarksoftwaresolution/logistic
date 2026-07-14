@@ -120,19 +120,19 @@ async function main() {
 
             if (sellerPincode) {
               const p = sellerPincode.toLowerCase();
-              if (assignedPincodes.includes(p) || areas.includes(p)) return true;
+              if (assignedPincodes.some(ap => ap.split(' (')[0] === p) || areas.some(a => a.split(' (')[0] === p)) return true;
             }
             if (sellerVillage) {
               const v = sellerVillage.toLowerCase();
-              if (assignedVillages.includes(v) || areas.includes(v)) return true;
+              if (assignedVillages.some(av => av.split(' (')[0] === v) || areas.some(a => a.split(' (')[0] === v)) return true;
             }
             if (sellerTaluka) {
               const tk = sellerTaluka.toLowerCase();
-              if (areas.includes(tk)) return true;
+              if (areas.some(a => a.split(' (')[0] === tk)) return true;
             }
             if (sellerDistrict) {
               const d = sellerDistrict.toLowerCase();
-              if (areas.includes(d)) return true;
+              if (areas.some(a => a.split(' (')[0] === d)) return true;
             }
             return false;
           });

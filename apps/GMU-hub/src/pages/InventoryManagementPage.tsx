@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { InventoryItem } from '../context/AppContext';
-import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, Barcode, QrCode } from 'lucide-react';
+import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, QrCode } from 'lucide-react';
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
   if (!startDate) return '-';
@@ -51,6 +51,48 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [isScanning, setIsScanning] = useState(false);
   const [qrScanSuccess, setQrScanSuccess] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
+
+  // Dispatch QR verification states
+  const [dispatchParcels, setDispatchParcels] = useState<any[]>([]);
+  const [loadingDispatchParcels, setLoadingDispatchParcels] = useState(false);
+  const [scanningParcel, setScanningParcel] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (isQrModalOpen && qrItem) {
+      setLoadingDispatchParcels(true);
+      const loadParcels = async () => {
+        try {
+          const res = await api.orders.generateQr(qrItem.uuid || qrItem.id, false);
+          if (res) {
+            setDispatchParcels(res);
+          }
+        } catch (e) {
+          console.error("Error loading dispatch parcels:", e);
+        } finally {
+          setLoadingDispatchParcels(false);
+        }
+      };
+      loadParcels();
+    } else {
+      setDispatchParcels([]);
+    }
+  }, [isQrModalOpen, qrItem]);
+
+  const handleSimulatedDispatchScan = async (parcel: any) => {
+    setScanningParcel(parcel);
+    setTimeout(async () => {
+      try {
+        await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
+        setDispatchParcels(prev => 
+          prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'DISPATCHED' } : p)
+        );
+      } catch (err: any) {
+        alert(err.message || 'Verification failed');
+      } finally {
+        setScanningParcel(null);
+      }
+    }, 2000);
+  };
 
   // Filters and Loading state
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -201,7 +243,6 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   // Incoming Inventory
   const incomingColumns = [
     { header: 'Order ID', accessor: 'id' as keyof InventoryItem },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof InventoryItem },
     { header: 'Start Date', accessor: 'orderDate' as keyof InventoryItem },
     { header: 'Delivery Expected Date', accessor: (row: InventoryItem) => getExpectedDeliveryDate(row.orderDate) },
     { header: 'Warehouse Received Date', accessor: 'storeDate' as keyof InventoryItem },
@@ -215,7 +256,6 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   // Return Pickup Inventory
   const returnPickupColumns = [
     { header: 'Order ID', accessor: 'id' as keyof InventoryItem },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof InventoryItem },
     { header: 'Seller Name', accessor: 'sellerName' as keyof InventoryItem },
     { header: 'Seller Mobile Number', accessor: 'sellerMobile' as keyof InventoryItem },
     { header: 'Seller Village/City', accessor: 'sellerVillage' as keyof InventoryItem },
@@ -235,7 +275,6 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   // Return Drop Inventory
   const returnDropColumns = [
     { header: 'Order ID', accessor: 'id' as keyof InventoryItem },
-    { header: 'Barcode Number', accessor: 'barcode' as keyof InventoryItem },
     { header: 'Start Date', accessor: 'orderDate' as keyof InventoryItem },
     { header: 'Delivery Expected Date', accessor: (row: InventoryItem) => getExpectedDeliveryDate(row.orderDate) },
     { header: 'Warehouse Received Date', accessor: 'storeDate' as keyof InventoryItem },
@@ -583,29 +622,33 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
                 {/* Right Section (Barcode & Logs) */}
                 <div className="space-y-6">
-                  {/* Barcode Card */}
+                  {/* QR Code Details Card */}
                   <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
                     <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
-                      <Barcode className="h-4 w-4 text-[#073318]" />
-                      Barcode
+                      <QrCode className="h-4 w-4 text-[#073318]" />
+                      QR Verification Status
                     </h4>
-                    {selectedItem.barcode ? (
-                      <div className="space-y-3 flex flex-col items-center">
-                        {/* Simulated barcode */}
-                        <div className="flex items-center gap-[1.5px] h-10 w-full bg-slate-50 border border-slate-100 p-2 rounded-xl justify-center">
-                          {Array.from({ length: 40 }).map((_, i) => {
-                            const width = (i % 3 === 0) ? 'w-[3px]' : (i % 5 === 0) ? 'w-[1px]' : 'w-[2px]';
-                            const bg = (i % 7 === 0) ? 'bg-transparent' : 'bg-slate-900';
-                            return <div key={i} className={`h-full ${width} ${bg}`} />;
-                          })}
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-150 flex flex-col items-center gap-3">
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative">
+                          <QrCode className="h-20 w-20 text-[#073318]" />
+                          <div className="absolute top-1 right-1 bg-emerald-500 rounded-full h-3 w-3 border-2 border-white" />
                         </div>
-                        <p className="text-xs font-mono font-bold tracking-widest text-slate-700">{selectedItem.barcode}</p>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          Parcel QR Code Active
+                        </span>
                       </div>
-                    ) : (
-                      <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
-                        <span className="text-sm font-bold text-slate-400">N/A</span>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold text-slate-600">
+                        <div>
+                          <span className="text-slate-400 block uppercase text-[8px] tracking-wider">Phase</span>
+                          <span className="font-bold text-[#073318]">{selectedItem.status === 'dispatched' ? 'DROP' : 'PICKUP'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block uppercase text-[8px] tracking-wider">Current Holder</span>
+                          <span className="font-bold text-slate-800">{selectedItem.status === 'stored' ? 'WAREHOUSE' : 'TRANSPORTER'}</span>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Warehouse Logs */}
@@ -706,77 +749,112 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
           title="Scan QR Code for Dispatch"
           variant="modal"
         >
-          {qrItem && (
-            <div className="space-y-6 text-center">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs font-semibold text-slate-700">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Order ID</span>
-                    <span className="font-mono text-sm text-[#073318] font-bold">{qrItem.id}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[9px] uppercase">Barcode</span>
-                    <span className="font-mono text-slate-800">{qrItem.barcode || 'N/A'}</span>
-                  </div>
-                  <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
-                    <span className="text-slate-400 block text-[9px] uppercase">Buyer / Destination</span>
-                    <span className="text-slate-800">{qrItem.buyerName || 'N/A'} - {qrItem.buyerAddress || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
+          {qrItem && (() => {
+            const verifiedCount = dispatchParcels.filter(p => ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'VERIFIED'].includes(p.parcelStatus)).length;
+            const allVerified = dispatchParcels.length > 0 && verifiedCount === dispatchParcels.length;
 
-              {/* Simulated Camera Viewfinder */}
-              <div className="relative w-64 h-64 mx-auto border-2 border-slate-300 rounded-3xl overflow-hidden bg-slate-950 flex items-center justify-center shadow-inner">
-                {/* Scanner corners */}
-                <div className="absolute top-4 left-4 w-6 h-6 border-t-4 border-l-4 border-[#B2D534] rounded-tl-md" />
-                <div className="absolute top-4 right-4 w-6 h-6 border-t-4 border-r-4 border-[#B2D534] rounded-tr-md" />
-                <div className="absolute bottom-4 left-4 w-6 h-6 border-b-4 border-l-4 border-[#B2D534] rounded-bl-md" />
-                <div className="absolute bottom-4 right-4 w-6 h-6 border-b-4 border-r-4 border-[#B2D534] rounded-br-md" />
-
-                {/* Red scanning line */}
-                {isScanning && (
-                  <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce" />
-                )}
-
-                {/* QR Code graphic */}
-                <div className="opacity-80 p-6 bg-white rounded-2xl shadow-md">
-                  <QrCode className={`h-24 w-24 text-slate-800 ${isScanning ? 'animate-pulse' : ''}`} />
-                </div>
-
-                {/* Success Overlay */}
-                {qrScanSuccess && (
-                  <div className="absolute inset-0 bg-[#073318]/90 backdrop-blur-xs flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
-                    <div className="h-16 w-16 bg-[#B2D534] rounded-full flex items-center justify-center shadow-lg mb-2">
-                      <span className="text-3xl">✓</span>
+            return (
+              <div className="space-y-6 text-center relative min-h-[300px]">
+                {/* Simulated Scanning Viewfinder Overlay */}
+                {scanningParcel && (
+                  <div className="absolute inset-0 bg-slate-950/95 rounded-3xl z-50 flex flex-col items-center justify-center text-white p-6">
+                    <div className="relative w-40 h-40 border-2 border-dashed border-[#B2D534] rounded-3xl flex items-center justify-center bg-slate-900 overflow-hidden shadow-inner">
+                      <div className="absolute left-0 right-0 h-1 bg-red-500 shadow-[0_0_10px_red] animate-bounce top-1/2" />
+                      <QrCode className="h-16 w-16 text-[#B2D534] animate-pulse" />
                     </div>
-                    <p className="text-sm font-bold">Scan Complete</p>
+                    <p className="mt-4 font-bold text-xs tracking-wide text-[#B2D534] animate-pulse">Scanning QR for {scanningParcel.productName}...</p>
+                    <p className="text-[9px] text-slate-400 mt-1">Simulating 2-second GMU Hub dispatch scanner verify</p>
                   </div>
                 )}
-              </div>
 
-              {/* Status Message */}
-              <div className="h-6 flex items-center justify-center">
-                {scanMessage ? (
-                  <p className={`text-xs font-bold ${qrScanSuccess ? 'text-emerald-600' : 'text-[#073318]'}`}>
-                    {scanMessage}
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-400">Position the QR code within the viewfinder frame to scan.</p>
-                )}
-              </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs font-semibold text-slate-700">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase">Order ID</span>
+                      <span className="font-mono text-sm text-[#073318] font-bold">{qrItem.id}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase">Parcel Info</span>
+                      <span className="font-semibold text-slate-800">{qrItem.totalQty || 0} items | {qrItem.totalWeight || 0} KG</span>
+                    </div>
+                    <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
+                      <span className="text-slate-400 block text-[9px] uppercase">Buyer / Destination</span>
+                      <span className="text-slate-800">{qrItem.buyerName || 'N/A'} - {qrItem.buyerAddress || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
 
-              {/* Action Button */}
-              {!qrScanSuccess && (
+                {/* Product Dispatch Checklist Card */}
+                <div className="border border-slate-200 rounded-2xl p-4 text-left bg-white shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                    <span className="font-extrabold text-xs text-[#073318] uppercase tracking-wider">Parcels Dispatch Verification</span>
+                    <span className="text-[11px] font-black text-slate-500">{verifiedCount} of {dispatchParcels.length} verified</span>
+                  </div>
+                  
+                  {loadingDispatchParcels ? (
+                    <p className="text-xs text-slate-400 italic">Loading parcels information...</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {dispatchParcels.map((parcel, idx) => {
+                        const isItemVerified = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'VERIFIED'].includes(parcel.parcelStatus);
+                        return (
+                          <div key={parcel.parcelId || idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-150 rounded-xl">
+                            <div>
+                              <p className="font-bold text-xs text-slate-800">{parcel.productName}</p>
+                              <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Parcel #{parcel.parcelNumber} of {parcel.totalParcels} | {parcel.weight}</p>
+                            </div>
+                            
+                            {isItemVerified ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
+                                ✓ Verified
+                              </span>
+                            ) : (
+                              <button
+                                  type="button"
+                                onClick={() => handleSimulatedDispatchScan(parcel)}
+                                className="px-3 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                              >
+                                Scan QR
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Final dispatch button */}
                 <button
-                  onClick={handleSimulateScan}
-                  disabled={isScanning}
-                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={async () => {
+                    setIsScanning(true);
+                    setScanMessage('Finalizing dispatch...');
+                    try {
+                      await dispatchInventory(qrItem.id);
+                      setQrScanSuccess(true);
+                      setScanMessage('Order dispatched successfully.');
+                      await loadData();
+                    } catch (err: any) {
+                      setScanMessage(err.message || 'Failed to dispatch order.');
+                    } finally {
+                      setIsScanning(false);
+                      setTimeout(() => {
+                        setIsQrModalOpen(false);
+                        setQrScanSuccess(false);
+                        setScanMessage('');
+                      }, 1500);
+                    }
+                  }}
+                  disabled={isScanning || !allVerified || loadingDispatchParcels}
+                  className="w-full py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {isScanning ? 'Processing...' : 'Simulate Successful QR Scan'}
+                  <CheckCircle className="h-4 w-4" />
+                  {isScanning ? 'Processing...' : 'Confirm Dispatch Order'}
                 </button>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </Modal>
       </div>
     </Layout>

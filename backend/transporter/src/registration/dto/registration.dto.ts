@@ -184,6 +184,13 @@ export class Step1PersonalDetailsDto {
   @Matches(PIN_REGEX, { message: 'PIN code must be exactly 6 digits' })
   pinCode: string;
 
+  @ApiPropertyOptional({ example: 'Rampur S.O', description: 'Post Office name' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  @MaxLength(100)
+  postOffice?: string;
+
   @ApiProperty({ example: '/uploads/photo.jpg', description: 'URL of the profile photo' })
   @IsNotEmpty()
   @IsString()

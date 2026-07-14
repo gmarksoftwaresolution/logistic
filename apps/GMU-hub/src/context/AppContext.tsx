@@ -257,7 +257,7 @@ export interface AppContextType {
   mapOrder: (o: any, flowType?: 'pickup' | 'drop' | 'return') => any;
   requestBuyerReturn: (dropOrderId: string) => void;
   generateOTP: (orderId: string) => string;
-  generateBarcode: (orderId: string) => Promise<string>;
+  generateQr: (orderId: string, regenerate?: boolean) => Promise<any[]>;
   approveSHG: (id: string) => void;
   approveTransporter: (id: string) => void;
   addNewSHG: (shg: Omit<SHGProfile, 'id' | 'assignedOrders'>) => void;
@@ -482,6 +482,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rescheduledBy: o.rescheduleType || 'SHG',
       items: o.items,
       tracking: o.tracking,
+      parcels: o.parcels,
       rawCreatedAt: o.createdAt,
       rawUpdatedAt: o.updatedAt,
     };
@@ -670,11 +671,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isTransporterReturn = returnDropInventory.some((item) => item.id === orderId);
     if (isTransporterReturn) {
       const order = returnDropInventory.find((item) => item.id === orderId) as any;
-      await api.orders.transporterReturnDispatch(order?.uuid || orderId, order?.barcode || '');
+      // Fetch parcels and verify them via QR
+      const parcels = await api.orders.generateQr(order?.uuid || orderId, false);
+      if (parcels && parcels.length > 0) {
+        for (const p of parcels) {
+          await api.orders.verifyQr(p.parcelId, p.verificationToken, 'GMU');
+        }
+      }
     } else {
       const item = incomingInventory.find((item) => item.id === orderId) as any;
       if (item) {
-        await api.orders.scan(item.uuid || orderId, item.barcode || '');
+        const parcels = await api.orders.generateQr(item.uuid || orderId, false);
+        if (parcels && parcels.length > 0) {
+          for (const p of parcels) {
+            await api.orders.verifyQr(p.parcelId, p.verificationToken, 'GMU');
+          }
+        }
       }
     }
     await loadCounts();
@@ -709,15 +721,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
-  const generateBarcode = async (orderId: string) => {
-    const order = pickupWarehouseOrders.find((o) => o.id === orderId) as any;
+  const generateQr = async (orderId: string, regenerate = false) => {
+    let order = pickupWarehouseOrders.find((o) => o.id === orderId) as any;
+    if (!order) {
+      order = pickupNewOrders.find((o) => o.id === orderId) as any;
+    }
     const uuid = order?.uuid || orderId;
-    const res = await api.orders.generateBarcode(uuid);
-    await api.orders.store(uuid);
+    const res = await api.orders.generateQr(uuid, regenerate);
     await loadCounts();
     await loadPickupWarehouse();
     await loadInventoryStored();
-    return res.barcode || `BAR-ORD-${orderId}`;
+    return res;
   };
 
   const approveSHG = (id: string) => {
@@ -953,7 +967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         intakeReturnOrder,
         requestBuyerReturn,
         generateOTP,
-        generateBarcode,
+        generateQr,
         approveSHG,
         approveTransporter,
         addNewSHG,

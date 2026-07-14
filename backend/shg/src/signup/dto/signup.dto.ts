@@ -319,6 +319,13 @@ export class AddressDto {
   @Matches(PINCODE_REGEX, { message: 'Pincode must be exactly 6 digits and not start with 0' })
   pincode: string;
 
+  @ApiProperty({ example: 'Rampur S.O', description: 'Post Office name', required: false })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) => value?.trim())
+  @MaxLength(100)
+  postOffice?: string;
+
   @ApiProperty({ example: 'Near Post Office', description: 'Delivery Address' })
   @IsString()
   @IsNotEmpty()
