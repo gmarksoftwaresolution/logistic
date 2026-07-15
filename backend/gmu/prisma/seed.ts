@@ -9,14 +9,20 @@ async function getVillageLocation(prisma: any, villageName: string) {
   for (const name of namesToTry) {
     // 1. Check Address table in public schema
     const addr = await prisma.address.findFirst({
-      where: { village: { equals: name, mode: 'insensitive' } },
+      where: { 
+        village: { equals: name, mode: 'insensitive' },
+        district: { equals: 'Kolhapur', mode: 'insensitive' }
+      },
       select: { village: true, pincode: true, taluka: true, district: true, state: true }
     });
     if (addr) return addr;
 
     // 2. Check Pincode table in public schema
     const pd = await prisma.pincode.findFirst({
-      where: { village: { equals: name, mode: 'insensitive' } }
+      where: { 
+        village: { equals: name, mode: 'insensitive' },
+        district: { equals: 'Kolhapur', mode: 'insensitive' }
+      }
     });
     if (pd) {
       return {
@@ -150,6 +156,37 @@ async function main() {
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.sellers RESTART IDENTITY CASCADE;`);
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE public.buyers RESTART IDENTITY CASCADE;`);
 
+  console.log('Clearing all SHG and Transporter users...');
+  await prisma.$executeRawUnsafe('DELETE FROM public."OTPVerification";');
+  await prisma.$executeRawUnsafe('DELETE FROM public."ShgDetail";');
+  await prisma.$executeRawUnsafe('DELETE FROM public."TransporterDetail";');
+  await prisma.$executeRawUnsafe('DELETE FROM public."DrivingDetail";');
+  await prisma.$executeRawUnsafe('DELETE FROM public."RouteDetail";');
+  await prisma.$executeRawUnsafe('DELETE FROM public."MilkVanDetail";');
+  const uIds = await prisma.user.findMany({
+    where: { role: { in: ['SHG', 'TRANSPORTER', 'INDIVIDUAL'] } },
+    select: { id: true }
+  }) as any[];
+  for (const u of uIds) {
+    const uId = u.id;
+    await prisma.$executeRawUnsafe(`DELETE FROM public."TransporterDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."DrivingDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."Address" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."BankDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."RouteDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."OtherDetails" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."StepTracking" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."Application" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."MilkVanDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."AuditLog" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."ShgDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."BusinessDetail" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."Document" WHERE "userId" = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public.products WHERE seller_id = $1;`, uId);
+    await prisma.$executeRawUnsafe(`DELETE FROM public."User" WHERE id = $1;`, uId);
+  }
+  console.log('All SHG and Transporter users deleted.');
+
   console.log('Resolving dynamic locations for allowed villages...');
   const allowedVillagesList = ['Gadhinglaj', 'Nesari', 'Dundage', 'Mahagaon', 'Batkanangale', 'Inchnal'];
   const resolvedLocationsMap: Record<string, any> = {};
@@ -230,7 +267,10 @@ async function main() {
   ];
 
   // Seed Transporters as real User profiles
-  await seedTransporterUsers(prisma, locations);
+  // await seedTransporterUsers(prisma, locations);
+
+  // Seed additional SHG registrations
+  // await seedAdditionalSHGs(prisma);
 
   // Clear orders and reseed them
   console.log('Seeding Orders...');
@@ -605,9 +645,6 @@ async function main() {
     `, pickupOrderId);
   }
 
-  // Seed additional SHG registrations
-  await seedAdditionalSHGs(prisma);
-
   console.log('Database Seeding Completed Successfully!');
 }
 
@@ -837,7 +874,7 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
     list.push({
       firstName: name.split(' ')[0],
       lastName: name.split(' ')[1],
-      mobileNumber: randomMobile(),
+      mobileNumber: '990000000' + i,
       type: 'ROUTE_PARTNER',
       vehicleType: vehicleTypes[i % 3],
       villageIndex: i + 2
@@ -849,7 +886,7 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
     list.push({
       firstName: name.split(' ')[0],
       lastName: name.split(' ')[1],
-      mobileNumber: randomMobile(),
+      mobileNumber: '990000001' + i,
       type: 'PERSONAL',
       vehicleType: 'Two Wheeler',
       villageIndex: i + 4

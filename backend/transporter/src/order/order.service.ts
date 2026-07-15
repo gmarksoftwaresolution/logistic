@@ -63,7 +63,7 @@ export class OrderService {
         assignedPincodes.some(ap => ap.split(' (')[0] === p) || 
         areas.some(a => a.split(' (')[0] === p)
       );
-      return !!(villageMatched && pincodeMatched);
+      return !!(villageMatched || pincodeMatched);
     };
 
     let assignedPickupOrderIds: string[] = [];

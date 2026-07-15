@@ -393,6 +393,19 @@ export class OrderService {
         },
       });
 
+      // Reset any pre-existing parcels for this order back to PENDING status and return holder to SELLER
+      await tx.parcel.updateMany({
+        where: {
+          orderId: masterOrder.orderNumber,
+          flowType: 'PICKUP',
+        },
+        data: {
+          parcelStatus: 'PENDING',
+          currentHolderId: String(pickupOrder.sellerId),
+          currentHolderType: 'SELLER',
+        },
+      });
+
       await tx.pickupTracking.create({
         data: {
           pickupOrderId,
@@ -511,6 +524,19 @@ export class OrderService {
         data: {
           status: nextStatus,
           shgId,
+        },
+      });
+
+      // Reset any pre-existing parcels for this order back to PENDING status and return holder to WAREHOUSE
+      await tx.parcel.updateMany({
+        where: {
+          orderId: masterOrder.orderNumber,
+          flowType: 'DROP',
+        },
+        data: {
+          parcelStatus: 'PENDING',
+          currentHolderId: 'HUB',
+          currentHolderType: 'WAREHOUSE',
         },
       });
 

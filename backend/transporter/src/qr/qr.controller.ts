@@ -43,7 +43,8 @@ export class QrController {
       userRole,
       dto.latitude,
       dto.longitude,
-      dto.remarks
+      dto.remarks,
+      dto.legType
     );
   }
 }

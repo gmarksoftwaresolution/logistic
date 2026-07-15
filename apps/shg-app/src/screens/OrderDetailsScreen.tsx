@@ -218,15 +218,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  // Dynamic computed variables directly from database/backend data structure
-  const codesGenerated = (order.products || []).some((p: any) => !!p.verificationCode);
-  const deliveryCodeGenerated = codesGenerated;
-  const deliveryCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
-  const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
-  const pickupCodeVisible = codesGenerated;
-
-
-
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
     if (!matchingParcel) return false;
@@ -270,6 +261,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
     }
   };
 
+  // Dynamic computed variables directly from database/backend data structure
+  const codesGenerated = (order.products || []).some((p: any) => !!p.verificationCode);
+  const deliveryCodeGenerated = codesGenerated;
+  const deliveryCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => isProductVerified(p));
+  const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => isProductVerified(p));
+  const pickupCodeVisible = codesGenerated;
+
   const allParcelsVerified = (order.products || []).length > 0 && (order.products || []).every((item: any) => {
     return isProductVerified(item);
   });
@@ -280,6 +278,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [isScanned, setIsScanned] = useState<boolean>(false);
   const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
   const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
+  const isScanningRef = useRef(false);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
 
   // Reschedule state hooks
@@ -385,6 +384,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     if (scannerModalVisible) {
       setScanned(false);
       setScanningStatus('scanning');
+      isScanningRef.current = false;
       if (!permission || !permission.granted) {
         requestPermission();
       }
@@ -392,7 +392,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   }, [scannerModalVisible, permission]);
 
   const handleBarcodeScanned = async ({ type, data }: { type: string; data: string }) => {
-    if (scanned) return;
+    if (scanned || isScanningRef.current) return;
+    isScanningRef.current = true;
     setScanned(true);
     setScanningStatus('success');
 
@@ -419,9 +420,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }
 
       if (!parcelId || !verificationToken) {
-        Alert.alert("Invalid QR Code", "This QR code does not contain a valid parcel ID and verification token.");
-        setScanned(false);
-        setScanningStatus('scanning');
+        Alert.alert(
+          "Invalid QR Code",
+          "This QR code does not contain a valid parcel ID and verification token.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setScanned(false);
+                setScanningStatus('scanning');
+                isScanningRef.current = false;
+              }
+            }
+          ]
+        );
         return;
       }
 
@@ -429,18 +441,41 @@ const OrderDetailsScreen: React.FC<Props> = ({
       if (activeScanningParcel && activeScanningParcel.parcelId !== parcelId) {
         Alert.alert(
           "Wrong Product Scanned",
-          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`
+          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setScanned(false);
+                setScanningStatus('scanning');
+                isScanningRef.current = false;
+              }
+            }
+          ]
         );
-        setScanned(false);
-        setScanningStatus('scanning');
         return;
       }
 
       const res = await axiosInstance.post('/qr/verify', {
         parcelId,
         verificationToken,
-        userRole: 'SHG'
+        userRole: 'SHG',
+        legType: isDeliveryPhase ? 'delivery' : 'pickup'
       });
+
+      // Optimistically update orderParcels status immediately
+      if (activeScanningParcel) {
+        const nextStatus = isDeliveryPhase
+          ? (order.phase === 'DROP' ? 'DELIVERED' : 'SHG_HANDOVER_VERIFIED')
+          : (order.phase === 'DROP' ? 'PARCEL_AT_DROP_SHG' : 'PARCEL_AT_SHG');
+        setOrderParcels(prev =>
+          prev.map(p =>
+            p.parcelId === activeScanningParcel.parcelId
+              ? { ...p, parcelStatus: nextStatus }
+              : p
+          )
+        );
+      }
 
       await fetchOrderParcels();
       await refreshOrdersList();
@@ -456,6 +491,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         setScannerModalVisible(false);
         setActiveScanningParcel(null);
         setScanned(false);
+        isScanningRef.current = false;
         if (isActive && currentStep?.id === 'scan_products_button') {
           nextStep();
         }
@@ -464,9 +500,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
     } catch (err: any) {
       console.error("Verification error:", err);
       const msg = err.response?.data?.message || err.message || "Failed to verify QR code.";
-      Alert.alert("Verification Failed", msg);
-      setScanned(false);
-      setScanningStatus('scanning');
+      Alert.alert(
+        "Verification Failed",
+        msg,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setScanned(false);
+              setScanningStatus('scanning');
+              isScanningRef.current = false;
+            }
+          }
+        ]
+      );
     }
   };
   const translateY = scanLaserAnim.interpolate({
