@@ -156,6 +156,8 @@ interface FormData {
   vehicleWheeler: string;
   vehicleType: string;
   vehicleMake: string;
+  minWeight: string;
+  maxWeight: string;
   vehicleNumber: string;
   rcPhoto: string | null;
   insurancePhoto: string | null;
@@ -223,7 +225,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timeMode, setTimeMode] = useState<'morning' | 'evening'>('morning');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | 'village' | 'residential_village' | 'post_office' | null>(null);
+  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | 'village' | 'residential_village' | 'post_office' | 'replace_assigned_village' | 'replace_operating_area' | null>(null);
   const [areaInput, setAreaInput] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -238,6 +240,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [pincodeVillages, setPincodeVillages] = useState<string[]>([]);
   const [residentialVillages, setResidentialVillages] = useState<Array<{ name: string; taluka: string }>>([]);
   const [postOffices, setPostOffices] = useState<string[]>([]);
+  const [editingVillageIndex, setEditingVillageIndex] = useState<number | null>(null);
+  const [isCustomVehicleType, setIsCustomVehicleType] = useState(false);
+  const [isCustomVehicleMake, setIsCustomVehicleMake] = useState(false);
 
   const otpInputs = useRef<Array<TextInput | null>>([]);
   const [dayTimings, setDayTimings] = useState<Record<string, { morning: string; evening: string; workingTime?: string }>>({});
@@ -300,6 +305,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     vehicleWheeler: '',
     vehicleType: '',
     vehicleMake: '',
+    minWeight: '',
+    maxWeight: '',
     vehicleNumber: '',
     rcPhoto: null,
     insurancePhoto: null,
@@ -473,6 +480,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       vehicleWheeler: 'vehicle_wheeler',
       vehicleType: 'vehicle_type',
       vehicleMake: 'vehicle_make',
+      minWeight: 'min_weight',
+      maxWeight: 'max_weight',
       vehicleNumber: 'vehicle_number',
       milkSangathanName: 'sangathan_name',
       milkCenterName: 'milk_center_name',
@@ -494,7 +503,12 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const labelKey = fieldLabelMap[field] || field;
-    const label = labelKey.includes('.') ? t(labelKey) : t(`signup.${labelKey}`);
+    let label = labelKey.includes('.') ? t(labelKey) : t(`signup.${labelKey}`);
+    if (label === 'signup.min_weight' || (label === `signup.${labelKey}` && labelKey === 'min_weight')) {
+      label = 'min weight';
+    } else if (label === 'signup.max_weight' || (label === `signup.${labelKey}` && labelKey === 'max_weight')) {
+      label = 'max weight';
+    }
 
     if (!val && field !== 'email' && field !== 'state' && field !== 'district' && field !== 'taluka') {
       return t('errors.required_field', { field: label });
@@ -510,6 +524,17 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       case 'licenseNumber':
         if (val && (val as string).length < 15) return t('errors.license_length', 'Driving License must be exactly 15 characters');
         return !validateLicenseNumber(val as string) ? t('errors.license_format', 'Format: MH1420110012345') : null;
+      case 'minWeight':
+        if (!val) return t('errors.required_field', { field: 'Minimum Weight' });
+        if (isNaN(Number(val)) || Number(val) <= 0) return 'Minimum weight must be a positive number';
+        return null;
+      case 'maxWeight':
+        if (!val) return t('errors.required_field', { field: 'Maximum Weight' });
+        if (isNaN(Number(val)) || Number(val) <= 0) return 'Maximum weight must be a positive number';
+        if (formData.minWeight && Number(val) < Number(formData.minWeight)) {
+          return 'Maximum weight cannot be less than minimum weight';
+        }
+        return null;
       case 'vehicleNumber':
         return !validateVehicleNumber(val as string) ? t('errors.vehicle_format') : null;
       case 'accountNumber':
@@ -1222,7 +1247,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             const pOffices = Array.from(new Set(villagesResponse.data.map((v: any) => v.postOffice).filter(Boolean))) as string[];
             setPostOffices(pOffices);
             setFormData(prev => {
-              const villageNames = villagesResponse.data.map((v: any) => typeof v === 'string' ? v : v.name);
+              const villageNames = Array.from(new Set(villagesResponse.data.map((v: any) => typeof v === 'string' ? v : v.name))) as string[];
               const pincodeChanged = lastFetchedPincodeRef.current !== '' && lastFetchedPincodeRef.current !== pin;
               let nextVillage = prev.village;
               let nextPostOffice = prev.postOffice;
@@ -1269,10 +1294,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           setIsLoading(true);
           const response = await api.get(`/registration/pincode/${pin}/villages`);
           if (response.data) {
-            setPincodeVillages(response.data.map((v: any) => {
+            const mapped = response.data.map((v: any) => {
               if (typeof v === 'string') return v;
-              return v.postOffice ? `${v.name} (${v.postOffice})` : v.name;
-            }));
+              return v.name;
+            });
+            setPincodeVillages(Array.from(new Set(mapped)));
           }
         } catch (error) {
           console.log('Fetch villages error:', error);
@@ -1402,6 +1428,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           number: data.vehicleNumber,
           rcUpload: rcUrl,
           insuranceUpload: insUrl,
+          minWeight: data.minWeight ? Number(data.minWeight) : undefined,
+          maxWeight: data.maxWeight ? Number(data.maxWeight) : undefined,
         });
       }
     } else if (step === 6) {
@@ -1464,6 +1492,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         number: data.vehicleNumber,
         rcUpload: rcUrl,
         insuranceUpload: insUrl,
+        minWeight: data.minWeight ? Number(data.minWeight) : undefined,
+        maxWeight: data.maxWeight ? Number(data.maxWeight) : undefined,
       });
     }
   };
@@ -1484,7 +1514,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         }
         return;
       }
-      fieldsToValidate = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'postOffice', 'address', 'pincode', 'profilePhoto'];
+      fieldsToValidate = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'address', 'pincode', 'profilePhoto'];
     } else if (currentStep === 2) {
       fieldsToValidate = ['licenseNumber', 'licensePhoto', 'licenseExpiry', 'experience'];
     } else if (currentStep === 3) {
@@ -1495,7 +1525,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fieldsToValidate = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
+        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
       }
     } else if (currentStep === 6) {
       if (formData.vehicleTypeSelection === 'Milk') {
@@ -1504,7 +1534,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fieldsToValidate = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
+      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
     }
 
     const stepErrors = fieldsToValidate.filter((f) => getError(f, true) || !formData[f]);
@@ -1601,7 +1631,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     let fields: (keyof FormData)[] = [];
     if (currentStep === 1) {
       if (!isOtpVerified) return false;
-      fields = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'postOffice', 'address', 'pincode', 'profilePhoto'];
+      fields = ['firstName', 'lastName', 'state', 'district', 'taluka', 'village', 'address', 'pincode', 'profilePhoto'];
     } else if (currentStep === 2) {
       fields = ['licenseNumber', 'licenseExpiry', 'experience'];
       if (!formData.licensePhoto) return false;
@@ -1613,7 +1643,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fields = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleNumber'];
+        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber'];
         if (!formData.rcPhoto || !formData.insurancePhoto) return false;
       }
     } else if (currentStep === 6) {
@@ -1623,7 +1653,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fields = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleNumber'];
+      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber'];
       if (!formData.rcPhoto || !formData.insurancePhoto) return false;
     }
 
@@ -2051,52 +2081,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           {getError('village') && <Text style={styles.errorText}>{getError('village')}</Text>}
         </View>
 
-        <View 
-          style={styles.inputContainer}
-          onLayout={(e) => { fieldPositions.current['postOffice'] = e.nativeEvent.layout.y; }}
-        >
-          <Text style={styles.label}>{t('signup.post_office', { defaultValue: 'Post Office' })} *</Text>
-          <TouchableOpacity
-            style={[
-              styles.inputWrapper,
-              (!formData.pincode || formData.pincode.length < 6 || postOffices.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 },
-              getError('postOffice') && styles.inputError
-            ]}
-            onPress={() => {
-              if (formData.pincode && formData.pincode.length === 6) {
-                if (postOffices.length > 0) {
-                  setDropdownType('post_office');
-                  setShowDropdown(true);
-                } else {
-                  Alert.alert(t('common.info', { defaultValue: 'Info' }), 'No post offices found for this pincode');
-                }
-              } else {
-                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
-              }
-            }}
-            activeOpacity={(formData.pincode && formData.pincode.length === 6 && postOffices.length > 0) ? 0.7 : 1}
-          >
-            <MapIcon size={scale(20)} color={(formData.pincode && formData.pincode.length === 6 && postOffices.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
-            <Text style={[
-              styles.input,
-              { 
-                color: formData.postOffice ? Colors.textPrimary : Colors.textPlaceholder, 
-                textAlignVertical: 'center', 
-                lineHeight: verticalScale(52) 
-              }
-            ]}>
-              {formData.postOffice || (
-                formData.pincode.length < 6
-                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load post offices' })
-                  : postOffices.length === 0
-                    ? 'No post offices found for this pincode'
-                    : t('signup.select_post_office', { defaultValue: 'Select Post Office' })
-              )}
-            </Text>
-            <ChevronDown size={20} color={Colors.iconSecondary} />
-          </TouchableOpacity>
-          {getError('postOffice') && <Text style={styles.errorText}>{getError('postOffice')}</Text>}
-        </View>
+
 
         <View 
           style={styles.inputContainer}
@@ -2572,7 +2557,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const renderDropdownModal = () => {
     let options: string[] = [];
     let title = '';
-    let key: keyof FormData | 'selectedVillage' = 'vehicleWheeler';
+    let key: keyof FormData | 'selectedVillage' | 'replace_assigned_village' = 'vehicleWheeler';
 
     if (dropdownType === 'wheeler') {
       options = ['2 Wheeler', '3 Wheeler', '4 Wheeler', '6 Wheeler', '8 Wheeler', '10 Wheeler', '12 Wheeler', '14 Wheeler', '16 Wheeler', '18 Wheeler', '22 Wheeler'];
@@ -2583,12 +2568,12 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (wheeler === '2 Wheeler') {
         options = ['Bike', 'Scooter', 'Moped', 'Electric Bike', 'Others'];
       } else if (wheeler === '3 Wheeler') {
-        options = ['Auto Rickshaw', 'Mini Van', 'Loading Auto', 'Open Cargo', 'Electric Loader'];
+        options = ['Auto Rickshaw', 'Mini Van', 'Loading Auto', 'Open Cargo', 'Electric Loader', 'Others'];
       } else if (wheeler === '4 Wheeler') {
-        options = ['Mini Truck', 'Pickup', 'Tempo Traveler', 'Refrigerated Van', 'Open Body Truck', 'Closed Container'];
+        options = ['Mini Truck', 'Pickup', 'Tempo Traveler', 'Refrigerated Van', 'Open Body Truck', 'Closed Container', 'Others'];
       } else {
         // 6 Wheeler and above
-        options = ['Open Truck', 'Closed Container', 'Trailer', 'Tanker', 'Tipper', 'Heavy Duty Truck', 'Flatbed'];
+        options = ['Open Truck', 'Closed Container', 'Trailer', 'Tanker', 'Tipper', 'Heavy Duty Truck', 'Flatbed', 'Others'];
       }
       title = t('signup.select_vehicle_type');
       key = 'vehicleType';
@@ -2619,13 +2604,18 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       title = t('signup.select_village', { defaultValue: 'Select Village' });
       key = 'selectedVillage';
     } else if (dropdownType === 'residential_village') {
-      options = residentialVillages.map(v => v.name);
+      options = Array.from(new Set(residentialVillages.map(v => v.name)));
       title = t('signup.select_village', { defaultValue: 'Select Village' });
       key = 'village';
-    } else if (dropdownType === 'post_office') {
-      options = postOffices;
-      title = t('signup.post_office', { defaultValue: 'Select Post Office' });
-      key = 'postOffice';
+    } else if (dropdownType === 'replace_assigned_village') {
+      options = pincodeVillages.filter(v => !formData.assignedVillages.includes(v) || (editingVillageIndex !== null && formData.assignedVillages[editingVillageIndex] === v));
+      title = t('signup.replace_village', { defaultValue: 'Replace Village' });
+      key = 'replace_assigned_village';
+    } else if (dropdownType === 'replace_operating_area') {
+      const currentAreas = formData.operatingArea ? formData.operatingArea.split(', ') : [];
+      options = pincodeVillages.filter(v => !currentAreas.includes(v) || (editingVillageIndex !== null && currentAreas[editingVillageIndex] === v));
+      title = t('signup.replace_village', { defaultValue: 'Replace Village' });
+      key = 'replace_assigned_village';
     }
 
     return (
@@ -2633,17 +2623,17 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         visible={showDropdown}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
+        onRequestClose={() => { setShowDropdown(false); setEditingVillageIndex(null); }}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowDropdown(false)}
+          onPress={() => { setShowDropdown(false); setEditingVillageIndex(null); }}
         >
           <View style={styles.dropdownContent}>
             <View style={styles.dropdownHeader}>
               <Text style={styles.dropdownTitle}>{title}</Text>
-              <TouchableOpacity onPress={() => setShowDropdown(false)}>
+              <TouchableOpacity onPress={() => { setShowDropdown(false); setEditingVillageIndex(null); }}>
                 <X size={20} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
@@ -2661,7 +2651,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                   ? (formData.vehicleTypeSelection === 'Milk'
                     ? formData.assignedVillages.includes(option)
                     : (formData.operatingArea ? formData.operatingArea.split(', ').map(s => s.trim()).includes(option.trim()) : false))
-                  : formData[key as keyof FormData] === option;
+                  : key === 'replace_assigned_village'
+                    ? (editingVillageIndex !== null && (
+                      formData.vehicleTypeSelection === 'Milk'
+                        ? formData.assignedVillages[editingVillageIndex] === option
+                        : (formData.operatingArea ? formData.operatingArea.split(', ')[editingVillageIndex] === option : false)
+                    ))
+                    : formData[key as keyof FormData] === option;
                 return (
                   <TouchableOpacity
                     key={index}
@@ -2671,7 +2667,23 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                       index === options.length - 1 && { borderBottomWidth: 0 }
                     ]}
                     onPress={() => {
-                      if (key === 'vehicleWheeler') {
+                      if (key === 'replace_assigned_village') {
+                        if (editingVillageIndex !== null) {
+                          if (formData.vehicleTypeSelection === 'Milk') {
+                            const updated = [...formData.assignedVillages];
+                            updated[editingVillageIndex] = option;
+                            updateFormData('assignedVillages', updated);
+                          } else {
+                            const currentAreas = formData.operatingArea ? formData.operatingArea.split(', ') : [];
+                            currentAreas[editingVillageIndex] = option;
+                            updateFormData('operatingArea', currentAreas.filter(Boolean).join(', '));
+                          }
+                          setEditingVillageIndex(null);
+                        }
+                        setShowDropdown(false);
+                      } else if (key === 'vehicleWheeler') {
+                        setIsCustomVehicleType(false);
+                        setIsCustomVehicleMake(false);
                         setFormData(prev => ({
                           ...prev,
                           vehicleWheeler: option,
@@ -2709,7 +2721,25 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                             updateFormData(key as keyof FormData, option);
                           }
                         } else {
-                          updateFormData(key as keyof FormData, option);
+                          if (key === 'vehicleType') {
+                            if (option === 'Others') {
+                              setIsCustomVehicleType(true);
+                              updateFormData('vehicleType', '');
+                            } else {
+                              setIsCustomVehicleType(false);
+                              updateFormData('vehicleType', option);
+                            }
+                          } else if (key === 'vehicleMake') {
+                            if (option === 'Others') {
+                              setIsCustomVehicleMake(true);
+                              updateFormData('vehicleMake', '');
+                            } else {
+                              setIsCustomVehicleMake(false);
+                              updateFormData('vehicleMake', option);
+                            }
+                          } else {
+                            updateFormData(key as keyof FormData, option);
+                          }
                         }
                       }
                       if (key !== 'selectedVillage') {
@@ -2775,23 +2805,48 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           onLayout={(e) => { fieldPositions.current['vehicleType'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.label}>{t("signup.vehicle_type")} *</Text>
-          <TouchableOpacity
-            style={styles.inputWrapper}
-            onPress={() => {
-              if (!formData.vehicleWheeler) {
-                alert(t('errors.select_wheeler_first'));
-                return;
-              }
-              setDropdownType("type");
-              setShowDropdown(true);
-            }}
-          >
-            <Truck size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <Text style={[styles.input, { color: formData.vehicleType ? "#181D27" : Colors.textPlaceholder, textAlignVertical: "center", lineHeight: verticalScale(52) }]}>
-              {formData.vehicleType || t("signup.select_vehicle_type")}
-            </Text>
-            <ChevronDown size={20} color={Colors.iconSecondary} />
-          </TouchableOpacity>
+          {isCustomVehicleType ? (
+            <View style={[styles.inputWrapper, getError('vehicleType') && styles.inputError]}>
+              <Truck size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder={t("signup.custom_vehicle_type_placeholder", { defaultValue: 'Enter custom vehicle type' })}
+                placeholderTextColor={Colors.textPlaceholder}
+                value={formData.vehicleType}
+                onChangeText={(val) => updateFormData("vehicleType", val)}
+                onBlur={() => handleBlur("vehicleType")}
+                autoFocus
+              />
+              <TouchableOpacity 
+                style={{ padding: scale(4), marginRight: scale(4) }} 
+                onPress={() => {
+                  setIsCustomVehicleType(false);
+                  updateFormData('vehicleType', '');
+                }}
+              >
+                <X size={18} color={Colors.iconSecondary} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.inputWrapper, getError('vehicleType') && styles.inputError]}
+              onPress={() => {
+                if (!formData.vehicleWheeler) {
+                  alert(t('errors.select_wheeler_first'));
+                  return;
+                }
+                setDropdownType("type");
+                setShowDropdown(true);
+              }}
+            >
+              <Truck size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+              <Text style={[styles.input, { color: formData.vehicleType ? "#181D27" : Colors.textPlaceholder, textAlignVertical: "center", lineHeight: verticalScale(52) }]}>
+                {formData.vehicleType || t("signup.select_vehicle_type")}
+              </Text>
+              <ChevronDown size={20} color={Colors.iconSecondary} />
+            </TouchableOpacity>
+          )}
+          {getError('vehicleType') && <Text style={styles.errorText}>{getError('vehicleType')}</Text>}
         </View>
 
         <View 
@@ -2799,23 +2854,88 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           onLayout={(e) => { fieldPositions.current['vehicleMake'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.label}>{t("signup.vehicle_make")} *</Text>
-          <TouchableOpacity
-            style={styles.inputWrapper}
-            onPress={() => {
-              if (!formData.vehicleWheeler) {
-                alert(t('errors.select_wheeler_first'));
-                return;
-              }
-              setDropdownType("make");
-              setShowDropdown(true);
-            }}
+          {isCustomVehicleMake ? (
+            <View style={[styles.inputWrapper, getError('vehicleMake') && styles.inputError]}>
+              <Building2 size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder={t("signup.custom_vehicle_make_placeholder", { defaultValue: 'Enter custom vehicle make' })}
+                placeholderTextColor={Colors.textPlaceholder}
+                value={formData.vehicleMake}
+                onChangeText={(val) => updateFormData("vehicleMake", val)}
+                onBlur={() => handleBlur("vehicleMake")}
+                autoFocus
+              />
+              <TouchableOpacity 
+                style={{ padding: scale(4), marginRight: scale(4) }} 
+                onPress={() => {
+                  setIsCustomVehicleMake(false);
+                  updateFormData('vehicleMake', '');
+                }}
+              >
+                <X size={18} color={Colors.iconSecondary} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.inputWrapper, getError('vehicleMake') && styles.inputError]}
+              onPress={() => {
+                if (!formData.vehicleWheeler) {
+                  alert(t('errors.select_wheeler_first'));
+                  return;
+                }
+                setDropdownType("make");
+                setShowDropdown(true);
+              }}
+            >
+              <Building2 size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+              <Text style={[styles.input, { color: formData.vehicleMake ? "#181D27" : Colors.textPlaceholder, textAlignVertical: "center", lineHeight: verticalScale(52) }]}>
+                {formData.vehicleMake || t("signup.select_vehicle_make")}
+              </Text>
+              <ChevronDown size={20} color={Colors.iconSecondary} />
+            </TouchableOpacity>
+          )}
+          {getError('vehicleMake') && <Text style={styles.errorText}>{getError('vehicleMake')}</Text>}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(12) }}>
+          <View 
+            style={{ flex: 1 }}
+            onLayout={(e) => { fieldPositions.current['minWeight'] = e.nativeEvent.layout.y; }}
           >
-            <Building2 size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <Text style={[styles.input, { color: formData.vehicleMake ? "#181D27" : Colors.textPlaceholder, textAlignVertical: "center", lineHeight: verticalScale(52) }]}>
-              {formData.vehicleMake || t("signup.select_vehicle_make")}
-            </Text>
-            <ChevronDown size={20} color={Colors.iconSecondary} />
-          </TouchableOpacity>
+            <Text style={styles.label}>{t("signup.min_weight", { defaultValue: 'Min Weight (kg)' })} *</Text>
+            <View style={[styles.inputWrapper, getError('minWeight') && styles.inputError]}>
+              <TextInput
+                style={styles.input}
+                placeholder={t("signup.min_weight_placeholder", { defaultValue: 'e.g. 500' })}
+                placeholderTextColor={Colors.textPlaceholder}
+                keyboardType="numeric"
+                value={formData.minWeight}
+                onChangeText={(val) => updateFormData("minWeight", val.replace(/[^0-9]/g, ''))}
+                onBlur={() => handleBlur("minWeight")}
+              />
+            </View>
+            {getError('minWeight') && <Text style={styles.errorText}>{getError('minWeight')}</Text>}
+          </View>
+
+          <View 
+            style={{ flex: 1 }}
+            onLayout={(e) => { fieldPositions.current['maxWeight'] = e.nativeEvent.layout.y; }}
+          >
+            <Text style={styles.label}>{t("signup.max_weight", { defaultValue: 'Max Weight (kg)' })} *</Text>
+            <View style={[styles.inputWrapper, getError('maxWeight') && styles.inputError]}>
+              <TextInput
+                style={styles.input}
+                placeholder={t("signup.max_weight_placeholder", { defaultValue: 'e.g. 2000' })}
+                placeholderTextColor={Colors.textPlaceholder}
+                keyboardType="numeric"
+                value={formData.maxWeight}
+                onChangeText={(val) => updateFormData("maxWeight", val.replace(/[^0-9]/g, ''))}
+                onBlur={() => handleBlur("maxWeight")}
+              />
+            </View>
+            {getError('maxWeight') && <Text style={styles.errorText}>{getError('maxWeight')}</Text>}
+          </View>
         </View>
 
         <View 
@@ -3069,43 +3189,122 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Operating Area display box (showing selected villages) */}
+        {/* Operating Area display box (showing selected villages in sequence timeline) */}
         <View 
           style={styles.inputContainer}
           onLayout={(e) => { fieldPositions.current['operatingArea'] = e.nativeEvent.layout.y; }}
         >
           <Text style={styles.label}>{t('signup.operating_area_city')} *</Text>
           <View style={[
-            styles.inputWrapper,
             {
-              height: undefined,
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              borderWidth: moderateScale(1),
+              borderColor: '#D0D5DD',
+              borderRadius: moderateScale(14),
+              backgroundColor: '#F9FAFB',
+              paddingHorizontal: moderateScale(16),
               minHeight: verticalScale(56),
-              paddingVertical: verticalScale(8),
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: scale(6)
+              paddingVertical: verticalScale(12),
             },
             getError('operatingArea') && styles.inputError
           ]}>
-            <Navigation size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
-            {!formData.operatingArea ? (
-              <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
-                {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
-              </Text>
+            {(!formData.operatingArea || formData.operatingArea.split(', ').filter(Boolean).length === 0) ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MapIcon size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
+                <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
+                  {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
+                </Text>
+              </View>
             ) : (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), flex: 1, paddingVertical: verticalScale(2) }}>
-                {formData.operatingArea.split(', ').filter(a => a).map((area, index) => (
-                  <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary + '15', paddingVertical: verticalScale(4), paddingHorizontal: scale(10), borderRadius: moderateScale(16) }}>
-                    <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.primary, marginRight: scale(4), includeFontPadding: false, textAlignVertical: 'center' }}>{area}</Text>
-                    <TouchableOpacity 
-                      style={{ justifyContent: 'center', alignItems: 'center' }}
-                      onPress={() => toggleArea(area)}
-                    >
-                      <X size={scale(14)} color={Colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              <View style={{ flex: 1, paddingVertical: verticalScale(2) }}>
+                {formData.operatingArea.split(', ').filter(Boolean).map((area, index, arr) => {
+                  const isLast = index === arr.length - 1;
+                  return (
+                    <View key={index} style={{ flexDirection: 'row', minHeight: verticalScale(36), alignItems: 'center', marginBottom: isLast ? 0 : verticalScale(6) }}>
+                      {/* Timeline dot and connecting line */}
+                      <View style={{ alignItems: 'center', justifyContent: 'center', width: scale(16), marginRight: scale(12), alignSelf: 'stretch' }}>
+                        {/* Dot in the exact center */}
+                        <View style={{
+                          width: scale(8),
+                          height: scale(8),
+                          borderRadius: scale(4),
+                          backgroundColor: Colors.primary,
+                          zIndex: 2,
+                        }} />
+
+                        {/* Top connector line */}
+                        {index > 0 && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: '50%',
+                            width: scale(2),
+                            backgroundColor: Colors.primary + '50',
+                            zIndex: 1,
+                          }} />
+                        )}
+
+                        {/* Bottom connector line */}
+                        {!isLast && (
+                          <View style={{
+                            position: 'absolute',
+                            top: '50%',
+                            bottom: -verticalScale(6),
+                            width: scale(2),
+                            backgroundColor: Colors.primary + '50',
+                            zIndex: 1,
+                          }} />
+                        )}
+                      </View>
+
+                      {/* Content block: Village name and delete button */}
+                      <View style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingVertical: verticalScale(2) }}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            if (villagePincode && villagePincode.length === 6) {
+                              setEditingVillageIndex(index);
+                              setDropdownType('replace_operating_area');
+                              setShowDropdown(true);
+                            } else {
+                              Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+                            }
+                          }}
+                        >
+                          <Text style={{
+                            fontFamily: Fonts.medium,
+                            fontSize: moderateScale(15),
+                            color: Colors.textPrimary,
+                            textDecorationLine: 'underline',
+                          }}>
+                            {area}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            padding: scale(6),
+                            borderRadius: moderateScale(8),
+                            backgroundColor: '#FEE4E2',
+                          }}
+                          onPress={() => {
+                            const updatedVillages = arr.filter((_, i) => i !== index);
+                            updateFormData('operatingArea', updatedVillages.join(', '));
+                          }}
+                        >
+                          <Trash2 size={scale(16)} color="#FDA29B" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -3335,39 +3534,113 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         >
           <Text style={styles.label}>{t('signup.assigned_villages')} *</Text>
           <View style={[
-            styles.inputWrapper,
             {
-              height: undefined,
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              borderWidth: moderateScale(1),
+              borderColor: '#D0D5DD',
+              borderRadius: moderateScale(14),
+              backgroundColor: '#F9FAFB',
+              paddingHorizontal: moderateScale(16),
               minHeight: verticalScale(56),
-              paddingVertical: verticalScale(8),
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: scale(6)
+              paddingVertical: verticalScale(12),
             },
             getError('assignedVillages') && styles.inputError
           ]}>
-            <MapIcon size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
             {formData.assignedVillages.length === 0 ? (
-              <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
-                {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MapIcon size={scale(20)} color={Colors.iconSecondary} style={styles.inputIcon} />
+                <Text style={[styles.input, { color: Colors.textPlaceholder, textAlignVertical: 'center', lineHeight: verticalScale(38) }]}>
+                  {t('signup.no_villages_assigned_placeholder', { defaultValue: 'Selected villages will appear here' })}
+                </Text>
+              </View>
             ) : (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), flex: 1, paddingVertical: verticalScale(2) }}>
-                {formData.assignedVillages.map((village, index) => (
-                  <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary + '15', paddingVertical: verticalScale(4), paddingHorizontal: scale(10), borderRadius: moderateScale(16) }}>
-                    <Text style={{ fontFamily: Fonts.medium, fontSize: moderateScale(14), color: Colors.primary, marginRight: scale(4), includeFontPadding: false, textAlignVertical: 'center' }}>{village}</Text>
-                    <TouchableOpacity 
-                      style={{ justifyContent: 'center', alignItems: 'center' }}
-                      onPress={() => {
-                        const newVillages = formData.assignedVillages.filter((_, i) => i !== index);
-                        updateFormData('assignedVillages', newVillages);
-                      }}
-                    >
-                      <X size={scale(14)} color={Colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              <View style={{ flex: 1, paddingVertical: verticalScale(2) }}>
+                {formData.assignedVillages.map((village, index) => {
+                  const isLast = index === formData.assignedVillages.length - 1;
+                  return (
+                    <View key={index} style={{ flexDirection: 'row', minHeight: verticalScale(36), alignItems: 'center', marginBottom: isLast ? 0 : verticalScale(6) }}>
+                      {/* Timeline dot and connecting line */}
+                      <View style={{ alignItems: 'center', justifyContent: 'center', width: scale(16), marginRight: scale(12), alignSelf: 'stretch' }}>
+                        {/* Dot in the exact center */}
+                        <View style={{
+                          width: scale(8),
+                          height: scale(8),
+                          borderRadius: scale(4),
+                          backgroundColor: Colors.primary,
+                          zIndex: 2,
+                        }} />
+
+                        {/* Top connector line (from top of row to center of dot) */}
+                        {index > 0 && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: '50%',
+                            width: scale(2),
+                            backgroundColor: Colors.primary + '50',
+                            zIndex: 1,
+                          }} />
+                        )}
+
+                        {/* Bottom connector line (from center of dot, extending through the bottom margin to the next row) */}
+                        {!isLast && (
+                          <View style={{
+                            position: 'absolute',
+                            top: '50%',
+                            bottom: -verticalScale(6),
+                            width: scale(2),
+                            backgroundColor: Colors.primary + '50',
+                            zIndex: 1,
+                          }} />
+                        )}
+                      </View>
+
+                      {/* Content block: Village name and delete button */}
+                      <View style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingVertical: verticalScale(2) }}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            if (villagePincode && villagePincode.length === 6) {
+                              setEditingVillageIndex(index);
+                              setDropdownType('replace_assigned_village');
+                              setShowDropdown(true);
+                            } else {
+                              Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+                            }
+                          }}
+                        >
+                          <Text style={{
+                            fontFamily: Fonts.medium,
+                            fontSize: moderateScale(14),
+                            color: Colors.textPrimary
+                          }}>
+                            {village}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{
+                            padding: scale(6),
+                            borderRadius: moderateScale(8),
+                            backgroundColor: '#FEE4E2',
+                          }}
+                          onPress={() => {
+                            const newVillages = formData.assignedVillages.filter((_, i) => i !== index);
+                            updateFormData('assignedVillages', newVillages);
+                          }}
+                        >
+                          <Trash2 size={scale(16)} color="#FDA29B" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             )}
           </View>

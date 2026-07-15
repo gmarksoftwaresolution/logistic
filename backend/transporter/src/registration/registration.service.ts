@@ -471,6 +471,30 @@ export class RegistrationService {
     return user;
   }
 
+  private mapVehicleType(type: string, category: string): VehicleType {
+    if (category === 'MILK_VAN') {
+      return VehicleType.MILK_VAN;
+    }
+    if (!type) {
+      return VehicleType.OTHER;
+    }
+    const cleanType = type.toLowerCase().trim();
+    if (cleanType.includes('2') || cleanType.includes('two')) {
+      return VehicleType.TWO_WHEELER;
+    }
+    if (cleanType.includes('3') || cleanType.includes('three')) {
+      return VehicleType.THREE_WHEELER;
+    }
+    if (cleanType.includes('4') || cleanType.includes('four') || 
+        cleanType.includes('pickup') || cleanType.includes('bolero') || 
+        cleanType.includes('mini') || cleanType.includes('tempo') || 
+        cleanType.includes('tractor') || cleanType.includes('container') || 
+        cleanType.includes('truck')) {
+      return VehicleType.FOUR_WHEELER;
+    }
+    return VehicleType.OTHER;
+  }
+
   private async completeRegistration(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -488,20 +512,182 @@ export class RegistrationService {
 
     const transporterUniqueId = await this.generateTransporterUniqueId();
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        applicationStatus: ApplicationStatus.COMPLETED,
-        currentStep: 7, // Set to 7 as per requirement
-        uniqueCode: transporterUniqueId,
-      },
+    const txResult = await this.prisma.$transaction(async (tx) => {
+      // 1. Update user details
+      const updated = await tx.user.update({
+        where: { id },
+        data: {
+          applicationStatus: ApplicationStatus.COMPLETED,
+          currentStep: 7, // Set to 7 as per requirement
+          uniqueCode: transporterUniqueId,
+        },
+      });
+
+      // 2. Fetch step tracking data
+      const steps = await tx.stepTracking.findMany({ where: { userId: id } });
+      const stepData: Record<number, any> = {};
+      for (const s of steps) {
+        stepData[s.step] = typeof s.data === 'string' ? JSON.parse(s.data) : s.data;
+      }
+
+      // 3. Driving Detail (Step 2)
+      const s2 = stepData[2];
+      if (s2) {
+        await tx.drivingDetail.upsert({
+          where: { userId: id },
+          update: {
+            licenseNumber: s2.licenseNumber,
+            expiryDate: new Date(s2.expiryDate),
+            drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+            drivingLicenseNo: s2.licenseNumber,
+            drivingLicenseUrl: s2.licensePhoto || null,
+          },
+          create: {
+            userId: id,
+            licenseNumber: s2.licenseNumber,
+            expiryDate: new Date(s2.expiryDate),
+            drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+            drivingLicenseNo: s2.licenseNumber,
+            drivingLicenseUrl: s2.licensePhoto || null,
+          },
+        });
+      }
+
+      // 4. Transporter Detail (Step 4 & Step 2 driving experience)
+      const s4 = stepData[4];
+      const vehicleCategory = (s4 && s4.vehicleCategory === 'MILK_VAN') ? 'MILK_VAN' : 'OTHER';
+
+      await tx.transporterDetail.upsert({
+        where: { userId: id },
+        update: {
+          transporterCode: transporterUniqueId,
+          vehicleCategory: vehicleCategory as any,
+          experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+        },
+        create: {
+          userId: id,
+          transporterCode: transporterUniqueId,
+          vehicleCategory: vehicleCategory as any,
+          experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+        },
+      });
+
+      // 5. Milk Van Detail (Step 5 Milk Van & Step 6 Milk Van)
+      const s5mv = stepData[5];
+      const s6mv = stepData[6];
+      if (vehicleCategory === 'MILK_VAN' && (s5mv || s6mv)) {
+        await tx.milkVanDetail.upsert({
+          where: { userId: id },
+          update: {
+            sangathanName: s5mv?.sangathanName || '',
+            centerName: s5mv?.centerName || '',
+            assignedVillages: s6mv?.assignedVillages || null,
+            morningShiftTime: s6mv?.morningShiftTime || null,
+            eveningShiftTime: s6mv?.eveningShiftTime || null,
+          },
+          create: {
+            userId: id,
+            sangathanName: s5mv?.sangathanName || '',
+            centerName: s5mv?.centerName || '',
+            assignedVillages: s6mv?.assignedVillages || null,
+            morningShiftTime: s6mv?.morningShiftTime || null,
+            eveningShiftTime: s6mv?.eveningShiftTime || null,
+          },
+        });
+      }
+
+      // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
+      const s6p = stepData[6];
+      if (vehicleCategory === 'MILK_VAN' && s6mv) {
+        const operatingAreaVal = Array.isArray(s6mv.assignedVillages)
+          ? s6mv.assignedVillages.join(', ')
+          : 'Milk Van Route';
+        await tx.routeDetail.upsert({
+          where: { userId: id },
+          update: {
+            operatingArea: operatingAreaVal,
+            workingDays: s6mv.workingDays || null,
+            workingSchedule: s6mv.workingSchedule || null,
+          },
+          create: {
+            userId: id,
+            operatingArea: operatingAreaVal,
+            workingDays: s6mv.workingDays || null,
+            workingSchedule: s6mv.workingSchedule || null,
+          },
+        });
+      } else if (vehicleCategory !== 'MILK_VAN' && s6p) {
+        await tx.routeDetail.upsert({
+          where: { userId: id },
+          update: {
+            operatingArea: s6p.operatingArea || '',
+            pickupLocations: s6p.pickupLocations || null,
+            dropLocations: s6p.dropLocations || null,
+            workingDays: s6p.workingDays || null,
+            workingSchedule: s6p.workingSchedule || null,
+          },
+          create: {
+            userId: id,
+            operatingArea: s6p.operatingArea || '',
+            pickupLocations: s6p.pickupLocations || null,
+            dropLocations: s6p.dropLocations || null,
+            workingDays: s6p.workingDays || null,
+            workingSchedule: s6p.workingSchedule || null,
+          },
+        });
+      }
+
+      // 7. Other Details / Vehicle details (Step 5 Personal or Step 7 Milk Van)
+      const s5p = stepData[5];
+      const s7mv = stepData[7];
+      const vehicleInfo = vehicleCategory === 'MILK_VAN' ? s7mv : s5p;
+      if (vehicleInfo) {
+        const existingVehicle = await tx.otherDetails.findFirst({
+          where: { userId: id },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        const mappedType = this.mapVehicleType(vehicleInfo.type, vehicleCategory);
+
+        if (existingVehicle) {
+          await tx.otherDetails.update({
+            where: { id: existingVehicle.id },
+            data: {
+              vehicleType: mappedType,
+              vehicleName: vehicleInfo.make || null,
+              registrationNumber: vehicleInfo.number || null,
+              rcUrl: vehicleInfo.rcUpload || null,
+              insuranceUrl: vehicleInfo.insuranceUpload || null,
+              wheeler: vehicleInfo.wheeler || null,
+              minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+              maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
+            },
+          });
+        } else {
+          await tx.otherDetails.create({
+            data: {
+              userId: id,
+              vehicleType: mappedType,
+              vehicleName: vehicleInfo.make || null,
+              registrationNumber: vehicleInfo.number || null,
+              rcUrl: vehicleInfo.rcUpload || null,
+              insuranceUrl: vehicleInfo.insuranceUpload || null,
+              wheeler: vehicleInfo.wheeler || null,
+              minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+              maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
+            },
+          });
+        }
+      }
+
+      return updated;
     });
 
     return {
       message: 'Registration steps completed. Your application is under review.',
-      requestId: updated.id,
-      transporterUniqueId: updated.uniqueCode,
-      status: updated.applicationStatus,
+      requestId: txResult.id,
+      transporterUniqueId: txResult.uniqueCode,
+      status: txResult.applicationStatus,
     };
   }
 }

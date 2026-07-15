@@ -364,6 +364,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         parcelId,
         verificationToken,
         userRole: 'TRANSPORTER',
+        legType: type === 'drop' ? 'delivery' : 'pickup'
       });
 
       showToast(res.data?.message || 'Product verified successfully via QR!', 'success');

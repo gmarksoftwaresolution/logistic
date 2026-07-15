@@ -228,7 +228,8 @@ export class QrService {
     scannedByUserRole?: string,
     latitude?: number,
     longitude?: number,
-    remarks?: string
+    remarks?: string,
+    legType?: string
   ): Promise<{ success: boolean; message: string; parcel: any }> {
     // 1. Verify Parcel Exists
     const parcel = await this.prisma.parcel.findUnique({
@@ -447,7 +448,7 @@ export class QrService {
     } 
     else if (finalUserRole === 'TRANSPORTER') {
       // Case D: Transporter picking up from SHG (Pickup phase)
-      if (order.phase === 'PICKUP' && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
+      if (order.phase === 'PICKUP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
         if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this Transporter');
         }
@@ -468,8 +469,30 @@ export class QrService {
         transitionAction = 'TRANSPORTER_PICKUP';
         transitionSuccessMessage = 'Parcel loaded by Transporter from SHG';
       }
+      // Case D-2: Transporter delivering to GMU Hub (Phase 1, drop/delivery leg)
+      else if (order.phase === 'PICKUP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB' || currentOrderMainStatus === 'HUB_RECEIVED' || currentOrderMainStatus === 'PARCEL_AT_GMU')) {
+        if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
+          throw new BadRequestException('Order is not assigned to this Transporter');
+        }
+
+        orderUpdateFn = async () => {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: {
+              pickupTransporterStatus: 'COMPLETED',
+              mainStatus: 'HUB_RECEIVED',
+            }
+          });
+        };
+
+        nextParcelStatus = 'HUB_RECEIVED';
+        nextHolderId = 'HUB';
+        nextHolderType = 'WAREHOUSE';
+        transitionAction = 'TRANSPORTER_HUB_DELIVER';
+        transitionSuccessMessage = 'Parcel delivered to GMU Hub by Transporter';
+      }
       // Case E: Transporter picking up drop parcel from Warehouse (Drop phase)
-      else if (order.phase === 'DROP' && (currentOrderMainStatus === 'STORED' || currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_ASSIGNED')) {
+      else if (order.phase === 'DROP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'STORED' || currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_ASSIGNED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED')) {
         if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this Transporter');
         }
@@ -489,6 +512,28 @@ export class QrService {
         nextHolderType = 'TRANSPORTER';
         transitionAction = 'TRANSPORTER_DROP_PICKUP';
         transitionSuccessMessage = 'Parcel loaded for delivery by Transporter from Warehouse';
+      }
+      // Case E-2: Transporter delivering to Drop SHG (Phase 2, drop/delivery leg)
+      else if (order.phase === 'DROP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'PARCEL_AT_DROP_SHG')) {
+        if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
+          throw new BadRequestException('Order is not assigned to this Transporter');
+        }
+
+        orderUpdateFn = async () => {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: {
+              dropTransporterStatus: 'DELIVERED',
+              mainStatus: 'PARCEL_AT_DROP_SHG',
+            }
+          });
+        };
+
+        nextParcelStatus = 'PARCEL_AT_DROP_SHG';
+        nextHolderId = String(order.dropShgId);
+        nextHolderType = 'SHG';
+        transitionAction = 'TRANSPORTER_SHG_DELIVER';
+        transitionSuccessMessage = 'Parcel delivered to Drop SHG by Transporter';
       }
     } 
     else if (finalUserRole === 'ADMIN' || finalUserRole === 'GMU' || finalUserRole === 'SUPER_ADMIN') {

@@ -348,7 +348,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? (o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId)
         : (o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId);
 
-    const shgMember = shgList.find(s => s.id === targetShgId);
+    const shgMember = shgList.find(s => String(s.id) === String(targetShgId));
 
     const apiShgDetails = (isBuyerReturnFlow
       ? o.returnShgDetails
@@ -374,7 +374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? (o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId)
         : (o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId);
 
-    const transMember = transporterList.find(t => t.id === targetTransporterId);
+    const transMember = transporterList.find(t => String(t.id) === String(targetTransporterId));
 
     const apiTransDetails = (isBuyerReturnFlow
       ? o.returnTransporterDetails
@@ -694,7 +694,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const intakePickupOrders = async (orderIds: string[]) => {
     for (const id of orderIds) {
-      const order = pickupAssignedOrders.find((o) => o.id === id) as any;
+      const order = pickupAssignedOrders.find((o) => o.id === id) || 
+                    pickupWarehouseOrders.find((o) => o.id === id) ||
+                    pickupNewOrders.find((o) => o.id === id) as any;
       await api.orders.warehouseIntake(order?.uuid || id);
     }
     await loadCounts();

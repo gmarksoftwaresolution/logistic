@@ -219,22 +219,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  // Delivery Scanner states
-  const [scannedItems, setScannedItems] = useState<Record<string, boolean>>({});
-  const [activeScanItem, setActiveScanItem] = useState<string | null>(null);
-  const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
-  const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [rejectModalVisible, setRejectModalVisible] = useState(false);
-
-  // Dynamic computed variables directly from database/backend data structure
-  const codesGenerated = (order.products || []).some((p: any) => !!p.verificationCode);
-  const deliveryCodeGenerated = codesGenerated;
-  const deliveryCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
-  const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => p.verificationStatus === 'VERIFIED');
-  const pickupCodeVisible = codesGenerated;
-
-
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
     if (!matchingParcel) return false;
@@ -278,12 +262,25 @@ const OrderDetailsScreen: React.FC<Props> = ({
     }
   };
 
+  // Dynamic computed variables directly from database/backend data structure
+  const codesGenerated = (order.products || []).some((p: any) => !!p.verificationCode);
+  const deliveryCodeGenerated = codesGenerated;
+  const deliveryCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => isProductVerified(p));
+  const pickupCodeVerified = (order.products || []).length > 0 && (order.products || []).every((p: any) => isProductVerified(p));
+  const pickupCodeVisible = codesGenerated;
+
   const allParcelsVerified = (order.products || []).length > 0 && (order.products || []).every((item: any) => {
     return isProductVerified(item);
   });
 
   const isSubmitDisabled = isSubmitting || !allParcelsVerified;
 
+  // Delivery Scanner states
+  const [isScanned, setIsScanned] = useState<boolean>(false);
+  const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
+  const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
+  const isScanningRef = useRef(false);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
 
   // Reschedule state hooks
   const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
@@ -388,6 +385,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     if (scannerModalVisible) {
       setScanned(false);
       setScanningStatus('scanning');
+      isScanningRef.current = false;
       if (!permission || !permission.granted) {
         requestPermission();
       }
@@ -395,7 +393,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   }, [scannerModalVisible, permission]);
 
   const handleBarcodeScanned = async ({ type, data }: { type: string; data: string }) => {
-    if (scanned) return;
+    if (scanned || isScanningRef.current) return;
+    isScanningRef.current = true;
     setScanned(true);
     setScanningStatus('success');
 
@@ -422,9 +421,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }
 
       if (!parcelId || !verificationToken) {
-        Alert.alert("Invalid QR Code", "This QR code does not contain a valid parcel ID and verification token.");
-        setScanned(false);
-        setScanningStatus('scanning');
+        Alert.alert(
+          "Invalid QR Code",
+          "This QR code does not contain a valid parcel ID and verification token.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setScanned(false);
+                setScanningStatus('scanning');
+                isScanningRef.current = false;
+              }
+            }
+          ]
+        );
         return;
       }
 
@@ -432,18 +442,41 @@ const OrderDetailsScreen: React.FC<Props> = ({
       if (activeScanningParcel && activeScanningParcel.parcelId !== parcelId) {
         Alert.alert(
           "Wrong Product Scanned",
-          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`
+          `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setScanned(false);
+                setScanningStatus('scanning');
+                isScanningRef.current = false;
+              }
+            }
+          ]
         );
-        setScanned(false);
-        setScanningStatus('scanning');
         return;
       }
 
       const res = await axiosInstance.post('/qr/verify', {
         parcelId,
         verificationToken,
-        userRole: 'SHG'
+        userRole: 'SHG',
+        legType: isDeliveryPhase ? 'delivery' : 'pickup'
       });
+
+      // Optimistically update orderParcels status immediately
+      if (activeScanningParcel) {
+        const nextStatus = isDeliveryPhase
+          ? (order.phase === 'DROP' ? 'DELIVERED' : 'SHG_HANDOVER_VERIFIED')
+          : (order.phase === 'DROP' ? 'PARCEL_AT_DROP_SHG' : 'PARCEL_AT_SHG');
+        setOrderParcels(prev =>
+          prev.map(p =>
+            p.parcelId === activeScanningParcel.parcelId
+              ? { ...p, parcelStatus: nextStatus }
+              : p
+          )
+        );
+      }
 
       await fetchOrderParcels();
       await refreshOrdersList();
@@ -458,6 +491,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         setScannerModalVisible(false);
         setActiveScanningParcel(null);
         setScanned(false);
+        isScanningRef.current = false;
         if (isActive && currentStep?.id === 'scan_products_button') {
           nextStep();
         }
@@ -466,9 +500,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
     } catch (err: any) {
       console.error("Verification error:", err);
       const msg = err.response?.data?.message || err.message || "Failed to verify QR code.";
-      Alert.alert("Verification Failed", msg);
-      setScanned(false);
-      setScanningStatus('scanning');
+      Alert.alert(
+        "Verification Failed",
+        msg,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setScanned(false);
+              setScanningStatus('scanning');
+              isScanningRef.current = false;
+            }
+          }
+        ]
+      );
     }
   };
   const translateY = scanLaserAnim.interpolate({
@@ -1170,35 +1215,18 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
                 {/* Central scanning grid area / transparent frame */}
                 <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center relative">
-                  {(permission && permission.granted) ? (
-                    <CameraView
-                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                      facing="back"
-                      barcodeScannerSettings={{
-                        barcodeTypes: ['qr'],
-                      }}
-                      onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-                    />
-                  ) : (
-                    <View className="p-4 items-center">
-                      <Text className="text-white text-center text-[12px] mb-2">Camera permission required</Text>
-                      <TouchableOpacity onPress={requestPermission} className="bg-emerald-600 px-3 py-1.5 rounded-lg">
-                        <Text className="text-white font-extrabold text-[11px]">Grant</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
                   {scanningStatus === 'scanning' ? <>
-                    {cameraPermission?.granted ? (
+                    {permission?.granted ? (
                       <CameraView
                         style={{ width: '100%', height: '100%', position: 'absolute' }}
                         facing="back"
-                        onBarcodeScanned={handleBarcodeScanned}
+                        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
                         barcodeScannerSettings={{
                           barcodeTypes: ["qr"],
                         }}
                       />
                     ) : (
-                      <TouchableOpacity onPress={requestCameraPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
+                      <TouchableOpacity onPress={requestPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
                         <Text className="text-white font-bold text-[13px]">Request Camera</Text>
                       </TouchableOpacity>
                     )}

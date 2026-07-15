@@ -28,4 +28,8 @@ export class VerifyQrDto {
   @IsString()
   @IsOptional()
   remarks?: string;
+
+  @IsString()
+  @IsOptional()
+  legType?: string;
 }

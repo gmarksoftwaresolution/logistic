@@ -228,7 +228,8 @@ export class QrService {
     scannedByUserRole?: string,
     latitude?: number,
     longitude?: number,
-    remarks?: string
+    remarks?: string,
+    legType?: string
   ): Promise<{ success: boolean; message: string; parcel: any }> {
     // 1. Verify Parcel Exists
     const parcel = await this.prisma.parcel.findUnique({
@@ -355,37 +356,14 @@ export class QrService {
 
     if (finalUserRole === 'SHG') {
       // Case A: SHG picking up from Seller
-      if (order.phase === 'PICKUP' && (currentOrderMainStatus === 'ORDER_PLACED' || currentOrderMainStatus === 'PICKUP_SHG_ACCEPTED' || currentOrderMainStatus === 'PENDING_PICKUP')) {
+      if (order.phase === 'PICKUP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'ORDER_PLACED' || currentOrderMainStatus === 'PICKUP_SHG_ACCEPTED' || currentOrderMainStatus === 'PENDING_PICKUP')) {
         // Verify SHG assignment
         if (order.pickupShgId && String(order.pickupShgId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this SHG');
         }
 
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              pickupShgStatus: 'PICKED',
-              mainStatus: 'PARCEL_AT_SHG',
-            }
-          });
+        orderUpdateFn = null;
 
-          // Set pickup_order status to COMPLETED if it exists
-          const masterOrderObj = await this.prisma.masterOrder.findUnique({
-            where: { orderNumber: order.orderId }
-          });
-          if (masterOrderObj) {
-            const pickupOrder = await this.prisma.pickupOrder.findFirst({
-              where: { masterOrderId: masterOrderObj.id }
-            });
-            if (pickupOrder) {
-              await this.prisma.pickupOrder.update({
-                where: { id: pickupOrder.id },
-                data: { status: 'COMPLETED' }
-              });
-            }
-          }
-        };
 
         nextParcelStatus = 'PARCEL_AT_SHG';
         nextHolderId = finalUserId;
@@ -393,7 +371,7 @@ export class QrService {
         transitionAction = 'SHG_PICKUP';
         transitionSuccessMessage = 'Parcel picked up from seller by SHG';
       }
-      else if (order.phase === 'PICKUP' && currentOrderMainStatus === 'PARCEL_AT_SHG') {
+      else if (order.phase === 'PICKUP' && (legType !== 'pickup' || !legType) && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
         nextParcelStatus = 'SHG_HANDOVER_VERIFIED';
         nextHolderId = finalUserId;
         nextHolderType = 'SHG';
@@ -401,7 +379,7 @@ export class QrService {
         transitionSuccessMessage = 'SHG verified parcel handover to transporter';
       }
       // Case B: Drop SHG receiving drop parcel from Transporter
-      else if (order.phase === 'DROP' && (currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER')) {
+      else if (order.phase === 'DROP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER')) {
         if (order.dropShgId && String(order.dropShgId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this SHG');
         }
@@ -423,7 +401,7 @@ export class QrService {
         transitionSuccessMessage = 'Parcel received by drop SHG from transporter';
       }
       // Case C: Final delivery to buyer by SHG
-      else if (order.phase === 'DROP' && currentOrderMainStatus === 'PARCEL_AT_DROP_SHG') {
+      else if (order.phase === 'DROP' && (legType !== 'pickup' || !legType) && currentOrderMainStatus === 'PARCEL_AT_DROP_SHG') {
         if (order.dropShgId && String(order.dropShgId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this SHG');
         }
@@ -447,7 +425,7 @@ export class QrService {
     } 
     else if (finalUserRole === 'TRANSPORTER') {
       // Case D: Transporter picking up from SHG (Pickup phase)
-      if (order.phase === 'PICKUP' && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
+      if (order.phase === 'PICKUP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
         if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this Transporter');
         }
@@ -468,8 +446,30 @@ export class QrService {
         transitionAction = 'TRANSPORTER_PICKUP';
         transitionSuccessMessage = 'Parcel loaded by Transporter from SHG';
       }
+      // Case D-2: Transporter delivering to GMU Hub (Phase 1, drop/delivery leg)
+      else if (order.phase === 'PICKUP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB' || currentOrderMainStatus === 'HUB_RECEIVED' || currentOrderMainStatus === 'PARCEL_AT_GMU')) {
+        if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
+          throw new BadRequestException('Order is not assigned to this Transporter');
+        }
+
+        orderUpdateFn = async () => {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: {
+              pickupTransporterStatus: 'COMPLETED',
+              mainStatus: 'HUB_RECEIVED',
+            }
+          });
+        };
+
+        nextParcelStatus = 'HUB_RECEIVED';
+        nextHolderId = 'HUB';
+        nextHolderType = 'WAREHOUSE';
+        transitionAction = 'TRANSPORTER_HUB_DELIVER';
+        transitionSuccessMessage = 'Parcel delivered to GMU Hub by Transporter';
+      }
       // Case E: Transporter picking up drop parcel from Warehouse (Drop phase)
-      else if (order.phase === 'DROP' && (currentOrderMainStatus === 'STORED' || currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_ASSIGNED')) {
+      else if (order.phase === 'DROP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'STORED' || currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_ASSIGNED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED')) {
         if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
           throw new BadRequestException('Order is not assigned to this Transporter');
         }
@@ -490,10 +490,32 @@ export class QrService {
         transitionAction = 'TRANSPORTER_DROP_PICKUP';
         transitionSuccessMessage = 'Parcel loaded for delivery by Transporter from Warehouse';
       }
+      // Case E-2: Transporter delivering to Drop SHG (Phase 2, drop/delivery leg)
+      else if (order.phase === 'DROP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'PARCEL_AT_DROP_SHG')) {
+        if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
+          throw new BadRequestException('Order is not assigned to this Transporter');
+        }
+
+        orderUpdateFn = async () => {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: {
+              dropTransporterStatus: 'DELIVERED',
+              mainStatus: 'PARCEL_AT_DROP_SHG',
+            }
+          });
+        };
+
+        nextParcelStatus = 'PARCEL_AT_DROP_SHG';
+        nextHolderId = String(order.dropShgId);
+        nextHolderType = 'SHG';
+        transitionAction = 'TRANSPORTER_SHG_DELIVER';
+        transitionSuccessMessage = 'Parcel delivered to Drop SHG by Transporter';
+      }
     } 
     else if (finalUserRole === 'ADMIN' || finalUserRole === 'GMU' || finalUserRole === 'SUPER_ADMIN') {
       // Case F: Warehouse Intake (GMU receiving from transporter)
-      if (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB') {
+      if (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB' || currentOrderMainStatus === 'PARCEL_AT_GMU' || currentOrderMainStatus === 'HUB_RECEIVED') {
         orderUpdateFn = async () => {
           await this.prisma.order.update({
             where: { id: order.id },

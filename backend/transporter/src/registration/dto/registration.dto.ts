@@ -309,6 +309,16 @@ export class Step5PersonalVehicleDto {
   @Transform(({ value }) => value?.trim())
   make: string;
 
+  @ApiPropertyOptional({ example: 500, description: 'Minimum capacity weight' })
+  @IsOptional()
+  @IsNumber()
+  minWeight?: number;
+
+  @ApiPropertyOptional({ example: 2000, description: 'Maximum capacity weight' })
+  @IsOptional()
+  @IsNumber()
+  maxWeight?: number;
+
   @ApiProperty({ example: 'MH12AB1234' })
   @IsNotEmpty()
   @IsString()

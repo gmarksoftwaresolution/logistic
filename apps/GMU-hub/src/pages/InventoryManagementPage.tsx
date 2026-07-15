@@ -6,7 +6,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { InventoryItem } from '../context/AppContext';
-import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, QrCode } from 'lucide-react';
+import { Eye, Layers, Truck, X, FileText, MoreVertical, Phone, MapPin, Calendar, Clock, Package, QrCode, CheckCircle } from 'lucide-react';
+import { api } from '../utils/api';
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
   if (!startDate) return '-';
@@ -30,6 +31,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     loadInventoryBuyerReturn,
     counts,
     loadCounts,
+    readyToStore,
   } = useAppContext();
 
   // Sub-tabs: Incoming Inventory | Return Pickup Inventory | Return Drop Inventory
@@ -229,6 +231,26 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                 >
                   <QrCode className="h-4 w-4 text-[#073318]/70" />
                   <span>Scan QR</span>
+                </button>
+              )}
+
+              {(statusLower === 'at_hub' || statusLower === 'at hub' || statusLower === 'hub_received' || statusLower === 'hub received' || statusLower === 'parcel_at_gmu') && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setActiveActionMenu(null);
+                    try {
+                      await readyToStore(row.id);
+                      alert('Order stored in inventory successfully.');
+                      await loadData();
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to store in inventory.');
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-[#073318] hover:bg-[#B2D534]/20 rounded-xl transition-all duration-150 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <Layers className="h-4 w-4 text-[#073318]/70" />
+                  <span>Store in Inventory</span>
                 </button>
               )}
             </div>
@@ -518,6 +540,27 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                         <Truck className="h-5 w-5 text-slate-400" />
                       </div>
                     </div>
+
+                    {['AT_HUB', 'HUB_RECEIVED', 'PARCEL_AT_GMU'].includes(selectedItem.status) && (
+                      <div className="pt-4 border-t border-[#073318]/10 flex justify-end">
+                        <button
+                          onClick={async () => {
+                            try {
+                              await readyToStore(selectedItem.id);
+                              alert('Order stored in inventory successfully.');
+                              setIsViewModalOpen(false);
+                              await loadData();
+                            } catch (err: any) {
+                              alert(err.message || 'Failed to store in inventory.');
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-[#B2D534] hover:bg-[#B2D534]/90 text-[#073318] rounded-xl font-extrabold text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                        >
+                          <Layers className="h-4 w-4" />
+                          Store in Inventory
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Section 2: Partner Information */}
@@ -573,46 +616,6 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                             <span className="leading-tight">
                               {selectedItem.buyerAddress || 'N/A'}
                             </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* SHG Card */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">SHG Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedItem.shgName || 'N/A'}</h5>
-                        </div>
-                        <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Contact:</span>
-                            <span>{selectedItem.shgMobile || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-start gap-2 text-slate-650 font-semibold">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                            <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">{selectedItem.shgAddress || 'N/A'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Transporter Card */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-1">Transporter Information</p>
-                          <h5 className="font-extrabold text-[#073318] text-base">{selectedItem.transporterName || 'N/A'}</h5>
-                        </div>
-                        <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs">
-                          <div className="flex items-center gap-2 text-slate-650 font-semibold">
-                            <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="text-slate-455">Contact:</span>
-                            <span>{selectedItem.transporterMobile || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-start gap-2 text-slate-650 font-semibold">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                            <span className="text-slate-455 shrink-0">Address:</span>
-                            <span className="leading-tight">{selectedItem.transporterAddress || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
