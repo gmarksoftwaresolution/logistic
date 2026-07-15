@@ -557,26 +557,49 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       returnDropCompleted,
     } = allLists;
 
-    const pNew = pickupNew.find((o: any) => o.id === orderId);
-    const pAssigned = pickupAssigned.find((o: any) => o.id === orderId);
-    const pWh = pickupWarehouse.find((o: any) => o.id === orderId);
-    const pRej = pickupRejected.find((o: any) => o.id === orderId);
-    const pRes = pickupRescheduled.find((o: any) => o.id === orderId);
+    const tempPrimary = dropCompleted.find((o: any) => o.id === orderId) ||
+      dropRescheduled.find((o: any) => o.id === orderId) ||
+      dropRejected.find((o: any) => o.id === orderId) ||
+      dropAssigned.find((o: any) => o.id === orderId) ||
+      dropNew.find((o: any) => o.id === orderId) ||
+      pickupWarehouse.find((o: any) => o.id === orderId) ||
+      pickupRescheduled.find((o: any) => o.id === orderId) ||
+      pickupRejected.find((o: any) => o.id === orderId) ||
+      pickupAssigned.find((o: any) => o.id === orderId) ||
+      pickupNew.find((o: any) => o.id === orderId) ||
+      returnPickupCompleted.find((o: any) => o.id === orderId) ||
+      returnDropCompleted.find((o: any) => o.id === orderId) ||
+      returnPickupNew.find((o: any) => o.id === orderId) ||
+      returnDropNew.find((o: any) => o.id === orderId);
 
-    const dNew = dropNew.find((o: any) => o.id === orderId);
-    const dAssigned = dropAssigned.find((o: any) => o.id === orderId);
-    const dRej = dropRejected.find((o: any) => o.id === orderId);
-    const dRes = dropRescheduled.find((o: any) => o.id === orderId);
-    const dComp = dropCompleted.find((o: any) => o.id === orderId);
+    if (!tempPrimary) return null;
 
-    const retPNew = returnPickupNew.find((o: any) => o.id === orderId);
-    const retPComp = returnPickupCompleted.find((o: any) => o.id === orderId);
-    const retDNew = returnDropNew.find((o: any) => o.id === orderId);
-    const retDComp = returnDropCompleted.find((o: any) => o.id === orderId);
+    const baseNumber = tempPrimary.orderId?.split('-').pop() || tempPrimary.id?.split('-').pop() || '';
+    const matchBase = (o: any) => {
+      if (o.id === orderId) return true;
+      if (!baseNumber) return false;
+      const num = o.orderId || o.id || '';
+      return num.endsWith(baseNumber);
+    };
 
-    const primary = dComp || dRes || dRej || dAssigned || dNew || pWh || pRes || pRej || pAssigned || pNew || retPComp || retDComp || retPNew || retDNew;
+    const pNew = pickupNew.find(matchBase);
+    const pAssigned = pickupAssigned.find(matchBase);
+    const pWh = pickupWarehouse.find(matchBase);
+    const pRej = pickupRejected.find(matchBase);
+    const pRes = pickupRescheduled.find(matchBase);
 
-    if (!primary) return null;
+    const dNew = dropNew.find(matchBase);
+    const dAssigned = dropAssigned.find(matchBase);
+    const dRej = dropRejected.find(matchBase);
+    const dRes = dropRescheduled.find(matchBase);
+    const dComp = dropCompleted.find(matchBase);
+
+    const retPNew = returnPickupNew.find(matchBase);
+    const retPComp = returnPickupCompleted.find(matchBase);
+    const retDNew = returnDropNew.find(matchBase);
+    const retDComp = returnDropCompleted.find(matchBase);
+
+    const primary = tempPrimary;
 
     const allTracking = [
       ...(pNew?.tracking || []),
@@ -1039,7 +1062,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
 
     let shgPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (order.pickupShgStatus === 'PICKED' || ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+    if (order.pickupShgStatus === 'PICKED' || ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
       shgPickupState = 'completed';
     } else if (order.pickupShgStatus === 'ACCEPTED' || ['PICKUP_ASSIGNED', 'PARCEL_AT_SHG'].includes(order.mainStatus)) {
       shgPickupState = 'active';
@@ -1050,7 +1073,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
 
     let transPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+    if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
       transPickupState = 'completed';
     } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
       transPickupState = 'active';
@@ -1061,40 +1084,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
 
     let gmuState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    let transDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-
     if (['DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
       gmuState = 'completed';
     } else if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'PARCEL_AT_HUB', 'AT_HUB'].includes(order.mainStatus)) {
       gmuState = 'active';
     }
 
-    if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED') {
-      transDropState = 'completed';
-    } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
-      transDropState = 'active';
-    } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
-      transDropState = 'rejected';
-    } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
-      transDropState = 'delayed';
-    }
-
+    let transDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
     let shgDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED') {
-      shgDropState = 'completed';
-    } else if (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED') {
-      shgDropState = 'active';
-    } else if (order.dropShgStatus === 'REJECTED' || order.mainStatus === 'SHG_DROP_DECLINED') {
-      shgDropState = 'rejected';
-    } else if (order.rescheduleType === 'DROP_SHG') {
-      shgDropState = 'delayed';
-    }
-
     let buyerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
-      buyerState = 'completed';
-    } else if (['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
-      buyerState = 'active';
+
+    if (order.phase === 'DROP') {
+      const transporterAccepted = ['DROP_TRANSPORTER_ACCEPTED', 'DROP_TRANSPORTER_PENDING', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'ACCEPTED' || order.dropTransporterStatus === 'DELIVERED';
+
+      if (transporterAccepted) {
+        if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED') {
+          transDropState = 'completed';
+        } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
+          transDropState = 'active';
+        } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
+          transDropState = 'rejected';
+        } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
+          transDropState = 'delayed';
+        }
+
+        if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED') {
+          shgDropState = 'completed';
+        } else if (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED') {
+          shgDropState = 'active';
+        } else if (order.dropShgStatus === 'REJECTED' || order.mainStatus === 'SHG_DROP_DECLINED') {
+          shgDropState = 'rejected';
+        } else if (order.rescheduleType === 'DROP_SHG') {
+          shgDropState = 'delayed';
+        }
+
+        if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+          buyerState = 'completed';
+        } else if (['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+          buyerState = 'active';
+        }
+      }
     }
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
@@ -2392,6 +2421,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         <Truck className="h-5 w-5 text-slate-400" />
                       </div>
                     </div>
+
+                    {['AT_HUB', 'HUB_RECEIVED', 'PARCEL_AT_GMU'].includes(selectedOrderDetails.mainStatus) && (
+                      <div className="pt-4 border-t border-[#073318]/10 flex justify-end">
+                        <button
+                          onClick={async () => {
+                            try {
+                              await readyToStore(selectedOrderDetails.id);
+                              alert('Order stored in inventory successfully.');
+                              setIsViewModalOpen(false);
+                              await loadData();
+                            } catch (err: any) {
+                              alert(err.message || 'Failed to store in inventory.');
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-[#B2D534] hover:bg-[#B2D534]/90 text-[#073318] rounded-xl font-extrabold text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                        >
+                          <Layers className="h-4 w-4" />
+                          Store in Inventory
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Partners Details */}

@@ -1829,7 +1829,7 @@ export class OrderManagementService implements OnModuleInit {
   async warehouseIntake(id: string) {
     const order = await this.getOrderDetails(id);
 
-    return this.prisma.order.update({
+    await this.prisma.order.update({
       where: { id: order.id },
       data: {
         // Phase 5: Parcel arrives at hub → AT_HUB
@@ -1837,6 +1837,8 @@ export class OrderManagementService implements OnModuleInit {
         warehouseReceivedAt: new Date(),
       },
     });
+
+    return this.storeInventory(order.id);
   }
 
 
@@ -2155,7 +2157,7 @@ export class OrderManagementService implements OnModuleInit {
       throw new BadRequestException(`No drop SHG assignment request found for SHG ID ${shgId}`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.orderAssignment.update({
         where: { id: assignment.id },
         data: { status: 'ACCEPTED' },
@@ -2211,6 +2213,14 @@ export class OrderManagementService implements OnModuleInit {
 
       return updated;
     });
+
+    try {
+      await this.broadcastDropTransporter(order.id);
+    } catch (err: any) {
+      console.error(`[dropShgAccept] Immediate drop transporter broadcast failed:`, err.message);
+    }
+
+    return result;
   }
 
   async dropShgReject(id: string, shgId: string) {
@@ -2831,12 +2841,10 @@ export class OrderManagementService implements OnModuleInit {
     const ov = village;
     const op = pincode;
 
-    // Match on Village and Pincode only
+    // Match on Pincode OR Village
     const matchingShgs = approvedShgs.filter(shg => 
-      shg.pincode && op && 
-      shg.pincode.trim().toLowerCase() === op.trim().toLowerCase() &&
-      shg.village && ov && 
-      normalizeStr(shg.village) === normalizeStr(ov)
+      (shg.pincode && op && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()) ||
+      (shg.village && ov && normalizeStr(shg.village) === normalizeStr(ov))
     );
 
     return matchingShgs.map(shg => ({
@@ -2884,13 +2892,18 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, villages, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Match on Village and Pincode only
-    const matchingTransporters = approvedTransporters.filter((tr) => {
-      const { areas, villages, pincodes } = getTransporterInfo(tr);
-      const villageMatched = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
-      const pincodeMatched = p && (pincodes.includes(p) || areas.includes(p));
-      return !!(villageMatched && pincodeMatched);
+    // Match using routing priority: Pincode -> Village
+    let matchingTransporters = approvedTransporters.filter((tr) => {
+      const { areas, pincodes } = getTransporterInfo(tr);
+      return p && (pincodes.includes(p) || areas.includes(p));
     });
+
+    if (matchingTransporters.length === 0 && v) {
+      matchingTransporters = approvedTransporters.filter((tr) => {
+        const { areas, villages } = getTransporterInfo(tr);
+        return villages.includes(normalizeStr(v)) || areas.includes(v);
+      });
+    }
 
     return matchingTransporters.map(tr => ({
       ...tr,

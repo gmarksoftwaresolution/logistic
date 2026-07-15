@@ -26,7 +26,7 @@ export class TransporterManagementService {
 
     const query = `
       SELECT 
-        COALESCE(tm.id::text, u.id::text) as "id",
+        u.id::text as "id",
         COALESCE(td."transporterCode", u."uniqueCode") as "transporterCode",
         u.role,
         u."fullName",
@@ -226,7 +226,7 @@ export class TransporterManagementService {
 
     const query = `
       SELECT 
-        COALESCE(tm.id::text, u.id::text) as "id",
+        u.id::text as "id",
         COALESCE(td."transporterCode", u."uniqueCode") as "transporterCode",
         u.role,
         u."fullName",
@@ -313,8 +313,6 @@ export class TransporterManagementService {
           "rejectedAt" = NULL
       WHERE id = ${userId}
     `;
-
-    await this.populateTransporterDetails(userId);
 
     return { success: true };
   }

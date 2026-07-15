@@ -396,62 +396,164 @@ export class SignupService {
         }
       }
 
-      await this.prisma.otherDetails.deleteMany({ where: { userId } });
-      await this.prisma.otherDetails.create({
-        data: {
-          userId,
-          vehicleType: (dto.hasVehicle && dto.vehicle?.vehicleType) ? dto.vehicle.vehicleType : VehicleType.OTHER,
-          vehicleName: null,
-          registrationNumber: (dto.hasVehicle && dto.vehicle?.vehicleRegistrationNo) ? dto.vehicle.vehicleRegistrationNo : null,
-          licenseNumber: (dto.hasVehicle && (dto.vehicle?.licenseNumber || dto.vehicle?.drivingLicenseNumber)) ? (dto.vehicle.licenseNumber || dto.vehicle.drivingLicenseNumber) : null,
-          rcUrl: null,
-          insuranceUrl: null,
-          vehicleImageUrl: (dto.hasVehicle && dto.vehicle?.vehicleImageUrl) ? dto.vehicle.vehicleImageUrl : null,
-          heihgt: height,
-          width: width,
-          storageSpace: dto.storageSpace || null,
-          DLurl: (dto.hasVehicle && dto.vehicle?.drivingLicenseImageUrl) ? dto.vehicle.drivingLicenseImageUrl : null,
-        },
-      });
-
-      // 3. Ensure Unique ID exists
-      let requestId = user.uniqueCode;
-      if (!requestId) {
-        const count = await this.prisma.user.count({
-          where: {
-            uniqueCode: { startsWith: 'LOG-' },
+      const txResult = await this.prisma.$transaction(async (tx) => {
+        await tx.otherDetails.deleteMany({ where: { userId } });
+        await tx.otherDetails.create({
+          data: {
+            userId,
+            vehicleType: (dto.hasVehicle && dto.vehicle?.vehicleType) ? dto.vehicle.vehicleType : VehicleType.OTHER,
+            vehicleName: null,
+            registrationNumber: (dto.hasVehicle && dto.vehicle?.vehicleRegistrationNo) ? dto.vehicle.vehicleRegistrationNo : null,
+            licenseNumber: (dto.hasVehicle && (dto.vehicle?.licenseNumber || dto.vehicle?.drivingLicenseNumber)) ? (dto.vehicle.licenseNumber || dto.vehicle.drivingLicenseNumber) : null,
+            rcUrl: null,
+            insuranceUrl: null,
+            vehicleImageUrl: (dto.hasVehicle && dto.vehicle?.vehicleImageUrl) ? dto.vehicle.vehicleImageUrl : null,
+            heihgt: height,
+            width: width,
+            storageSpace: dto.storageSpace || null,
+            DLurl: (dto.hasVehicle && dto.vehicle?.drivingLicenseImageUrl) ? dto.vehicle.drivingLicenseImageUrl : null,
           },
         });
-        requestId = ShgUtil.formatUniqueId(user.role, count + 1);
 
-        await this.prisma.user.update({
+        // 3. Ensure Unique ID exists
+        let requestId = user.uniqueCode;
+        if (!requestId) {
+          const count = await tx.user.count({
+            where: {
+              uniqueCode: { startsWith: 'LOG-' },
+            },
+          });
+          requestId = ShgUtil.formatUniqueId(user.role, count + 1);
+        }
+
+        // 4. Mark signup as completed and update user fields
+        const updatedUser = await tx.user.update({
           where: { id: userId },
-          data: { uniqueCode: requestId }
+          data: { 
+            currentStep: 7,
+            uniqueCode: requestId,
+            applicationStatus: 'PENDING'
+          },
         });
-      }
 
-      // 4. Mark signup as completed
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { currentStep: 7 },
-      });
+        await tx.stepTracking.upsert({
+          where: { userId_step: { userId, step: 7 } },
+          create: {
+            userId,
+            step: 7,
+            status: 'COMPLETED',
+            data: dto ? JSON.parse(JSON.stringify(dto)) : {},
+          },
+          update: {
+            status: 'COMPLETED',
+            data: dto ? JSON.parse(JSON.stringify(dto)) : {},
+            updatedAt: new Date(),
+          },
+        });
 
-      await this.trackStep(userId, 7, 'COMPLETED', dto);
+        // 5. Final Application upsert
+        const application = await tx.application.create({
+          data: {
+            userId,
+            status: 'PENDING',
+          },
+        });
 
-      // 5. Final Application upsert
-      const application = await this.prisma.application.create({
-        data: {
-          userId,
-          status: 'PENDING',
-        },
+        // Immediately populate public."ShgDetail" upon registration
+        let shgName = null;
+        let shgLeaderName = null;
+        let shgLeaderContact = null;
+        let fullName = updatedUser.fullName || null;
+        let shgRole = null;
+        let crpName = null;
+        let crpMobile = null;
+        let crpEmail = null;
+        let groupSize = null;
+        let imgUrl = updatedUser.profilePhoto || null;
+        let age = null;
+
+        // Fetch step tracking data
+        const steps = await tx.stepTracking.findMany({ where: { userId } });
+        const stepData: Record<number, any> = {};
+        for (const s of steps) {
+          stepData[s.step] = typeof s.data === 'string' ? JSON.parse(s.data) : s.data;
+        }
+
+        // Get age from StepTracking step 1
+        const s1 = stepData[1];
+        if (s1 && s1.age) {
+          age = parseInt(s1.age, 10);
+        }
+
+        if (updatedUser.role === 'SHG') {
+          const s2 = stepData[2];
+          if (s2) {
+            shgName = s2.shgName || null;
+            shgRole = s2.shgRole || null;
+            crpName = s2.crpName || null;
+            crpMobile = s2.crpMobile || null;
+            crpEmail = s2.crpEmail || null;
+            groupSize = s2.shgGroupSize ? parseInt(s2.shgGroupSize, 10) : null;
+
+            if (shgRole === 'LEADER') {
+              shgLeaderName = updatedUser.fullName || null;
+              shgLeaderContact = updatedUser.phoneNumber || null;
+            } else if (shgRole === 'MEMBER' || shgRole === 'CRP') {
+              shgLeaderName = s2.shgLeaderName || null;
+              shgLeaderContact = s2.shgLeaderContact || null;
+              fullName = updatedUser.fullName || null;
+            }
+          }
+        } else {
+          shgName = updatedUser.fullName || null;
+          shgLeaderName = updatedUser.fullName || null;
+          shgLeaderContact = updatedUser.phoneNumber || null;
+          fullName = updatedUser.fullName || null;
+        }
+
+        await tx.shgDetail.upsert({
+          where: { userId },
+          create: {
+            userId,
+            shgName,
+            shgLeaderName,
+            shgLeaderContact,
+            shgRole: shgRole as any,
+            crpName,
+            crpMobile,
+            crpEmail,
+            groupSize,
+            fullName,
+            imgUrl,
+            age,
+          },
+          update: {
+            shgName,
+            shgLeaderName,
+            shgLeaderContact,
+            shgRole: shgRole as any,
+            crpName,
+            crpMobile,
+            crpEmail,
+            groupSize,
+            fullName,
+            imgUrl,
+            age,
+          },
+        });
+
+        return {
+          requestId,
+          status: application.status,
+        };
       });
 
       return {
         success: true,
         message: 'Signup completed successfully! Your application is under review.',
-        requestId: requestId || user.uniqueCode,
-        shgUniqueId: requestId || user.uniqueCode,
-        status: application.status,
+        requestId: txResult.requestId || user.uniqueCode,
+        shgUniqueId: txResult.requestId || user.uniqueCode,
+        status: txResult.status,
       };
     } catch (err: any) {
       console.error('Save Other Details Error:', err);
