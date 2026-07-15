@@ -659,6 +659,8 @@ export class RegistrationService {
               rcUrl: vehicleInfo.rcUpload || null,
               insuranceUrl: vehicleInfo.insuranceUpload || null,
               wheeler: vehicleInfo.wheeler || null,
+              minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+              maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
             },
           });
         } else {
@@ -671,6 +673,8 @@ export class RegistrationService {
               rcUrl: vehicleInfo.rcUpload || null,
               insuranceUrl: vehicleInfo.insuranceUpload || null,
               wheeler: vehicleInfo.wheeler || null,
+              minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
+              maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
             },
           });
         }
