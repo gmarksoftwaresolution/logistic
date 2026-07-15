@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
@@ -16,7 +17,7 @@ import { useOnboarding } from '../context/OnboardingContext';
 import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../api/axiosInstance';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
@@ -487,7 +488,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
       });
 
       setTimeout(() => {
-        setIsScanned(true);
         setScannerModalVisible(false);
         setActiveScanningParcel(null);
         setScanned(false);
@@ -561,10 +561,26 @@ const OrderDetailsScreen: React.FC<Props> = ({
           setIsSubmitting(false);
           return;
         }
-        if (order.legType === 'drop' && !order.handoverCode) {
-          Alert.alert("Verification Required", "Please wait for transporter to generate code before submitting.");
+
+        // Delivery Code Verification Rule (for transporter delivery)
+        if (activeType === 'transporter' && isDeliveryPhase && !deliveryCodeVerified) {
+          Alert.alert("Verification Required", "Please verify delivery code before submitting.");
           setIsSubmitting(false);
           return;
+        }
+
+        // Pickup Code Verification Rule (for transporter pickup)
+        if (activeType === 'transporter' && !isDeliveryPhase) {
+          if (order.legType === 'pickup' && !pickupCodeVerified) {
+            Alert.alert("Verification Required", "Please verify pickup code before submitting.");
+            setIsSubmitting(false);
+            return;
+          }
+          if (order.legType === 'drop' && !order.handoverCode) {
+            Alert.alert("Verification Required", "Please wait for transporter to generate code before submitting.");
+            setIsSubmitting(false);
+            return;
+          }
         }
       }
 
@@ -581,7 +597,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('ReturnOrders' as never);
+          navigation.navigate('ReturnedOrders' as never);
         }
         return;
       }
@@ -607,7 +623,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('ReturnOrders' as never);
+          navigation.navigate('ReturnedOrders' as never);
         }
       } else {
         if (navigation.canGoBack()) {
@@ -1199,24 +1215,21 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
                 {/* Central scanning grid area / transparent frame */}
                 <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center relative">
-                  {(permission && permission.granted) ? (
-                    <CameraView
-                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                      facing="back"
-                      barcodeScannerSettings={{
-                        barcodeTypes: ['qr'],
-                      }}
-                      onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-                    />
-                  ) : (
-                    <View className="p-4 items-center">
-                      <Text className="text-white text-center text-[12px] mb-2">Camera permission required</Text>
-                      <TouchableOpacity onPress={requestPermission} className="bg-emerald-600 px-3 py-1.5 rounded-lg">
-                        <Text className="text-white font-extrabold text-[11px]">Grant</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
                   {scanningStatus === 'scanning' ? <>
+                    {permission?.granted ? (
+                      <CameraView
+                        style={{ width: '100%', height: '100%', position: 'absolute' }}
+                        facing="back"
+                        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                        barcodeScannerSettings={{
+                          barcodeTypes: ["qr"],
+                        }}
+                      />
+                    ) : (
+                      <TouchableOpacity onPress={requestPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
+                        <Text className="text-white font-bold text-[13px]">Request Camera</Text>
+                      </TouchableOpacity>
+                    )}
                     <Animated.View style={{
                       transform: [{
                         translateY

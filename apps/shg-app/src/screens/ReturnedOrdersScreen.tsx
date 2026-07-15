@@ -25,7 +25,7 @@ import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrde
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
 
 type Props = CompositeScreenProps<
-  NativeStackScreenProps<OrdersStackParamList, 'ReturnOrders'>,
+  NativeStackScreenProps<OrdersStackParamList, 'ReturnedOrders'>,
   CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList>,
     NativeStackScreenProps<RootStackParamList>
@@ -34,7 +34,7 @@ type Props = CompositeScreenProps<
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
+const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
   const { returnedOrders, highlightedOrders, receiveOrder } = useOrders();
@@ -372,4 +372,4 @@ const ReturnOrdersScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-export default ReturnOrdersScreen;
+export default ReturnedOrdersScreen;

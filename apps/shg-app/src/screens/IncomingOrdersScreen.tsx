@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import TextTicker from 'react-native-text-ticker';
-import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -54,6 +54,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     t
   } = context;
   const { refreshOrdersList } = useOrders();
+  const isScreenFocused = useIsFocused();
 
   useFocusEffect(
     useCallback(() => {
@@ -191,7 +192,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               text1: "Return Order Accepted",
               text2: "Pickup Return Created"
             });
-            navigation.navigate('ReturnOrders');
+            navigation.navigate('ReturnedOrders');
           } else {
             await acceptOrders(ordersToAccept);
             setSelectedIds([]);
@@ -683,6 +684,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               stepId="accept_selected_button"
               autoAdvance={false}
               style={{ flex: 1 }}
+              isFocused={isScreenFocused}
             >
               <TouchableOpacity onPress={handleAcceptSelected} activeOpacity={0.8} className="w-full flex-row items-center justify-center bg-[#073318] py-3.5 rounded-[22px] shadow-md" style={{
                 shadowColor: '#073318',

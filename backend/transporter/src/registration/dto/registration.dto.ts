@@ -313,11 +313,16 @@ export class Step5PersonalVehicleDto {
   @IsOptional()
   @IsNumber()
   minWeight?: number;
-
-  @ApiPropertyOptional({ example: 2000, description: 'Maximum capacity weight' })
-  @IsOptional()
-  @IsNumber()
-  maxWeight?: number;
+ 
+   @ApiPropertyOptional({ example: 2000, description: 'Maximum capacity weight' })
+   @IsOptional()
+   @IsNumber()
+   maxWeight?: number;
+ 
+   @ApiPropertyOptional({ example: 12.5, description: 'Rate per kilometer' })
+   @IsOptional()
+   @IsNumber()
+   ratePerKm?: number;
 
   @ApiProperty({ example: 'MH12AB1234' })
   @IsNotEmpty()

@@ -79,8 +79,6 @@ export default function SettingsScreen({
         <SectionHeader title={t("su_account_427")} />
         {renderCard(<>
             <SettingRow icon={<Ionicons name="person-outline" size={20} color="#16A34A" />} title={t("personal_details")} subtitle={t("su_update_your_personal_429")} onPress={() => navigation.navigate("PersonalDetails")} />
-            <SettingRow icon={<Ionicons name="call-outline" size={20} color="#16A34A" />} title={t("su_profile_settings_430")} subtitle={user?.mobile ? `+91 ${user.mobile}` : "Not provided"} />
-            <SettingRow icon={<Ionicons name="lock-closed-outline" size={20} color="#16A34A" />} title={t("su_change_password_431")} subtitle={t("su_update_your_password_432")} />
             <SettingRow icon={<Ionicons name="notifications-outline" size={20} color="#16A34A" />} title={t("su_manage_session_433")} subtitle={t("su_check_your_active_se_434")} />
           </>)}
 

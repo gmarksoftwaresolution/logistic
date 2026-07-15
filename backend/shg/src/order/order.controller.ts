@@ -26,6 +26,18 @@ export class OrderController {
     return this.orderService.getAssignedPickups(user.id, user.phoneNumber);
   }
 
+  @Get('completed')
+  @ApiOperation({ summary: 'Get all completed orders (Pickups, Regular Drops, Return Drops) for the logged-in SHG' })
+  async getCompletedOrders(@GetUser() user: User) {
+    return this.orderService.getCompletedOrders(user.id, user.phoneNumber);
+  }
+
+  @Get('rejected')
+  @ApiOperation({ summary: 'Get all rejected orders for the logged-in SHG' })
+  async getRejectedOrders(@GetUser() user: User) {
+    return this.orderService.getRejectedOrders(user.id, user.phoneNumber);
+  }
+
   @Post('new/:id/accept')
   @ApiOperation({ summary: 'Accept a pickup order (supports legType: drop to accept transporter deliveries)' })
   async acceptPickup(

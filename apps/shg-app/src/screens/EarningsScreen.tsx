@@ -1,17 +1,25 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SharedHeader } from '../components/SharedHeader';
 
 import { LanguageContext } from '../context/LanguageContext';
 
-const PlaceholderScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, navigation }) => {
+const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, navigation }) => {
   const context = React.useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
 
   const routeName = route?.name || 'Screen';
   const title = routeName === 'Earning' ? (t('earning') || 'Earnings') : (routeName === 'Profile' ? (t('profile') || 'Profile') : routeName);
+  
+  const [refreshing, setRefreshing] = React.useState(false);
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    // Simulate API reload for now
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  }, []);
   
   let subtitle = "Manage your information";
   if (routeName === 'Earning') subtitle = "Track your earnings and income";
@@ -19,12 +27,20 @@ const PlaceholderScreen: React.FC<{ route?: any, navigation?: any }> = ({ route,
 
   return (
     <SafeAreaView style={styles.container}>
-      <SharedHeader title={title} subtitle={subtitle} navigation={navigation} />
-      <View style={styles.content}>
+      <ScrollView 
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+        }
+      >
+        <SharedHeader title={title} subtitle={subtitle} navigation={navigation} />
+        <View style={styles.content}>
         <Ionicons name="construct-outline" size={64} color="#CBD5E1" />
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{t("placeholder_under_dev") || "This screen is currently under development"}</Text>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -54,4 +70,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PlaceholderScreen;
+export default EarningsScreen;

@@ -12,7 +12,6 @@ import { MainTabParamList, OrdersStackParamList } from './types';
 // Screen Imports
 import DashboardScreen from '../screens/DashboardScreen';
 import OrderManagementScreen from '../screens/OrderManagementScreen';
-import OrdersOverviewScreen from '../screens/OrdersOverviewScreen';
 import StockManagementScreen from '../screens/StockManagementScreen';
 import CompletedOrdersScreen from '../screens/CompletedOrdersScreen';
 import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScreen';
@@ -22,8 +21,8 @@ import DeliveryScreen from '../screens/DeliveryScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
-import ReturnOrdersScreen from '../screens/ReturnOrdersScreen';
-import PlaceholderScreen from '../screens/PlaceholderScreen';
+import ReturnedOrdersScreen from '../screens/ReturnedOrdersScreen';
+import EarningsScreen from '../screens/EarningsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -63,8 +62,9 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         const { width } = e.nativeEvent.layout;
         setContainerWidth(width);
       }}
-      className="absolute bottom-6 left-5 right-5 h-[72px] bg-white border border-[#E2F0E7] flex-row justify-around items-center rounded-[32px] shadow-lg"
+      className="absolute left-5 right-5 h-[72px] bg-white border border-[#E2F0E7] flex-row justify-around items-center rounded-[32px] shadow-lg"
       style={{
+        bottom: Math.max(insets.bottom + 12, 24),
         elevation: 8,
         shadowColor: '#073318',
         shadowOffset: {
@@ -124,7 +124,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
           IconComponent = Ionicons;
           iconName = isFocused ? 'document-text' : 'document-text-outline';
           displayLabel = t('order_history') || 'Order History';
-        } else if (route.name === 'Earning') {
+        } else if (route.name === 'Earnings') {
           IconComponent = Ionicons;
           iconName = isFocused ? 'wallet' : 'wallet-outline';
           displayLabel = t('earning') || 'Earnings';
@@ -177,13 +177,13 @@ const OrdersStack = createNativeStackNavigator<OrdersStackParamList>();
 function OrdersStackNavigator() {
   return (
     <OrdersStack.Navigator screenOptions={{ headerShown: false }}>
-      <OrdersStack.Screen name="OrdersOverview" component={OrdersOverviewScreen} />
+      <OrdersStack.Screen name="OrderManagement" component={OrderManagementScreen} />
       <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} options={{ gestureEnabled: false }} />
       <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
       <OrdersStack.Screen name="Delivery" component={DeliveryRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
-      <OrdersStack.Screen name="ReturnOrders" component={ReturnOrdersScreen} />
+      <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
     </OrdersStack.Navigator>
@@ -202,7 +202,7 @@ export default function MainTabNavigator() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Orders" component={OrdersStackNavigator} />
       <Tab.Screen name="OrderHistory" component={OrderHistoryScreen} />
-      <Tab.Screen name="Earning" component={PlaceholderScreen} />
+      <Tab.Screen name="Earnings" component={EarningsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

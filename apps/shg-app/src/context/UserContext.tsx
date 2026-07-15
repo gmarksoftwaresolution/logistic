@@ -95,6 +95,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         await userService.updateProfile({
           name: updatedUser.name,
           profileImage: updatedUser.profileImage,
+          pincode: updatedUser.pincode,
+          stateName: updatedUser.stateName,
+          district: updatedUser.district,
+          taluka: updatedUser.taluka,
+          village: updatedUser.village,
+          homeAddress: updatedUser.homeAddress,
         });
       } catch (err) {
         console.error('Failed to sync profile update to backend', err);

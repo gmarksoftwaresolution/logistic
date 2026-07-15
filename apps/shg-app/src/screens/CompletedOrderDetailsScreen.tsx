@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useIsFocused } from '@react-navigation/native';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
@@ -21,6 +22,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   const {
     t
   } = context;
+  const isScreenFocused = useIsFocused();
   const { isActive, currentStep } = useOnboarding();
   const scrollViewRef = React.useRef<ScrollView>(null);
 
@@ -327,10 +329,14 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           <Text className="font-extrabold text-[15px] text-[#073318] ml-2">{t("su_download_invoice_386")}</Text>
         </TouchableOpacity>
 
-        <WalkthroughElement stepId="completed_details_close" style={{ width: '100%', marginBottom: 40 }}>
+        <WalkthroughElement 
+          stepId="completed_details_close" 
+          style={{ width: '100%', marginBottom: 40 }}
+          isFocused={isScreenFocused}
+        >
           <TouchableOpacity onPress={() => {
             if (isActive && currentStep?.id === 'completed_details_close') {
-              navigation.navigate('OrdersOverview');
+              navigation.navigate('OrderManagement');
             } else {
               navigation.goBack();
             }

@@ -17,7 +17,6 @@ import ProfileScreen from '../screens/ProfileScreen';
 import PersonalDetailsScreen from '../screens/PersonalDetailsScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AddressScreen from '../screens/AddressScreen';
-import OrdersOverviewScreen from '../screens/OrdersOverviewScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import MainTabNavigator from './MainTabNavigator';
 import StockManagementScreen from '../screens/StockManagementScreen';

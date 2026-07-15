@@ -294,6 +294,7 @@ model OtherDetails {
   wheeler               String?
   minWeight             Float?
   maxWeight             Float?
+  ratePerKm             Float?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -817,6 +818,7 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
+}
 
 model ScanHistory {
   id           Int       @id @default(autoincrement())

@@ -27,7 +27,7 @@ export const DashboardLoader: React.FC<{ t?: any }> = ({ t }) => {
     switch (routeName) {
       case 'Home':
         return { title: 'Loading Home', subtitle: 'Fetching latest updates...' };
-      case 'OrdersOverview':
+      case 'OrderManagement':
       case 'OrderManagement':
         return { title: 'Loading Order Management', subtitle: 'Fetching latest orders...' };
       case 'IncomingOrders':

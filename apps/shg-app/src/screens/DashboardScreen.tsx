@@ -1,6 +1,6 @@
 import { LanguageContext } from '../context/LanguageContext';
 import React, { useContext, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -44,6 +44,14 @@ export default function DashboardScreen({
     },
   ]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    // Simulate API reload for now
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  }, []);
+
   const {
     user
   } = useUser();
@@ -56,7 +64,14 @@ export default function DashboardScreen({
     y: 1
   }} className="flex-1">
       <SafeAreaView className="flex-1">
-        <View className="flex-1 relative">
+        <ScrollView 
+          className="flex-1 relative"
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+          }
+        >
           
           {/* Header Box */}
           <LinearGradient colors={['#FFFFFF', '#E8F5EC']} start={{
@@ -249,7 +264,7 @@ export default function DashboardScreen({
           <Text className="text-[15px] font-medium text-[#6B7280] text-center leading-6">{t("su_we_re_building_somet_425")}</Text>
         </View>
 
-      </View>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
   </LinearGradient>;
 }
