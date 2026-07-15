@@ -460,10 +460,6 @@ export default function SignupScreen({
   const [showPincodeMenu, setShowPincodeMenu] = useState(false);
   const [showVillageMenu, setShowVillageMenu] = useState(false);
   const [showAreaMenu, setShowAreaMenu] = useState(false);
-  const [postOffice, setPostOffice] = useState('');
-  const [postOfficeError, setPostOfficeError] = useState('');
-  const [postOfficeList, setPostOfficeList] = useState<string[]>([]);
-  const [showPostOfficeMenu, setShowPostOfficeMenu] = useState(false);
   const [stateName, setStateName] = useState('');
   const [stateNameError, setStateNameError] = useState('');
   const [district, setDistrict] = useState('');
@@ -598,7 +594,6 @@ export default function SignupScreen({
     if (data.district) setDistrict(data.district);
     if (data.taluka) setTaluka(data.taluka);
     if (data.village) setVillage(data.village);
-    if (data.postOffice) setPostOffice(data.postOffice);
     if (data.streetArea) setStreetArea(data.streetArea);
     if (data.houseNo) setHouseNo(data.houseNo);
     if (data.landmark) setLandmark(data.landmark);
@@ -677,7 +672,6 @@ export default function SignupScreen({
         district,
         taluka,
         village,
-        postOffice,
         streetArea,
         houseNo,
         landmark,
@@ -742,7 +736,7 @@ export default function SignupScreen({
       // Only save after OTP is verified
       saveSignupProgress(step);
     }
-  }, [step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience, shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader, producesProducts, businessTeamSize, productName, productCategory, otherCategory, dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName, district, taluka, village, postOffice, streetArea, houseNo, landmark, aadhaarNumber, panNumber, aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber, ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType, vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole]);
+  }, [step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience, shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader, producesProducts, businessTeamSize, productName, productCategory, otherCategory, dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName, district, taluka, village, streetArea, houseNo, landmark, aadhaarNumber, panNumber, aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber, ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType, vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole]);
 
   // IFSC Auto-fetch Effect
   useEffect(() => {
@@ -843,7 +837,6 @@ export default function SignupScreen({
       if (localData) {
         setSelectedData(localData);
         setVillageList(localData.villages || []);
-        setPostOfficeList(localData.villages || []);
       } else {
         const fetchPincodeData = async () => {
           try {
@@ -851,7 +844,6 @@ export default function SignupScreen({
             if (data) {
               setSelectedData(data);
               setVillageList(data.villages || []);
-              setPostOfficeList(data.postOffices || []);
             }
           } catch (err) {
             console.error('Failed to sync pincode details in effect:', err);
@@ -974,9 +966,6 @@ export default function SignupScreen({
     setDistrict('');
     setTaluka('');
     setVillage('');
-    setPostOffice('');
-    setPostOfficeError('');
-    setPostOfficeList([]);
     setStreetArea('');
     setHouseNo('');
     setLandmark('');
@@ -1560,7 +1549,6 @@ export default function SignupScreen({
     let firstInvalidRef: any = null;
     setPincodeError('');
     setVillageError('');
-    setPostOfficeError('');
     setStreetAreaError('');
     setTalukaError('');
     setDistrictError('');
@@ -1576,10 +1564,6 @@ export default function SignupScreen({
       setVillageError(t("su_village_is_required_56"));
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = villageRef;
-    }
-    if (!postOffice) {
-      setPostOfficeError(t("val_post_office_required"));
-      isValid = false;
     }
     if (!landmark) {
       setLandmarkError(t("su_delivery_address_is__57"));
@@ -1621,8 +1605,7 @@ export default function SignupScreen({
         district,
         state: stateName,
         houseNo,
-        landmark,
-        postOffice
+        landmark
       });
       setStep(7);
     } catch (error: any) {
@@ -2507,17 +2490,6 @@ export default function SignupScreen({
                         setVillageList([]);
                         setVillage('');
                       }
-                      if (data.postOffices && data.postOffices.length > 0) {
-                        setPostOfficeList(data.postOffices);
-                        if (data.postOffices.length === 1) {
-                          setPostOffice(data.postOffices[0]);
-                        } else {
-                          setPostOffice('');
-                        }
-                      } else {
-                        setPostOfficeList([]);
-                        setPostOffice('');
-                      }
                       setStateNameError('');
                       setDistrictError('');
                       setTalukaError('');
@@ -2549,16 +2521,7 @@ export default function SignupScreen({
               if (!validateRequired(landmark)) setLandmarkError(t("su_address_is_required_195"));
             }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => talukaRef.current?.focus()} />
 
-                {/* Post Office Row */}
-                <View className="w-full mt-4">
-                  <DropdownField label={t("post_office")} placeholder={t("post_office")} icon="mail-outline" value={postOffice} error={postOfficeError} required={true} onPress={() => {
-                    if (postOfficeList.length > 0) {
-                      setShowPostOfficeMenu(true);
-                    } else if (postOfficeList.length === 0 && pincode.length === 6) {
-                      setPostOfficeError('No post offices found for this pincode');
-                    }
-                  }} />
-                </View>
+
 
                 {/* Village & Taluka Row */}
                 <View className="flex-row w-full mt-4">
@@ -3231,35 +3194,7 @@ export default function SignupScreen({
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Post Office Menu */}
-      <Modal visible={showPostOfficeMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowPostOfficeMenu(false)}>
-          <View className="flex-1 justify-end" style={{
-          backgroundColor: 'rgba(0,0,0,0.3)'
-        }}>
-            <TouchableWithoutFeedback>
-              <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("post_office")}</Text>
-                <ScrollView style={{
-                maxHeight: 400
-              }} showsVerticalScrollIndicator={false}>
-                  {postOfficeList.map(opt => {
-                  const isSelected = postOffice === opt;
-                  return <TouchableOpacity key={opt} onPress={() => {
-                    setPostOffice(opt);
-                    setPostOfficeError('');
-                    setShowPostOfficeMenu(false);
-                  }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
-                        {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                      </TouchableOpacity>;
-                })}
-                </ScrollView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+
 
       {/* Village Menu */}
       <Modal visible={showVillageMenu} transparent={true} animationType="fade">

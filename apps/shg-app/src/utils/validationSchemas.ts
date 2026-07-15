@@ -31,7 +31,6 @@ export const addressDetailsSchema = yup.object().shape({
   taluka: yup.string().required('val_taluka_required'),
   district: yup.string().required('val_district_required'),
   state: yup.string().required('val_state_required'),
-  postOffice: yup.string().required('val_post_office_required'),
 });
 
 export const bankDetailsSchema = yup.object().shape({

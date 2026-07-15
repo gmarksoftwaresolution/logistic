@@ -250,7 +250,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: dto.postOffice || null,
+        postOffice: null,
         landmark: dto.landmark || null,
       },
       update: {
@@ -260,7 +260,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: dto.postOffice || null,
+        postOffice: null,
         landmark: dto.landmark || null,
       },
     });

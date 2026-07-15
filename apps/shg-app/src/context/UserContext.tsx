@@ -18,7 +18,6 @@ export interface UserProfile {
   district: string;
   taluka: string;
   village: string;
-  postOffice?: string;
   homeAddress: string;
   shgUniqueId?: string;
   applicationStatus?: string;

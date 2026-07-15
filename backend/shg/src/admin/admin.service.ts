@@ -67,6 +67,15 @@ export class AdminService {
       },
     });
 
+    // Update User status
+    await this.prisma.user.update({
+      where: { id: application.userId },
+      data: {
+        applicationStatus: ApplicationStatus.APPROVED,
+        approvedAt: new Date(),
+      },
+    });
+
     return {
       success: true,
       message: 'Request approved successfully',
@@ -90,6 +99,16 @@ export class AdminService {
       where: { id: requestId },
       data: {
         status: ApplicationStatus.REJECTED,
+        rejectionReason: dto.reason,
+        rejectedAt: new Date(),
+      },
+    });
+
+    // Update User status
+    await this.prisma.user.update({
+      where: { id: application.userId },
+      data: {
+        applicationStatus: ApplicationStatus.REJECTED,
         rejectionReason: dto.reason,
         rejectedAt: new Date(),
       },

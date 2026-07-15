@@ -29,7 +29,6 @@ export default function AddressScreen({
     district: user?.district || '',
     taluka: user?.taluka || '',
     village: user?.village || '',
-    postOffice: user?.postOffice || '',
     homeAddress: user?.homeAddress || ''
   });
   const [showSuccess, setShowSuccess] = useState(false);
@@ -46,8 +45,7 @@ export default function AddressScreen({
               stateName: data.state || prev.stateName,
               district: data.district || prev.district,
               taluka: data.taluka || prev.taluka,
-              village: data.villages && data.villages.length > 0 ? (data.villages.length === 1 ? data.villages[0] : (prev.village || data.villages[0])) : prev.village,
-              postOffice: data.postOffices && data.postOffices.length > 0 ? (data.postOffices.length === 1 ? data.postOffices[0] : (prev.postOffice || data.postOffices[0])) : prev.postOffice
+              village: data.villages && data.villages.length > 0 ? (data.villages.length === 1 ? data.villages[0] : (prev.village || data.villages[0])) : prev.village
             }));
           }
         } catch (error) {
@@ -59,7 +57,7 @@ export default function AddressScreen({
   }, [formData.pincode]);
 
   const hasChanges = () => {
-    return formData.pincode !== user.pincode || formData.stateName !== user.stateName || formData.district !== user.district || formData.taluka !== user.taluka || formData.village !== user.village || formData.postOffice !== user.postOffice || formData.homeAddress !== user.homeAddress;
+    return formData.pincode !== user.pincode || formData.stateName !== user.stateName || formData.district !== user.district || formData.taluka !== user.taluka || formData.village !== user.village || formData.homeAddress !== user.homeAddress;
   };
   const handleSave = () => {
     if (!hasChanges()) {
@@ -131,10 +129,6 @@ export default function AddressScreen({
             ...formData,
             village: val
           })} placeholder={t("su_enter_village_341")} />
-            <InputField label={t('post_office')} value={formData.postOffice} onChangeText={(val: string) => setFormData({
-            ...formData,
-            postOffice: val
-          })} placeholder={t('post_office')} />
             <InputField label={t('home_address')} value={formData.homeAddress} onChangeText={(val: string) => setFormData({
             ...formData,
             homeAddress: val

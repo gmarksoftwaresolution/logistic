@@ -24,11 +24,6 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
-        OR: [
-          { pickupShgStatus: null },
-          { pickupShgStatus: { not: 'NO_PARTNERS_FOUND' } },
-          { pickupShgStatus: 'PENDING' }
-        ]
       },
       include: {
         assignments: {
@@ -57,10 +52,6 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: 'PARCEL_AT_SHG',
-        OR: [
-          { pickupTransporterStatus: null },
-          { pickupTransporterStatus: { not: 'NO_PARTNERS_FOUND' } }
-        ]
       },
       include: {
         assignments: {
@@ -89,10 +80,6 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'DROP',
         mainStatus: { in: ['DROP_PENDING', 'DROP_CREATED'] },
-        OR: [
-          { dropShgStatus: null },
-          { dropShgStatus: { not: 'NO_PARTNERS_FOUND' } }
-        ]
       },
       include: {
         assignments: {
@@ -121,10 +108,6 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'DROP',
         mainStatus: { in: ['DROP_SHG_ACCEPTED', 'RETURN_SHG_ACCEPTED'] },
-        OR: [
-          { dropTransporterStatus: null },
-          { dropTransporterStatus: { not: 'NO_PARTNERS_FOUND' } }
-        ]
       },
       include: {
         assignments: {
@@ -2841,9 +2824,9 @@ export class OrderManagementService implements OnModuleInit {
     const ov = village;
     const op = pincode;
 
-    // Match on Pincode OR Village
+    // Match on Pincode AND Village (Both must match)
     const matchingShgs = approvedShgs.filter(shg => 
-      (shg.pincode && op && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()) ||
+      (shg.pincode && op && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()) &&
       (shg.village && ov && normalizeStr(shg.village) === normalizeStr(ov))
     );
 
@@ -2892,18 +2875,13 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, villages, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Match using routing priority: Pincode -> Village
-    let matchingTransporters = approvedTransporters.filter((tr) => {
-      const { areas, pincodes } = getTransporterInfo(tr);
-      return p && (pincodes.includes(p) || areas.includes(p));
+    // Match using BOTH Pincode AND Village (Both must match)
+    const matchingTransporters = approvedTransporters.filter((tr) => {
+      const { areas, villages, pincodes } = getTransporterInfo(tr);
+      const pinMatches = p && (pincodes.includes(p) || areas.includes(p));
+      const villageMatches = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
+      return pinMatches && villageMatches;
     });
-
-    if (matchingTransporters.length === 0 && v) {
-      matchingTransporters = approvedTransporters.filter((tr) => {
-        const { areas, villages } = getTransporterInfo(tr);
-        return villages.includes(normalizeStr(v)) || areas.includes(v);
-      });
-    }
 
     return matchingTransporters.map(tr => ({
       ...tr,
