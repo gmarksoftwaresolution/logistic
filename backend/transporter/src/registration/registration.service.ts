@@ -661,6 +661,7 @@ export class RegistrationService {
               wheeler: vehicleInfo.wheeler || null,
               minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
               maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
+              ratePerKm: vehicleInfo.ratePerKm ? Number(vehicleInfo.ratePerKm) : null,
             },
           });
         } else {
@@ -675,6 +676,7 @@ export class RegistrationService {
               wheeler: vehicleInfo.wheeler || null,
               minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
               maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
+              ratePerKm: vehicleInfo.ratePerKm ? Number(vehicleInfo.ratePerKm) : null,
             },
           });
         }
