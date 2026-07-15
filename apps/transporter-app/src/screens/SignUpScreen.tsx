@@ -159,6 +159,7 @@ interface FormData {
   minWeight: string;
   maxWeight: string;
   vehicleNumber: string;
+  ratePerKm: string;
   rcPhoto: string | null;
   insurancePhoto: string | null;
   operatingArea: string;
@@ -308,6 +309,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     minWeight: '',
     maxWeight: '',
     vehicleNumber: '',
+    ratePerKm: '',
     rcPhoto: null,
     insurancePhoto: null,
     operatingArea: '',
@@ -500,6 +502,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       bankName: 'bank_name',
       branchName: 'branch_name',
       upiId: 'upi_id',
+      ratePerKm: 'rate_per_km',
     };
 
     const labelKey = fieldLabelMap[field] || field;
@@ -508,6 +511,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       label = 'min weight';
     } else if (label === 'signup.max_weight' || (label === `signup.${labelKey}` && labelKey === 'max_weight')) {
       label = 'max weight';
+    } else if (label === 'signup.rate_per_km' || (label === `signup.${labelKey}` && labelKey === 'rate_per_km')) {
+      label = 'rate per km';
     }
 
     if (!val && field !== 'email' && field !== 'state' && field !== 'district' && field !== 'taluka') {
@@ -537,6 +542,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         return null;
       case 'vehicleNumber':
         return !validateVehicleNumber(val as string) ? t('errors.vehicle_format') : null;
+      case 'ratePerKm':
+        if (!val) return t('errors.required_field', { field: 'Rate' });
+        if (isNaN(Number(val)) || Number(val) <= 0) return 'Rate must be a positive number';
+        return null;
       case 'accountNumber':
         if (!val) return t('errors.required_field');
         if ((val as string).length < 9) return t('errors.account_number_length', 'Account number must be at least 9 digits');
@@ -1009,6 +1018,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         newFormData.vehicleNumber = data.vehicleDetails.number;
         newFormData.rcPhoto = data.vehicleDetails.rcUpload;
         newFormData.insurancePhoto = data.vehicleDetails.insuranceUpload;
+        newFormData.minWeight = data.vehicleDetails.minWeight ? data.vehicleDetails.minWeight.toString() : '';
+        newFormData.maxWeight = data.vehicleDetails.maxWeight ? data.vehicleDetails.maxWeight.toString() : '';
+        newFormData.ratePerKm = data.vehicleDetails.ratePerKm ? data.vehicleDetails.ratePerKm.toString() : '';
       }
 
       if (data.routeDetails) {
@@ -1430,6 +1442,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           insuranceUpload: insUrl,
           minWeight: data.minWeight ? Number(data.minWeight) : undefined,
           maxWeight: data.maxWeight ? Number(data.maxWeight) : undefined,
+          ratePerKm: data.ratePerKm ? Number(data.ratePerKm) : undefined,
         });
       }
     } else if (step === 6) {
@@ -1494,6 +1507,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         insuranceUpload: insUrl,
         minWeight: data.minWeight ? Number(data.minWeight) : undefined,
         maxWeight: data.maxWeight ? Number(data.maxWeight) : undefined,
+        ratePerKm: data.ratePerKm ? Number(data.ratePerKm) : undefined,
       });
     }
   };
@@ -1525,7 +1539,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fieldsToValidate = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
+        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
       }
     } else if (currentStep === 6) {
       if (formData.vehicleTypeSelection === 'Milk') {
@@ -1534,7 +1548,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fieldsToValidate = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto'];
+      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
     }
 
     const stepErrors = fieldsToValidate.filter((f) => getError(f, true) || !formData[f]);
@@ -1643,7 +1657,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fields = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber'];
+        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
         if (!formData.rcPhoto || !formData.insurancePhoto) return false;
       }
     } else if (currentStep === 6) {
@@ -1653,7 +1667,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fields = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber'];
+      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
       if (!formData.rcPhoto || !formData.insurancePhoto) return false;
     }
 
@@ -2898,44 +2912,56 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           {getError('vehicleMake') && <Text style={styles.errorText}>{getError('vehicleMake')}</Text>}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(12) }}>
-          <View 
-            style={{ flex: 1 }}
-            onLayout={(e) => { fieldPositions.current['minWeight'] = e.nativeEvent.layout.y; }}
-          >
-            <Text style={styles.label}>{t("signup.min_weight", { defaultValue: 'Min Weight (kg)' })} *</Text>
-            <View style={[styles.inputWrapper, getError('minWeight') && styles.inputError]}>
-              <TextInput
-                style={styles.input}
-                placeholder={t("signup.min_weight_placeholder", { defaultValue: 'e.g. 500' })}
-                placeholderTextColor={Colors.textPlaceholder}
-                keyboardType="numeric"
-                value={formData.minWeight}
-                onChangeText={(val) => updateFormData("minWeight", val.replace(/[^0-9]/g, ''))}
-                onBlur={() => handleBlur("minWeight")}
-              />
-            </View>
-            {getError('minWeight') && <Text style={styles.errorText}>{getError('minWeight')}</Text>}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['minWeight'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t("signup.min_weight_label", { defaultValue: 'Min Weight (kg)' })} *</Text>
+          <View style={[styles.inputWrapper, getError('minWeight') && styles.inputError]}>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. 500"
+              placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="numeric"
+              value={formData.minWeight}
+              onChangeText={(val) => updateFormData("minWeight", val.replace(/[^0-9]/g, ''))} // Integers only for KG
+              onBlur={() => handleBlur("minWeight")}
+            />
+            <View style={{ width: 1, height: '60%', backgroundColor: '#E5E7EB', marginHorizontal: scale(10) }} />
+            <Text style={{ fontFamily: Fonts.bold, color: Colors.iconSecondary, fontSize: scale(14) }}>KG</Text>
           </View>
+          {Number(formData.minWeight) >= 1000 && (
+            <Text style={{ fontSize: scale(12), color: Colors.primary, marginTop: verticalScale(4), fontFamily: Fonts.medium, paddingHorizontal: scale(4) }}>
+              {formData.minWeight} kg = {(Number(formData.minWeight) / 1000).toFixed(2).replace(/\.00$/, '').replace(/\.(\d)0$/, '.$1')} ton
+            </Text>
+          )}
+          {getError('minWeight') && <Text style={styles.errorText}>{getError('minWeight')}</Text>}
+        </View>
 
-          <View 
-            style={{ flex: 1 }}
-            onLayout={(e) => { fieldPositions.current['maxWeight'] = e.nativeEvent.layout.y; }}
-          >
-            <Text style={styles.label}>{t("signup.max_weight", { defaultValue: 'Max Weight (kg)' })} *</Text>
-            <View style={[styles.inputWrapper, getError('maxWeight') && styles.inputError]}>
-              <TextInput
-                style={styles.input}
-                placeholder={t("signup.max_weight_placeholder", { defaultValue: 'e.g. 2000' })}
-                placeholderTextColor={Colors.textPlaceholder}
-                keyboardType="numeric"
-                value={formData.maxWeight}
-                onChangeText={(val) => updateFormData("maxWeight", val.replace(/[^0-9]/g, ''))}
-                onBlur={() => handleBlur("maxWeight")}
-              />
-            </View>
-            {getError('maxWeight') && <Text style={styles.errorText}>{getError('maxWeight')}</Text>}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['maxWeight'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t("signup.max_weight_label", { defaultValue: 'Max Weight (kg)' })} *</Text>
+          <View style={[styles.inputWrapper, getError('maxWeight') && styles.inputError]}>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. 2000"
+              placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="numeric"
+              value={formData.maxWeight}
+              onChangeText={(val) => updateFormData("maxWeight", val.replace(/[^0-9]/g, ''))} // Integers only for KG
+              onBlur={() => handleBlur("maxWeight")}
+            />
+            <View style={{ width: 1, height: '60%', backgroundColor: '#E5E7EB', marginHorizontal: scale(10) }} />
+            <Text style={{ fontFamily: Fonts.bold, color: Colors.iconSecondary, fontSize: scale(14) }}>KG</Text>
           </View>
+          {Number(formData.maxWeight) >= 1000 && (
+            <Text style={{ fontSize: scale(12), color: Colors.primary, marginTop: verticalScale(4), fontFamily: Fonts.medium, paddingHorizontal: scale(4) }}>
+              {formData.maxWeight} kg = {(Number(formData.maxWeight) / 1000).toFixed(2).replace(/\.00$/, '').replace(/\.(\d)0$/, '.$1')} ton
+            </Text>
+          )}
+          {getError('maxWeight') && <Text style={styles.errorText}>{getError('maxWeight')}</Text>}
         </View>
 
         <View 
@@ -2964,6 +2990,34 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             />
           </View>
           {getError('vehicleNumber') && <Text style={styles.errorText}>{getError('vehicleNumber')}</Text>}
+        </View>
+
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['ratePerKm'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t("signup.rate_per_km", { defaultValue: "Rate according to per kilometer" })} *</Text>
+          <View style={[styles.inputWrapper, getError('ratePerKm') && styles.inputError]}>
+            <Text style={{ fontSize: scale(20), color: Colors.iconSecondary, marginRight: scale(12), fontFamily: Fonts.bold }}>₹</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t("signup.rate_per_km_placeholder", { defaultValue: "e.g. 15" })}
+              placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="numeric"
+              value={formData.ratePerKm}
+              onChangeText={(val) => updateFormData("ratePerKm", val.replace(/[^0-9.]/g, ''))}
+              onBlur={() => handleBlur("ratePerKm")}
+              onSubmitEditing={() => Keyboard.dismiss()}
+              returnKeyType="done"
+            />
+          </View>
+          {getError('ratePerKm') && <Text style={styles.errorText}>{getError('ratePerKm')}</Text>}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(6), paddingHorizontal: scale(4) }}>
+            <CircleAlert size={16} color={Colors.primary} style={{ marginRight: scale(6) }} />
+            <Text style={{ fontSize: scale(12), color: '#111827', flex: 1, fontFamily: Fonts.medium }}>
+              {t("signup.final_rate_note", { defaultValue: "Final rate is subject to company approval and negotiation." })}
+            </Text>
+          </View>
         </View>
 
         <View 
