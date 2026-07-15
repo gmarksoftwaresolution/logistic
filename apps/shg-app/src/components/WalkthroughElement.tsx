@@ -1,19 +1,18 @@
 import React, { useRef, useEffect } from 'react';
 import { View, ViewStyle, StyleProp } from 'react-native';
 import { useOnboarding, StepId } from '../context/OnboardingContext';
-import { useIsFocused } from '@react-navigation/native';
 
 interface Props {
   stepId: StepId;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   autoAdvance?: boolean;
+  isFocused?: boolean;
 }
 
-const WalkthroughElement: React.FC<Props> = ({ stepId, children, style, autoAdvance = true }) => {
+const WalkthroughElement: React.FC<Props> = ({ stepId, children, style, autoAdvance = true, isFocused = true }) => {
   const { currentStep, isActive, registerStepLayout, nextStep } = useOnboarding();
   const viewRef = useRef<View>(null);
-  const isFocused = useIsFocused();
 
   const handlePress = (originalOnPress?: () => void) => {
     if (isActive && currentStep?.id === stepId && isFocused && autoAdvance) {

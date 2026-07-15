@@ -236,99 +236,9 @@ export class OrderService {
     const updatedRegularDrops = regularDrops;
 
     // Format both regular pickups and inbound drops to a common response structure
-    const formattedPickups = await Promise.all(updatedPickups.map(async p => ({
-      ...p,
-      seller: p.seller ? {
-        fullName: (p.seller as any).sellerName,
-        phoneNumber: (p.seller as any).mobileNumber,
-        address: {
-          houseNo: (p.seller as any).addressLine1 || '',
-          village: (p.seller as any).village,
-          taluka: (p.seller as any).taluka,
-          district: (p.seller as any).district,
-          pincode: (p.seller as any).pincode,
-        }
-      } : null,
-      transporter: await this.enrichTransporterInfo(p.transporter),
-      legType: 'pickup',
-      sourceType: 'seller',
-    })));
-
-    const formattedInboundDrops = await Promise.all(filteredInboundDrops.map(async (d: any) => ({
-      id: d.id,
-      pickupOrderNumber: d.dropOrderNumber,
-      masterOrderId: d.masterOrderId,
-      sellerId: d.buyerId,
-      shgId: d.shgId,
-      transporterId: d.transporterId,
-      status: d.status,
-      pickupTime: null,
-      handoverCode: d.handoverCode,
-      createdAt: d.createdAt,
-      seller: {
-        fullName: 'Transporter delivery to SHG',
-        phoneNumber: d.buyer ? d.buyer.mobileNumber : '',
-        address: d.buyer ? {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
-        } : null,
-      },
-      items: d.items,
-      masterOrder: d.masterOrder,
-      tracking: d.tracking,
-      transporter: await this.enrichTransporterInfo(d.transporter),
-      legType: 'drop',
-      sourceType: 'transporter',
-    })));
-
-    const formattedRegularDrops = await Promise.all(updatedRegularDrops.map(async (d: any) => ({
-      id: d.id,
-      dropOrderNumber: d.dropOrderNumber,
-      masterOrderId: d.masterOrderId,
-      buyerId: d.buyerId,
-      shgId: d.shgId,
-      transporterId: d.transporterId,
-      status: d.status,
-      deliveryAddress: d.deliveryAddress,
-      handoverCode: d.handoverCode,
-      createdAt: d.createdAt,
-      buyer: d.buyer ? {
-        fullName: d.buyer.buyerName,
-        phoneNumber: d.buyer.mobileNumber,
-        address: {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
-        }
-      } : null,
-      items: d.items,
-      masterOrder: d.masterOrder ? {
-        ...d.masterOrder,
-        items: d.masterOrder.items.map((item: any) => ({
-          ...item,
-          seller: item.seller ? {
-            fullName: item.seller.sellerName,
-            phoneNumber: item.seller.mobileNumber,
-            address: {
-              houseNo: item.seller.addressLine1 || '',
-              village: item.seller.village,
-              taluka: item.seller.taluka,
-              district: item.seller.district,
-              pincode: item.seller.pincode,
-            }
-          } : null
-        }))
-      } : null,
-      tracking: d.tracking,
-      transporter: await this.enrichTransporterInfo(d.transporter),
-      legType: 'drop',
-      sourceType: 'buyer',
-    })));
+    const formattedPickups = await this.formatPickups(updatedPickups);
+    const formattedInboundDrops = await this.formatInboundDrops(filteredInboundDrops);
+    const formattedRegularDrops = await this.formatRegularDrops(updatedRegularDrops);
 
     return [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
   }
@@ -1215,65 +1125,8 @@ export class OrderService {
       },
     });
 
-    const formattedReturnPickups = returnPickups.map((d: any) => {
-      const transporterName = d.transporter?.fullName || 'Transporter';
-      const transporterMobile = d.transporter?.phoneNumber || '';
-      return {
-        ...d,
-        legType: 'pickup',
-        sourceType: 'transporter',
-        transporterName,
-        transporterMobile,
-        seller: {
-          fullName: transporterName,
-          phoneNumber: transporterMobile,
-          address: {
-            addressLine1: 'Transporter',
-            addressLine2: null,
-            village: null,
-            district: null,
-          } as any,
-        },
-        buyer: {
-          fullName: d.shg?.fullName || 'SHG Hub',
-          phoneNumber: d.shg?.phoneNumber || '',
-          address: d.shg?.address || null,
-        },
-      };
-    });
-
-    const formattedReturnDrops = returnDrops.map((d: any) => {
-      const firstItem = d.masterOrder?.items?.[0];
-      const sellerInfo = firstItem?.seller;
-      const sellerAddress = sellerInfo ? {
-        houseNo: sellerInfo.addressLine1 || '',
-        village: sellerInfo.village,
-        taluka: sellerInfo.taluka,
-        district: sellerInfo.district,
-        pincode: sellerInfo.pincode,
-      } : null;
-      return {
-        ...d,
-        legType: 'drop',
-        sourceType: 'seller',
-        deliveryAddress: d.deliveryAddress || (sellerAddress ? `${sellerAddress.houseNo || ''}, ${sellerAddress.village || ''}`.trim() : 'Seller'),
-        seller: {
-          fullName: d.shg?.fullName || 'SHG Hub',
-          phoneNumber: d.shg?.phoneNumber || '',
-          address: {
-            addressLine1: 'Transporter',
-            addressLine2: null,
-            village: null,
-            district: null,
-          } as any,
-        },
-        buyer: {
-          fullName: sellerInfo?.sellerName || 'Seller',
-          phoneNumber: sellerInfo?.mobileNumber || '',
-          address: sellerAddress,
-        },
-      };
-    });
+    const formattedReturnPickups = this.formatReturnPickups(returnPickups);
+    const formattedReturnDrops = this.formatReturnDrops(returnDrops);
 
     return [...formattedReturnPickups, ...formattedReturnDrops];
   }
@@ -2119,5 +1972,319 @@ export class OrderService {
     }
     return transporter;
   }
+
+  // --- BEGIN SHARED ORDER FORMATTING HELPERS ---
+
+  public async formatPickups(pickups: any[]) {
+    return Promise.all(pickups.map(async (p: any) => ({
+      ...p,
+      seller: p.seller ? {
+        fullName: (p.seller as any).sellerName,
+        phoneNumber: (p.seller as any).mobileNumber,
+        address: {
+          houseNo: (p.seller as any).addressLine1 || '',
+          village: (p.seller as any).village,
+          taluka: (p.seller as any).taluka,
+          district: (p.seller as any).district,
+          pincode: (p.seller as any).pincode,
+        }
+      } : null,
+      transporter: await this.enrichTransporterInfo(p.transporter),
+      legType: 'pickup',
+      sourceType: 'seller',
+    })));
+  }
+
+  public async formatInboundDrops(drops: any[]) {
+    return Promise.all(drops.map(async (d: any) => ({
+      id: d.id,
+      pickupOrderNumber: d.dropOrderNumber,
+      masterOrderId: d.masterOrderId,
+      sellerId: d.buyerId,
+      shgId: d.shgId,
+      transporterId: d.transporterId,
+      status: d.status,
+      pickupTime: null,
+      handoverCode: d.handoverCode,
+      createdAt: d.createdAt,
+      seller: {
+        fullName: 'Transporter delivery to SHG',
+        phoneNumber: d.buyer ? d.buyer.mobileNumber : '',
+        address: d.buyer ? {
+          houseNo: d.buyer.addressLine1 || '',
+          village: d.buyer.village,
+          taluka: d.buyer.taluka,
+          district: d.buyer.district,
+          pincode: d.buyer.pincode,
+        } : null,
+      },
+      items: d.items,
+      masterOrder: d.masterOrder,
+      tracking: d.tracking,
+      transporter: await this.enrichTransporterInfo(d.transporter),
+      legType: 'drop',
+      sourceType: 'transporter',
+    })));
+  }
+
+  public async formatRegularDrops(drops: any[]) {
+    return Promise.all(drops.map(async (d: any) => ({
+      id: d.id,
+      dropOrderNumber: d.dropOrderNumber,
+      masterOrderId: d.masterOrderId,
+      buyerId: d.buyerId,
+      shgId: d.shgId,
+      transporterId: d.transporterId,
+      status: d.status,
+      deliveryAddress: d.deliveryAddress,
+      handoverCode: d.handoverCode,
+      createdAt: d.createdAt,
+      buyer: d.buyer ? {
+        fullName: d.buyer.buyerName,
+        phoneNumber: d.buyer.mobileNumber,
+        address: {
+          houseNo: d.buyer.addressLine1 || '',
+          village: d.buyer.village,
+          taluka: d.buyer.taluka,
+          district: d.buyer.district,
+          pincode: d.buyer.pincode,
+        }
+      } : null,
+      items: d.items,
+      masterOrder: d.masterOrder ? {
+        ...d.masterOrder,
+        items: d.masterOrder.items.map((item: any) => ({
+          ...item,
+          seller: item.seller ? {
+            fullName: item.seller.sellerName,
+            phoneNumber: item.seller.mobileNumber,
+            address: {
+              houseNo: item.seller.addressLine1 || '',
+              village: item.seller.village,
+              taluka: item.seller.taluka,
+              district: item.seller.district,
+              pincode: item.seller.pincode,
+            }
+          } : null
+        }))
+      } : null,
+      tracking: d.tracking,
+      transporter: await this.enrichTransporterInfo(d.transporter),
+      legType: 'drop',
+      sourceType: 'buyer',
+    })));
+  }
+
+  public formatReturnPickups(returnPickups: any[]) {
+    return returnPickups.map((d: any) => {
+      const transporterName = d.transporter?.fullName || 'Transporter';
+      const transporterMobile = d.transporter?.phoneNumber || '';
+      return {
+        ...d,
+        legType: 'pickup',
+        sourceType: 'transporter',
+        transporterName,
+        transporterMobile,
+        seller: {
+          fullName: transporterName,
+          phoneNumber: transporterMobile,
+          address: {
+            addressLine1: 'Transporter',
+            addressLine2: null,
+            village: null,
+            district: null,
+          } as any,
+        },
+        buyer: {
+          fullName: d.shg?.fullName || 'SHG Hub',
+          phoneNumber: d.shg?.phoneNumber || '',
+          address: d.shg?.address || null,
+        },
+      };
+    });
+  }
+
+  public formatReturnDrops(returnDrops: any[]) {
+    return returnDrops.map((d: any) => {
+      const firstItem = d.masterOrder?.items?.[0];
+      const sellerInfo = firstItem?.seller;
+      const sellerAddress = sellerInfo ? {
+        houseNo: sellerInfo.addressLine1 || '',
+        village: sellerInfo.village,
+        taluka: sellerInfo.taluka,
+        district: sellerInfo.district,
+        pincode: sellerInfo.pincode,
+      } : null;
+      return {
+        ...d,
+        legType: 'drop',
+        sourceType: 'seller',
+        deliveryAddress: d.deliveryAddress || (sellerAddress ? `${sellerAddress.houseNo || ''}, ${sellerAddress.village || ''}`.trim() : 'Seller'),
+        seller: {
+          fullName: d.shg?.fullName || 'SHG Hub',
+          phoneNumber: d.shg?.phoneNumber || '',
+          address: {
+            addressLine1: 'Transporter',
+            addressLine2: null,
+            village: null,
+            district: null,
+          } as any,
+        },
+        buyer: {
+          fullName: sellerInfo?.sellerName || 'Seller',
+          phoneNumber: sellerInfo?.mobileNumber || '',
+          address: sellerAddress,
+        },
+      };
+    });
+  }
+
+  // --- END SHARED ORDER FORMATTING HELPERS ---
+
+  async getCompletedOrders(shgId: number, mobileNumber?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: shgId }
+    });
+    if (!user || user.role !== 'SHG') return { newOrders: [], returnOrders: [] };
+
+    const pickups = await this.prisma.pickupOrder.findMany({
+      where: { shgId, status: 'COMPLETED' },
+      include: {
+        seller: true,
+        items: { include: { product: true } },
+        masterOrder: true,
+        tracking: true,
+        transporter: {
+          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const drops = await this.prisma.dropOrder.findMany({
+      where: {
+        shgId,
+        buyerId: { not: shgId },
+        status: 'DELIVERED',
+        NOT: { dropOrderNumber: { startsWith: 'RET-' } }
+      },
+      include: {
+        buyer: true,
+        items: { include: { product: true } },
+        masterOrder: {
+          include: { items: { include: { seller: true } } },
+        },
+        tracking: true,
+        transporter: {
+          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const returnDrops = await this.prisma.dropOrder.findMany({
+      where: {
+        shgId,
+        buyerId: { not: shgId },
+        status: 'RETURNED', // Completed returns
+      },
+      include: {
+        buyer: true,
+        shg: { select: { fullName: true, phoneNumber: true, address: true } },
+        items: { include: { product: true } },
+        masterOrder: {
+          include: {
+            pickupOrders: true,
+            items: { include: { seller: true } },
+          },
+        },
+        tracking: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const formattedPickups = await this.formatPickups(pickups);
+    const formattedDrops = await this.formatRegularDrops(drops);
+    const formattedReturnDrops = this.formatReturnDrops(returnDrops);
+
+    return {
+      newOrders: [...formattedPickups, ...formattedDrops],
+      returnOrders: formattedReturnDrops,
+    };
+  }
+
+  async getRejectedOrders(shgId: number, mobileNumber?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: shgId }
+    });
+    if (!user || user.role !== 'SHG') return { newOrders: [], returnOrders: [] };
+
+    const pickups = await this.prisma.pickupOrder.findMany({
+      where: { shgId, status: { in: ['REJECTED', 'CANCELLED'] } },
+      include: {
+        seller: true,
+        items: { include: { product: true } },
+        masterOrder: true,
+        tracking: true,
+        transporter: {
+          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const drops = await this.prisma.dropOrder.findMany({
+      where: {
+        shgId,
+        buyerId: { not: shgId },
+        status: { in: ['REJECTED', 'CANCELLED'] },
+        NOT: { dropOrderNumber: { startsWith: 'RET-' } }
+      },
+      include: {
+        buyer: true,
+        items: { include: { product: true } },
+        masterOrder: {
+          include: { items: { include: { seller: true } } },
+        },
+        tracking: true,
+        transporter: {
+          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const returnDrops = await this.prisma.dropOrder.findMany({
+      where: {
+        shgId,
+        buyerId: { not: shgId },
+        status: { in: ['REJECTED', 'CANCELLED'] },
+        dropOrderNumber: { startsWith: 'RET-' }
+      },
+      include: {
+        buyer: true,
+        shg: { select: { fullName: true, phoneNumber: true, address: true } },
+        items: { include: { product: true } },
+        masterOrder: {
+          include: {
+            pickupOrders: true,
+            items: { include: { seller: true } },
+          },
+        },
+        tracking: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const formattedPickups = await this.formatPickups(pickups);
+    const formattedDrops = await this.formatRegularDrops(drops);
+    const formattedReturnDrops = this.formatReturnDrops(returnDrops);
+
+    return {
+      newOrders: [...formattedPickups, ...formattedDrops],
+      returnOrders: formattedReturnDrops,
+    };
+  }
 }
+
 

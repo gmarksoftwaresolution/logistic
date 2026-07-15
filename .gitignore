@@ -53,3 +53,14 @@ scratch/
 
 #supabase backup
 supabase_backup.sql
+
+packages/db/check_db.js
+packages/db/delete_test_order.js
+packages/db/get_order_history.js
+packages/db/test_db_shg.js
+packages/db/test_db.js
+packages/db/test_orders.js
+dummy.prisma
+local_schema.sql
+Untracked files:
+backend/shg/validate_orders.ts

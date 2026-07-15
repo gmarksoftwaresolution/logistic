@@ -321,6 +321,22 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.warn('Failed to fetch assigned returns:', err);
       }
 
+      let rawCompleted: any = { newOrders: [], returnOrders: [] };
+      try {
+        const completedRes = await axiosInstance.get('/orders/completed');
+        rawCompleted = completedRes.data || { newOrders: [], returnOrders: [] };
+      } catch (err) {
+        console.warn('Failed to fetch completed orders:', err);
+      }
+
+      let rawRejected: any = { newOrders: [], returnOrders: [] };
+      try {
+        const rejectedRes = await axiosInstance.get('/orders/rejected');
+        rawRejected = rejectedRes.data || { newOrders: [], returnOrders: [] };
+      } catch (err) {
+        console.warn('Failed to fetch rejected orders:', err);
+      }
+
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
@@ -444,14 +460,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const activeReturns = mappedReturns.filter(o => o.status !== 'REJECTED' && o.status !== 'COMPLETED' && o.status !== 'assigned');
       const rejectedReturnsFromBackend = mappedReturns.filter(o => o.status === 'REJECTED');
 
-      const sortedRejected = finalMapped.filter(o => o.status === 'REJECTED').sort((a, b) => {
-        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
-        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
-        return bNum - aNum;
-      });
-      const rawMappedRejected = [...sortedRejected, ...rejectedReturnsFromBackend, ...localRejectedReturnsRef.current];
+      const mappedRejectedNew = (rawRejected.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
+      const mappedRejectedReturns = (rawRejected.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
+      const allRejected = [...mappedRejectedNew, ...mappedRejectedReturns, ...localRejectedReturnsRef.current];
       const uniqueRejectedMap = new Map<string, Order>();
-      rawMappedRejected.forEach(o => uniqueRejectedMap.set(o.id, o));
+      allRejected.forEach(o => uniqueRejectedMap.set(o.id, o));
       setRejectedOrders(Array.from(uniqueRejectedMap.values()));
 
       const sortedReturned = finalMapped.filter(o => o.status === 'RETURNED').sort((a, b) => {
@@ -480,10 +493,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setReturnedOrders(mappedReturned);
 
-      // Completed = Everything Completed
-      const backendCompleted = finalMapped.filter(o => o.status === 'COMPLETED');
-      const returnCompleted = mappedReturns.filter(o => o.status === 'COMPLETED');
-      const allCompleted = [...backendCompleted, ...returnCompleted, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
+      // Completed = Everything Completed from Dedicated Endpoints
+      const mappedCompletedNew = (rawCompleted.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
+      const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
+      const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
       const uniqueCompletedMap = new Map<string, Order>();
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));
       setDeliveredOrders(Array.from(uniqueCompletedMap.values()));
