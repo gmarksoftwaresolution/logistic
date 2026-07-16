@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderManagementService } from '../order-management/order-management.service';
 
 @Injectable()
 export class TransporterManagementService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private orderManagementService: OrderManagementService,
+  ) { }
 
   // Common method to fetch transporters from public schema
   async getTransporters(typeFilter: 'ROUTE_PARTNER' | 'PERSONAL', statusFilter: string | null) {
@@ -313,6 +317,12 @@ export class TransporterManagementService {
           "rejectedAt" = NULL
       WHERE id = ${userId}
     `;
+
+    try {
+      await this.orderManagementService.rebroadcastForApprovedPartner(String(userId), 'TRANSPORTER');
+    } catch (err: any) {
+      console.warn(`[approveTransporter rebroadcast] Failed to rebroadcast:`, err.message);
+    }
 
     return { success: true };
   }

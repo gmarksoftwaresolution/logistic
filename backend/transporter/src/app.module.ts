@@ -13,6 +13,7 @@ import { ApplicationModule } from './application/application.module';
 import { LoggerMiddleware } from './common/logger.middleware';
 import { OrderModule } from './order/order.module';
 import { QrModule } from './qr/qr.module';
+import { LocationModule } from './location/location.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { QrModule } from './qr/qr.module';
     ApplicationModule,
     OrderModule,
     QrModule,
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

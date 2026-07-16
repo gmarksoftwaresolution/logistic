@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocationService } from '../location/location.service';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private locationService: LocationService,
+  ) { }
 
   async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
@@ -72,6 +76,29 @@ export class UserService {
     }
 
     if (Object.keys(addressData).length > 0) {
+      // Get existing address to merge and validate the full combination
+      const existingAddress = await this.prisma.address.findUnique({
+        where: { userId: userId },
+      });
+      const mergedAddress = {
+        pincode: addressData.pincode !== undefined ? addressData.pincode : (existingAddress?.pincode || ''),
+        village: addressData.village !== undefined ? addressData.village : (existingAddress?.village || ''),
+        taluka: addressData.taluka !== undefined ? addressData.taluka : (existingAddress?.taluka || ''),
+        district: addressData.district !== undefined ? addressData.district : (existingAddress?.district || ''),
+        state: addressData.state !== undefined ? addressData.state : (existingAddress?.state || ''),
+      };
+
+      const isValid = await this.locationService.validateLocation(
+        mergedAddress.pincode,
+        mergedAddress.village,
+        mergedAddress.taluka,
+        mergedAddress.district,
+        mergedAddress.state,
+      );
+      if (!isValid) {
+        throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
+      }
+
       await this.prisma.address.upsert({
         where: { userId: userId },
         update: addressData,

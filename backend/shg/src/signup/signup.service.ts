@@ -17,6 +17,7 @@ import { ShgUtil } from '../common/utils/shg.util';
 import { AuthService } from '../auth/auth.service';
 import { UserRole, ShgRole, ProductCategory, VehicleType, StepStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { LocationService } from '../location/location.service';
 
 @Injectable()
 export class SignupService {
@@ -24,6 +25,7 @@ export class SignupService {
     private prisma: PrismaService,
     private otpService: OtpService,
     private authService: AuthService,
+    private locationService: LocationService,
   ) { }
 
   // ─── OTP FLOW ────────────────────────────────────────────────────────────────
@@ -239,6 +241,17 @@ export class SignupService {
   async saveAddress(userId: number, dto: AddressDto) {
     const user = await this.ensureVerified(userId);
     this.validateStep(user.currentStep, user.role === UserRole.SHG ? 3 : 2);
+
+    const isValid = await this.locationService.validateLocation(
+      dto.pincode,
+      dto.village,
+      dto.taluka,
+      dto.district,
+      dto.state,
+    );
+    if (!isValid) {
+      throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
+    }
 
     await this.prisma.address.upsert({
       where: { userId },
@@ -526,6 +539,7 @@ export class SignupService {
             fullName,
             imgUrl,
             age,
+            memberCode: requestId,
           },
           update: {
             shgName,
@@ -539,6 +553,7 @@ export class SignupService {
             fullName,
             imgUrl,
             age,
+            memberCode: requestId,
           },
         });
 

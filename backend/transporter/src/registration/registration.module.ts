@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RegistrationController } from './registration.controller';
 import { RegistrationService } from './registration.service';
+import { LocationModule } from '../location/location.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RegistrationService } from './registration.service';
       }),
       inject: [ConfigService],
     }),
+    LocationModule,
   ],
   controllers: [RegistrationController],
   providers: [RegistrationService],

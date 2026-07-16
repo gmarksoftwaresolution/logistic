@@ -357,6 +357,7 @@ model ShgDetail {
   shgName             String?
   shgLeaderName       String?
   shgLeaderContact    String?
+  memberCode          String?
 
   shgRole             ShgRole?
 
@@ -710,40 +711,28 @@ model DropTracking {
   @@map("drop_tracking")
 }
 
-model Pincode {
+model PincodeDirectory {
   id             Int      @id @default(autoincrement())
   name           String
-  village        String
   description    String?
   branchType     String?
   deliveryStatus String?
   circle         String?
-  district       String?
+  district       String
   division       String?
   region         String?
   block          String?
-  state          String?
-  country        String?  @default("India")
+  state          String
+  country        String   @default("India")
   pincode        String
   createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  @@unique([pincode, name, village])
-  @@index([pincode])
-  @@index([village])
   @@index([name])
-  @@map("pincodes")
-}
-
-model PincodeDirectory {
-  id        Int      @id @default(autoincrement())
-  pincode   String
-  village   String
-  taluka    String
-  district  String
-  state     String
-  country   String   @default("India")
-
   @@index([pincode])
+  @@index([district])
+  @@index([block])
+  @@index([name, pincode])
   @@map("pincode_directory")
 }
 

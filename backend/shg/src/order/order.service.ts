@@ -38,7 +38,7 @@ export class OrderService {
         SELECT o."orderId" 
         FROM public."OrderAssignment" oa
         JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'SHG' AND oa.status IN ('PENDING', 'ACCEPTED') AND o.phase = 'PICKUP';
+        WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'SHG' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') AND o.phase = 'PICKUP';
       `, shgUuid) as any[];
       assignedPickupOrderIds = pickupAssignments.map(a => a.orderId);
 

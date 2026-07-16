@@ -478,6 +478,101 @@ export default function SignupScreen({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState('');
 
+  // Location Option States for Option 1 / Option 2
+  const [locationOption, setLocationOption] = useState<'pincode' | 'state'>('pincode');
+  const [statesList, setStatesList] = useState<string[]>([]);
+  const [showStateMenu, setShowStateMenu] = useState(false);
+  const [districtsList, setDistrictsList] = useState<string[]>([]);
+  const [showDistrictMenu, setShowDistrictMenu] = useState(false);
+  const [blocksList, setBlocksList] = useState<string[]>([]);
+  const [showBlockMenu, setShowBlockMenu] = useState(false);
+
+  useEffect(() => {
+    if (locationOption === 'state' && statesList.length === 0) {
+      const fetchStates = async () => {
+        try {
+          const list = await signupService.getStates();
+          setStatesList(list);
+        } catch (err) {
+          console.error('Failed to load states:', err);
+        }
+      };
+      fetchStates();
+    }
+  }, [locationOption]);
+
+  const handleStateSelect = async (stateSelected: string) => {
+    setStateName(stateSelected);
+    setStateNameError('');
+    setDistrict('');
+    setDistrictError('');
+    setTaluka('');
+    setTalukaError('');
+    setVillage('');
+    setVillageError('');
+    setPincode('');
+    setPincodeError('');
+    setDistrictsList([]);
+    setBlocksList([]);
+    setVillageList([]);
+    try {
+      const list = await signupService.getDistricts(stateSelected);
+      setDistrictsList(list);
+    } catch (err) {
+      console.error('Failed to load districts:', err);
+    }
+  };
+
+  const handleDistrictSelect = async (districtSelected: string) => {
+    setDistrict(districtSelected);
+    setDistrictError('');
+    setTaluka('');
+    setTalukaError('');
+    setVillage('');
+    setVillageError('');
+    setPincode('');
+    setPincodeError('');
+    setBlocksList([]);
+    setVillageList([]);
+    try {
+      const list = await signupService.getBlocks(stateName, districtSelected);
+      setBlocksList(list);
+    } catch (err) {
+      console.error('Failed to load blocks:', err);
+    }
+  };
+
+  const handleBlockSelect = async (blockSelected: string) => {
+    setTaluka(blockSelected);
+    setTalukaError('');
+    setVillage('');
+    setVillageError('');
+    setPincode('');
+    setPincodeError('');
+    setVillageList([]);
+    try {
+      const list = await signupService.getVillages(stateName, district, blockSelected);
+      setVillageList(list);
+    } catch (err) {
+      console.error('Failed to load villages:', err);
+    }
+  };
+
+  const handleVillageSelect = async (villageSelected: string) => {
+    setVillage(villageSelected);
+    setVillageError('');
+    setPincode('');
+    setPincodeError('');
+    try {
+      const data = await signupService.getLocationDetails(stateName, district, taluka, villageSelected);
+      if (data && data.pincode) {
+        setPincode(data.pincode);
+      }
+    } catch (err) {
+      console.error('Failed to load location details:', err);
+    }
+  };
+
   // Step 6: Documents
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarError, setAadhaarError] = useState('');
@@ -2461,110 +2556,159 @@ export default function SignupScreen({
               <FormSection iconName="location-outline" title={t("address_details")} subtitle={t("su_enter_your_location__181")} />
 
               <View className="w-full">
-                <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
-              const cleaned = val.replace(/[^0-9]/g, '');
-              setPincode(cleaned);
-              if (!validateRequired(cleaned)) {
-                setPincodeError(t("val_pincode_required"));
-              } else if (!validatePincode(cleaned)) {
-                setPincodeError(t("su_enter_valid_6_digit__185"));
-              } else {
-                setPincodeError('');
-              }
-              if (cleaned.length === 6) {
-                const fetchPincode = async () => {
-                  try {
-                    const data = await signupService.getPincodeDetails(cleaned);
-                    if (data) {
-                      setStateName(data.state);
-                      setDistrict(data.district);
-                      setTaluka(data.taluka);
-                      if (data.villages && data.villages.length > 0) {
-                        setVillageList(data.villages);
-                        if (data.villages.length === 1) {
-                          setVillage(data.villages[0]);
-                        } else {
-                          setVillage('');
-                        }
-                      } else {
-                        setVillageList([]);
-                        setVillage('');
-                      }
-                      setStateNameError('');
-                      setDistrictError('');
-                      setTalukaError('');
-                      houseNoRef.current?.focus();
-                    }
-                  } catch (error) {
-                    console.error('Pincode fetch error:', error);
-                    setPincodeError(t("su_invalid_pincode_186"));
-                  }
-                };
-                fetchPincode();
-              }
-            }} onBlur={() => {
-              if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
-            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => houseNoRef.current?.focus()} />
+                {/* Segmented Selector for Option 1 and Option 2 */}
+                <View className="flex-row justify-between mb-6 border border-gray-200 rounded-[20px] p-1 bg-gray-50">
+                  <TouchableOpacity 
+                    className={`flex-1 py-3 rounded-[16px] items-center ${locationOption === 'pincode' ? 'bg-[#073318]' : ''}`}
+                    onPress={() => {
+                      setLocationOption('pincode');
+                      setPincode('');
+                      setVillage('');
+                      setTaluka('');
+                      setDistrict('');
+                      setStateName('');
+                      setVillageList([]);
+                    }}
+                  >
+                    <Text className={`font-bold ${locationOption === 'pincode' ? 'text-white' : 'text-gray-500'}`}>
+                      Pincode Search
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    className={`flex-1 py-3 rounded-[16px] items-center ${locationOption === 'state' ? 'bg-[#073318]' : ''}`}
+                    onPress={() => {
+                      setLocationOption('state');
+                      setPincode('');
+                      setVillage('');
+                      setTaluka('');
+                      setDistrict('');
+                      setStateName('');
+                      setVillageList([]);
+                    }}
+                  >
+                    <Text className={`font-bold ${locationOption === 'state' ? 'text-white' : 'text-gray-500'}`}>
+                      State Selection
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
+                {locationOption === 'pincode' ? (
+                  <>
+                    <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
+                      const cleaned = val.replace(/[^0-9]/g, '');
+                      setPincode(cleaned);
+                      if (!validateRequired(cleaned)) {
+                        setPincodeError(t("val_pincode_required"));
+                      } else if (!validatePincode(cleaned)) {
+                        setPincodeError(t("su_enter_valid_6_digit__185"));
+                      } else {
+                        setPincodeError('');
+                      }
+                      if (cleaned.length === 6) {
+                        const fetchPincode = async () => {
+                          try {
+                            const data = await signupService.getPincodeDetails(cleaned);
+                            if (data) {
+                              setStateName(data.state);
+                              setDistrict(data.district);
+                              setTaluka(data.taluka);
+                              if (data.villages && data.villages.length > 0) {
+                                setVillageList(data.villages);
+                                if (data.villages.length === 1) {
+                                  setVillage(data.villages[0]);
+                                } else {
+                                  setVillage('');
+                                }
+                              } else {
+                                setVillageList([]);
+                                setVillage('');
+                              }
+                              setStateNameError('');
+                              setDistrictError('');
+                              setTalukaError('');
+                            }
+                          } catch (error) {
+                            console.error('Pincode fetch error:', error);
+                            setPincodeError(t("su_invalid_pincode_186"));
+                          }
+                        };
+                        fetchPincode();
+                      }
+                    }} onBlur={() => {
+                      if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
+                    }} returnKeyType="next" />
+
+                    {/* Village Dropdown */}
+                    <View className="mt-4">
+                      <DropdownField label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
+                        if (villageList.length > 0) {
+                          setShowVillageMenu(true);
+                        } else if (villageList.length === 0 && pincode.length === 6) {
+                          setVillageError('No villages found for this pincode');
+                        }
+                      }} />
+                    </View>
+
+                    {/* Auto-populated details */}
+                    <View className="flex-row w-full mt-4">
+                      <View className="flex-1 mr-2">
+                        <InputField label={t("taluka")} icon="flag-outline" value={taluka} editable={false} error={talukaError} required={true} />
+                      </View>
+                      <View className="flex-1 ml-2">
+                        <InputField label={t("district")} icon="flag-outline" value={district} editable={false} error={districtError} required={true} />
+                      </View>
+                    </View>
+                    <View className="mt-4">
+                      <InputField label={t("state")} icon="flag-outline" value={stateName} editable={false} error={stateNameError} required={true} />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    {/* Option 2 Dropdowns */}
+                    <DropdownField label="State" placeholder="Select State" icon="flag-outline" value={stateName} error={stateNameError} required={true} onPress={() => setShowStateMenu(true)} />
+                    
+                    <View className="mt-4">
+                      <DropdownField label="District" placeholder="Select District" icon="flag-outline" value={district} error={districtError} required={true} onPress={() => {
+                        if (!stateName) setDistrictError('Please select state first');
+                        else setShowDistrictMenu(true);
+                      }} />
+                    </View>
+
+                    <View className="mt-4">
+                      <DropdownField label="Taluka" placeholder="Select Taluka" icon="flag-outline" value={taluka} error={talukaError} required={true} onPress={() => {
+                        if (!district) setTalukaError('Please select district first');
+                        else setShowBlockMenu(true);
+                      }} />
+                    </View>
+
+                    <View className="mt-4">
+                      <DropdownField label={t("su_village_city_196")} placeholder="Select Village" icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
+                        if (!taluka) setVillageError('Please select taluka first');
+                        else setShowVillageMenu(true);
+                      }} />
+                    </View>
+
+                    <View className="mt-4">
+                      <InputField label={t("pincode")} icon="location-outline" value={pincode} editable={false} error={pincodeError} required={true} placeholder="Auto-filled from village selection" />
+                    </View>
+                  </>
+                )}
+
+                {/* Common fields (houseNo & landmark) */}
                 <InputField ref={houseNoRef} label={t("su_house_no_189")} placeholder={t("su_enter_house_number_190")} icon="home-outline" error={houseNoError} required={true} value={houseNo} onChangeText={val => {
-              const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
-              setHouseNo(cleaned);
-              if (!validateRequired(cleaned)) setHouseNoError(t("su_house_number_is_requ_191"));else setHouseNoError('');
-            }} onBlur={() => {
-              if (!validateRequired(houseNo)) setHouseNoError(t("su_house_number_is_requ_191"));
-            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => landmarkRef.current?.focus()} />
+                  const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
+                  setHouseNo(cleaned);
+                  if (!validateRequired(cleaned)) setHouseNoError(t("su_house_number_is_requ_191"));else setHouseNoError('');
+                }} onBlur={() => {
+                  if (!validateRequired(houseNo)) setHouseNoError(t("su_house_number_is_requ_191"));
+                }} returnKeyType="next" />
 
                 <InputField ref={landmarkRef} label={t("su_delivery_address_193")} placeholder={t("su_enter_full_delivery__194")} icon="map-outline" error={landmarkError} required={true} value={landmark} onChangeText={val => {
-              setLandmark(val);
-              if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
-            }} onBlur={() => {
-              if (!validateRequired(landmark)) setLandmarkError(t("su_address_is_required_195"));
-            }} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => talukaRef.current?.focus()} />
-
-
-
-                {/* Village & Taluka Row */}
-                <View className="flex-row w-full mt-4">
-                  <View className="flex-1 mr-2">
-                    <DropdownField label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
-                      if (villageList.length > 0) {
-                        setShowVillageMenu(true);
-                      } else if (villageList.length === 0 && pincode.length === 6) {
-                        setVillageError('No villages found for this pincode');
-                      }
-                    }} />
-                  </View>
-
-                  <View className="flex-1 ml-2">
-                    <InputField ref={talukaRef} label={t("taluka")} placeholder={t("taluka")} icon="flag-outline" error={talukaError} required={true} value={taluka} multiline={true} blurOnSubmit={true} onChangeText={val => {
-                  setTaluka(val);
-                  if (talukaError) setTalukaError(validateRequired(val) ? '' : 'Taluka is required');
+                  setLandmark(val);
+                  if (landmarkError) setLandmarkError(validateRequired(val) ? '' : 'Landmark is required');
                 }} onBlur={() => {
-                  if (!validateRequired(taluka)) setTalukaError(t("val_taluka_required"));
-                }} returnKeyType="next" onSubmitEditing={() => districtRef.current?.focus()} />
-                  </View>
-                </View>
-
-                {/* District & State Row */}
-                <View className="flex-row w-full mt-4">
-                  <View className="flex-1 mr-2">
-                    <InputField ref={districtRef} label={t("district")} placeholder={t("district")} icon="flag-outline" error={districtError} required={true} value={district} multiline={true} blurOnSubmit={true} onChangeText={val => {
-                  setDistrict(val);
-                  if (districtError) setDistrictError(validateRequired(val) ? '' : 'Please select district');
-                }} onBlur={() => {
-                  if (!validateRequired(district)) setDistrictError(t("val_district_required"));
-                }} returnKeyType="next" onSubmitEditing={() => stateNameRef.current?.focus()} />
-                  </View>
-
-                  <View className="flex-1 ml-2">
-                    <InputField ref={stateNameRef} label={t("state")} placeholder={t("state")} icon="flag-outline" error={stateNameError} required={true} value={stateName} multiline={true} blurOnSubmit={true} onChangeText={val => {
-                  setStateName(val);
-                  if (stateNameError) setStateNameError(validateRequired(val) ? '' : 'Please select state');
-                }} onBlur={() => {
-                  if (!validateRequired(stateName)) setStateNameError(t("val_state_required"));
-                }} returnKeyType="done" onSubmitEditing={handleNextStep6} />
-                  </View>
-                </View>
+                  if (!validateRequired(landmark)) setLandmarkError(t("su_address_is_required_195"));
+                }} returnKeyType="done" />
               </View>
 
               <PrimaryButton title={t("continue")} onPress={handleNextStep6} loading={isSubmitting} />
@@ -3196,6 +3340,81 @@ export default function SignupScreen({
 
 
 
+      {/* State Menu */}
+      <Modal visible={showStateMenu} transparent={true} animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowStateMenu(false)}>
+          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+            <TouchableWithoutFeedback>
+              <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select State</Text>
+                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                  {statesList.map(opt => {
+                    const isSelected = stateName === opt;
+                    return <TouchableOpacity key={opt} onPress={() => {
+                      handleStateSelect(opt);
+                      setShowStateMenu(false);
+                    }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                      {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                    </TouchableOpacity>;
+                  })}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* District Menu */}
+      <Modal visible={showDistrictMenu} transparent={true} animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowDistrictMenu(false)}>
+          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+            <TouchableWithoutFeedback>
+              <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select District</Text>
+                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                  {districtsList.map(opt => {
+                    const isSelected = district === opt;
+                    return <TouchableOpacity key={opt} onPress={() => {
+                      handleDistrictSelect(opt);
+                      setShowDistrictMenu(false);
+                    }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                      {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                    </TouchableOpacity>;
+                  })}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Block/Taluka Menu */}
+      <Modal visible={showBlockMenu} transparent={true} animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowBlockMenu(false)}>
+          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+            <TouchableWithoutFeedback>
+              <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Taluka</Text>
+                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                  {blocksList.map(opt => {
+                    const isSelected = taluka === opt;
+                    return <TouchableOpacity key={opt} onPress={() => {
+                      handleBlockSelect(opt);
+                      setShowBlockMenu(false);
+                    }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                      {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                    </TouchableOpacity>;
+                  })}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* Village Menu */}
       <Modal visible={showVillageMenu} transparent={true} animationType="fade">
         <TouchableWithoutFeedback onPress={() => setShowVillageMenu(false)}>
@@ -3211,8 +3430,12 @@ export default function SignupScreen({
                   {villageList.map(opt => {
                   const isSelected = village === opt;
                   return <TouchableOpacity key={opt} onPress={() => {
-                    setVillage(opt);
-                    setVillageError('');
+                    if (locationOption === 'state') {
+                      handleVillageSelect(opt);
+                    } else {
+                      setVillage(opt);
+                      setVillageError('');
+                    }
                     setShowVillageMenu(false);
                   }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                         <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>

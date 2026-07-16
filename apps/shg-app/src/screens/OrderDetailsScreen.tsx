@@ -1060,21 +1060,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
 
             {/* RIGHT: Scanner Action Button or checkmark */}
-            {(!isVerified && matchingParcel) ? (
-              <TouchableOpacity
-                onPress={() => {
-                  setActiveScanningParcel(matchingParcel);
-                  setScannerModalVisible(true);
-                }}
-                className="bg-[#073318] px-3 py-1.5 rounded-lg flex-row items-center"
-              >
-                <Ionicons name="scan-outline" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-                <Text className="text-[11px] font-extrabold text-white">Scan QR</Text>
-              </TouchableOpacity>
-            ) : isVerified ? (
-              <Ionicons name="checkmark-done" size={16} color="#10B981" />
+            {isVerified ? (
+              <View className="flex-row items-center gap-1">
+                <Ionicons name="checkmark-done" size={16} color="#10B981" />
+                <Text className="text-[11px] font-bold text-[#10B981]">Verified</Text>
+              </View>
             ) : (
-              <Text className="text-[10px] font-bold text-slate-400">Awaiting QR</Text>
+              <Text className="text-[11px] font-bold text-slate-400">Awaiting Dashboard Scan</Text>
             )}
           </View>;
         })}
@@ -1136,7 +1128,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         )}
 
-        {/* Submit Order full-width button */}
+        {/* Submit Order full-width button (Disabled since Scan-and-Go automatically transitions orders) */}
+        {/*
         <TouchableOpacity 
           onPress={handleSubmitOrder} 
           disabled={isSubmitDisabled} 
@@ -1150,6 +1143,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
                 : (isDeliveryPhase ? t("su_submit_delivery") || "Submit Delivery" : t("su_submit_order_357") || "Submit Order"))}
           </Text>
         </TouchableOpacity>
+        */}
 
           <View className="h-32" />
         </ScrollView>

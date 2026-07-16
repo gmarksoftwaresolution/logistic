@@ -3,9 +3,10 @@ import { SignupService } from './signup.service';
 import { SignupController } from './signup.controller';
 import { AuthModule } from '../auth/auth.module';
 import { OtpModule } from '../otp/otp.module';
+import { LocationModule } from '../location/location.module';
 
 @Module({
-  imports: [AuthModule, OtpModule],
+  imports: [AuthModule, OtpModule, LocationModule],
   providers: [SignupService],
   controllers: [SignupController],
 })

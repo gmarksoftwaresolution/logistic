@@ -795,9 +795,9 @@ async function seedAdditionalSHGs(prisma: any) {
     // 2. Create ShgDetail
     await prisma.$executeRawUnsafe(`
       INSERT INTO public."ShgDetail" (
-        "userId", "shgName", "shgLeaderName", "shgLeaderContact", "shgRole", "groupSize", "fullName", "age", "createdAt", "updatedAt"
-      ) VALUES ($1, $2, $3, $4, 'LEADER'::public."ShgRole", $5, $6, $7, NOW(), NOW());
-    `, userId, shg.shgName, shg.contactPerson, shg.mobileNumber, 10, shg.contactPerson, 35);
+        "userId", "shgName", "shgLeaderName", "shgLeaderContact", "shgRole", "groupSize", "fullName", "age", "memberCode", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, 'LEADER'::public."ShgRole", $5, $6, $7, $8, NOW(), NOW());
+    `, userId, shg.shgName, shg.contactPerson, shg.mobileNumber, 10, shg.contactPerson, 35, uniqueCode);
 
     // 3. Create Address
     await prisma.$executeRawUnsafe(`

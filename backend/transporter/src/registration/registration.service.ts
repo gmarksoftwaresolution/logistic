@@ -20,12 +20,15 @@ import {
   MilkOrganizationDetailsDto,
 } from './dto/registration.dto';
 
+import { LocationService } from '../location/location.service';
+
 @Injectable()
 export class RegistrationService {
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private locationService: LocationService,
   ) { }
 
   private async trackStep(userId: number, step: number, data: any) {
@@ -245,6 +248,17 @@ export class RegistrationService {
   async saveStep1(dto: Step1PersonalDetailsDto) {
     const user = await this.validateStep(dto.phoneNumber, 1);
 
+    const isValid = await this.locationService.validateLocation(
+      dto.pinCode,
+      dto.village,
+      dto.taluka,
+      dto.district,
+      dto.state,
+    );
+    if (!isValid) {
+      throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -411,9 +425,7 @@ export class RegistrationService {
   }
 
   async getPincodeInfo(pincode: string) {
-    const records: any[] = await this.prisma.$queryRaw`
-      SELECT state, district, block AS taluka FROM public.pincodes WHERE pincode = ${pincode} LIMIT 1
-    `;
+    const records = await this.locationService.findByPincode(pincode);
     if (!records || records.length === 0) {
       throw new NotFoundException('Pincode details not found');
     }
@@ -422,18 +434,16 @@ export class RegistrationService {
       success: true,
       state: data.state,
       district: data.district,
-      taluka: data.taluka || data.district,
+      taluka: data.block || data.district,
     };
   }
 
   async getPincodeVillages(pincode: string) {
-    const records: any[] = await this.prisma.$queryRaw`
-      SELECT DISTINCT village, block AS taluka, district, name AS "postOffice" FROM public.pincodes WHERE pincode = ${pincode} ORDER BY village ASC
-    `;
+    const records = await this.locationService.findByPincode(pincode);
     return records.map(r => ({
-      name: r.village,
-      taluka: r.taluka || r.district || '',
-      postOffice: r.postOffice || '',
+      name: r.name,
+      taluka: r.block || r.district || '',
+      postOffice: r.name,
     }));
   }
 
@@ -596,41 +606,64 @@ export class RegistrationService {
         });
       }
 
+      // Helper to resolve pincodes for a list of villages
+      const resolvePincodesForVillages = async (villagesList: string[]): Promise<string[]> => {
+        const pincodes: string[] = [];
+        for (const village of villagesList) {
+          const trimmedVillage = village.trim();
+          if (!trimmedVillage) continue;
+          const records = await tx.pincodeDirectory.findMany({
+            where: { name: { equals: trimmedVillage, mode: 'insensitive' } },
+            select: { pincode: true },
+          });
+          records.forEach(r => pincodes.push(r.pincode));
+        }
+        return [...new Set(pincodes)];
+      };
+
       // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
       const s6p = stepData[6];
       if (vehicleCategory === 'MILK_VAN' && s6mv) {
         const operatingAreaVal = Array.isArray(s6mv.assignedVillages)
           ? s6mv.assignedVillages.join(', ')
           : 'Milk Van Route';
+        const villages = Array.isArray(s6mv.assignedVillages) ? s6mv.assignedVillages : [];
+        const resolvedPincodes = await resolvePincodesForVillages(villages);
         await tx.routeDetail.upsert({
           where: { userId: id },
           update: {
             operatingArea: operatingAreaVal,
+            pickupLocations: resolvedPincodes,
+            dropLocations: resolvedPincodes,
             workingDays: s6mv.workingDays || null,
             workingSchedule: s6mv.workingSchedule || null,
           },
           create: {
             userId: id,
             operatingArea: operatingAreaVal,
+            pickupLocations: resolvedPincodes,
+            dropLocations: resolvedPincodes,
             workingDays: s6mv.workingDays || null,
             workingSchedule: s6mv.workingSchedule || null,
           },
         });
       } else if (vehicleCategory !== 'MILK_VAN' && s6p) {
+        const villages = s6p.operatingArea ? s6p.operatingArea.split(',').map((s: string) => s.trim()) : [];
+        const resolvedPincodes = await resolvePincodesForVillages(villages);
         await tx.routeDetail.upsert({
           where: { userId: id },
           update: {
             operatingArea: s6p.operatingArea || '',
-            pickupLocations: s6p.pickupLocations || null,
-            dropLocations: s6p.dropLocations || null,
+            pickupLocations: resolvedPincodes,
+            dropLocations: resolvedPincodes,
             workingDays: s6p.workingDays || null,
             workingSchedule: s6p.workingSchedule || null,
           },
           create: {
             userId: id,
             operatingArea: s6p.operatingArea || '',
-            pickupLocations: s6p.pickupLocations || null,
-            dropLocations: s6p.dropLocations || null,
+            pickupLocations: resolvedPincodes,
+            dropLocations: resolvedPincodes,
             workingDays: s6p.workingDays || null,
             workingSchedule: s6p.workingSchedule || null,
           },

@@ -962,27 +962,23 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
                         if (matchingParcel) {
                           return (
-                            <TouchableOpacity
-                              onPress={() => {
-                                setActiveScanningParcel(matchingParcel);
-                                setScannerModalVisible(true);
-                              }}
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: scale(4),
-                                backgroundColor: '#073318',
-                                paddingHorizontal: scale(10),
-                                paddingVertical: verticalScale(6),
-                                borderRadius: scale(8),
-                              }}
-                            >
+                            <View style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: scale(4),
+                              backgroundColor: '#F1F5F9',
+                              paddingHorizontal: scale(8),
+                              paddingVertical: verticalScale(4),
+                              borderRadius: scale(8),
+                              borderWidth: 1,
+                              borderColor: '#E2E8F0',
+                            }}>
                               <Text style={{
                                 fontFamily: Fonts.bold,
                                 fontSize: moderateScale(11),
-                                color: '#FFFFFF',
-                              }}>Scan QR</Text>
-                            </TouchableOpacity>
+                                color: '#64748B',
+                              }}>Awaiting Dashboard Scan</Text>
+                            </View>
                           );
                         }
 
@@ -1044,6 +1040,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           ) : (
             <View style={{ gap: verticalScale(12) }}>
+              {/* Manual Confirmation Button (Disabled since verification is automatic) */}
+              {/*
               {verifiedCount >= displayProducts.length && (
                 <TouchableOpacity
                   style={[
@@ -1064,6 +1062,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                   </Text>
                 </TouchableOpacity>
               )}
+              */}
               <TouchableOpacity
                 style={[styles.primaryConfirmBtn, { backgroundColor: '#073318', marginTop: verticalScale(4) }]}
                 onPress={handleQrScanSimulated}

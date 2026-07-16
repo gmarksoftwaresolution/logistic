@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from '../utils/storage';
 import { userService } from '../services/userService';
 
 export interface UserProfile {
+  id?: number;
   name: string;
   mobile: string;
   profileImage: string | null;

@@ -11,6 +11,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useOnboarding } from '../context/OnboardingContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Animated, Alert, Vibration } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -258,11 +260,6 @@ const DashboardScreen: React.FC<any> = () => {
             </TouchableOpacity>
           </View>
         )}
-
-
-
-
-
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t('home.current_operations')}</Text>
         </View>
@@ -881,6 +878,63 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bold,
     fontSize: moderateScale(11),
     color: '#FFFFFF',
+  },
+  scannerCard: {
+    borderRadius: moderateScale(20),
+    padding: scale(16),
+    shadowColor: '#1E293B',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+    marginBottom: verticalScale(10),
+  },
+  scannerIconBg: {
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(10),
+    backgroundColor: 'rgba(178, 213, 52, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11),
+    color: '#D5EFE0',
+    letterSpacing: 1,
+  },
+  scannerTitleText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(20),
+    color: '#FFFFFF',
+    marginBottom: verticalScale(4),
+  },
+  scannerDescText: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(12),
+    color: '#E2F0E7',
+    lineHeight: moderateScale(16),
+    marginBottom: verticalScale(16),
+  },
+  scannerButton: {
+    backgroundColor: '#B2D534',
+    paddingVertical: verticalScale(12),
+    borderRadius: moderateScale(12),
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  scannerButtonText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(13),
+    color: '#073318',
+    letterSpacing: 0.5,
   },
 });
 

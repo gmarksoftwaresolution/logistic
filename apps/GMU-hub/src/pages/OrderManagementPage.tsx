@@ -1045,8 +1045,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Graphical tracking nodes calculator
   const getTimelineNodes = (order: any) => {
-    const isDirect = false;
-
     const getLogsForStage = (stageKeywords: string[]) => {
       if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
       const matching = order.tracking.filter((t: any) => 
@@ -1056,43 +1054,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
     };
 
-    let sellerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'completed';
-    if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(order.mainStatus)) {
-      sellerState = 'active';
+    let placedState: 'completed' | 'active' | 'pending' = 'completed';
+
+    let shgAcceptState: 'completed' | 'active' | 'pending' = 'pending';
+    if (order.pickupShgStatus === 'ACCEPTED' || order.pickupShgStatus === 'PICKED' || ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+      shgAcceptState = 'completed';
+    } else if (order.mainStatus === 'ORDER_PLACED') {
+      shgAcceptState = 'active';
     }
 
-    let shgPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (order.pickupShgStatus === 'PICKED' || ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
-      shgPickupState = 'completed';
-    } else if (order.pickupShgStatus === 'ACCEPTED' || ['PICKUP_ASSIGNED', 'PARCEL_AT_SHG'].includes(order.mainStatus)) {
-      shgPickupState = 'active';
-    } else if (order.pickupShgStatus === 'REJECTED' || order.mainStatus === 'SHG_PICKUP_DECLINED') {
-      shgPickupState = 'rejected';
-    } else if (order.rescheduleType === 'PICKUP_SHG') {
-      shgPickupState = 'delayed';
+    let shgPickedState: 'completed' | 'active' | 'pending' = 'pending';
+    if (order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+      shgPickedState = 'completed';
+    } else if (order.mainStatus === 'PICKUP_SHG_ACCEPTED') {
+      shgPickedState = 'active';
     }
 
-    let transPickupState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+    let transPickupState: 'completed' | 'active' | 'pending' = 'pending';
+    if (['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
       transPickupState = 'completed';
-    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
+    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG'].includes(order.mainStatus)) {
       transPickupState = 'active';
-    } else if (order.pickupTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
-      transPickupState = 'rejected';
-    } else if (order.rescheduleType === 'PICKUP_TRANSPORTER') {
-      transPickupState = 'delayed';
     }
 
-    let gmuState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    if (['DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
-      gmuState = 'completed';
-    } else if (['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'PARCEL_AT_HUB', 'AT_HUB'].includes(order.mainStatus)) {
-      gmuState = 'active';
+    let hubReceivedState: 'completed' | 'active' | 'pending' = 'pending';
+    if (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+      hubReceivedState = 'completed';
+    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus)) {
+      hubReceivedState = 'active';
     }
 
-    let transDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    let shgDropState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
-    let buyerState: 'completed' | 'active' | 'pending' | 'rejected' | 'delayed' = 'pending';
+    let hubStoredState: 'completed' | 'active' | 'pending' = 'pending';
+    if (['STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP') {
+      hubStoredState = 'completed';
+    } else if (order.mainStatus === 'HUB_RECEIVED') {
+      hubStoredState = 'active';
+    }
+
+    let transDropState: 'completed' | 'active' | 'pending' = 'pending';
+    let shgDropState: 'completed' | 'active' | 'pending' = 'pending';
+    let buyerState: 'completed' | 'active' | 'pending' = 'pending';
 
     if (order.phase === 'DROP') {
       const transporterAccepted = ['DROP_TRANSPORTER_ACCEPTED', 'DROP_TRANSPORTER_PENDING', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'ACCEPTED' || order.dropTransporterStatus === 'DELIVERED';
@@ -1102,32 +1103,24 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           transDropState = 'completed';
         } else if (['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus)) {
           transDropState = 'active';
-        } else if (order.dropTransporterStatus === 'REJECTED' || order.mainStatus === 'TRANSPORTER_DECLINED') {
-          transDropState = 'rejected';
-        } else if (order.rescheduleType === 'DROP_TRANSPORTER') {
-          transDropState = 'delayed';
         }
+      }
 
-        if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED') {
-          shgDropState = 'completed';
-        } else if (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED') {
-          shgDropState = 'active';
-        } else if (order.dropShgStatus === 'REJECTED' || order.mainStatus === 'SHG_DROP_DECLINED') {
-          shgDropState = 'rejected';
-        } else if (order.rescheduleType === 'DROP_SHG') {
-          shgDropState = 'delayed';
-        }
+      if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED') {
+        shgDropState = 'completed';
+      } else if (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED') {
+        shgDropState = 'active';
+      }
 
-        if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
-          buyerState = 'completed';
-        } else if (['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
-          buyerState = 'active';
-        }
+      if (['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+        buyerState = 'completed';
+      } else if (['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+        buyerState = 'active';
       }
     }
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
-      { id: 'seller', label: 'Seller', state: sellerState, details: {
+      { id: 'placed', label: 'Order Placed', state: placedState, details: {
         'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
         'Role': 'Seller / Farmer',
         'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
@@ -1136,51 +1129,60 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Order Placed Date': order.orderDate || 'N/A',
         'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
-        'Status': 'PICKUP SCHEDULED',
+        'Status': 'PLACED',
         'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
       } },
-      { id: 'shg_pickup', label: 'Pickup SHG', state: shgPickupState, details: (shgPickupState !== 'pending' && order.pickupShgDetails) ? {
+      { id: 'shg_accept', label: 'SHG Accepted', state: shgAcceptState, details: (shgAcceptState !== 'pending' && order.pickupShgDetails) ? {
         'Person Name': order.pickupShgDetails.name || 'N/A',
         'Role': 'Pickup Self Help Group',
         'Mobile': order.pickupShgDetails.mobile || 'N/A',
         'Address': order.pickupShgDetails.address || 'N/A',
         'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Schedule Details': order.shgPickupSchedule || 'N/A',
         'Status': order.pickupShgStatus || 'ACCEPTED',
+        'Full Scan History': getLogsForStage(['PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'])
+      } : null },
+      { id: 'shg_picked', label: 'Picked by SHG', state: shgPickedState, details: (shgPickedState !== 'pending' && order.pickupShgDetails) ? {
+        'Person Name': order.pickupShgDetails.name || 'N/A',
+        'Role': 'Pickup Self Help Group (Verification)',
+        'Mobile': order.pickupShgDetails.mobile || 'N/A',
+        'Address': order.pickupShgDetails.address || 'N/A',
+        'Order ID': order.id,
+        'Status': 'PICKED',
         'Full Scan History': getLogsForStage(['SHG_PICKUP', 'PARCEL_AT_SHG', 'PICKED'])
       } : null },
-      { id: 'trans_pickup', label: 'Transporter', state: transPickupState, details: (transPickupState !== 'pending' && order.pickupTransporterDetails) ? {
+      { id: 'trans_pickup', label: 'Pickup Transporter', state: transPickupState, details: (transPickupState !== 'pending' && order.pickupTransporterDetails) ? {
         'Person Name': order.pickupTransporterDetails.name || 'N/A',
         'Role': 'Pickup Transporter',
         'Mobile': order.pickupTransporterDetails.mobile || 'N/A',
         'Address': order.pickupTransporterDetails.address || 'N/A',
         'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
         'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Status': order.pickupTransporterStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'])
+        'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
       } : null },
-      { id: 'gmu', label: 'GMU Hub', state: gmuState, details: (gmuState !== 'pending') ? {
-        'Person Name': 'Main GMU Hub Staff',
-        'Role': 'GMU Hub Central Warehouse Admin',
+      { id: 'hub_received', label: 'Received at Hub', state: hubReceivedState, details: (hubReceivedState !== 'pending') ? {
         'Warehouse': 'GMU Hub Central Warehouse',
         'Order ID': order.id,
         'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Intake Time': order.warehouseReceivedDate || 'N/A',
-        'Inventory Shelf': order.storedDate ? 'Shelf A-4' : 'Incoming Bay',
-        'Dispatch Time': order.dispatchedAt || 'N/A',
-        'Status': order.mainStatus || 'IN_PROCESS',
-        'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'STORED', 'DISPATCHED'])
+        'Status': 'RECEIVED',
+        'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'])
       } : null },
-      { id: 'trans_drop', label: 'Transporter', state: transDropState, details: (transDropState !== 'pending' && order.dropTransporterDetails) ? {
+      { id: 'hub_stored', label: 'Stored in Inventory', state: hubStoredState, details: (hubStoredState !== 'pending') ? {
+        'Warehouse': 'GMU Hub Central Warehouse',
+        'Order ID': order.id,
+        'Inventory Shelf': order.storedDate ? 'Shelf A-4' : 'Incoming Bay',
+        'Stored Time': order.storedDate || 'N/A',
+        'Status': 'STORED',
+        'Full Scan History': getLogsForStage(['STORED'])
+      } : null },
+      { id: 'trans_drop', label: 'Drop Transporter', state: transDropState, details: (transDropState !== 'pending' && order.dropTransporterDetails) ? {
         'Person Name': order.dropTransporterDetails.name || 'N/A',
         'Role': 'Drop Transporter',
         'Mobile': order.dropTransporterDetails.mobile || 'N/A',
         'Address': order.dropTransporterDetails.address || 'N/A',
         'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
         'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Status': order.dropTransporterStatus || 'PENDING',
         'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
       } : null },
@@ -1190,20 +1192,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         'Mobile': order.dropShgDetails.mobile || 'N/A',
         'Address': order.dropShgDetails.address || 'N/A',
         'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Schedule Details': order.shgPickupSchedule || 'N/A',
         'Status': order.dropShgStatus || 'PENDING',
         'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
       } : null },
-      { id: 'buyer', label: 'Buyer', state: buyerState, details: (buyerState === 'completed') ? {
+      { id: 'buyer', label: 'Delivered to Buyer', state: buyerState, details: (buyerState === 'completed') ? {
         'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
         'Role': 'Consignee / Buyer',
         'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
         'Address': order.buyerAddress || order.buyer?.address || 'N/A',
         'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
         'Delivery Completed Date': order.deliveredAt || 'N/A',
-        'Status': order.mainStatus === 'DELIVERED' || order.mainStatus === 'COMPLETED' ? 'DELIVERED' : 'PENDING',
+        'Status': 'DELIVERED',
         'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
       } : null }
     ];
@@ -1215,20 +1214,25 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const lbl = nodeLabel.toLowerCase();
     let timestamp: string | null = null;
     
-    // 1. Try finding actual tracking event
     if (order.tracking && order.tracking.length > 0) {
       let statusKeywords: string[] = [];
-      if (lbl === 'seller') {
+      if (lbl === 'seller' || lbl.includes('placed')) {
         statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
-      } else if (lbl.includes('pickup shg')) {
-        statusKeywords = ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP', 'PARCEL_AT_SHG', 'PICKED'];
-      } else if (lbl.includes('transporter')) {
-        statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'SHG_HANDOVER_VERIFY'];
-      } else if (lbl.includes('gmu') || lbl.includes('hub')) {
-        statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
-      } else if (lbl.includes('drop shg')) {
-        statusKeywords = ['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'];
-      } else if (lbl === 'buyer') {
+      } else if (lbl.includes('shg accepted') || lbl.includes('shg_accept')) {
+        statusKeywords = ['PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'];
+      } else if (lbl.includes('picked by shg') || lbl.includes('shg_picked')) {
+        statusKeywords = ['PARCEL_AT_SHG', 'PICKED'];
+      } else if (lbl.includes('pickup transporter') || lbl.includes('trans_pickup')) {
+        statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'];
+      } else if (lbl.includes('received at hub') || lbl.includes('hub_received')) {
+        statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU'];
+      } else if (lbl.includes('stored') || lbl.includes('hub_stored')) {
+        statusKeywords = ['STORED'];
+      } else if (lbl.includes('drop transporter') || lbl.includes('trans_drop')) {
+        statusKeywords = ['DROP_ASSIGNED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'];
+      } else if (lbl.includes('drop shg') || lbl.includes('shg_drop')) {
+        statusKeywords = ['DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG'];
+      } else if (lbl === 'buyer' || lbl.includes('delivered')) {
         statusKeywords = ['DELIVERED', 'COMPLETED'];
       }
 
@@ -1240,19 +1244,24 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       }
     }
     
-    // 2. Fallback to order fields if tracking event not found
     if (!timestamp) {
-      if (lbl === 'seller') {
+      if (lbl === 'seller' || lbl.includes('placed')) {
         timestamp = order.createdAt || order.orderDate;
-      } else if (lbl.includes('pickup shg')) {
+      } else if (lbl.includes('shg accepted') || lbl.includes('shg_accept')) {
         timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
-      } else if (lbl.includes('transporter')) {
+      } else if (lbl.includes('picked by shg') || lbl.includes('shg_picked')) {
+        timestamp = order.storedDate || order.warehouseReceivedDate;
+      } else if (lbl.includes('pickup transporter') || lbl.includes('trans_pickup')) {
         timestamp = order.pickupTransporterDetails?.acceptedAt;
-      } else if (lbl.includes('gmu') || lbl.includes('hub')) {
+      } else if (lbl.includes('received at hub') || lbl.includes('hub_received')) {
         timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
-      } else if (lbl.includes('drop shg')) {
+      } else if (lbl.includes('stored') || lbl.includes('hub_stored')) {
+        timestamp = order.storedDate;
+      } else if (lbl.includes('drop transporter') || lbl.includes('trans_drop')) {
+        timestamp = order.dropTransporterDetails?.acceptedAt;
+      } else if (lbl.includes('drop shg') || lbl.includes('shg_drop')) {
         timestamp = order.dropShgDetails?.acceptedAt;
-      } else if (lbl === 'buyer') {
+      } else if (lbl === 'buyer' || lbl.includes('delivered')) {
         timestamp = order.deliveredAt || order.completedAt;
       }
     }
@@ -1717,7 +1726,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                           {/* Center Column (Visual Journey Stepper) */}
                           <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
-                            <div className="min-w-[650px] relative flex items-center justify-between h-12">
+                            <div className="min-w-[850px] relative flex items-center justify-between h-12">
                               
                               {/* Horizontal Connecting Line Track */}
                               <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />

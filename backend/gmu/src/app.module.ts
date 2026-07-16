@@ -9,6 +9,7 @@ import { TransporterManagementModule } from './transporter-management/transporte
 import { OrderManagementModule } from './order-management/order-management.module';
 import { QrModule } from './qr/qr.module';
 import { AppController } from './app.controller';
+import { LocationModule } from './location/location.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AppController } from './app.controller';
     TransporterManagementModule,
     OrderManagementModule,
     QrModule,
+    LocationModule,
   ],
   controllers: [AppController],
 })

@@ -1,6 +1,6 @@
 import { LanguageContext } from '../context/LanguageContext';
 import React, { useContext, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl, Modal, Alert, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -10,6 +10,10 @@ import { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useUser } from '../context/UserContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
+import axiosInstance from '../api/axiosInstance';
 type Props = CompositeScreenProps<BottomTabScreenProps<MainTabParamList, 'Dashboard'>, NativeStackScreenProps<RootStackParamList>>;
 export default function DashboardScreen({
   navigation
@@ -250,20 +254,6 @@ export default function DashboardScreen({
             </View>
           </View>
         )}
-
-        {/* Center Content */}
-        <View className="flex-1 justify-center items-center px-8 pb-10">
-          <View className="w-28 h-28 bg-white rounded-full items-center justify-center shadow-md mb-8 border border-gray-100" style={{
-          elevation: 3
-        }}>
-            <MaterialIcons name="construction" size={48} color="#073318" />
-          </View>
-          
-          <Text className="text-[22px] font-extrabold text-[#111827] text-center mb-4 leading-8">{t("su_home_screen_is_under_423")}{'\n'}{t("su_development_424")}</Text>
-          
-          <Text className="text-[15px] font-medium text-[#6B7280] text-center leading-6">{t("su_we_re_building_somet_425")}</Text>
-        </View>
-
         </ScrollView>
       </SafeAreaView>
   </LinearGradient>;

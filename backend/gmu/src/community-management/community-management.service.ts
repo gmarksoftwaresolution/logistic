@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderManagementService } from '../order-management/order-management.service';
 
 @Injectable()
 export class CommunityManagementService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private orderManagementService: OrderManagementService,
+  ) {}
 
   // Common method to fetch community members from public schema
   async getCommunityMembers(role: 'SHG' | 'INDIVIDUAL', statusFilter: string | null) {
@@ -273,6 +277,12 @@ export class CommunityManagementService {
         INSERT INTO public."Application" ("userId", status, "approvedAt", "createdAt", "updatedAt")
         VALUES (${userId}, 'APPROVED'::public."ApplicationStatus", NOW(), NOW(), NOW())
       `;
+    }
+
+    try {
+      await this.orderManagementService.rebroadcastForApprovedPartner(String(userId), 'SHG');
+    } catch (err: any) {
+      console.warn(`[approveMember rebroadcast] Failed to rebroadcast:`, err.message);
     }
 
     return { success: true };

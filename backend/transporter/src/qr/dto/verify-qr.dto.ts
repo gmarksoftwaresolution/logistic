@@ -6,8 +6,8 @@ export class VerifyQrDto {
   parcelId: string;
 
   @IsString()
-  @IsNotEmpty()
-  verificationToken: string;
+  @IsOptional()
+  verificationToken?: string;
 
   @IsString()
   @IsOptional()

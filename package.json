@@ -17,7 +17,8 @@
     "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend",
     "gmu-backend:dev": "npm run start:dev --workspace=@logistic/gmu-backend",
     "db:generate": "npm run prisma:generate --workspace=@logistic/db",
-    "db:push": "npm run prisma:migrate --workspace=@logistic/db"
+    "db:push": "npm run prisma:migrate --workspace=@logistic/db",
+    "seed:pincode": "ts-node backend/gmu/prisma/seed-pincode.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

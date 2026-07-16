@@ -1130,6 +1130,12 @@ export class OrderManagementService implements OnModuleInit {
       console.warn(`[broadcastShg auto-run] Failed to broadcast order ${order.id}:`, err.message);
     }
 
+    try {
+      await this.broadcastTransporter(order.id);
+    } catch (err: any) {
+      console.warn(`[broadcastTransporter auto-run] Failed to broadcast order ${order.id}:`, err.message);
+    }
+
     return order;
   }
 
@@ -2051,6 +2057,12 @@ export class OrderManagementService implements OnModuleInit {
       console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
     }
 
+    try {
+      await this.broadcastDropTransporter(result.dropId);
+    } catch (err: any) {
+      console.error(`[storeInventory] Immediate drop Transporter broadcast failed:`, err.message);
+    }
+
     return result.updated;
   }
 
@@ -2300,7 +2312,8 @@ export class OrderManagementService implements OnModuleInit {
     );
 
     if (matchingTransporters.length === 0) {
-      throw new BadRequestException(`No matching approved transporters found for buyer village ${order.buyerVillage || 'N/A'} or pincode ${order.buyerPincode || 'N/A'}`);
+      console.warn(`[broadcastDropTransporter] No matching approved transporters found for buyer village ${order.buyerVillage || 'N/A'} or pincode ${order.buyerPincode || 'N/A'}`);
+      return order;
     }
 
     await this.prisma.orderAssignment.deleteMany({
@@ -2325,6 +2338,72 @@ export class OrderManagementService implements OnModuleInit {
       },
       include: { assignments: true },
     }); // DROP_ASSIGNED stays — transporter broadcast doesn't change displayed status
+  }
+
+  async rebroadcastForApprovedPartner(partnerId: string, role: 'SHG' | 'TRANSPORTER') {
+    console.log(`[rebroadcastForApprovedPartner] Triggered rebroadcast for approved partner: ${partnerId} (${role})`);
+    
+    if (role === 'SHG') {
+      const pickupOrders = await this.prisma.order.findMany({
+        where: {
+          phase: 'PICKUP',
+          mainStatus: 'ORDER_PLACED',
+          pickupShgId: null,
+        }
+      });
+      for (const order of pickupOrders) {
+        try {
+          await this.broadcastShg(order.id);
+        } catch (err: any) {
+          console.warn(`[rebroadcast SHG Pickup] Failed for order ${order.id}:`, err.message);
+        }
+      }
+
+      const dropOrders = await this.prisma.order.findMany({
+        where: {
+          phase: 'DROP',
+          mainStatus: { in: ['DROP_PENDING', 'DROP_ASSIGNED'] },
+          dropShgId: null,
+        }
+      });
+      for (const order of dropOrders) {
+        try {
+          await this.broadcastDropShg(order.id);
+        } catch (err: any) {
+          console.warn(`[rebroadcast SHG Drop] Failed for order ${order.id}:`, err.message);
+        }
+      }
+    } else if (role === 'TRANSPORTER') {
+      const pickupOrders = await this.prisma.order.findMany({
+        where: {
+          phase: 'PICKUP',
+          mainStatus: { in: ['ORDER_PLACED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'] },
+          pickupTransporterId: null,
+        }
+      });
+      for (const order of pickupOrders) {
+        try {
+          await this.broadcastTransporter(order.id);
+        } catch (err: any) {
+          console.warn(`[rebroadcast Transporter Pickup] Failed for order ${order.id}:`, err.message);
+        }
+      }
+
+      const dropOrders = await this.prisma.order.findMany({
+        where: {
+          phase: 'DROP',
+          mainStatus: { in: ['DROP_PENDING', 'DROP_ASSIGNED', 'DISPATCHED'] },
+          dropTransporterId: null,
+        }
+      });
+      for (const order of dropOrders) {
+        try {
+          await this.broadcastDropTransporter(order.id);
+        } catch (err: any) {
+          console.warn(`[rebroadcast Transporter Drop] Failed for order ${order.id}:`, err.message);
+        }
+      }
+    }
   }
 
   async dropTransporterAccept(id: string, transporterId: string) {

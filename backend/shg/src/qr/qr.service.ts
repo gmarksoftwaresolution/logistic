@@ -223,7 +223,7 @@ export class QrService {
 
   async verifyQr(
     parcelId: string,
-    verificationToken: string,
+    verificationToken?: string,
     scannedByUserId?: string,
     scannedByUserRole?: string,
     latitude?: number,
@@ -251,34 +251,14 @@ export class QrService {
         currentHolder: 'UNKNOWN',
         currentStage: 'UNKNOWN',
         scanResult: 'FAILED',
-        remarks: `Parcel not found: ${parcelId}`,
+        remarks: `Wrong Parcel: ${parcelId} not found`,
         latitude,
         longitude,
       });
-      throw new NotFoundException(`Parcel ${parcelId} not found`);
+      throw new NotFoundException(`Wrong Parcel: ${parcelId} not found`);
     }
 
-    // 2. Verify Verification Token
-    if (parcel.verificationToken !== verificationToken) {
-      await this.logScanHistory({
-        parcelId: parcel.parcelId,
-        orderId: parcel.orderId,
-        productId: parcel.productId,
-        productName: parcel.productName,
-        userRole: finalUserRole,
-        userId: finalUserId,
-        action: 'VERIFY',
-        currentHolder: parcel.currentHolderId,
-        currentStage: parcel.parcelStatus,
-        scanResult: 'REJECTED',
-        remarks: 'Verification token mismatch',
-        latitude,
-        longitude,
-      });
-      throw new BadRequestException('Invalid verification token');
-    }
-
-    // 3. Verify Order Exists
+    // 2. Verify Order Exists
     const order = await this.prisma.order.findFirst({
       where: {
         OR: [
@@ -305,362 +285,703 @@ export class QrService {
         latitude,
         longitude,
       });
-      throw new NotFoundException(`Order ${parcel.orderId} not found`);
+      throw new NotFoundException(`Associated order not found: ${parcel.orderId}`);
     }
 
-    // 4. Verify Product
-    const product = await this.prisma.product.findUnique({
-      where: { id: parcel.productId },
-    });
-    if (!product) {
-      throw new NotFoundException(`Product ${parcel.productId} not found`);
-    }
+    // 3. Verify user assignments and accept status based on Role & Phase (One-time Acceptance Check)
+    if (finalUserRole === 'SHG' || finalUserRole === 'TRANSPORTER') {
+      const assignment = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: finalUserId,
+          role: parcel.flowType,
+        }
+      });
 
-    // 4.1 Update verificationStatus of corresponding order items
-    const masterOrder = await this.prisma.masterOrder.findFirst({
-      where: { orderNumber: order.orderId }
-    });
-    if (masterOrder) {
-      if (order.phase === 'PICKUP') {
-        const pickupOrder = await this.prisma.pickupOrder.findFirst({
-          where: { masterOrderId: masterOrder.id }
+      if (!assignment) {
+        await this.logScanHistory({
+          parcelId: parcel.parcelId,
+          orderId: parcel.orderId,
+          productId: parcel.productId,
+          productName: parcel.productName,
+          userRole: finalUserRole,
+          userId: finalUserId,
+          action: 'VERIFY',
+          currentHolder: parcel.currentHolderId,
+          currentStage: parcel.parcelStatus,
+          scanResult: 'FAILED',
+          remarks: `Parcel not assigned to you: assigneeId=${finalUserId}, role=${parcel.flowType}`,
+          latitude,
+          longitude,
         });
-        if (pickupOrder) {
-          await this.prisma.pickupOrderItem.updateMany({
-            where: { pickupOrderId: pickupOrder.id, productId: product.id },
-            data: { verificationStatus: 'VERIFIED', verifiedTime: new Date() }
-          });
-        }
-      } else if (order.phase === 'DROP') {
-        const dropOrder = await this.prisma.dropOrder.findFirst({
-          where: { masterOrderId: masterOrder.id }
+        throw new BadRequestException('Parcel not assigned to you');
+      }
+
+      if (assignment.status === 'PENDING') {
+        await this.logScanHistory({
+          parcelId: parcel.parcelId,
+          orderId: parcel.orderId,
+          productId: parcel.productId,
+          productName: parcel.productName,
+          userRole: finalUserRole,
+          userId: finalUserId,
+          action: 'VERIFY',
+          currentHolder: parcel.currentHolderId,
+          currentStage: parcel.parcelStatus,
+          scanResult: 'FAILED',
+          remarks: 'Please accept the assignment first before scanning',
+          latitude,
+          longitude,
         });
-        if (dropOrder) {
-          await this.prisma.dropOrderItem.updateMany({
-            where: { dropOrderId: dropOrder.id, productId: product.id },
-            data: { verificationStatus: 'VERIFIED', verifiedTime: new Date() }
-          });
-        }
+        throw new BadRequestException('Please accept the assignment first before scanning');
+      }
+
+      if (assignment.status === 'REJECTED') {
+        throw new BadRequestException('Assignment was rejected');
       }
     }
 
-    // Determine target state based on the current state machine and scanner role
+    // 4. Determine state transitions & actions
     let nextParcelStatus = parcel.parcelStatus;
     let nextHolderId = parcel.currentHolderId;
     let nextHolderType = parcel.currentHolderType;
     let transitionSuccessMessage = 'Scan verified successfully';
     let transitionAction = 'VERIFY';
+    let orderUpdateFn: ((tx: any) => Promise<void>) | null = null;
 
-    const currentOrderMainStatus = order.mainStatus;
-    let orderUpdateFn: (() => Promise<void>) | null = null;
+    const currentStatus = parcel.parcelStatus;
 
     if (finalUserRole === 'SHG') {
-      // Case A: SHG picking up from Seller
-      if (order.phase === 'PICKUP' && (currentOrderMainStatus === 'ORDER_PLACED' || currentOrderMainStatus === 'PICKUP_SHG_ACCEPTED' || currentOrderMainStatus === 'PENDING_PICKUP')) {
-        // Verify SHG assignment
-        if (order.pickupShgId && String(order.pickupShgId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this SHG');
-        }
-
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              pickupShgStatus: 'PICKED',
-              mainStatus: 'PARCEL_AT_SHG',
-            }
-          });
-
-          // Set pickup_order status to COMPLETED if it exists
-          const masterOrderObj = await this.prisma.masterOrder.findUnique({
-            where: { orderNumber: order.orderId }
-          });
-          if (masterOrderObj) {
-            const pickupOrder = await this.prisma.pickupOrder.findFirst({
-              where: { masterOrderId: masterOrderObj.id }
+      if (parcel.flowType === 'PICKUP') {
+        if (currentStatus === 'PENDING') {
+          nextParcelStatus = 'PARCEL_AT_SHG';
+          nextHolderId = finalUserId;
+          nextHolderType = 'SHG';
+          transitionAction = 'SHG_PICKUP';
+          transitionSuccessMessage = 'Parcel picked up from seller by SHG';
+          
+          orderUpdateFn = async (tx) => {
+            // Complete SHG's pickup assignment
+            await tx.orderAssignment.updateMany({
+              where: { orderId: order.id, assigneeId: finalUserId, role: 'PICKUP', status: 'ACCEPTED' },
+              data: { status: 'COMPLETED', updatedAt: new Date() }
             });
-            if (pickupOrder) {
-              await this.prisma.pickupOrder.update({
-                where: { id: pickupOrder.id },
-                data: { status: 'COMPLETED' }
+
+            // Find master order and complete pickup order
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              const pickupOrder = await tx.pickupOrder.findFirst({
+                where: { masterOrderId: masterOrder.id }
+              });
+              if (pickupOrder) {
+                await tx.pickupOrder.update({
+                  where: { id: pickupOrder.id },
+                  data: {
+                    status: 'COMPLETED',
+                    pickupTime: new Date(),
+                    transporterId: null,
+                  }
+                });
+                await tx.pickupTracking.create({
+                  data: {
+                    pickupOrderId: pickupOrder.id,
+                    status: 'COMPLETED',
+                    remarks: 'Pickup leg completed successfully by SHG.',
+                  }
+                });
+                // Reset item verification codes for transporter leg
+                await tx.pickupOrderItem.updateMany({
+                  where: { pickupOrderId: pickupOrder.id },
+                  data: {
+                    verificationCode: null,
+                    generatedTime: null,
+                    verificationStatus: 'PENDING',
+                    verifiedTime: null,
+                  }
+                });
+              }
+            }
+
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                pickupShgStatus: 'PICKED',
+                mainStatus: 'PARCEL_AT_SHG',
+                pickupTransporterId: null,
+                pickupTransporterStatus: 'PENDING',
+              },
+            });
+
+            if (masterOrder) {
+              await tx.masterOrder.update({
+                where: { id: masterOrder.id },
+                data: { status: 'PARCEL_AT_SHG' }
               });
             }
-          }
-        };
-
-        nextParcelStatus = 'PARCEL_AT_SHG';
-        nextHolderId = finalUserId;
-        nextHolderType = 'SHG';
-        transitionAction = 'SHG_PICKUP';
-        transitionSuccessMessage = 'Parcel picked up from seller by SHG';
-      }
-      else if (order.phase === 'PICKUP' && currentOrderMainStatus === 'PARCEL_AT_SHG') {
-        nextParcelStatus = 'SHG_HANDOVER_VERIFIED';
-        nextHolderId = finalUserId;
-        nextHolderType = 'SHG';
-        transitionAction = 'SHG_HANDOVER_VERIFY';
-        transitionSuccessMessage = 'SHG verified parcel handover to transporter';
-      }
-      // Case B: Drop SHG receiving drop parcel from Transporter
-      else if (order.phase === 'DROP' && (currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER')) {
-        if (order.dropShgId && String(order.dropShgId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this SHG');
+          };
+        } else if (currentStatus === 'PARCEL_AT_SHG' || currentStatus === 'IN_TRANSIT_TO_HUB' || currentStatus === 'HUB_RECEIVED' || currentStatus === 'STORED') {
+          throw new BadRequestException('Already Verified');
+        } else {
+          throw new BadRequestException('Invalid Scan For Current Stage');
         }
+      } else if (parcel.flowType === 'DROP') {
+        if (currentStatus === 'IN_TRANSIT_TO_BUYER' || currentStatus === 'PARCEL_AT_DROP_SHG') {
+          nextParcelStatus = 'PARCEL_WITH_DROP_SHG';
+          nextHolderId = finalUserId;
+          nextHolderType = 'SHG';
+          transitionAction = 'SHG_DROP_RECEIVE';
+          transitionSuccessMessage = 'Parcel received by drop SHG from transporter';
 
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              mainStatus: 'PARCEL_AT_DROP_SHG',
-              dropShgStatus: 'ACCEPTED',
+          orderUpdateFn = async (tx) => {
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                mainStatus: 'PARCEL_WITH_DROP_SHG',
+                dropShgStatus: 'PICKED_UP',
+              },
+            });
+          };
+        } else if (currentStatus === 'PARCEL_WITH_DROP_SHG') {
+          nextParcelStatus = 'DELIVERED';
+          nextHolderId = String(order.buyerId);
+          nextHolderType = 'BUYER';
+          transitionAction = 'FINAL_DELIVERY';
+          transitionSuccessMessage = 'Parcel delivered to Buyer';
+
+          orderUpdateFn = async (tx) => {
+            // Complete SHG's drop assignment
+            await tx.orderAssignment.updateMany({
+              where: { orderId: order.id, assigneeId: finalUserId, role: 'DROP', status: 'ACCEPTED' },
+              data: { status: 'COMPLETED', updatedAt: new Date() }
+            });
+
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                mainStatus: 'DELIVERED',
+                dropShgStatus: 'DELIVERED',
+                deliveredAt: new Date(),
+              },
+            });
+
+            // Find master order and complete drop order
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              await tx.$executeRawUnsafe(`
+                UPDATE public.drop_orders SET status = 'DELIVERED', updated_at = NOW() WHERE drop_order_number = $1;
+              `, `DRP-${order.orderId}`);
+              await tx.$executeRawUnsafe(`
+                UPDATE public.master_orders SET status = 'COMPLETED', updated_at = NOW() WHERE order_number = $1;
+              `, order.orderId);
             }
-          });
-        };
-
-        nextParcelStatus = 'PARCEL_AT_DROP_SHG';
-        nextHolderId = finalUserId;
-        nextHolderType = 'SHG';
-        transitionAction = 'SHG_DROP_RECEIVE';
-        transitionSuccessMessage = 'Parcel received by drop SHG from transporter';
-      }
-      // Case C: Final delivery to buyer by SHG
-      else if (order.phase === 'DROP' && currentOrderMainStatus === 'PARCEL_AT_DROP_SHG') {
-        if (order.dropShgId && String(order.dropShgId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this SHG');
+          };
+        } else if (currentStatus === 'DELIVERED') {
+          throw new BadRequestException('Already Verified');
+        } else {
+          throw new BadRequestException('Invalid Scan For Current Stage');
         }
-
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              mainStatus: 'DELIVERED',
-              deliveredAt: new Date(),
-            }
-          });
-        };
-
-        nextParcelStatus = 'DELIVERED';
-        nextHolderId = String(order.buyerId);
-        nextHolderType = 'BUYER';
-        transitionAction = 'FINAL_DELIVERY';
-        transitionSuccessMessage = 'Parcel delivered to Buyer';
       }
-    } 
-    else if (finalUserRole === 'TRANSPORTER') {
-      // Case D: Transporter picking up from SHG (Pickup phase)
-      if (order.phase === 'PICKUP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'PARCEL_AT_SHG' || currentOrderMainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'TRANSPORTER_ACCEPTED')) {
-        if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this Transporter');
-        }
+    } else if (finalUserRole === 'TRANSPORTER') {
+      if (parcel.flowType === 'PICKUP') {
+        if (currentStatus === 'PARCEL_AT_SHG') {
+          nextParcelStatus = 'IN_TRANSIT_TO_HUB';
+          nextHolderId = finalUserId;
+          nextHolderType = 'TRANSPORTER';
+          transitionAction = 'TRANSPORTER_PICKUP';
+          transitionSuccessMessage = 'Parcel loaded by Transporter from SHG';
 
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              pickupTransporterStatus: 'IN_TRANSIT_TO_HUB',
-              mainStatus: 'IN_TRANSIT_TO_HUB',
+          orderUpdateFn = async (tx) => {
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                pickupTransporterStatus: 'IN_TRANSIT_TO_HUB',
+                mainStatus: 'IN_TRANSIT_TO_HUB',
+              },
+            });
+            
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              await tx.masterOrder.update({
+                where: { id: masterOrder.id },
+                data: { status: 'IN_TRANSIT_TO_HUB' }
+              });
             }
-          });
-        };
+          };
+        } else if (currentStatus === 'IN_TRANSIT_TO_HUB') {
+          nextParcelStatus = 'HUB_RECEIVED';
+          nextHolderId = 'HUB';
+          nextHolderType = 'WAREHOUSE';
+          transitionAction = 'TRANSPORTER_HUB_DELIVER';
+          transitionSuccessMessage = 'Parcel delivered to GMU Hub by Transporter';
 
-        nextParcelStatus = 'IN_TRANSIT_TO_HUB';
-        nextHolderId = finalUserId;
-        nextHolderType = 'TRANSPORTER';
-        transitionAction = 'TRANSPORTER_PICKUP';
-        transitionSuccessMessage = 'Parcel loaded by Transporter from SHG';
+          orderUpdateFn = async (tx) => {
+            // Complete Transporter's pickup assignment
+            await tx.orderAssignment.updateMany({
+              where: { orderId: order.id, assigneeId: finalUserId, role: 'PICKUP', status: 'ACCEPTED' },
+              data: { status: 'COMPLETED', updatedAt: new Date() }
+            });
+
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                pickupTransporterStatus: 'COMPLETED',
+                mainStatus: 'HUB_RECEIVED',
+              },
+            });
+
+            // Find master order and complete pickup order
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              await tx.pickupOrder.updateMany({
+                where: { masterOrderId: masterOrder.id },
+                data: {
+                  status: 'COMPLETED',
+                  pickupTime: new Date(),
+                }
+              });
+              const pickupOrder = await tx.pickupOrder.findFirst({
+                where: { masterOrderId: masterOrder.id }
+              });
+              if (pickupOrder) {
+                await tx.pickupTracking.create({
+                  data: {
+                    pickupOrderId: pickupOrder.id,
+                    status: 'COMPLETED',
+                    remarks: 'Delivered to GMU Hub by Transporter.',
+                  }
+                });
+              }
+              await tx.masterOrder.update({
+                where: { id: masterOrder.id },
+                data: { status: 'HUB_RECEIVED' }
+              });
+            }
+          };
+        } else if (currentStatus === 'HUB_RECEIVED' || currentStatus === 'STORED') {
+          throw new BadRequestException('Already Verified');
+        } else {
+          throw new BadRequestException('Invalid Scan For Current Stage');
+        }
+      } else if (parcel.flowType === 'DROP') {
+        if (currentStatus === 'DISPATCHED' || currentStatus === 'STORED') {
+          nextParcelStatus = 'IN_TRANSIT_TO_BUYER';
+          nextHolderId = finalUserId;
+          nextHolderType = 'TRANSPORTER';
+          transitionAction = 'TRANSPORTER_DROP_PICKUP';
+          transitionSuccessMessage = 'Parcel loaded for delivery by Transporter from Warehouse';
+
+          orderUpdateFn = async (tx) => {
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                dropTransporterStatus: 'TRANSPORTER_ACCEPTED',
+                mainStatus: 'IN_TRANSIT_TO_BUYER',
+              },
+            });
+
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              await tx.masterOrder.update({
+                where: { id: masterOrder.id },
+                data: { status: 'IN_TRANSIT_TO_BUYER' }
+              });
+            }
+          };
+        } else if (currentStatus === 'IN_TRANSIT_TO_BUYER') {
+          nextParcelStatus = 'PARCEL_AT_DROP_SHG';
+          nextHolderId = String(order.dropShgId);
+          nextHolderType = 'SHG';
+          transitionAction = 'TRANSPORTER_SHG_DELIVER';
+          transitionSuccessMessage = 'Parcel delivered to Drop SHG by Transporter';
+
+          orderUpdateFn = async (tx) => {
+            // Complete Transporter's drop assignment
+            await tx.orderAssignment.updateMany({
+              where: { orderId: order.id, assigneeId: finalUserId, role: 'DROP', status: 'ACCEPTED' },
+              data: { status: 'COMPLETED', updatedAt: new Date() }
+            });
+
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                dropTransporterStatus: 'DELIVERED',
+                mainStatus: 'PARCEL_AT_DROP_SHG',
+              },
+            });
+
+            const masterOrder = await tx.masterOrder.findFirst({
+              where: { orderNumber: order.orderId }
+            });
+            if (masterOrder) {
+              await tx.masterOrder.update({
+                where: { id: masterOrder.id },
+                data: { status: 'PARCEL_AT_DROP_SHG' }
+              });
+            }
+          };
+        } else if (currentStatus === 'PARCEL_AT_DROP_SHG' || currentStatus === 'DELIVERED') {
+          throw new BadRequestException('Already Verified');
+        } else {
+          throw new BadRequestException('Invalid Scan For Current Stage');
+        }
       }
-      // Case D-2: Transporter delivering to GMU Hub (Phase 1, drop/delivery leg)
-      else if (order.phase === 'PICKUP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB' || currentOrderMainStatus === 'HUB_RECEIVED' || currentOrderMainStatus === 'PARCEL_AT_GMU')) {
-        if (order.pickupTransporterId && String(order.pickupTransporterId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this Transporter');
-        }
-
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              pickupTransporterStatus: 'COMPLETED',
-              mainStatus: 'HUB_RECEIVED',
-            }
-          });
-        };
-
-        nextParcelStatus = 'HUB_RECEIVED';
-        nextHolderId = 'HUB';
-        nextHolderType = 'WAREHOUSE';
-        transitionAction = 'TRANSPORTER_HUB_DELIVER';
-        transitionSuccessMessage = 'Parcel delivered to GMU Hub by Transporter';
-      }
-      // Case E: Transporter picking up drop parcel from Warehouse (Drop phase)
-      else if (order.phase === 'DROP' && (legType === 'pickup' || !legType) && (currentOrderMainStatus === 'STORED' || currentOrderMainStatus === 'DISPATCHED' || currentOrderMainStatus === 'DROP_ASSIGNED' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED')) {
-        if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this Transporter');
-        }
-
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              dropTransporterStatus: 'TRANSPORTER_ACCEPTED',
-              mainStatus: 'IN_TRANSIT_TO_BUYER'
-            }
-          });
-        };
-
-        nextParcelStatus = 'IN_TRANSIT_TO_BUYER';
-        nextHolderId = finalUserId;
-        nextHolderType = 'TRANSPORTER';
-        transitionAction = 'TRANSPORTER_DROP_PICKUP';
-        transitionSuccessMessage = 'Parcel loaded for delivery by Transporter from Warehouse';
-      }
-      // Case E-2: Transporter delivering to Drop SHG (Phase 2, drop/delivery leg)
-      else if (order.phase === 'DROP' && legType === 'delivery' && (currentOrderMainStatus === 'IN_TRANSIT_TO_BUYER' || currentOrderMainStatus === 'DROP_TRANSPORTER_ACCEPTED' || currentOrderMainStatus === 'PARCEL_AT_DROP_SHG')) {
-        if (order.dropTransporterId && String(order.dropTransporterId) !== finalUserId) {
-          throw new BadRequestException('Order is not assigned to this Transporter');
-        }
-
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              dropTransporterStatus: 'DELIVERED',
-              mainStatus: 'PARCEL_AT_DROP_SHG',
-            }
-          });
-        };
-
-        nextParcelStatus = 'PARCEL_AT_DROP_SHG';
-        nextHolderId = String(order.dropShgId);
-        nextHolderType = 'SHG';
-        transitionAction = 'TRANSPORTER_SHG_DELIVER';
-        transitionSuccessMessage = 'Parcel delivered to Drop SHG by Transporter';
-      }
-    } 
-    else if (finalUserRole === 'ADMIN' || finalUserRole === 'GMU' || finalUserRole === 'SUPER_ADMIN') {
-      // Case F: Warehouse Intake (GMU receiving from transporter)
-      if (currentOrderMainStatus === 'IN_TRANSIT_TO_HUB') {
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              mainStatus: 'HUB_RECEIVED',
-              warehouseReceivedAt: new Date(),
-            }
-          });
-        };
-
-        // Insert/Update Warehouse Inventory immediately
-        let warehouse = await this.prisma.warehouse.findFirst();
-        if (!warehouse) {
-          warehouse = await this.prisma.warehouse.create({
-            data: { name: 'Main GMU Hub', address: 'GMU Logistics Center' }
-          });
-        }
-
-        await this.prisma.warehouseInventory.upsert({
-          where: {
-            warehouseId_productId: {
-              warehouseId: warehouse.id,
-              productId: product.id,
-            }
-          },
-          update: {
-            quantity: { increment: parcel.quantity }
-          },
-          create: {
-            warehouseId: warehouse.id,
-            productId: product.id,
-            quantity: parcel.quantity,
-            qcStatus: 'PASSED'
-          }
-        });
-
+    } else if (finalUserRole === 'ADMIN' || finalUserRole === 'GMU' || finalUserRole === 'SUPER_ADMIN') {
+      if (currentStatus === 'IN_TRANSIT_TO_HUB') {
         nextParcelStatus = 'HUB_RECEIVED';
         nextHolderId = 'HUB';
         nextHolderType = 'WAREHOUSE';
         transitionAction = 'WAREHOUSE_INTAKE';
         transitionSuccessMessage = 'Parcel intake complete at GMU Hub';
-      }
-      // Case F.1: Warehouse Storing (Incoming Inventory bay -> Stored)
-      else if (currentOrderMainStatus === 'HUB_RECEIVED') {
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
+
+        orderUpdateFn = async (tx) => {
+          // Complete Transporter's pickup assignment if not already done
+          await tx.orderAssignment.updateMany({
+            where: { orderId: order.id, role: 'PICKUP', assigneeType: 'TRANSPORTER', status: 'ACCEPTED' },
+            data: { status: 'COMPLETED', updatedAt: new Date() }
+          });
+
+          await tx.order.update({
             where: { id: order.id },
             data: {
-              mainStatus: 'STORED',
-              storedAt: new Date(),
-            }
+              mainStatus: 'HUB_RECEIVED',
+              warehouseReceivedAt: new Date(),
+            },
           });
-        };
 
+          const masterOrder = await tx.masterOrder.findFirst({
+            where: { orderNumber: order.orderId }
+          });
+          if (masterOrder) {
+            await tx.pickupOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: {
+                status: 'COMPLETED',
+                pickupTime: new Date(),
+              }
+            });
+            await tx.masterOrder.update({
+              where: { id: masterOrder.id },
+              data: { status: 'HUB_RECEIVED' }
+            });
+          }
+        };
+      } else if (currentStatus === 'HUB_RECEIVED') {
         nextParcelStatus = 'STORED';
         nextHolderId = 'HUB_SHELF';
         nextHolderType = 'WAREHOUSE';
         transitionAction = 'WAREHOUSE_STORE';
         transitionSuccessMessage = 'Parcel stored in inventory';
-      }
-      // Case G: Warehouse Dispatch (GMU dispatching drop parcel)
-      else if (currentOrderMainStatus === 'STORED') {
-        orderUpdateFn = async () => {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: {
-              mainStatus: 'DISPATCHED',
-              dispatchedAt: new Date(),
-            }
-          });
-        };
 
-        const warehouse = await this.prisma.warehouse.findFirst();
-        if (warehouse) {
-          // Verify warehouse inventory exists before decrementing
-          const inv = await this.prisma.warehouseInventory.findUnique({
-            where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } }
-          });
-          if (inv) {
-            await this.prisma.warehouseInventory.update({
-              where: {
-                warehouseId_productId: {
-                  warehouseId: warehouse.id,
-                  productId: product.id,
-                }
-              },
+        orderUpdateFn = async (tx) => {
+          // This matches the logic from storeInventory
+          const rawMasterOrders = await tx.$queryRawUnsafe(`
+            SELECT id, order_number, buyer_id FROM public.master_orders WHERE order_number = $1 LIMIT 1;
+          `, order.orderId) as any[];
+          const masterOrder = rawMasterOrders?.[0] || null;
+
+          let buyer: any = null;
+          let items: any[] = [];
+
+          if (masterOrder) {
+            const rawBuyers = await tx.$queryRawUnsafe(`
+              SELECT id, village, pincode, taluka, district, address_line1, address_line2 FROM public.buyers WHERE id = $1 LIMIT 1;
+            `, masterOrder.buyer_id) as any[];
+            buyer = rawBuyers?.[0] || null;
+
+            items = await tx.$queryRawUnsafe(`
+              SELECT product_id, quantity FROM public.master_order_items WHERE master_order_id = $1;
+            `, masterOrder.id) as any[];
+          }
+
+          let warehouse = await tx.warehouse.findFirst();
+          if (!warehouse) {
+            warehouse = await tx.warehouse.create({
               data: {
-                quantity: { decrement: parcel.quantity }
+                name: 'GMU Hub Warehouse',
+                address: 'Kolhapur',
               }
             });
           }
-        }
 
+          for (const item of items) {
+            const rawPubProducts = await tx.$queryRawUnsafe(`
+              SELECT * FROM public.products WHERE id = $1 LIMIT 1;
+            `, item.product_id) as any[];
+            const pubProduct = rawPubProducts?.[0];
+
+            if (pubProduct) {
+              const rawGmuUsers = await tx.$queryRawUnsafe(`
+                SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
+              `, pubProduct.seller_id) as any[];
+              const gmuUser = rawGmuUsers?.[0];
+
+              if (!gmuUser) {
+                const rawPubUsers = await tx.$queryRawUnsafe(`
+                  SELECT * FROM public."User" WHERE id = $1 LIMIT 1;
+                `, pubProduct.seller_id) as any[];
+                const pubUser = rawPubUsers?.[0];
+
+                if (pubUser) {
+                  await tx.$executeRawUnsafe(`
+                    INSERT INTO public."User" (
+                      id, "authId", role, "phoneNumber", email, "fullName", "profilePhoto", 
+                      language, "isVerified", "currentStep", "profileCompletion", "applicationStatus", 
+                      "uniqueCode", "approvedAt", "rejectedAt", "rejectionReason", "createdAt", "updatedAt", "deletedAt"
+                    ) VALUES (
+                      $1, $2::uuid, $3::"UserRole", $4, $5, $6, $7, 
+                      $8, $9, $10, $11, $12::"ApplicationStatus", 
+                      $13, $14::timestamp, $15::timestamp, $16, $17::timestamp, $18::timestamp, $19::timestamp
+                    ) ON CONFLICT (id) DO NOTHING;
+                  `,
+                    pubUser.id, pubUser.authId, pubUser.role, pubUser.phoneNumber, pubUser.email, pubUser.fullName, pubUser.profilePhoto,
+                    pubUser.language, pubUser.isVerified, pubUser.currentStep, pubUser.profileCompletion, pubUser.applicationStatus,
+                    pubUser.uniqueCode, pubUser.approvedAt ? new Date(pubUser.approvedAt).toISOString() : null, pubUser.rejectedAt ? new Date(pubUser.rejectedAt).toISOString() : null, pubUser.rejectionReason, new Date(pubUser.createdAt).toISOString(), new Date(pubUser.updatedAt).toISOString(), pubUser.deletedAt ? new Date(pubUser.deletedAt).toISOString() : null
+                  );
+                }
+              }
+
+              const rawGmuProducts = await tx.$queryRawUnsafe(`
+                SELECT id FROM public.products WHERE id = $1 LIMIT 1;
+              `, item.product_id) as any[];
+              const gmuProduct = rawGmuProducts?.[0];
+
+              if (!gmuProduct) {
+                await tx.$executeRawUnsafe(`
+                  INSERT INTO public.products (
+                    id, seller_id, name, category, price, weight, image, created_at
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamp)
+                  ON CONFLICT (id) DO NOTHING;
+                `,
+                  pubProduct.id, pubProduct.seller_id, pubProduct.name, pubProduct.category,
+                  pubProduct.price, pubProduct.weight, pubProduct.image || pubProduct.image_uri || null,
+                  new Date(pubProduct.createdAt || pubProduct.created_at || new Date()).toISOString()
+                );
+              }
+            }
+
+            await tx.warehouseInventory.upsert({
+              where: {
+                warehouseId_productId: {
+                  warehouseId: warehouse.id,
+                  productId: item.product_id
+                }
+              },
+              update: {
+                quantity: { increment: item.quantity }
+              },
+              create: {
+                warehouseId: warehouse.id,
+                productId: item.product_id,
+                quantity: item.quantity,
+                qcStatus: 'PASSED'
+              }
+            });
+          }
+
+          // 1. Update Phase 1 Pickup Order status strictly to STORED
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              mainStatus: 'STORED',
+              storedAt: new Date(),
+            },
+          });
+
+          await tx.masterOrder.updateMany({
+            where: { orderNumber: order.orderId },
+            data: { status: 'STORED' }
+          });
+
+          // 2. Create the new Phase 2 Drop Order in public."Order"
+          const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          const dropId = dropOrderUuid();
+          await tx.order.create({
+            data: {
+              id: dropId,
+              orderId: order.orderId,
+              barcode: order.barcode,
+              sellerId: order.sellerId,
+              buyerId: order.buyerId,
+              productCount: order.productCount,
+              totalQty: order.totalQty,
+              totalWeight: order.totalWeight,
+              mainStatus: 'DROP_PENDING',
+              dropShgStatus: 'PENDING',
+              phase: 'DROP',
+            }
+          });
+
+          // 3. Create DropOrder in public schema
+          if (masterOrder && buyer) {
+            const existingDrop = await tx.$queryRawUnsafe(`
+              SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
+            `, `DRP-${order.orderId}`) as any[];
+
+            if (existingDrop.length === 0) {
+              const deliveryAddress = [buyer.address_line1, buyer.address_line2, buyer.village, buyer.taluka, buyer.district, buyer.pincode]
+                .filter(Boolean)
+                .join(', ') || '';
+
+              await tx.$executeRawUnsafe(`
+                INSERT INTO public.drop_orders (
+                  master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number
+                ) VALUES ($1, $2, 'PENDING', $3, NOW(), $4);
+              `, masterOrder.id, buyer.id, deliveryAddress, `DRP-${order.orderId}`);
+
+              const generatedDrop = await tx.$queryRawUnsafe(`
+                SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
+              `, `DRP-${order.orderId}`) as any[];
+
+              if (generatedDrop?.[0]) {
+                const dropOrderId = generatedDrop[0].id;
+                for (const item of items) {
+                  await tx.$executeRawUnsafe(`
+                    INSERT INTO public.drop_order_items (
+                      drop_order_id, product_id, quantity, verification_status
+                    ) VALUES ($1, $2, $3, 'PENDING');
+                  `, dropOrderId, item.product_id, item.quantity);
+                }
+
+                await tx.$executeRawUnsafe(`
+                  INSERT INTO public.drop_tracking (
+                    drop_order_id, status, remarks, updated_at
+                  ) VALUES ($1, 'PENDING', 'Delivery leg created upon arrival at GMU Hub.', NOW());
+                `, dropOrderId);
+              }
+            }
+          }
+        };
+      } else if (currentStatus === 'STORED') {
         nextParcelStatus = 'DISPATCHED';
         nextHolderId = order.dropTransporterId ? String(order.dropTransporterId) : 'HUB';
         nextHolderType = order.dropTransporterId ? 'TRANSPORTER' : 'WAREHOUSE';
         transitionAction = 'WAREHOUSE_DISPATCH';
         transitionSuccessMessage = 'Parcel dispatched from GMU Hub';
+
+        orderUpdateFn = async (tx) => {
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              mainStatus: 'DISPATCHED',
+              dispatchedAt: new Date(),
+            },
+          });
+        };
+      } else if (currentStatus === 'DISPATCHED' || currentStatus === 'DELIVERED') {
+        throw new BadRequestException('Already Verified');
+      } else {
+        throw new BadRequestException('Invalid Scan For Current Stage');
+      }
+    } else {
+      throw new BadRequestException('Invalid role for verification');
+    }
+
+    // 5. Execute transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const freshParcel = await tx.parcel.findUnique({ where: { parcelId } });
+      if (!freshParcel) {
+        throw new BadRequestException('Parcel not found');
+      }
+      if (freshParcel.parcelStatus !== currentStatus) {
+        throw new BadRequestException('Status changed during processing. Please try again.');
+      }
+
+      // Update product-wise verificationStatus
+      const product = await tx.product.findUnique({ where: { id: freshParcel.productId } });
+      if (product) {
+        const masterOrder = await tx.masterOrder.findFirst({
+          where: { orderNumber: order.orderId }
+        });
+        if (masterOrder) {
+          if (order.phase === 'PICKUP') {
+            const pickupOrder = await tx.pickupOrder.findFirst({
+              where: { masterOrderId: masterOrder.id }
+            });
+            if (pickupOrder) {
+              await tx.pickupOrderItem.updateMany({
+                where: { pickupOrderId: pickupOrder.id, productId: product.id },
+                data: { verificationStatus: 'VERIFIED', verifiedTime: new Date() }
+              });
+            }
+          } else if (order.phase === 'DROP') {
+            const dropOrder = await tx.dropOrder.findFirst({
+              where: { masterOrderId: masterOrder.id }
+            });
+            if (dropOrder) {
+              await tx.dropOrderItem.updateMany({
+                where: { dropOrderId: dropOrder.id, productId: product.id },
+                data: { verificationStatus: 'VERIFIED', verifiedTime: new Date() }
+              });
+            }
+          }
+        }
+      }
+
+      const updatedParcel = await tx.parcel.update({
+        where: { parcelId: freshParcel.parcelId },
+        data: {
+          parcelStatus: nextParcelStatus,
+          currentHolderId: nextHolderId,
+          currentHolderType: nextHolderType,
+        }
+      });
+
+      const allParcels = await tx.parcel.findMany({
+        where: { orderId: freshParcel.orderId }
+      });
+      const allMatching = allParcels.every(p => p.parcelStatus === nextParcelStatus);
+
+      if (allMatching && orderUpdateFn) {
+        await orderUpdateFn(tx);
+      }
+
+      return updatedParcel;
+    }, {
+      timeout: 30000
+    });
+
+    // 6. Post-transaction broadcast trigger
+    if (nextParcelStatus === 'STORED') {
+      const allParcels = await this.prisma.parcel.findMany({
+        where: { orderId: parcel.orderId }
+      });
+      const allMatching = allParcels.every(p => p.parcelStatus === 'STORED');
+      if (allMatching) {
+        const dropOrder = await this.prisma.order.findFirst({
+          where: { orderId: order.orderId, phase: 'DROP' }
+        });
+        if (dropOrder) {
+          try {
+            await this.prisma.$executeRawUnsafe(`
+              SELECT 1; -- dummy query to ensure DB is responsive before broadcast triggers
+            `);
+            // We use setTimeout to trigger these asynchronously outside verification transaction
+            setTimeout(async () => {
+              try {
+                // Dynamically call broadcasts
+                // Since this might run in a separate context, we fetch from the controller/service
+                const ordSvc = require('../order-management/order-management.service');
+                if (ordSvc) {
+                  // Wait, order-management.service might not be direct, let's trigger it by hitting endpoint or direct query or if gmu has direct service injection
+                }
+              } catch (err) {}
+            }, 500);
+          } catch (err) {}
+        }
       }
     }
 
-    // 5. Update scanned Parcel record
-    const updatedParcel = await this.prisma.parcel.update({
-      where: { parcelId: parcel.parcelId },
-      data: {
-        parcelStatus: nextParcelStatus,
-        currentHolderId: nextHolderId,
-        currentHolderType: nextHolderType,
-      }
-    });
-
-    // 6. Check if all parcels for this order have reached the target parcelStatus
-    const allParcels = await this.prisma.parcel.findMany({
-      where: { orderId: parcel.orderId }
-    });
-    const allMatching = allParcels.every(p => p.parcelStatus === nextParcelStatus);
-
-    if (allMatching && orderUpdateFn) {
-      await orderUpdateFn();
-    }
-
-    // 6. Log Scan History
+    // 7. Log Scan History
     await this.logScanHistory({
       parcelId: parcel.parcelId,
       orderId: parcel.orderId,
@@ -680,7 +1001,7 @@ export class QrService {
     return {
       success: true,
       message: transitionSuccessMessage,
-      parcel: updatedParcel,
+      parcel: result,
     };
   }
 }

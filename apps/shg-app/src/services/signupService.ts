@@ -59,5 +59,30 @@ export const signupService = {
   getPincodeDetails: async (pincode: string) => {
     const response = await axiosInstance.get(`/location/pincode/${pincode}`);
     return response.data;
+  },
+
+  getStates: async () => {
+    const response = await axiosInstance.get('/location/states');
+    return response.data;
+  },
+
+  getDistricts: async (state: string) => {
+    const response = await axiosInstance.get(`/location/districts?state=${encodeURIComponent(state)}`);
+    return response.data;
+  },
+
+  getBlocks: async (state: string, district: string) => {
+    const response = await axiosInstance.get(`/location/blocks?state=${encodeURIComponent(state)}&district=${encodeURIComponent(district)}`);
+    return response.data;
+  },
+
+  getVillages: async (state: string, district: string, block: string) => {
+    const response = await axiosInstance.get(`/location/villages?state=${encodeURIComponent(state)}&district=${encodeURIComponent(district)}&block=${encodeURIComponent(block)}`);
+    return response.data;
+  },
+
+  getLocationDetails: async (state: string, district: string, block: string, village: string) => {
+    const response = await axiosInstance.get(`/location/details?state=${encodeURIComponent(state)}&district=${encodeURIComponent(district)}&block=${encodeURIComponent(block)}&village=${encodeURIComponent(village)}`);
+    return response.data;
   }
 };
