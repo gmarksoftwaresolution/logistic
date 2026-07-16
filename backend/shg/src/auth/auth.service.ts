@@ -67,6 +67,7 @@ export class AuthService {
         taluka: user.address?.taluka || '',
         village: user.address?.village || '',
         homeAddress: user.address?.houseNo || '',
+        profileImage: user.profilePhoto || null,
       },
     };
   }
