@@ -173,11 +173,13 @@
     "license_photo_required": "लायसन्स फोटो आवश्यक आहे",
     "license_expiry_required": "लायसन्स समाप्ती तारीख आवश्यक आहे",
     "license_length": "ड्रायव्हिंग लायसन्स नक्की १५ अक्षरांचे असावे",
+    "driving_experience_minimum": "ड्रायव्हिंगचा अनुभव किमान १ वर्ष असावा",
     "account_number_length": "बँक खाते क्रमांक किमान ९ अंकी असावा",
     "account_number_max": "बँक खाते क्रमांक २० अंकांपेक्षा जास्त नसावा"
   },
   "common": {
     "continue": "जारी ठेवा",
+    "years": "वर्षे",
     "under_development": "विकसित होत आहे",
     "coming_soon": "आम्ही आपल्यासाठी काहीतरी आश्चर्यकारक बनवत आहोत.",
     "accept": "स्वीकार करा",

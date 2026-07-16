@@ -62,7 +62,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import TimePickerPopup from '../components/TimePickerPopup';
 
-import api, { uploadFile, BASE_URL } from '../services/api';
+import api, { uploadFile, BASE_URL, IMAGE_BASE_URL } from '../services/api';
 
 const resolveImageUri = (uri: string | null | undefined): string | undefined => {
   if (!uri) return undefined;
@@ -70,9 +70,9 @@ const resolveImageUri = (uri: string | null | undefined): string | undefined => 
     return uri;
   }
   if (uri.startsWith('/')) {
-    return `${BASE_URL}${uri}`;
+    return `${IMAGE_BASE_URL}${uri}`;
   }
-  return `${BASE_URL}/${uri}`;
+  return `${IMAGE_BASE_URL}/${uri}`;
 };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
@@ -222,6 +222,7 @@ import { getBankRule } from '../utils/bankValidation';
 const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const { t, i18n } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timeMode, setTimeMode] = useState<'morning' | 'evening'>('morning');
@@ -578,6 +579,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         return null;
       case 'assignedVillages':
         return (!val || (val as string[]).length === 0) ? t('errors.village_required') : null;
+      case 'experience': {
+        const expNum = Number(val);
+        if (isNaN(expNum) || expNum < 1) {
+          return t('errors.driving_experience_minimum', 'Driving experience must be at least 1 year');
+        }
+        return null;
+      }
       case 'milkSangathanName':
       case 'milkCenterName':
         return val && !validateOrganization(val as string) ? t('errors.invalid_characters', 'Contains invalid characters') : null;
@@ -654,6 +662,20 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       useNativeDriver: true,
     }).start();
   }, [currentStep]);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (isLoading || isVerifying) {
@@ -2574,7 +2596,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     let key: keyof FormData | 'selectedVillage' | 'replace_assigned_village' = 'vehicleWheeler';
 
     if (dropdownType === 'wheeler') {
-      options = ['2 Wheeler', '3 Wheeler', '4 Wheeler', '6 Wheeler', '8 Wheeler', '10 Wheeler', '12 Wheeler', '14 Wheeler', '16 Wheeler', '18 Wheeler', '22 Wheeler'];
+      options = ['3 Wheeler', '4 Wheeler', '6 Wheeler', '8 Wheeler', '10 Wheeler', '12 Wheeler', '14 Wheeler', '16 Wheeler', '18 Wheeler', '22 Wheeler'];
       title = t('signup.select_wheeler');
       key = 'vehicleWheeler';
     } else if (dropdownType === 'type') {
@@ -3853,7 +3875,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           ref={scrollViewRef}
           contentContainerStyle={[
             styles.scrollContent,
-            (currentStep === 1 && !isOtpVerified) && { paddingBottom: verticalScale(24) }
+            (currentStep === 1 && !isOtpVerified) && { paddingBottom: verticalScale(24) },
+            keyboardHeight > 0 && { paddingBottom: keyboardHeight + verticalScale(32) }
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -3909,7 +3932,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: scale(24),
-    paddingBottom: verticalScale(400),
+    paddingBottom: verticalScale(32),
   },
   topNavigation: {
     marginTop: Platform.OS === 'ios' ? verticalScale(20) : verticalScale(25),

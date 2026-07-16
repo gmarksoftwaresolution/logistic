@@ -45,7 +45,7 @@ import {
 import { Colors, Fonts } from '../constants/Colors';
 import ScreenHeader from '../components/ScreenHeader';
 import { scale, verticalScale, moderateScale, SCREEN_WIDTH } from '../utils/responsive';
-import api, { BASE_URL } from '../services/api';
+import api, { BASE_URL, IMAGE_BASE_URL } from '../services/api';
 import { useOnboarding } from '../context/OnboardingContext';
 
 const { width } = Dimensions.get('window');
@@ -236,10 +236,13 @@ const ProfileScreen: React.FC = () => {
 
   const getFullPhotoUrl = (path: string | null): string | undefined => {
     if (!path) return undefined;
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://')) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://') || path.startsWith('content://')) {
       return path;
     }
-    return `${BASE_URL}${path}`;
+    if (path.startsWith('/')) {
+      return `${IMAGE_BASE_URL}${path}`;
+    }
+    return `${IMAGE_BASE_URL}/${path}`;
   };
 
   const toggleSection = (section: string) => {

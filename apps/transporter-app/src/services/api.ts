@@ -47,7 +47,9 @@ const getBackendUrl = (): string => {
 };
 
 export const BASE_URL = getBackendUrl();
+export const IMAGE_BASE_URL = BASE_URL.endsWith('/api') ? BASE_URL.slice(0, -4) : BASE_URL;
 console.log('Transporter App BASE_URL resolved to:', BASE_URL);
+console.log('Transporter App IMAGE_BASE_URL resolved to:', IMAGE_BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,

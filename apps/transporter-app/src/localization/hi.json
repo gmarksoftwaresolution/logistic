@@ -173,11 +173,13 @@
     "license_photo_required": "लाइसेंस फ़ोटो आवश्यक है",
     "license_expiry_required": "लाइसेंस समाप्ति तिथि आवश्यक है",
     "license_length": "ड्राइविंग लाइसेंस ठीक 15 अक्षरों का होना चाहिए",
+    "driving_experience_minimum": "ड्राइविंग अनुभव कम से कम 1 वर्ष होना चाहिए",
     "account_number_length": "बैंक खाता संख्या कम से कम 9 अंकों की होनी चाहिए",
     "account_number_max": "बैंक खाता संख्या 20 अंकों से अधिक नहीं होनी चाहिए"
   },
   "common": {
     "continue": "जारी रखें",
+    "years": "वर्ष",
     "under_development": "विकास के अधीन है",
     "coming_soon": "हम आपके लिए कुछ अद्भुत बना रहे हैं।",
     "accept": "स्वीकार करें",

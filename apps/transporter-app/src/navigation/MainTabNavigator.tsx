@@ -298,7 +298,7 @@ const MainTabNavigator = () => {
           </View>
 
           {/* Bottom actions */}
-          <View style={{ pb: verticalScale(32), alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ paddingBottom: verticalScale(32), alignItems: 'center', justifyContent: 'center' }}>
             {scanningStatus === 'scanning' ? <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(20), borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
               <ActivityIndicator size="small" color="#059669" />
               <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(13), color: '#FFFFFF', marginLeft: scale(8) }}>Scanning...</Text>
