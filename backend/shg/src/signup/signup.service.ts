@@ -414,8 +414,8 @@ export class SignupService {
         await tx.otherDetails.create({
           data: {
             userId,
-            vehicleType: (dto.hasVehicle && dto.vehicle?.vehicleType) ? dto.vehicle.vehicleType : VehicleType.OTHER,
-            vehicleName: null,
+            vehicleType: (dto.hasVehicle && dto.vehicle?.vehicleType) ? dto.vehicle.vehicleType as any : 'OTHER',
+            vehicleName: (dto.hasVehicle && dto.vehicle?.vehicleName) ? dto.vehicle.vehicleName : null,
             registrationNumber: (dto.hasVehicle && dto.vehicle?.vehicleRegistrationNo) ? dto.vehicle.vehicleRegistrationNo : null,
             licenseNumber: (dto.hasVehicle && (dto.vehicle?.licenseNumber || dto.vehicle?.drivingLicenseNumber)) ? (dto.vehicle.licenseNumber || dto.vehicle.drivingLicenseNumber) : null,
             rcUrl: null,
@@ -425,6 +425,7 @@ export class SignupService {
             width: width,
             storageSpace: dto.storageSpace || null,
             DLurl: (dto.hasVehicle && dto.vehicle?.drivingLicenseImageUrl) ? dto.vehicle.drivingLicenseImageUrl : null,
+            carryingCapacity: (dto.hasVehicle && dto.vehicle?.carryingCapacity) ? dto.vehicle.carryingCapacity : null,
           },
         });
 
