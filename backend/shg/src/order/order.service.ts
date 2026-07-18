@@ -1969,15 +1969,29 @@ export class OrderService {
   // --- BEGIN SHARED ORDER FORMATTING HELPERS ---
 
   public async formatPickups(pickups: any[]) {
+    const orderIds = pickups
+      .filter((p: any) => p.parcelWeight === undefined && p.totalWeight === undefined && p.masterOrder?.totalWeight === undefined && p.masterOrder?.orderNumber)
+      .map((p: any) => p.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(pickups.map(async (p: any) => {
       let parcelWeight = p.parcelWeight ?? p.totalWeight ?? p.masterOrder?.totalWeight;
       
       // If undefined, attempt to fetch from the standalone Order table using the order number
-      if (parcelWeight === undefined && p.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: p.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && p.masterOrder?.orderNumber && orderWeights.has(p.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(p.masterOrder.orderNumber);
       }
 
       return {
@@ -2003,14 +2017,28 @@ export class OrderService {
   }
 
   public async formatInboundDrops(drops: any[]) {
+    const orderIds = drops
+      .filter((d: any) => d.parcelWeight === undefined && d.totalWeight === undefined && d.masterOrder?.totalWeight === undefined && d.masterOrder?.orderNumber)
+      .map((d: any) => d.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(drops.map(async (d: any) => {
       let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
 
-      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber && orderWeights.has(d.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(d.masterOrder.orderNumber);
       }
 
       return {
@@ -2048,14 +2076,28 @@ export class OrderService {
   }
 
   public async formatRegularDrops(drops: any[]) {
+    const orderIds = drops
+      .filter((d: any) => d.parcelWeight === undefined && d.totalWeight === undefined && d.masterOrder?.totalWeight === undefined && d.masterOrder?.orderNumber)
+      .map((d: any) => d.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(drops.map(async (d: any) => {
       let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
 
-      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber && orderWeights.has(d.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(d.masterOrder.orderNumber);
       }
 
       return {
