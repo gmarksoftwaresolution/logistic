@@ -279,6 +279,7 @@ model OtherDetails {
   minWeight             Float?
   maxWeight             Float?
   ratePerKm             Float?
+  carryingCapacity      String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

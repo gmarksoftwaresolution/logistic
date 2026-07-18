@@ -9,6 +9,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { uploadService } from '../services/uploadService';
 type Props = NativeStackScreenProps<RootStackParamList, 'PersonalDetails'>;
 export default function PersonalDetailsScreen({
   navigation
@@ -37,9 +38,12 @@ export default function PersonalDetailsScreen({
   const [generalError, setGeneralError] = useState('');
   const [showDobPicker, setShowDobPicker] = useState(false);
   const [showJoiningPicker, setShowJoiningPicker] = useState(false);
+  
+  const [isEditing, setIsEditing] = useState(false);
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'], // Updated to avoid deprecation warning
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1
@@ -64,7 +68,24 @@ export default function PersonalDetailsScreen({
       joiningDate: user?.joiningDate
     });
   };
-  const handleSave = () => {
+  
+  const handleCancel = () => {
+    setIsEditing(false);
+    setFormData({
+      name: user?.name || '',
+      mobile: user?.mobile || '',
+      profileImage: user?.profileImage || null,
+      gmuId: user?.gmuId || '',
+      role: user?.role || '',
+      dob: user?.dob || '',
+      aadhaar: user?.aadhaar || '',
+      joiningDate: user?.joiningDate || ''
+    });
+    setGeneralError('');
+    setMobileError('');
+  };
+
+  const handleSave = async () => {
     if (!hasChanges()) {
       setGeneralError('Please make changes before saving');
       return;
@@ -77,11 +98,30 @@ export default function PersonalDetailsScreen({
       setMobileError('Mobile number must start from 6');
       return;
     }
-    updateUser(formData);
+
+    let finalFormData = { ...formData };
+
+    if (
+      formData.profileImage && 
+      !formData.profileImage.startsWith('http') && 
+      !formData.profileImage.startsWith('/uploads')
+    ) {
+      try {
+        const response = await uploadService.uploadProfilePhoto(formData.profileImage);
+        const baseUrl = (process.env.EXPO_PUBLIC_API_URL || '').replace('/api', '');
+        finalFormData.profileImage = baseUrl + response.url;
+      } catch (error) {
+        setGeneralError('Failed to upload profile photo');
+        return;
+      }
+    }
+
+    updateUser(finalFormData);
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
-      navigation.goBack();
+      setIsEditing(false);
+      // Removed navigation.goBack() so user stays on view mode
     }, 2000);
   };
   const InputField = ({
@@ -95,7 +135,7 @@ export default function PersonalDetailsScreen({
       <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{label}</Text>
       <View className={`flex-row items-center py-3 px-4 rounded-xl border ${editable ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-100 border-gray-100 opacity-70'}`}>
         <TextInput value={value} onChangeText={val => {
-        if (editable) {
+        if (editable && onChangeText) {
           onChangeText(val);
           setGeneralError('');
         }
@@ -143,32 +183,25 @@ export default function PersonalDetailsScreen({
               </View>
             </View>
 
-            <InputField label={t('gmu_full_name')} value={formData.name} onChangeText={(val: string) => setFormData({
-            ...formData,
-            name: val
-          })} placeholder={t("su_enter_name_332")} />
+            <InputField label={t('gmu_full_name')} value={formData.name} editable={false} placeholder={t("su_enter_name_332")} />
 
             <View className="w-full mb-6">
               <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t('mobile_number')}</Text>
-              <View className={`flex-row items-center bg-white py-3 px-4 rounded-xl border ${mobileError ? 'border-red-500' : 'border-gray-200'} shadow-sm`}>
-                <Text className="text-textPrimary font-bold mr-3">+91</Text>
-                <TextInput value={formData.mobile} onChangeText={val => {
-                setFormData({
-                  ...formData,
-                  mobile: val
-                });
-                setMobileError('');
-              }} className="flex-1 text-textPrimary font-semibold text-base" keyboardType="phone-pad" maxLength={10} />
+              <View className="flex-row items-center py-3 px-4 rounded-xl border bg-gray-100 border-gray-100 opacity-70">
+                <Text className="text-textSecondary font-bold mr-3">+91</Text>
+                <TextInput value={formData.mobile} editable={false} className="flex-1 text-textSecondary font-semibold text-base" />
               </View>
               {mobileError ? <Text className="text-red-500 text-xs mt-2 ml-1">{mobileError}</Text> : null}
             </View>
             <InputField label={t('role_in_group')} value={formData.role} editable={false} />
             
-            <View pointerEvents="none">
-               <InputField label={t('dob')} value={formData.dob} editable={false} />
-            </View>
+            <TouchableOpacity activeOpacity={isEditing ? 0.8 : 1} onPress={() => { if (isEditing) setShowDobPicker(true); }}>
+              <View pointerEvents="none">
+                 <InputField label={t('dob')} value={formData.dob} editable={isEditing} />
+              </View>
+            </TouchableOpacity>
 
-            <InputField label={t('aadhaar_optional')} value={formData.aadhaar} editable={false} />
+            <InputField label={t('aadhaar_optional')} value={formData.aadhaar} editable={isEditing} onChangeText={(val: string) => setFormData({...formData, aadhaar: val})} />
 
             <View pointerEvents="none">
                <InputField label={t('joining_date')} value={formData.joiningDate} editable={false} />
@@ -180,8 +213,8 @@ export default function PersonalDetailsScreen({
               </View> : null}
 
             <View className="flex-row gap-4 w-full">
-              <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
-                <Text className="text-textPrimary font-bold text-base">{t("cancel")}</Text>
+              <TouchableOpacity onPress={isEditing ? handleCancel : () => setIsEditing(true)} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
+                <Text className="text-textPrimary font-bold text-base">{isEditing ? t("cancel") : 'Edit'}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
                 <Text className="text-white font-bold text-base">{t("save_changes")}</Text>

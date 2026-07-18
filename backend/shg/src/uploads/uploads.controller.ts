@@ -22,6 +22,7 @@ const ALLOWED_TYPES = /(jpg|jpeg|png|webp)$/;
 
 @ApiTags('Uploads')
 @Controller('uploads')
+@UseGuards(JwtAuthGuard)
 export class UploadsController {
   constructor(private uploadsService: UploadsService) {}
 
@@ -30,6 +31,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadProfilePhoto(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -40,7 +42,7 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'profile_photos', 0);
+    return this.uploadsService.uploadFile(file, 'profile_photos', user.id);
   }
 
   @Post('aadhaar-front')
@@ -48,6 +50,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAadhaarFront(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -58,7 +61,7 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'aadhaar_front', 0);
+    return this.uploadsService.uploadFile(file, 'aadhaar_front', user.id);
   }
 
   @Post('aadhaar-back')
@@ -66,6 +69,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAadhaarBack(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -76,7 +80,7 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'aadhaar_back', 0);
+    return this.uploadsService.uploadFile(file, 'aadhaar_back', user.id);
   }
 
   @Post('pan-card')
@@ -84,6 +88,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadPanCard(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -94,7 +99,7 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'pan_card', 0);
+    return this.uploadsService.uploadFile(file, 'pan_card', user.id);
   }
 
   @Post('driving-license')
@@ -102,6 +107,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadDrivingLicense(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -112,7 +118,7 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'driving_license', 0);
+    return this.uploadsService.uploadFile(file, 'driving_license', user.id);
   }
 
   @Post('vehicle')
@@ -120,6 +126,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadVehicleImage(
+    @GetUser() user: User,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -130,6 +137,6 @@ export class UploadsController {
     )
     file: Express.Multer.File,
   ) {
-    return this.uploadsService.uploadFile(file, 'vehicle', 0);
+    return this.uploadsService.uploadFile(file, 'vehicle', user.id);
   }
 }

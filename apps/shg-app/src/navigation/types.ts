@@ -8,6 +8,7 @@ export type OrdersStackParamList = {
   CompletedOrders: undefined;
   OrderDetails: { order: any };
   CompletedOrderDetails: { order: any };
+  VehicleSuggestionDetails: { order: any };
 };
 
 export type MainTabParamList = {

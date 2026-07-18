@@ -633,7 +633,10 @@ export default function SignupScreen({
   const [hasVehicleError, setHasVehicleError] = useState('');
   const [vehicleType, setVehicleType] = useState('');
   const [vehicleTypeError, setVehicleTypeError] = useState('');
+  const [vehicleName, setVehicleName] = useState('');
+  const [carryingCapacity, setCarryingCapacity] = useState('');
   const [showVehicleMenu, setShowVehicleMenu] = useState(false);
+  const [isCapacityExpanded, setIsCapacityExpanded] = useState(false);
   const [vehicleRegNo, setVehicleRegNo] = useState('');
   const [vehicleRegNoError, setVehicleRegNoError] = useState('');
   const [dlNumber, setDlNumber] = useState('');
@@ -707,7 +710,24 @@ export default function SignupScreen({
     if (data.storageWidth) setStorageWidth(data.storageWidth?.toString());
     if (data.storageLength) setStorageLength(data.storageLength?.toString());
     if (data.hasVehicle) setHasVehicle(data.hasVehicle);
-    if (data.vehicleType) setVehicleType(data.vehicleType);
+    
+    // UI Restore Fallback Logic for backward compatibility
+    if (data.vehicleName) {
+      setVehicleName(data.vehicleName);
+      setVehicleType(data.vehicleType || '');
+    } else if (data.vehicleType) {
+      // Fallback for older records
+      let derivedName = data.vehicleType;
+      if (data.vehicleType === 'TWO_WHEELER') derivedName = 'Bike / Scooty';
+      else if (data.vehicleType === 'THREE_WHEELER') derivedName = 'Auto Rickshaw (Cargo)';
+      else if (data.vehicleType === 'FOUR_WHEELER') derivedName = 'Pickup (Tata Ace / Bolero Pickup)'; // default for FOUR_WHEELER
+      else if (data.vehicleType === 'MILK_VAN') derivedName = 'Mini Van';
+      else if (data.vehicleType === 'OTHER') derivedName = 'Other';
+      setVehicleName(derivedName);
+      setVehicleType(data.vehicleType);
+    }
+    
+    if (data.carryingCapacity) setCarryingCapacity(data.carryingCapacity);
     if (data.vehicleRegNo) setVehicleRegNo(data.vehicleRegNo);
     if (data.dlNumber) setDlNumber(data.dlNumber);
     if (data.dlImage) setDlImage(data.dlImage);
@@ -786,6 +806,8 @@ export default function SignupScreen({
         storageLength,
         hasVehicle,
         vehicleType,
+        vehicleName,
+        carryingCapacity,
         vehicleRegNo,
         dlNumber,
         dlImage,
@@ -831,7 +853,7 @@ export default function SignupScreen({
       // Only save after OTP is verified
       saveSignupProgress(step);
     }
-  }, [step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience, shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader, producesProducts, businessTeamSize, productName, productCategory, otherCategory, dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName, district, taluka, village, streetArea, houseNo, landmark, aadhaarNumber, panNumber, aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber, ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType, vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole]);
+  }, [step, selectedRole, fullName, age, profileImage, shgRole, shgName, shgExperience, shgGroupSize, leaderName, leaderMobile, crpName, crpMobile, crpEmail, isShgLeader, producesProducts, businessTeamSize, productName, productCategory, otherCategory, dailyProduction, productUnit, weeklyProduction, productPrice, pincode, stateName, district, taluka, village, streetArea, houseNo, landmark, aadhaarNumber, panNumber, aadhaarFront, aadhaarBack, panImage, accountName, bankName, branchName, accountNumber, ifscCode, upiId, storageSpace, storageWidth, storageLength, hasVehicle, vehicleType, vehicleName, carryingCapacity, vehicleRegNo, dlNumber, dlImage, vehicleImage, generatedRequestId, individualRole]);
 
   // IFSC Auto-fetch Effect
   useEffect(() => {
@@ -1080,6 +1102,8 @@ export default function SignupScreen({
     setStorageLength('');
     setHasVehicle(null);
     setVehicleType('');
+    setVehicleName('');
+    setCarryingCapacity('');
     setVehicleRegNo('');
     setDlNumber('');
     setDlImage(null);
@@ -1917,19 +1941,15 @@ export default function SignupScreen({
     }
     setIsSubmitting(true);
     try {
-      const vehicleTypeMap: Record<string, string> = {
-        'bike___scooty': 'TWO_WHEELER',
-        'auto___cargo': 'THREE_WHEELER',
-        'car___pickup': 'FOUR_WHEELER',
-        'other': 'OTHER'
-      };
       const response = await signupService.submitOtherDetails({
         storageSpace: storageSpace.trim(),
         storageWidth: storageWidth ? parseFloat(storageWidth) : undefined,
         storageLength: storageLength ? parseFloat(storageLength) : undefined,
         hasVehicle: hasVehicle === 'yes',
         vehicle: hasVehicle === 'yes' ? {
-          vehicleType: vehicleTypeMap[vehicleType] || undefined,
+          vehicleType: vehicleType || undefined,
+          vehicleName: vehicleName || undefined,
+          carryingCapacity: carryingCapacity || undefined,
           vehicleRegistrationNo: cleanRegNo || undefined,
           drivingLicenseNumber: cleanDl || undefined,
           drivingLicenseImageUrl: dlImage || undefined,
@@ -2936,7 +2956,33 @@ export default function SignupScreen({
               setHasVehicleError('');
             }} />
                 {hasVehicle === 'yes' && <Animated.View entering={FadeInUp.duration(400).springify()} className="w-full mt-4">
-                    <DropdownField label={t("su_vehicle_type_265")} placeholder={t("su_select_vehicle_type_266")} icon="car-sport-outline" required={true} value={vehicleType ? t("opt_" + vehicleType) : ""} error={vehicleTypeError} onPress={() => setShowVehicleMenu(true)} />
+                    <DropdownField 
+                      label={t("su_vehicle_type_265")} 
+                      placeholder={t("su_select_vehicle_type_266")} 
+                      icon="car-sport-outline" 
+                      required={true} 
+                      value={(vehicleType === 'OTHER' && !['Small Truck', 'Tractor / Trolley', 'Above 5000 kg'].includes(vehicleName || '')) ? 'Other' : (vehicleName || "")} 
+                      error={vehicleTypeError} 
+                      onPress={() => setShowVehicleMenu(true)} 
+                    />
+                    {(vehicleType === 'OTHER' && !['Small Truck', 'Tractor / Trolley', 'Above 5000 kg'].includes(vehicleName || '')) && (
+                      <>
+                        <InputField
+                          label="Specify Vehicle Name"
+                          placeholder="e.g. Tata Ace, Bolero Pickup, Mahindra Maxi"
+                          icon="car-outline"
+                          value={vehicleName}
+                          editable={false}
+                        />
+                        <InputField
+                          label="Carrying Capacity"
+                          placeholder="Capacity"
+                          icon="cube-outline"
+                          value={carryingCapacity ? (carryingCapacity === '5001' ? 'Above 5000 kg' : `Up to ${carryingCapacity} kg`) : ''}
+                          editable={false}
+                        />
+                      </>
+                    )}
 
                     <InputField ref={vehicleRegNoRef} label={t("su_vehicle_registration_267")} placeholder={t("su_e_g_mh09ab1234_268")} icon="card-outline" required={true} autoCapitalize="characters" maxLength={10} error={vehicleRegNoError} value={vehicleRegNo} onChangeText={val => {
                 let clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -3210,17 +3256,137 @@ export default function SignupScreen({
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
                 <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_vehicle_type_289")}</Text>
-                {['bike___scooty', 'auto___cargo', 'car___pickup', 'other'].map(opt => {
-                const isSelected = vehicleType === opt;
-                return <TouchableOpacity key={opt} onPress={() => {
-                  setVehicleType(opt);
-                  setVehicleTypeError('');
-                  setShowVehicleMenu(false);
-                }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                      <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{t("opt_" + opt)}</Text>
-                      {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                    </TouchableOpacity>;
-              })}
+                <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+                {[
+                  { id: 'TWO_WHEELER', name: 'Bike / Scooty', capacity: '30', capacityLabel: 'Up to 30 kg', desc: 'Best for small parcels & light items', icon: 'bicycle-outline' },
+                  { id: 'THREE_WHEELER', name: 'Auto Rickshaw (Cargo)', capacity: '250', capacityLabel: 'Up to 250 kg', desc: 'Suitable for medium size deliveries', icon: 'car-outline' },
+                  { id: 'FOUR_WHEELER', name: 'Pickup (Tata Ace / Bolero Pickup)', capacity: '750', capacityLabel: 'Up to 750 kg', desc: 'Ideal for large volume deliveries', icon: 'car-sport-outline' },
+                  { id: 'FOUR_WHEELER', name: 'Car', capacity: '400', capacityLabel: 'Up to 400 kg', desc: 'Standard car for regular items', icon: 'car-sport-outline' },
+                  { id: 'MILK_VAN', name: 'Mini Van', capacity: '500', capacityLabel: 'Up to 500 kg', desc: 'Good for secure medium transport', icon: 'bus-outline' },
+                  { id: 'OTHER', name: 'Small Truck', capacity: '2000', capacityLabel: 'Up to 2000 kg', desc: 'For heavy cargo', icon: 'bus-outline' },
+                  { id: 'OTHER', name: 'Tractor / Trolley', capacity: '5000', capacityLabel: 'Up to 5000 kg', desc: 'For very heavy or agricultural loads', icon: 'car-outline' },
+                  { id: 'OTHER', name: 'Above 5000 kg', capacity: '5000', capacityLabel: 'Above 5000 kg', desc: 'Specialized heavy transport', icon: 'car-outline' },
+                  { id: 'OTHER', name: 'Other', capacity: '', capacityLabel: 'Custom', desc: 'For vehicles not listed above', icon: 'ellipsis-horizontal' }
+                ].map((opt, index) => {
+                  const isOtherOption = opt.name === 'Other';
+                  const isSelected = isOtherOption 
+                    ? (vehicleType === 'OTHER' && !['Small Truck', 'Tractor / Trolley', 'Above 5000 kg'].includes(vehicleName || '')) 
+                    : (vehicleName === opt.name);
+                    
+                  const CAPACITY_OPTS = [
+                    { label: 'Up to 30 kg', value: '30' },
+                    { label: 'Up to 150 kg', value: '150' },
+                    { label: 'Up to 250 kg', value: '250' },
+                    { label: 'Up to 500 kg', value: '500' },
+                    { label: 'Up to 1000 kg', value: '1000' },
+                    { label: 'Up to 3000 kg', value: '3000' },
+                    { label: 'Up to 5000 kg', value: '5000' },
+                    { label: 'Above 5000 kg', value: '5001' }
+                  ];
+
+                  return (
+                    <View key={index} className={`mb-3 rounded-[20px] border-2 overflow-hidden ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                      <TouchableOpacity 
+                        onPress={() => {
+                          setVehicleType(opt.id);
+                          if (!isOtherOption) {
+                            setVehicleName(opt.name);
+                            setCarryingCapacity(opt.capacity);
+                            setVehicleTypeError('');
+                            setShowVehicleMenu(false);
+                            setIsCapacityExpanded(false);
+                          } else {
+                            if (!isSelected) {
+                              setVehicleName('');
+                              setCarryingCapacity('');
+                            }
+                          }
+                        }} 
+                        className="p-4 flex-row items-center justify-between"
+                      >
+                        <View className="flex-row items-center flex-1 pr-2">
+                          <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${isSelected ? 'bg-[#073318]' : 'bg-gray-100'}`}>
+                            <Ionicons name={opt.icon as any} size={20} color={isSelected ? 'white' : '#6B7280'} />
+                          </View>
+                          <View className="flex-1">
+                            <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt.name}</Text>
+                            <Text className={`text-xs mt-0.5 ${isSelected ? 'text-[#073318]' : 'text-gray-500'}`} numberOfLines={1}>{opt.desc}</Text>
+                          </View>
+                        </View>
+                        <View className="items-end">
+                          <View className={`px-2 py-1 rounded-md mb-1 ${isSelected ? 'bg-[#073318]' : 'bg-gray-100'}`}>
+                            <Text className={`text-[10px] font-bold ${isSelected ? 'text-white' : 'text-gray-600'}`}>{opt.capacityLabel}</Text>
+                          </View>
+                          <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${isSelected ? 'border-[#073318]' : 'border-gray-300'}`}>
+                            {isSelected && <View className="w-2.5 h-2.5 rounded-full bg-[#073318]" />}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+
+                      {isOtherOption && isSelected && (
+                        <View className="px-4 pb-4">
+                          <Text className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider mb-2 ml-1 mt-2">ENTER VEHICLE NAME <Text className="text-red-500">*</Text></Text>
+                          <View className="flex-row items-center bg-white border border-gray-300 rounded-xl px-3 h-12 mb-4">
+                            <Ionicons name="car-outline" size={20} color="#073318" className="mr-2" />
+                            <TextInput
+                              className="flex-1 text-base text-[#111827] h-full"
+                              placeholder="e.g. Tata Ace, Bolero Pickup, Mahindra Maxi"
+                              placeholderTextColor="#9CA3AF"
+                              value={vehicleName}
+                              onChangeText={setVehicleName}
+                            />
+                          </View>
+                          
+                          <Text className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider mb-2 ml-1">CARRYING CAPACITY <Text className="text-red-500">*</Text></Text>
+                          <TouchableOpacity 
+                            className={`flex-row items-center bg-white border rounded-xl px-3 h-12 ${isCapacityExpanded ? 'border-[#073318] mb-0 rounded-b-none' : 'border-gray-300 mb-4'} justify-between`}
+                            onPress={() => setIsCapacityExpanded(!isCapacityExpanded)}
+                          >
+                            <View className="flex-row items-center">
+                              <MaterialCommunityIcons name="weight" size={20} color="#073318" className="mr-2" />
+                              <Text className={`text-base ${carryingCapacity ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}>
+                                {carryingCapacity ? CAPACITY_OPTS.find(c => c.value === carryingCapacity)?.label : 'Select capacity'}
+                              </Text>
+                            </View>
+                            <Ionicons name={isCapacityExpanded ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+                          </TouchableOpacity>
+
+                          {isCapacityExpanded && (
+                            <View className="bg-white border border-t-0 border-[#073318] rounded-b-xl mb-4 overflow-hidden" style={{ maxHeight: 200 }}>
+                              <ScrollView nestedScrollEnabled={true}>
+                                {CAPACITY_OPTS.map((cap, i) => (
+                                  <TouchableOpacity 
+                                    key={i} 
+                                    className={`p-3 border-b border-gray-100 ${carryingCapacity === cap.value ? 'bg-gray-50' : ''}`}
+                                    onPress={() => {
+                                      setCarryingCapacity(cap.value);
+                                      setIsCapacityExpanded(false);
+                                    }}
+                                  >
+                                    <Text className={`text-base ${carryingCapacity === cap.value ? 'text-[#073318] font-bold' : 'text-[#111827]'}`}>
+                                      {cap.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          )}
+
+                          <PrimaryButton 
+                            title="Done" 
+                            onPress={() => {
+                              setShowVehicleMenu(false);
+                              setVehicleTypeError('');
+                              setIsCapacityExpanded(false);
+                            }} 
+                            disabled={!vehicleName || !carryingCapacity}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+                </ScrollView>
               </View>
             </TouchableWithoutFeedback>
           </View>
