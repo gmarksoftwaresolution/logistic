@@ -20,6 +20,11 @@ export class OrderManagementService implements OnModuleInit {
 
   async runAutoBroadcastLoop() {
     // 1. Check SHG auto-broadcasts
+    const approvedShgs = await this.prisma.user.findMany({
+      where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
+    });
+    const approvedShgIds = approvedShgs.map(s => String(s.id));
+
     const ordersPlaced = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
@@ -37,7 +42,10 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     for (const order of ordersPlaced) {
-      if (order.assignments.length === 0) {
+      const validShgAssignments = order.assignments.filter(a => 
+        a.assigneeType === 'SHG' && approvedShgIds.includes(a.assigneeId)
+      );
+      if (validShgAssignments.length === 0) {
         console.log(`[AutoBroadcastLoop] Automatically triggering SHG broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastShg(order.id);
@@ -940,6 +948,25 @@ export class OrderManagementService implements OnModuleInit {
         // Reset sequence for public.sellers and public.sellers
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.sellers', 'id'), COALESCE(MAX(id), 1)) FROM public.sellers;`);
+      } else {
+        // Update seller with newly provided details
+        seller = await tx.seller.update({
+          where: { id: seller.id },
+          data: {
+            sellerName: dto.sellerName,
+            village: dto.sellerVillage,
+            taluka: dto.sellerTaluka || seller.taluka,
+            district: dto.sellerDistrict || seller.district,
+            state: dto.sellerState || seller.state,
+            pincode: dto.sellerPincode,
+            postOffice: dto.sellerPostOffice || seller.postOffice,
+          }
+        });
+        await tx.$executeRawUnsafe(`
+          UPDATE public.sellers 
+          SET seller_name = $1, village = $2, taluka = $3, district = $4, state = $5, pincode = $6, post_office = $7, updated_at = NOW()
+          WHERE id = $8;
+        `, dto.sellerName, dto.sellerVillage, dto.sellerTaluka || seller.taluka, dto.sellerDistrict || seller.district, dto.sellerState || seller.state, dto.sellerPincode, dto.sellerPostOffice || seller.postOffice, seller.id);
       }
 
       // 2. Ensure user account for logistics seller exists in public."User" table so products foreign key mapping works
@@ -994,6 +1021,25 @@ export class OrderManagementService implements OnModuleInit {
         // Reset sequence for public.buyers and public.buyers
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
         await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
+      } else {
+        // Update buyer with newly provided details
+        buyer = await tx.buyer.update({
+          where: { id: buyer.id },
+          data: {
+            buyerName: dto.buyerName,
+            village: dto.buyerVillage,
+            taluka: dto.buyerTaluka || buyer.taluka,
+            district: dto.buyerDistrict || buyer.district,
+            state: dto.buyerState || buyer.state,
+            pincode: dto.buyerPincode,
+            postOffice: dto.buyerPostOffice || buyer.postOffice,
+          }
+        });
+        await tx.$executeRawUnsafe(`
+          UPDATE public.buyers 
+          SET buyer_name = $1, village = $2, taluka = $3, district = $4, state = $5, pincode = $6, post_office = $7, updated_at = NOW()
+          WHERE id = $8;
+        `, dto.buyerName, dto.buyerVillage, dto.buyerTaluka || buyer.taluka, dto.buyerDistrict || buyer.district, dto.buyerState || buyer.state, dto.buyerPincode, dto.buyerPostOffice || buyer.postOffice, buyer.id);
       }
 
       // Ensure user account for logistics buyer exists in public."User" table so master_orders foreign key works
@@ -1427,6 +1473,16 @@ export class OrderManagementService implements OnModuleInit {
         include: { assignments: true },
       });
     }
+
+    // Clean up any existing pending assignments (specifically to remove ghost/invalid seeds)
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'SHG',
+        status: 'PENDING',
+      }
+    });
 
     // Create PENDING assignments with duplicate protection
     let assignmentsCreatedCount = 0;

@@ -17,16 +17,16 @@ async function getVillageLocation(prisma: any, villageName: string) {
     });
     if (addr) return addr;
 
-    // 2. Check Pincode table in public schema
-    const pd = await prisma.pincode.findFirst({
+    // 2. Check PincodeDirectory table in public schema
+    const pd = await prisma.pincodeDirectory.findFirst({
       where: { 
-        village: { equals: name, mode: 'insensitive' },
+        name: { equals: name, mode: 'insensitive' },
         district: { equals: 'Kolhapur', mode: 'insensitive' }
       }
     });
     if (pd) {
       return {
-        village: pd.village,
+        village: pd.name,
         pincode: pd.pincode,
         taluka: pd.block || pd.district || 'N/A',
         district: pd.district,
@@ -189,22 +189,14 @@ async function main() {
 
   console.log('Resolving dynamic locations for allowed villages...');
   const allowedVillagesList = ['Gadhinglaj', 'Nesari', 'Dundage', 'Mahagaon', 'Batkanangale', 'Inchnal'];
-  const resolvedLocationsMap: Record<string, any> = {};
-  for (const village of allowedVillagesList) {
-    try {
-      const loc = await getVillageLocation(prisma, village);
-      resolvedLocationsMap[village.toLowerCase()] = loc;
-    } catch (e: any) {
-      console.log(`Warning: Location details not found in database for village ${village}: ${e.message}. Falling back to defaults.`);
-      resolvedLocationsMap[village.toLowerCase()] = {
-        village,
-        pincode: village === 'Nesari' ? '416504' : village === 'Dundage' ? '416501' : village === 'Mahagaon' ? '416503' : '416502',
-        taluka: 'Gadhinglaj',
-        district: 'Kolhapur',
-        state: 'Maharashtra'
-      };
-    }
-  }
+  const resolvedLocationsMap: Record<string, any> = {
+    gadhinglaj: { village: 'Gadhinglaj', pincode: '416502', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' },
+    nesari: { village: 'Nesari', pincode: '416504', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' },
+    dundage: { village: 'Dundage', pincode: '416501', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' },
+    mahagaon: { village: 'Mahagaon', pincode: '416503', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' },
+    batkanangale: { village: 'Batkanangale', pincode: '416503', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' },
+    inchnal: { village: 'Inchnal', pincode: '416502', taluka: 'Gadhinglaj', district: 'Kolhapur', state: 'Maharashtra' }
+  };
 
   const locations = allowedVillagesList.map(v => resolvedLocationsMap[v.toLowerCase()]);
 
@@ -267,10 +259,10 @@ async function main() {
   ];
 
   // Seed Transporters as real User profiles
-  // await seedTransporterUsers(prisma, locations);
+  await seedTransporterUsers(prisma, locations);
 
   // Seed additional SHG registrations
-  // await seedAdditionalSHGs(prisma);
+  await seedAdditionalSHGs(prisma);
 
   // Clear orders and reseed them
   console.log('Seeding Orders...');
@@ -653,90 +645,80 @@ async function seedAdditionalSHGs(prisma: any) {
   const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
   const additionalShgs = [
-    // Test SHG
+    // 1. Dundage
     {
-      village: 'Gadhinglaj',
-      shgName: 'Tara Mahila Bachat Gat',
-      contactPerson: 'Tara Bai Shinde',
-      mobileNumber: '7777777777',
-      email: 'tara.shinde@test.com',
-      houseNo: 'House No. 10',
-      landmark: 'Near Temple',
-      bankAccount: '33333333330',
-      aadhaar: '111122223330',
-      pan: 'ABCDE0000Z'
-    },
-    // Batkanangale
-    {
-      village: 'Batkanangale',
-      shgName: 'Ekta Mahila Bachat Gat',
-      contactPerson: 'Shalini Patil',
+      village: 'Dundage',
+      shgName: 'Dundage Sakhi Bachat Gat',
+      contactPerson: 'Sunita Lohar',
       mobileNumber: '9090900001',
-      email: 'shalini.ekta@test.com',
-      houseNo: 'Plot No. 12',
-      landmark: 'Near Gram Panchayat',
+      email: 'sunita@test.com',
+      houseNo: 'House No. 10',
+      landmark: 'Near Milk Cooperative',
       bankAccount: '33333333331',
       aadhaar: '111122223331',
       pan: 'ABCDE1111A'
     },
+    // 2. Gadhinglaj (Pooja - the user's primary login!)
     {
-      village: 'Batkanangale',
-      shgName: 'Pragati Mahila Bachat Gat',
-      contactPerson: 'Mangal Desai',
-      mobileNumber: '9090900002',
-      email: 'mangal.pragati@test.com',
-      houseNo: 'Flat 101, Shivneri Appt',
-      landmark: 'Opposite ZP School',
+      village: 'Gadhinglaj',
+      shgName: 'Gadhinglaj Tara Bachat Gat',
+      contactPerson: 'Pooja Patil',
+      mobileNumber: '9999999991',
+      email: 'pooja@gmail.com',
+      houseNo: 'House No. 20',
+      landmark: 'Near Bus Stand',
       bankAccount: '33333333332',
       aadhaar: '111122223332',
       pan: 'ABCDE2222B'
     },
-    // Inchnal
+    // 3. Inchnal
     {
       village: 'Inchnal',
-      shgName: 'Vikas Mahila Bachat Gat',
+      shgName: 'Inchnal Vikas Bachat Gat',
       contactPerson: 'Surekha Kamble',
       mobileNumber: '9090900003',
-      email: 'surekha.vikas@test.com',
-      houseNo: 'Gat No. 45',
-      landmark: 'Near Water Tank',
+      email: 'surekha@test.com',
+      houseNo: 'House No. 30',
+      landmark: 'Near Gram Panchayat',
       bankAccount: '33333333333',
       aadhaar: '111122223333',
       pan: 'ABCDE3333C'
     },
+    // 4. Mahagaon
     {
-      village: 'Inchnal',
-      shgName: 'Savtribai Mahila Bachat Gat',
-      contactPerson: 'Laxmi Shinde',
+      village: 'Mahagaon',
+      shgName: 'Mahagaon Pragati Bachat Gat',
+      contactPerson: 'Kavita Kadam',
       mobileNumber: '9090900004',
-      email: 'laxmi.savtri@test.com',
-      houseNo: 'Ward No. 3',
-      landmark: 'Near Hanuman Temple',
+      email: 'kavita@test.com',
+      houseNo: 'House No. 40',
+      landmark: 'Near School',
       bankAccount: '33333333334',
       aadhaar: '111122223334',
       pan: 'ABCDE4444D'
     },
-    // Dundage
+    // 5. Batkanangale
     {
-      village: 'Dundage',
-      shgName: 'Kiran Mahila Bachat Gat',
-      contactPerson: 'Sunita Lohar',
+      village: 'Batkanangale',
+      shgName: 'Batkanangale Ekta Bachat Gat',
+      contactPerson: 'Shalini Patil',
       mobileNumber: '9090900005',
-      email: 'sunita.kiran@test.com',
-      houseNo: 'House No. 89',
-      landmark: 'Near Milk Dairy',
+      email: 'shalini@test.com',
+      houseNo: 'House No. 50',
+      landmark: 'Opposite Temple',
       bankAccount: '33333333335',
       aadhaar: '111122223335',
       pan: 'ABCDE5555E'
     },
+    // 6. Nesari
     {
-      village: 'Dundage',
-      shgName: 'Tejaswini Mahila Bachat Gat',
-      contactPerson: 'Rupali Powar',
+      village: 'Nesari',
+      shgName: 'Nesari Savitri Bachat Gat',
+      contactPerson: 'Lata Gaikwad',
       mobileNumber: '9090900006',
-      email: 'rupali.tejaswini@test.com',
-      houseNo: 'Galli No. 2',
-      landmark: 'Near Library',
+      email: 'lata@test.com',
+      houseNo: 'House No. 60',
+      landmark: 'Near Primary Health Center',
       bankAccount: '33333333336',
       aadhaar: '111122223336',
       pan: 'ABCDE6666F'
@@ -856,60 +838,49 @@ async function seedAdditionalSHGs(prisma: any) {
 async function seedTransporterUsers(prisma: any, locations: any[]) {
   console.log('Seeding Transporters as real User profiles...');
   const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-  const randomMobile = () => '9' + Math.floor(100000000 + Math.random() * 900000000).toString();
-  const vehicleTypes = ['Mini Truck (Tata Ace)', 'Pickup Van (Bolero)', 'Auto Rickshaw Cargo', 'Two Wheeler'];
 
-  const routePartnerNames = [
-    'Ramesh Jadhav', 'Suresh Kadam', 'Vijay Patil', 'Anil Chavan', 'Dilip Shinde',
-    'Sunil Lohar', 'Prakash Desai', 'Sanjay More', 'Vikas Patil', 'Rajendra Jadhav'
-  ];
-
-  const personalNames = [
-    'Sachin Sawant', 'Rahul Kulkarni', 'Sandip Patil', 'Amol Joshi', 'Prasad Desai'
-  ];
-
-  const list = [];
-  for (let i = 0; i < 10; i++) {
-    const name = routePartnerNames[i];
-    list.push({
-      firstName: name.split(' ')[0],
-      lastName: name.split(' ')[1],
-      mobileNumber: '990000000' + i,
+  const list = [
+    {
+      firstName: 'Balasaheb',
+      lastName: 'Patil',
+      mobileNumber: '9999999999', // Main active transporter login!
       type: 'ROUTE_PARTNER',
-      vehicleType: vehicleTypes[i % 3],
-      villageIndex: i + 2
-    });
-  }
-
-  for (let i = 0; i < 5; i++) {
-    const name = personalNames[i];
-    list.push({
-      firstName: name.split(' ')[0],
-      lastName: name.split(' ')[1],
-      mobileNumber: '990000001' + i,
+      vehicleType: 'Pickup Van (Bolero)',
+      villageIndex: 1
+    },
+    {
+      firstName: 'Sachin',
+      lastName: 'Sawant',
+      mobileNumber: '9900000001',
+      type: 'ROUTE_PARTNER',
+      vehicleType: 'Mini Truck (Tata Ace)',
+      villageIndex: 2
+    },
+    {
+      firstName: 'Amol',
+      lastName: 'Joshi',
+      mobileNumber: '9900000002',
+      type: 'ROUTE_PARTNER',
+      vehicleType: 'Auto Rickshaw Cargo',
+      villageIndex: 3
+    },
+    {
+      firstName: 'Rahul',
+      lastName: 'Kulkarni',
+      mobileNumber: '9900000003',
       type: 'PERSONAL',
       vehicleType: 'Two Wheeler',
-      villageIndex: i + 4
-    });
-  }
-
-  // Specific Test Transporter
-  list.push({
-    firstName: 'Balasaheb',
-    lastName: 'Patil',
-    mobileNumber: '9999999999',
-    type: 'ROUTE_PARTNER',
-    vehicleType: 'Pickup Van (Bolero)',
-    villageIndex: 1
-  });
-
-  const villageToPincode = (villageName: string) => {
-    const v = villageName.trim().toLowerCase();
-    if (v === 'nesari') return '416504';
-    if (v === 'dundage') return '416501';
-    if (v === 'mahagaon' || v === 'mahagaon (kolhapur)') return '416503';
-    return '416502';
-  };
+      villageIndex: 4
+    },
+    {
+      firstName: 'Sandip',
+      lastName: 'Patil',
+      mobileNumber: '9900000004',
+      type: 'PERSONAL',
+      vehicleType: 'Two Wheeler',
+      villageIndex: 5
+    }
+  ];
 
   for (const tr of list) {
     const loc = locations[tr.villageIndex % locations.length];
@@ -973,16 +944,8 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
     `, userId, `MH-09-L-${1000 + userId}`, new Date(Date.now() + 365*24*60*60*1000), 'http://dummy.url/license.jpg');
 
     // 5. Create RouteDetail
-    const areas = [loc.village];
-    if (loc.village === 'Nesari') {
-      areas.push('Gadhinglaj', 'Batkangale', 'Nesari');
-    } else if (loc.village === 'Dundage') {
-      areas.push('Dundage', 'Gadhinglaj', 'Batkangale', 'Nesari');
-    } else {
-      areas.push('Gadhinglaj', 'Inchnal', 'Atyal');
-    }
-    const uniqueVillages = Array.from(new Set(areas.map(v => v.trim())));
-    const pincodes = Array.from(new Set(uniqueVillages.map(v => villageToPincode(v))));
+    const uniqueVillages = ['Dundage', 'Gadhinglaj', 'Inchnal', 'Mahagaon', 'Batkanangale', 'Nesari'];
+    const pincodes = ['416501', '416502', '416503', '416504'];
 
     await prisma.$executeRawUnsafe(`
       INSERT INTO public."RouteDetail" ("userId", "operatingArea", "pickupLocations", "dropLocations", "workingDays", "workingSchedule", "createdAt", "updatedAt")

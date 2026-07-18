@@ -151,6 +151,8 @@ api.interceptors.response.use(
 
         // Handle unauthorized (e.g., clear token and redirect to login)
         await AsyncStorage.removeItem('access_token');
+        await AsyncStorage.removeItem('@gmu_active_pickup_session');
+        await AsyncStorage.removeItem('@gmu_active_drop_session');
         const { navigationRef } = require('../navigation/AppNavigator');
         
         const navigateToLogin = () => {

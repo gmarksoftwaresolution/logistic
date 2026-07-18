@@ -226,6 +226,8 @@ const ProfileScreen: React.FC = () => {
         await AsyncStorage.removeItem('rejected_batches');
         await AsyncStorage.removeItem('completed_batches');
         await AsyncStorage.removeItem('captured_photos');
+        await AsyncStorage.removeItem('@gmu_active_pickup_session');
+        await AsyncStorage.removeItem('@gmu_active_drop_session');
         navigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],

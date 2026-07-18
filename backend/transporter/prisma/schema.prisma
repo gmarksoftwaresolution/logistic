@@ -845,6 +845,7 @@ model Parcel {
   updatedAt          DateTime @updatedAt
 
   scanHistories      ParcelScanHistory[]
+  scanSessionItems   ScanSessionItem[]
 
   @@map("Parcel")
 }
@@ -868,6 +869,32 @@ model ParcelScanHistory {
   longitude     Float?
 
   @@map("ParcelScanHistory")
+}
+
+model ScanSession {
+  sessionId   String            @id @default(uuid())
+  userId      String
+  userRole    String
+  sessionType String            // "PICKUP" or "DROP"
+  status      String            // "IN_PROGRESS" or "CONFIRMED" or "CANCELLED"
+  orderIds    String            // Comma-separated order numbers/IDs
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  items       ScanSessionItem[]
+
+  @@map("ScanSession")
+}
+
+model ScanSessionItem {
+  id          String      @id @default(uuid())
+  sessionId   String
+  session     ScanSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  parcelId    String
+  parcel      Parcel      @relation(fields: [parcelId], references: [parcelId], onDelete: Cascade)
+  scannedAt   DateTime    @default(now())
+
+  @@unique([sessionId, parcelId])
+  @@map("ScanSessionItem")
 }
 
 

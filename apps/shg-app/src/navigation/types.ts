@@ -43,4 +43,6 @@ export type RootStackParamList = {
   Delivery: undefined;
   CompletedOrderDetails: { order: any };
   OrderHistoryDetails: { order: any };
+  PickupScanner: { sessionId?: string; orderIds?: string[] } | undefined;
+  DropScanner: { sessionId?: string; orderIds?: string[] } | undefined;
 };

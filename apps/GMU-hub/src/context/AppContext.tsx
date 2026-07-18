@@ -445,6 +445,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : null
           );
 
+    // Compute explicit pickup & drop details for the graphical timeline
+    const pickupShgId = o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId;
+    const pickupShgMember = shgList.find(s => String(s.id) === String(pickupShgId));
+    const apiPickupShgDetails = o.pickupShgDetails || (flowType === 'pickup' ? o.shgDetails : undefined);
+    const pickupShgDetails = apiPickupShgDetails ? {
+      name: apiPickupShgDetails.name,
+      mobile: apiPickupShgDetails.mobile,
+      address: apiPickupShgDetails.address,
+    } : (pickupShgMember ? {
+      name: pickupShgMember.name,
+      mobile: pickupShgMember.mobile,
+      address: pickupShgMember.address,
+    } : undefined);
+
+    const dropShgId = o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId;
+    const dropShgMember = shgList.find(s => String(s.id) === String(dropShgId));
+    const apiDropShgDetails = o.dropShgDetails || (flowType === 'drop' ? o.shgDetails : undefined);
+    const dropShgDetails = apiDropShgDetails ? {
+      name: apiDropShgDetails.name,
+      mobile: apiDropShgDetails.mobile,
+      address: apiDropShgDetails.address,
+    } : (dropShgMember ? {
+      name: dropShgMember.name,
+      mobile: dropShgMember.mobile,
+      address: dropShgMember.address,
+    } : undefined);
+
+    const pickupTransporterId = o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+    const pickupTransporterMember = transporterList.find(t => String(t.id) === String(pickupTransporterId));
+    const apiPickupTransporterDetails = o.pickupTransporterDetails || (flowType === 'pickup' ? o.transporterDetails : undefined);
+    const pickupTransporterDetails = apiPickupTransporterDetails ? {
+      name: apiPickupTransporterDetails.name,
+      mobile: apiPickupTransporterDetails.mobile,
+      address: apiPickupTransporterDetails.address,
+    } : (pickupTransporterMember ? {
+      name: pickupTransporterMember.name,
+      mobile: pickupTransporterMember.mobile,
+      address: pickupTransporterMember.address,
+    } : undefined);
+
+    const dropTransporterId = o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+    const dropTransporterMember = transporterList.find(t => String(t.id) === String(dropTransporterId));
+    const apiDropTransporterDetails = o.dropTransporterDetails || (flowType === 'drop' ? o.transporterDetails : undefined);
+    const dropTransporterDetails = apiDropTransporterDetails ? {
+      name: apiDropTransporterDetails.name,
+      mobile: apiDropTransporterDetails.mobile,
+      address: apiDropTransporterDetails.address,
+    } : (dropTransporterMember ? {
+      name: dropTransporterMember.name,
+      mobile: dropTransporterMember.mobile,
+      address: dropTransporterMember.address,
+    } : undefined);
+
     return {
       id: o.orderId,
       uuid: o.id,
@@ -485,6 +538,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       parcels: o.parcels,
       rawCreatedAt: o.createdAt,
       rawUpdatedAt: o.updatedAt,
+      // Pass along computed detailed fields and status properties for graphical timeline
+      pickupShgId,
+      dropShgId,
+      pickupTransporterId,
+      dropTransporterId,
+      pickupShgStatus: o.pickupShgStatus || (flowType === 'pickup' ? mappedShgStatus : undefined),
+      dropShgStatus: o.dropShgStatus || (flowType === 'drop' ? mappedShgStatus : undefined),
+      pickupTransporterStatus: o.pickupTransporterStatus || (flowType === 'pickup' ? mappedTransporterStatus : undefined),
+      dropTransporterStatus: o.dropTransporterStatus || (flowType === 'drop' ? mappedTransporterStatus : undefined),
+      pickupShgDetails,
+      dropShgDetails,
+      pickupTransporterDetails,
+      dropTransporterDetails,
     };
   };
 

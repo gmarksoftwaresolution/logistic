@@ -18,6 +18,7 @@ import { useOrderManagement, BatchOrder, HUB_CONTACT } from '../../context/Order
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { FloatingScannerButton } from '../../components/FloatingScannerButton/FloatingScannerButton';
 
 type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
 
@@ -101,7 +102,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   };
 
   // 1. Pickups Data
-  const { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops } = useMemo(() => {
+  const { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds } = useMemo(() => {
     // 1. Pickups Data
     const pickupBatches = batches.filter((b) => b.status === 'ACCEPTED_PICKUP');
     const pickupDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
@@ -145,7 +146,15 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     const totalPickups = pickupBatches.filter(b => b.products.some(p => p.status === 'pending')).length;
     const totalDrops = dropBatches.length;
 
-    return { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops };
+    const pickupOrderIds = Array.from(new Set(
+      pickupBatches.map(b => String(b.displayId || ''))
+    )).filter(Boolean);
+    
+    const dropOrderIds = Array.from(new Set(
+      dropBatches.map(b => String(b.displayId || ''))
+    )).filter(Boolean);
+
+    return { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds };
   }, [batches]);
 
   const renderAreaList = (
@@ -364,6 +373,21 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         {renderAreaList(pickupAreas, pickupGroupedEntries, 'pickup')}
         {renderAreaList(dropAreas, dropGroupedEntries, 'drop')}
       </Animated.ScrollView>
+
+      {activeTab === 'pickup' && (
+        <FloatingScannerButton
+          module="PICKUP"
+          orderIds={pickupOrderIds}
+          navigation={navigation}
+        />
+      )}
+      {activeTab === 'drop' && (
+        <FloatingScannerButton
+          module="DROP"
+          orderIds={dropOrderIds}
+          navigation={navigation}
+        />
+      )}
     </SafeAreaView>
   );
 };

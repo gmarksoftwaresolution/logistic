@@ -157,20 +157,18 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       deliveryDay: dateStr,
       date: dateStr,
       status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
-              (
-                ((dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') &&
-                 !['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')) ||
-                (type === 'drop' && ['PICKED_UP', 'RETURN_PICKED_UP'].includes(dbOrder.status) && ['PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'].includes(dbOrder.masterOrder?.status || ''))
-              ) ? 'Accepted' :
-              (
-                ((dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP' || (dbOrder.status === 'DELIVERED' && dbOrder.masterOrder?.status === 'PARCEL_AT_DROP_SHG')) &&
-                  !(type === 'drop' && ['PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER'].includes(dbOrder.masterOrder?.status || ''))) ||
-                (type === 'pickup' && (
-                  (dbOrder.status === 'COMPLETED' && !['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(dbOrder.masterOrder?.status || '')) ||
-                  ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED'].includes(dbOrder.masterOrder?.status || '')
-                ))
-              ) ? 'PickedUp' :
-              dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED',
+              (type === 'pickup') ? (
+                ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(dbOrder.masterOrder?.status || '') ? (
+                  ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(dbOrder.masterOrder?.status || '') ? 'COMPLETED' : 'PickedUp'
+                ) : (
+                  (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' : 'COMPLETED'
+                )
+              ) : (
+                // Drop Leg logic
+                (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' :
+                (dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') ? 'PickedUp' :
+                dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED'
+              ),
       isReturn: isReturnFlag,
       image: items[0]?.product?.image || '',
       currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',

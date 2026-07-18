@@ -437,19 +437,6 @@ export class OrderService {
         },
       });
 
-      // Reset any pre-existing parcels for this order back to PENDING status and return holder to WAREHOUSE
-      await tx.parcel.updateMany({
-        where: {
-          orderId: masterOrder.orderNumber,
-          flowType: 'DROP',
-        },
-        data: {
-          parcelStatus: 'PENDING',
-          currentHolderId: 'HUB',
-          currentHolderType: 'WAREHOUSE',
-        },
-      });
-
       await tx.dropTracking.create({
         data: {
           dropOrderId,
@@ -974,10 +961,12 @@ export class OrderService {
         } else {
           // Only SHG has completed
           const nextGmuStatus = isReturn ? 'RETURN_PARCEL_AT_TRANSPORTER' : 'PARCEL_AT_TRANSPORTER';
+          const nextStatus = isReturn ? 'RETURNED' : 'COMPLETED';
 
           await tx.pickupOrder.update({
             where: { id: pickupOrderId },
             data: {
+              status: nextStatus,
               pickupTime: new Date(),
             },
           });

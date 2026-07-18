@@ -17,6 +17,7 @@ import { useOnboarding } from '../context/OnboardingContext';
 import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../api/axiosInstance';
+import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
 
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
@@ -229,21 +230,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
     if (phase === 'PICKUP') {
       if (isDeliveryPhase) {
         // Step 2: SHG delivery handover to Transporter
-        return status === 'SHG_HANDOVER_VERIFIED' ||
-               status === 'IN_TRANSIT_TO_HUB' ||
-               status === 'HUB_RECEIVED' ||
-               status === 'DELIVERED' ||
-               status === 'COMPLETED' ||
-               status === 'VERIFIED';
+        // Verified if status is NOT pending/ready_for_pickup/parcel_at_shg/parcel_picked
+        return status !== 'PENDING' && status !== 'READY_FOR_PICKUP' && status !== 'PARCEL_AT_SHG' && status !== 'PARCEL_PICKED';
       } else {
         // Step 1: SHG pickup from Seller
-        return status === 'PARCEL_AT_SHG' ||
-               status === 'SHG_HANDOVER_VERIFIED' ||
-               status === 'IN_TRANSIT_TO_HUB' ||
-               status === 'HUB_RECEIVED' ||
-               status === 'DELIVERED' ||
-               status === 'COMPLETED' ||
-               status === 'VERIFIED';
+        // Verified if status is NOT pending/ready_for_pickup
+        return status !== 'PENDING' && status !== 'READY_FOR_PICKUP';
       }
     } else {
       // phase === 'DROP'
@@ -254,7 +246,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
                status === 'VERIFIED';
       } else {
         // Step 9: Drop SHG pickup from Transporter
-        return status === 'PARCEL_AT_DROP_SHG' ||
+        return status === 'PARCEL_WITH_DROP_SHG' ||
                status === 'DELIVERED' ||
                status === 'COMPLETED' ||
                status === 'VERIFIED';
@@ -487,13 +479,34 @@ const OrderDetailsScreen: React.FC<Props> = ({
         text2: res.data?.message || 'Product verified successfully via QR!'
       });
 
-      setTimeout(() => {
+      setTimeout(async () => {
         setScannerModalVisible(false);
         setActiveScanningParcel(null);
         setScanned(false);
         isScanningRef.current = false;
         if (isActive && currentStep?.id === 'scan_products_button') {
           nextStep();
+        }
+
+        try {
+          const freshRes = await axiosInstance.get(`/qr/order/${order.orderId}`);
+          const updatedParcels = freshRes.data || [];
+          const allVerified = (products || []).every((item: any) => {
+            const matchingParcel = updatedParcels.find((p: any) => p.productId === item.productId);
+            if (!matchingParcel) return false;
+            const status = matchingParcel.parcelStatus;
+            if (order.phase === 'PICKUP') {
+              return isDeliveryPhase ? (status !== 'PENDING' && status !== 'READY_FOR_PICKUP' && status !== 'PARCEL_AT_SHG' && status !== 'PARCEL_PICKED') : (status !== 'PENDING' && status !== 'READY_FOR_PICKUP');
+            } else {
+              return isDeliveryPhase ? ['DELIVERED', 'COMPLETED', 'VERIFIED'].includes(status) : ['PARCEL_WITH_DROP_SHG', 'DELIVERED', 'COMPLETED', 'VERIFIED'].includes(status);
+            }
+          });
+
+          if (allVerified) {
+            await handleSubmitOrder();
+          }
+        } catch (e) {
+          console.warn("Auto-submit check failed:", e);
         }
       }, 1200);
 
@@ -1128,23 +1141,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         )}
 
-        {/* Submit Order full-width button (Disabled since Scan-and-Go automatically transitions orders) */}
-        {/*
-        <TouchableOpacity 
-          onPress={handleSubmitOrder} 
-          disabled={isSubmitDisabled} 
-          className={`mx-2 mb-2 h-12 rounded-[16px] flex-row items-center justify-center shadow-sm ${isSubmitDisabled ? 'bg-[#86A691]' : 'bg-[#073318]'}`}>
-          {isSubmitting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="checkmark-circle-outline" size={16} color="white" />}
-          <Text className="text-[14px] font-bold text-white ml-2">
-            {isSubmitting
-              ? (t("su_submitting_order") || "Submitting Order...")
-              : (order.isRejectedDelivery
-                ? (t("su_confirm_return_delivery") || "Confirm Return Delivery")
-                : (isDeliveryPhase ? t("su_submit_delivery") || "Submit Delivery" : t("su_submit_order_357") || "Submit Order"))}
-          </Text>
-        </TouchableOpacity>
-        */}
-
           <View className="h-32" />
         </ScrollView>
 
@@ -1304,6 +1300,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
             }
           }}
         />
+        {((isPickupAccepted || isDeliveryPhase) && order.status !== 'Delivered') && (
+          <FloatingScannerButton
+            module={isDeliveryPhase ? 'DROP' : 'PICKUP'}
+            orderIds={[order.orderId]}
+            navigation={navigation}
+          />
+        )}
       </SafeAreaView>;
 };
       export default OrderDetailsScreen;

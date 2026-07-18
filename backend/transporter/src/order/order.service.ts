@@ -169,13 +169,15 @@ export class OrderService {
     const updatedPickups = [];
     for (const p of filteredPickups) {
       const gmuOrders = await this.prisma.$queryRawUnsafe(`
-        SELECT "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT "pickupTransporterStatus", "mainStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
       `, p.masterOrder.orderNumber) as any[];
       const pickupTransporterStatus = gmuOrders?.[0]?.pickupTransporterStatus || null;
+      const mainStatus = gmuOrders?.[0]?.mainStatus || null;
 
       updatedPickups.push({
         ...p,
         pickupTransporterStatus,
+        mainStatus,
         seller: p.seller ? {
           fullName: p.seller.sellerName,
           phoneNumber: p.seller.mobileNumber,
@@ -695,7 +697,7 @@ export class OrderService {
           { transporterId },
           { transporterId: null },
         ],
-        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED', 'DELIVERED'] },
       },
       select: {
         id: true,
@@ -1327,7 +1329,21 @@ export class OrderService {
         data: { status: nextGmuStatus },
       });
 
-      // 4. Create pickup tracking record
+      // 4. Update public."OrderAssignment" status to COMPLETED
+      const rawGmuOrder = await tx.$queryRawUnsafe(`
+        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+      `, masterOrder.orderNumber) as any[];
+
+      if (rawGmuOrder.length > 0) {
+        const orderUuid = rawGmuOrder[0].id;
+        await tx.$executeRawUnsafe(`
+          UPDATE public."OrderAssignment"
+          SET status = 'COMPLETED', "updatedAt" = NOW()
+          WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
+        `, orderUuid, String(transporterId));
+      }
+
+      // 5. Create pickup tracking record
       await tx.pickupTracking.create({
         data: {
           pickupOrderId,
