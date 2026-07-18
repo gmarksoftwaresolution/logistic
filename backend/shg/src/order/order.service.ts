@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { VehicleSuggestionService } from './vehicle-suggestion.service';
 import axios from 'axios';
 
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private vehicleSuggestionService: VehicleSuggestionService,
+  ) { }
 
   //////////////////////////////////////////////////////
   // NEW CLEAN ARCHITECTURE METHODS
@@ -1976,103 +1980,143 @@ export class OrderService {
   // --- BEGIN SHARED ORDER FORMATTING HELPERS ---
 
   public async formatPickups(pickups: any[]) {
-    return Promise.all(pickups.map(async (p: any) => ({
-      ...p,
-      seller: p.seller ? {
-        fullName: (p.seller as any).sellerName,
-        phoneNumber: (p.seller as any).mobileNumber,
-        address: {
-          houseNo: (p.seller as any).addressLine1 || '',
-          village: (p.seller as any).village,
-          taluka: (p.seller as any).taluka,
-          district: (p.seller as any).district,
-          pincode: (p.seller as any).pincode,
+    return Promise.all(pickups.map(async (p: any) => {
+      let parcelWeight = p.parcelWeight ?? p.totalWeight ?? p.masterOrder?.totalWeight;
+      
+      // If undefined, attempt to fetch from the standalone Order table using the order number
+      if (parcelWeight === undefined && p.masterOrder?.orderNumber) {
+        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: p.masterOrder.orderNumber } });
+        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
+          parcelWeight = orderRecord.totalWeight;
         }
-      } : null,
-      transporter: await this.enrichTransporterInfo(p.transporter),
-      legType: 'pickup',
-      sourceType: 'seller',
-    })));
+      }
+
+      return {
+        ...p,
+        seller: p.seller ? {
+          fullName: (p.seller as any).sellerName,
+          phoneNumber: (p.seller as any).mobileNumber,
+          address: {
+            houseNo: (p.seller as any).addressLine1 || '',
+            village: (p.seller as any).village,
+            taluka: (p.seller as any).taluka,
+            district: (p.seller as any).district,
+            pincode: (p.seller as any).pincode,
+          }
+        } : null,
+        transporter: await this.enrichTransporterInfo(p.transporter),
+        legType: 'pickup',
+        sourceType: 'seller',
+        parcelWeight,
+        ...(this.vehicleSuggestionService.getSuggestion(parcelWeight) || { recommendedVehicle: null, recommendedCapacity: null, otherSuitableVehicles: [] }),
+      };
+    }));
   }
 
   public async formatInboundDrops(drops: any[]) {
-    return Promise.all(drops.map(async (d: any) => ({
-      id: d.id,
-      pickupOrderNumber: d.dropOrderNumber,
-      masterOrderId: d.masterOrderId,
-      sellerId: d.buyerId,
-      shgId: d.shgId,
-      transporterId: d.transporterId,
-      status: d.status,
-      pickupTime: null,
-      handoverCode: d.handoverCode,
-      createdAt: d.createdAt,
-      seller: {
-        fullName: 'Transporter delivery to SHG',
-        phoneNumber: d.buyer ? d.buyer.mobileNumber : '',
-        address: d.buyer ? {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
-        } : null,
-      },
-      items: d.items,
-      masterOrder: d.masterOrder,
-      tracking: d.tracking,
-      transporter: await this.enrichTransporterInfo(d.transporter),
-      legType: 'drop',
-      sourceType: 'transporter',
-    })));
+    return Promise.all(drops.map(async (d: any) => {
+      let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
+
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
+        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
+        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
+          parcelWeight = orderRecord.totalWeight;
+        }
+      }
+
+      return {
+        id: d.id,
+        pickupOrderNumber: d.dropOrderNumber,
+        masterOrderId: d.masterOrderId,
+        sellerId: d.buyerId,
+        shgId: d.shgId,
+        transporterId: d.transporterId,
+        status: d.status,
+        pickupTime: null,
+        handoverCode: d.handoverCode,
+        createdAt: d.createdAt,
+        seller: {
+          fullName: 'Transporter delivery to SHG',
+          phoneNumber: d.buyer ? d.buyer.mobileNumber : '',
+          address: d.buyer ? {
+            houseNo: d.buyer.addressLine1 || '',
+            village: d.buyer.village,
+            taluka: d.buyer.taluka,
+            district: d.buyer.district,
+            pincode: d.buyer.pincode,
+          } : null,
+        },
+        items: d.items,
+        masterOrder: d.masterOrder,
+        tracking: d.tracking,
+        transporter: await this.enrichTransporterInfo(d.transporter),
+        legType: 'drop',
+        sourceType: 'transporter',
+        parcelWeight,
+        ...(this.vehicleSuggestionService.getSuggestion(parcelWeight) || { recommendedVehicle: null, recommendedCapacity: null, otherSuitableVehicles: [] }),
+      };
+    }));
   }
 
   public async formatRegularDrops(drops: any[]) {
-    return Promise.all(drops.map(async (d: any) => ({
-      id: d.id,
-      dropOrderNumber: d.dropOrderNumber,
-      masterOrderId: d.masterOrderId,
-      buyerId: d.buyerId,
-      shgId: d.shgId,
-      transporterId: d.transporterId,
-      status: d.status,
-      deliveryAddress: d.deliveryAddress,
-      handoverCode: d.handoverCode,
-      createdAt: d.createdAt,
-      buyer: d.buyer ? {
-        fullName: d.buyer.buyerName,
-        phoneNumber: d.buyer.mobileNumber,
-        address: {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
+    return Promise.all(drops.map(async (d: any) => {
+      let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
+
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
+        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
+        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
+          parcelWeight = orderRecord.totalWeight;
         }
-      } : null,
-      items: d.items,
-      masterOrder: d.masterOrder ? {
-        ...d.masterOrder,
-        items: d.masterOrder.items.map((item: any) => ({
-          ...item,
-          seller: item.seller ? {
-            fullName: item.seller.sellerName,
-            phoneNumber: item.seller.mobileNumber,
-            address: {
-              houseNo: item.seller.addressLine1 || '',
-              village: item.seller.village,
-              taluka: item.seller.taluka,
-              district: item.seller.district,
-              pincode: item.seller.pincode,
-            }
-          } : null
-        }))
-      } : null,
-      tracking: d.tracking,
-      transporter: await this.enrichTransporterInfo(d.transporter),
-      legType: 'drop',
-      sourceType: 'buyer',
-    })));
+      }
+
+      return {
+        id: d.id,
+        dropOrderNumber: d.dropOrderNumber,
+        masterOrderId: d.masterOrderId,
+        buyerId: d.buyerId,
+        shgId: d.shgId,
+        transporterId: d.transporterId,
+        status: d.status,
+        deliveryAddress: d.deliveryAddress,
+        handoverCode: d.handoverCode,
+        createdAt: d.createdAt,
+        buyer: d.buyer ? {
+          fullName: d.buyer.buyerName,
+          phoneNumber: d.buyer.mobileNumber,
+          address: {
+            houseNo: d.buyer.addressLine1 || '',
+            village: d.buyer.village,
+            taluka: d.buyer.taluka,
+            district: d.buyer.district,
+            pincode: d.buyer.pincode,
+          }
+        } : null,
+        items: d.items,
+        masterOrder: d.masterOrder ? {
+          ...d.masterOrder,
+          items: d.masterOrder.items.map((item: any) => ({
+            ...item,
+            seller: item.seller ? {
+              fullName: item.seller.sellerName,
+              phoneNumber: item.seller.mobileNumber,
+              address: {
+                houseNo: item.seller.addressLine1 || '',
+                village: item.seller.village,
+                taluka: item.seller.taluka,
+                district: item.seller.district,
+                pincode: item.seller.pincode,
+              }
+            } : null
+          }))
+        } : null,
+        tracking: d.tracking,
+        transporter: await this.enrichTransporterInfo(d.transporter),
+        legType: 'drop',
+        sourceType: 'buyer',
+        parcelWeight,
+        ...(this.vehicleSuggestionService.getSuggestion(parcelWeight) || { recommendedVehicle: null, recommendedCapacity: null, otherSuitableVehicles: [] }),
+      };
+    }));
   }
 
   public formatReturnPickups(returnPickups: any[]) {

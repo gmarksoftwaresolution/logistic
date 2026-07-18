@@ -3,6 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { STORAGE_KEYS } from '../utils/storage';
 
+export interface VehicleInfo {
+  id: string | number;
+  name: string;
+  capacity: number;
+  description: string;
+  icon: string;
+}
+
+export interface VehicleSuggestion {
+  recommendedVehicle: VehicleInfo;
+  suitableVehicles: VehicleInfo[];
+}
+
 export interface Order {
   id: string;
   orderId: string;
@@ -48,6 +61,10 @@ export interface Order {
   sellerName?: string;
   products?: any[];
   handoverCode?: string;
+  parcelWeight?: number;
+  recommendedVehicle?: VehicleInfo | null;
+  recommendedCapacity?: number | null;
+  otherSuitableVehicles?: VehicleInfo[];
 }
 
 interface OrderContextType {
@@ -148,6 +165,10 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       id: `${type}-${dbOrder.id}`,
       orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
       parcelName,
+      parcelWeight: dbOrder.parcelWeight,
+      recommendedVehicle: dbOrder.recommendedVehicle,
+      recommendedCapacity: dbOrder.recommendedCapacity,
+      otherSuitableVehicles: dbOrder.otherSuitableVehicles || [],
       category,
       mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
       amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),

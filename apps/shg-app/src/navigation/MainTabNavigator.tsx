@@ -26,6 +26,7 @@ import DeliveryScreen from '../screens/DeliveryScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
+import VehicleSuggestionDetailsScreen from '../screens/VehicleSuggestionDetailsScreen';
 import ReturnedOrdersScreen from '../screens/ReturnedOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -191,6 +192,7 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
+      <OrdersStack.Screen name="VehicleSuggestionDetails" component={VehicleSuggestionDetailsScreen} />
     </OrdersStack.Navigator>
   );
 }

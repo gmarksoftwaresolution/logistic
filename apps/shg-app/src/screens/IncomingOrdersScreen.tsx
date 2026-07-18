@@ -62,11 +62,25 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     }, [refreshOrdersList])
   );
 
+  const getIconName = (icon: string): keyof typeof Ionicons.glyphMap => {
+    switch (icon) {
+      case 'bike': return 'bicycle-outline';
+      case 'car': return 'car-sport-outline';
+      case 'auto': return 'bus-outline';
+      case 'pickup': return 'car-outline';
+      case 'minivan': return 'bus-outline';
+      case 'truck': return 'car-outline';
+      case 'tractor': return 'car-outline';
+      default: return 'car-outline';
+    }
+  };
+
   // Selection and Animation states
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isNavigating = useRef(false);
 
   const PAGE_SIZE = 5;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -503,6 +517,8 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
         const orderReschedule = rescheduledOrders[item.id];
         const isOrderRescheduled = !!orderReschedule;
+        const showSuggestionPanel = item.parcelWeight !== undefined && item.parcelWeight > 30 && item.recommendedVehicle;
+
         return (
           <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
             <TouchableOpacity key={item.id} onPress={() => toggleSelect(item.id)} activeOpacity={0.85} style={{
@@ -522,7 +538,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
               backgroundColor: isOrderRescheduled && !isSelected ? '#FFFBEB' : 'white'
             }} className="flex-row items-center">
                 {/* Left Selection Circular Checkbox */}
-                <View style={{
+                <TouchableOpacity onPress={() => toggleSelect(item.id)} activeOpacity={0.7} style={{
                   width: 24,
                   height: 24,
                   borderRadius: 12,
@@ -540,7 +556,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   marginRight: 12
                 }} className="items-center justify-center">
                   {isSelected && <Ionicons name="checkmark" size={12} color="white" />}
-                </View>
+                </TouchableOpacity>
 
                 {/* Center Content Side */}
                 <View className="flex-1 pr-2">
@@ -607,6 +623,35 @@ const IncomingOrdersScreen: React.FC<Props> = ({
                   </View>
                 </View>
 
+                {/* Right Side - Vehicle Suggestion Panel */}
+                {showSuggestionPanel && (
+                  <View className="w-[120px] bg-[#F0FDF4] rounded-[14px] border border-[#DCFCE7] p-2.5 ml-1 flex-col justify-between" style={{ alignSelf: 'stretch' }}>
+                    <View>
+                      <View className="flex-row justify-between items-start mb-1.5">
+                        <Text className="text-[#16A34A] font-bold text-[10px]" numberOfLines={1}>Vehicle Suggestion</Text>
+                        {item.recommendedVehicle?.icon && (
+                          <Ionicons name={getIconName(item.recommendedVehicle.icon)} size={14} color="#15803D" />
+                        )}
+                      </View>
+                      <Text className="text-slate-500 text-[9px] font-medium">Parcel Weight</Text>
+                      <Text className="text-[#166534] font-black text-[13px] mb-2">{item.parcelWeight} kg</Text>
+                      <Text className="text-slate-500 text-[9px] font-medium">Suggested Vehicle</Text>
+                      <Text className="text-[#15803D] font-bold text-[11px]" numberOfLines={2}>{item.recommendedVehicle?.name}</Text>
+                    </View>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        if (isNavigating.current) return;
+                        isNavigating.current = true;
+                        navigation.navigate('VehicleSuggestionDetails', { order: item });
+                        setTimeout(() => { isNavigating.current = false; }, 1000);
+                      }}
+                      activeOpacity={0.7}
+                      className="mt-2 bg-white border border-[#22C55E] rounded-lg py-1.5 items-center justify-center shadow-sm"
+                    >
+                      <Text className="text-[#16A34A] font-bold text-[10px]">View Options</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
               </TouchableOpacity>
             </HighlightCardWrapper>
@@ -930,6 +975,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
           />
         );
       })()}
+
     </SafeAreaView>;
 };
 export default IncomingOrdersScreen;

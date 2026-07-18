@@ -22,6 +22,7 @@ export interface UserProfile {
   homeAddress: string;
   shgUniqueId?: string;
   applicationStatus?: string;
+  vehicleCapacity?: number;
 }
 
 export type ApplicationStatus = 'Pending' | 'Under Review' | 'Approved' | 'Rejected' | null;
