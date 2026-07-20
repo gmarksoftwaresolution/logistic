@@ -12,7 +12,7 @@ const getLocalDevelopmentUrl = (): string => {
       if (match) {
         const host = match[1];
         // The Transporter backend runs on port 3003
-        return `http://${host}:3003`;
+        return `http://${host}:3003/api`;
       }
     }
   } catch (e) {
@@ -21,9 +21,9 @@ const getLocalDevelopmentUrl = (): string => {
 
   // Fallbacks based on platform
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3003'; // Android emulator host loopback
+    return 'http://10.0.2.2:3003/api'; // Android emulator host loopback
   }
-  return 'http://localhost:3003';
+  return 'http://localhost:3003/api';
 };
 
 const getBackendUrl = (): string => {
@@ -123,9 +123,10 @@ api.interceptors.response.use(
           console.log(`[API Auto-Login] Received 401. Attempting background re-login for: ${userPhone}`);
           try {
             let accessToken = null;
+            const targetBaseUrl = (api.defaults.baseURL || BASE_URL).replace(/\/+$/, '');
             // Try /auth/verify-otp first
             try {
-              const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/auth/verify-otp`, {
+              const res = await axios.post(`${targetBaseUrl}/auth/verify-otp`, {
                 mobileNumber: userPhone,
                 otp: '123456',
               });
@@ -133,7 +134,7 @@ api.interceptors.response.use(
             } catch (authErr) {
               console.log('[API Auto-Login] /auth/verify-otp failed, trying /registration/verify-otp...');
               // Fall back to /registration/verify-otp
-              const res = await axios.post(`${api.defaults.baseURL || BASE_URL}/registration/verify-otp`, {
+              const res = await axios.post(`${targetBaseUrl}/registration/verify-otp`, {
                 mobileNumber: userPhone,
                 otp: '123456',
               });
