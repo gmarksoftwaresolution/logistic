@@ -292,12 +292,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
           status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId) 
             ? 'NEW_ORDER' 
-            : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED') 
-              ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || o.masterOrder?.status === 'PARCEL_AT_DROP_SHG' || o.masterOrder?.status === 'PARCEL_WITH_DROP_SHG' || o.masterOrder?.status === 'DELIVERED' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
-              : (o.status === 'PICKED_UP' || o.status === 'RETURN_PICKED_UP')
-                ? ('PICKUP_COMPLETED' as const)
-                : (o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'DELIVERED') 
-                  ? ('DROP_COMPLETED' as const) 
+            : (o.masterOrder?.dropTransporterStatus === 'COMPLETED' || o.masterOrder?.status === 'PARCEL_AT_DROP_SHG' || o.masterOrder?.status === 'PARCEL_WITH_DROP_SHG' || o.masterOrder?.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'DELIVERED')
+              ? ('DROP_COMPLETED' as const)
+              : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED') 
+                ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
+                : (o.status === 'PICKED_UP' || o.status === 'RETURN_PICKED_UP')
+                  ? ('DROP_COMPLETED' as const) // Since SHG picked it up, Transporter must be done
                   : ('rejected' as const),
         rejectReason: (() => {
           const rawReason = o.tracking?.[0]?.remarks;
