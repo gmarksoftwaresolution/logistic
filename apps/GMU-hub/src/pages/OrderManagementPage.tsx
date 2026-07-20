@@ -1077,7 +1077,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
     // 4. GMU Hub: completed if dispatched from hub or later status
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
     if (isHubCompleted) {
       gmuHubState = 'completed';
     } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
