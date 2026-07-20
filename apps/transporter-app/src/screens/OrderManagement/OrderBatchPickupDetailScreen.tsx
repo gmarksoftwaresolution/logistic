@@ -315,8 +315,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     }
   }, [scannerModalVisible, permission]);
 
+  const isScanningRef = useRef(false);
+
   const handleBarcodeScanned = async ({ type: qrType, data }: { type: string; data: string }) => {
-    if (scanned) return;
+    if (scanned || isScanningRef.current) return;
+    isScanningRef.current = true;
     setScanned(true);
     setScanningStatus('success');
 
@@ -346,6 +349,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       if (!parcelId || !verificationToken) {
         Alert.alert('Invalid QR Code', 'This QR code does not contain a valid parcel ID and verification token.');
         setScanned(false);
+        isScanningRef.current = false;
         setScanningStatus('scanning');
         return;
       }
@@ -357,6 +361,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           `Please scan the QR code specifically for "${activeScanningParcel.productName || 'this item'}".`
         );
         setScanned(false);
+        isScanningRef.current = false;
         setScanningStatus('scanning');
         return;
       }
@@ -378,6 +383,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         setScannerModalVisible(false);
         setActiveScanningParcel(null);
         setScanned(false);
+        isScanningRef.current = false;
       }, 1200);
 
     } catch (err: any) {
@@ -385,6 +391,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       const msg = err.response?.data?.message || err.message || 'Failed to verify QR code.';
       Alert.alert('Verification Failed', msg);
       setScanned(false);
+      isScanningRef.current = false;
       setScanningStatus('scanning');
     }
   };

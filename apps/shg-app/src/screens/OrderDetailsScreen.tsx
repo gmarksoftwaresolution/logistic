@@ -589,11 +589,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
             setIsSubmitting(false);
             return;
           }
-          if (order.legType === 'drop' && !order.handoverCode) {
-            Alert.alert("Verification Required", "Please wait for transporter to generate code before submitting.");
-            setIsSubmitting(false);
-            return;
-          }
         }
       }
 
@@ -1084,6 +1079,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>;
         })}
       </View>
+
+
 
 
 

@@ -629,13 +629,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       (a: any, b: any) => new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime()
     );
 
-    const pickupShgDetails = pAssigned?.shgDetails || pWh?.shgDetails || pRej?.shgDetails || pRes?.shgDetails || pNew?.shgDetails;
-    const dropShgDetails = dAssigned?.shgDetails || dRej?.shgDetails || dRes?.shgDetails || dComp?.shgDetails || dNew?.shgDetails;
-    const returnShgDetails = retPNew?.shgDetails || retPComp?.shgDetails || retDNew?.shgDetails || retDComp?.shgDetails;
+    const pickupShgDetails = pAssigned?.shgDetails || pWh?.shgDetails || pRej?.shgDetails || pRes?.shgDetails || pNew?.shgDetails || tempPrimary.pickupShgDetails;
+    const dropShgDetails = dAssigned?.shgDetails || dRej?.shgDetails || dRes?.shgDetails || dComp?.shgDetails || dNew?.shgDetails || tempPrimary.dropShgDetails;
+    const returnShgDetails = retPNew?.shgDetails || retPComp?.shgDetails || retDNew?.shgDetails || retDComp?.shgDetails || tempPrimary.returnShgDetails;
 
-    const pickupTransporterDetails = pAssigned?.transporterDetails || pWh?.transporterDetails || pRej?.transporterDetails || pRes?.transporterDetails;
-    const dropTransporterDetails = dAssigned?.transporterDetails || dRej?.transporterDetails || dRes?.transporterDetails || dComp?.transporterDetails;
-    const returnTransporterDetails = retPNew?.transporterDetails || retPComp?.transporterDetails || retDNew?.transporterDetails || retDComp?.transporterDetails;
+    const pickupTransporterDetails = pAssigned?.transporterDetails || pWh?.transporterDetails || pRej?.transporterDetails || pRes?.transporterDetails || tempPrimary.pickupTransporterDetails;
+    const dropTransporterDetails = dAssigned?.transporterDetails || dRej?.transporterDetails || dRes?.transporterDetails || dComp?.transporterDetails || tempPrimary.dropTransporterDetails;
+    const returnTransporterDetails = retPNew?.transporterDetails || retPComp?.transporterDetails || retDNew?.transporterDetails || retDComp?.transporterDetails || tempPrimary.returnTransporterDetails;
 
     return {
       ...primary,
@@ -1059,7 +1059,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
     // 2. Pickup SHG: completed if order is picked (or later status)
     let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
     if (isShgPicked) {
       pickupShgState = 'completed';
     } else if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
@@ -1068,37 +1068,37 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
     // 3. Pickup Transporter: completed if parcel is picked up by transporter (or later status)
     let pickupTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isTransPickupCompleted = ['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isTransPickupCompleted = ['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
     if (isTransPickupCompleted) {
       pickupTransporterState = 'completed';
     } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG'].includes(order.mainStatus) || order.pickupTransporterStatus === 'ACCEPTED') {
       pickupTransporterState = 'active';
     }
 
-    // 4. GMU Hub: completed if stored/dispatched/drop started
+    // 4. GMU Hub: completed if dispatched from hub or later status
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
     if (isHubCompleted) {
       gmuHubState = 'completed';
-    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'AT_HUB'].includes(order.mainStatus)) {
+    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
       gmuHubState = 'active';
     }
 
     // 5. Drop Transporter: completed if parcel is at drop SHG/delivered
     let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED' || order.dropShgStatus === 'ACCEPTED' || order.dropShgStatus === 'DELIVERED';
+    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED';
     if (isDropTransCompleted) {
       dropTransporterState = 'completed';
-    } else if (order.phase === 'DROP' && (['DROP_TRANSPORTER_ACCEPTED', 'DROP_TRANSPORTER_PENDING', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_TRANSPORTER'].includes(order.mainStatus) || order.dropTransporterStatus === 'ACCEPTED')) {
+    } else if (order.phase === 'DROP' && !['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
       dropTransporterState = 'active';
     }
 
     // 6. Drop SHG: completed if delivered/completed
     let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropShgCompleted = ['DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED';
+    const isDropShgCompleted = ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED';
     if (isDropShgCompleted) {
       dropShgState = 'completed';
-    } else if (order.phase === 'DROP' && (['DROP_SHG_ACCEPTED', 'DROP_SHG_PENDING', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || order.dropShgStatus === 'ACCEPTED')) {
+    } else if (order.phase === 'DROP' && ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG'].includes(order.mainStatus)) {
       dropShgState = 'active';
     }
 
@@ -1107,7 +1107,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const isBuyerCompleted = ['DELIVERED', 'COMPLETED'].includes(order.mainStatus);
     if (isBuyerCompleted) {
       buyerState = 'completed';
-    } else if (order.phase === 'DROP' && ['PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+    } else if (order.phase === 'DROP' && ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
       buyerState = 'active';
     }
 
@@ -1282,6 +1282,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   const completedColumns = [
     { header: 'Order ID', accessor: 'id' as keyof DropOrder },
+    { header: 'Status', accessor: (row: any) => (
+      <span className="bg-emerald-50 text-[#073318] border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
+        Completed
+      </span>
+    ) },
     { header: 'QR Codes', accessor: (row: any) => (
       <button 
         onClick={(e) => {
@@ -1648,7 +1653,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       const isExpanded = !!expandedOrders[order.id];
                       const nodes = getTimelineNodes(order);
 
-                      const needsIntake = ['PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
+                      const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
                       const needsBarcode = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
                       return (

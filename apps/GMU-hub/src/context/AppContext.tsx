@@ -363,7 +363,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           mobile: apiShgDetails.mobile,
           address: apiShgDetails.address,
         } : (shgMember ? {
-          name: shgMember.name,
+          name: shgMember.leader || shgMember.name,
           mobile: shgMember.mobile,
           address: shgMember.address,
         } : undefined));
@@ -446,7 +446,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
 
     // Compute explicit pickup & drop details for the graphical timeline
-    const pickupShgId = o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId;
+    // Compute explicit pickup & drop details for the graphical timeline
+    const pickupShgId = o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
     const pickupShgMember = shgList.find(s => String(s.id) === String(pickupShgId));
     const apiPickupShgDetails = o.pickupShgDetails || (flowType === 'pickup' ? o.shgDetails : undefined);
     const pickupShgDetails = apiPickupShgDetails ? {
@@ -454,12 +455,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mobile: apiPickupShgDetails.mobile,
       address: apiPickupShgDetails.address,
     } : (pickupShgMember ? {
-      name: pickupShgMember.name,
+      name: pickupShgMember.leader || pickupShgMember.name,
       mobile: pickupShgMember.mobile,
       address: pickupShgMember.address,
     } : undefined);
 
-    const dropShgId = o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId;
+    const dropShgId = o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
     const dropShgMember = shgList.find(s => String(s.id) === String(dropShgId));
     const apiDropShgDetails = o.dropShgDetails || (flowType === 'drop' ? o.shgDetails : undefined);
     const dropShgDetails = apiDropShgDetails ? {
@@ -467,12 +468,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mobile: apiDropShgDetails.mobile,
       address: apiDropShgDetails.address,
     } : (dropShgMember ? {
-      name: dropShgMember.name,
+      name: dropShgMember.leader || dropShgMember.name,
       mobile: dropShgMember.mobile,
       address: dropShgMember.address,
     } : undefined);
 
-    const pickupTransporterId = o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+    const pickupTransporterId = o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
     const pickupTransporterMember = transporterList.find(t => String(t.id) === String(pickupTransporterId));
     const apiPickupTransporterDetails = o.pickupTransporterDetails || (flowType === 'pickup' ? o.transporterDetails : undefined);
     const pickupTransporterDetails = apiPickupTransporterDetails ? {
@@ -485,7 +486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       address: pickupTransporterMember.address,
     } : undefined);
 
-    const dropTransporterId = o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+    const dropTransporterId = o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
     const dropTransporterMember = transporterList.find(t => String(t.id) === String(dropTransporterId));
     const apiDropTransporterDetails = o.dropTransporterDetails || (flowType === 'drop' ? o.transporterDetails : undefined);
     const dropTransporterDetails = apiDropTransporterDetails ? {
@@ -519,6 +520,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transporterStatus: mappedTransporterStatus,
       mainStatus: o.mainStatus,
       status: o.mainStatus,
+      phase: o.phase,
       created_at: o.createdAt ? o.createdAt.replace('T', ' ').substring(0, 16) : '',
       updated_at: o.updatedAt ? o.updatedAt.replace('T', ' ').substring(0, 16) : '',
       shgDetails,
@@ -538,6 +540,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       parcels: o.parcels,
       rawCreatedAt: o.createdAt,
       rawUpdatedAt: o.updatedAt,
+      pickupShgDetails,
+      pickupTransporterDetails,
+      dropShgDetails,
+      dropTransporterDetails,
       // Pass along computed detailed fields and status properties for graphical timeline
       pickupShgId,
       dropShgId,

@@ -247,7 +247,7 @@ export class QrService {
       validateVerificationToken(verificationToken, parcel.verificationToken);
     }
 
-    const transition = determineTransition(sessionType, finalUserRole, finalUserId, parcel, order);
+    const transition = determineTransition(sessionType, finalUserRole, finalUserId, parcel, order, legType);
 
     const updatedParcel = await this.prisma.$transaction(async (tx: any) => {
       const updated = await tx.parcel.update({
@@ -296,7 +296,8 @@ export class QrService {
         dropTransporterStatus = 'COMPLETED';
         dropShgStatus = 'ACCEPTED';
       } else if (mainStatus === 'DELIVERED') {
-        dropShgStatus = 'DELIVERED';
+        mainStatus = 'IN_TRANSIT_TO_BUYER';
+        dropShgStatus = 'PICKED';
       }
 
       await tx.order.update({

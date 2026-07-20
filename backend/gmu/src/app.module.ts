@@ -11,6 +11,7 @@ import { QrModule } from './qr/qr.module';
 import { AppController } from './app.controller';
 import { LocationModule } from './location/location.module';
 
+// Reload trigger: 2026-07-19
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),

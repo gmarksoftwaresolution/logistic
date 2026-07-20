@@ -66,6 +66,7 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const [hasScannedAny, setHasScannedAny] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const isScanningRef = useRef(false);
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -73,7 +74,7 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
   useEffect(() => {
     const initSession = async () => {
       try {
-        if (!activeSession && orderIds) {
+        if (orderIds && orderIds.length > 0) {
           await startSession('DROP', orderIds);
         }
       } catch (err: any) {
@@ -118,17 +119,23 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (scanned || !activeSession || actionLoading) return;
+    if (scanned || isScanningRef.current || !activeSession || actionLoading) return;
 
-    // Scan throttling lock (250 ms)
+    // Scan lock: prevent any further scans until this operation finishes
+    isScanningRef.current = true;
     setScanned(true);
-    setTimeout(() => setScanned(false), 250);
+
+    const resetScanLock = () => {
+      setScanned(false);
+      isScanningRef.current = false;
+    };
 
     let decoded;
     try {
       decoded = decodeQrData(data);
     } catch (err: any) {
       triggerScanFeedback('error', 'Malformed QR payload scanned.');
+      setTimeout(resetScanLock, 1500);
       return;
     }
 
@@ -148,6 +155,8 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
       } catch (err: any) {
         const errMsg = err.response?.data?.message || 'Sync failed.';
         triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+      } finally {
+        setTimeout(resetScanLock, 1500);
       }
       return;
     }
@@ -155,6 +164,7 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
     // Validate verification token locally if available
     if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
       triggerScanFeedback('error', 'Invalid verification token.');
+      setTimeout(resetScanLock, 1500);
       return;
     }
 
@@ -164,6 +174,7 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     if (isDuplicate) {
       triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName}`);
+      setTimeout(resetScanLock, 1500);
       return;
     }
 
@@ -190,6 +201,8 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
       setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
       const errMsg = err.response?.data?.message || 'Sync failed.';
       triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+    } finally {
+      setTimeout(resetScanLock, 1500);
     }
   };
 
@@ -444,7 +457,10 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
                   <View style={styles.orderHeaderRow}>
                     <View>
                       <Text style={styles.orderIdLabel}>Order ID</Text>
-                      <Text style={styles.orderIdValue}>ORD-{orderGroup.orderId.replace('pickup-', '').replace('drop-', '')}</Text>
+                      <Text style={styles.orderIdValue}>ORD-{(() => {
+                        const id = orderGroup.orderId.replace('pickup-', '').replace('drop-', '');
+                        return id.startsWith('ORD-') ? id.substring(4) : id;
+                      })()}</Text>
                     </View>
                     <View style={styles.badgeContainer}>
                       <Text style={[

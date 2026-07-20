@@ -1148,8 +1148,8 @@ export class OrderService {
 
     if (dropOrder.status !== 'DELIVERED') {
       const expectedBarcode = dropOrder.handoverCode;
-      if (!code || code !== expectedBarcode) {
-        throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode || 'a valid barcode'}, received ${code || 'none'}.`);
+      if (expectedBarcode && (!code || code !== expectedBarcode)) {
+        throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode}, received ${code || 'none'}.`);
       }
     }
 
@@ -1178,13 +1178,19 @@ export class OrderService {
         },
       });
 
-      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'IN_TRANSIT_TO_BUYER';
-      const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-        WHERE "orderId" = $3 AND phase = 'DROP';
-      `, dropShgStatus, nextGmuStatus, orderNumber);
+      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
+      const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
+      await tx.order.updateMany({
+        where: {
+          orderId: orderNumber,
+          phase: 'DROP',
+        },
+        data: {
+          dropShgStatus,
+          mainStatus: nextGmuStatus,
+          updatedAt: new Date(),
+        },
+      });
 
       await tx.masterOrder.update({
         where: { id: dropOrder.masterOrderId },
@@ -1256,12 +1262,18 @@ export class OrderService {
         },
       });
 
-      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PARCEL_AT_BUYER';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropShgStatus" = 'DROPPED', "mainStatus" = $1, "updatedAt" = NOW()
-        WHERE "orderId" = $2 AND phase = 'DROP';
-      `, nextGmuStatus, masterOrder.orderNumber);
+      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'DELIVERED';
+      await tx.order.updateMany({
+        where: {
+          orderId: masterOrder.orderNumber,
+          phase: 'DROP',
+        },
+        data: {
+          dropShgStatus: 'DROPPED',
+          mainStatus: nextGmuStatus,
+          updatedAt: new Date(),
+        },
+      });
 
       await tx.masterOrder.update({
         where: { id: dropOrder.masterOrderId },
@@ -2198,7 +2210,7 @@ export class OrderService {
       where: {
         shgId,
         buyerId: { not: shgId },
-        status: 'DELIVERED',
+        status: { in: ['DELIVERED', 'COMPLETED'] },
         NOT: { dropOrderNumber: { startsWith: 'RET-' } }
       },
       include: {

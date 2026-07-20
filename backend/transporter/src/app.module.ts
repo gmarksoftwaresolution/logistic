@@ -15,6 +15,7 @@ import { OrderModule } from './order/order.module';
 import { QrModule } from './qr/qr.module';
 import { LocationModule } from './location/location.module';
 
+// Reload trigger: 2026-07-19
 @Module({
   imports: [
     ConfigModule.forRoot({
