@@ -14,7 +14,7 @@ for (const p of envPaths) {
   }
 }
 
-process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:root@localhost:5432/logistic_db?schema=public";
+// Database URL is read from .env
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
@@ -23,17 +23,21 @@ async function main() {
 
   // 1. Delete all drop orders and tracking to start Phase 2 fresh
   console.log('- Clearing Drop Orders & Tracking...');
-  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_tracking;`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_order_items;`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public.drop_orders;`);
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public.drop_tracking;`); } catch (e) { console.log('  (Skipped public.drop_tracking deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public.drop_order_items;`); } catch (e) { console.log('  (Skipped public.drop_order_items deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public.drop_orders;`); } catch (e) { console.log('  (Skipped public.drop_orders deletion)'); }
+  
+  console.log('- Clearing Scan Sessions...');
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."ScanSessionItem";`); } catch (e) { console.log('  (Skipped public.ScanSessionItem deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."ScanSession";`); } catch (e) { console.log('  (Skipped public.ScanSession deletion)'); }
 
   // 2. Delete verification records except for setup/initial ones
   console.log('- Clearing verification records...');
-  await prisma.$executeRawUnsafe(`DELETE FROM public."VerificationRecord";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public."ScanHistory";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public."ParcelScanHistory";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public."Parcel";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_tracking;`);
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."VerificationRecord";`); } catch (e) { console.log('  (Skipped public.VerificationRecord deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."ScanHistory";`); } catch (e) { console.log('  (Skipped public.ScanHistory deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."ParcelScanHistory";`); } catch (e) { console.log('  (Skipped public.ParcelScanHistory deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."Parcel";`); } catch (e) { console.log('  (Skipped public.Parcel deletion)'); }
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public.pickup_tracking;`); } catch (e) { console.log('  (Skipped public.pickup_tracking deletion)'); }
 
   // 3. Reset pickup_orders to PENDING
   console.log('- Resetting public.pickup_orders...');
@@ -74,6 +78,43 @@ async function main() {
   `;
   await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'gmu'));
   await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'public'));
+
+  // Update sellers/buyers villages and pincodes in public schema to match exact database spellings
+  console.log('- Aligning seller/buyer villages and pincodes with database PincodeDirectory...');
+  await prisma.$executeRawUnsafe(`UPDATE public.sellers SET village = 'Batkangale', pincode = '416503' WHERE village = 'Batkanangale';`);
+  await prisma.$executeRawUnsafe(`UPDATE public.sellers SET village = 'Mahagaon (Kolhapur)', pincode = '416503' WHERE village = 'Mahagaon';`);
+  await prisma.$executeRawUnsafe(`UPDATE public.sellers SET village = 'Gadhinglaj', pincode = '416502' WHERE village = 'Gadhinglaj';`);
+
+  await prisma.$executeRawUnsafe(`UPDATE public.buyers SET village = 'Batkangale', pincode = '416503' WHERE village = 'Batkanangale';`);
+  await prisma.$executeRawUnsafe(`UPDATE public.buyers SET village = 'Mahagaon (Kolhapur)', pincode = '416503' WHERE village = 'Mahagaon';`);
+  await prisma.$executeRawUnsafe(`UPDATE public.buyers SET village = 'Gadhinglaj', pincode = '416502' WHERE village = 'Gadhinglaj';`);
+
+  // Update registered user addresses in public."Address" schema to use correct spellings
+  console.log('- Aligning registered user addresses with database PincodeDirectory...');
+  await prisma.$executeRawUnsafe(`UPDATE public."Address" SET village = 'Batkangale' WHERE village = 'Batkanangale';`);
+
+  // Update RouteDetail villages to match exact database spellings
+  console.log('- Aligning transporter RouteDetail villages with database PincodeDirectory...');
+  await prisma.$executeRawUnsafe(`
+    UPDATE public."RouteDetail" 
+    SET "operatingArea" = REPLACE("operatingArea"::text, 'Batkanangale', 'Batkangale')::text
+    WHERE "operatingArea"::text LIKE '%Batkanangale%';
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE public."RouteDetail" 
+    SET "operatingArea" = REPLACE("operatingArea"::text, 'Mahagaon', 'Mahagaon (Kolhapur)')::text
+    WHERE "operatingArea"::text LIKE '%Mahagaon%' AND "operatingArea"::text NOT LIKE '%Mahagaon (Kolhapur)%';
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE public."RouteDetail" 
+    SET "pickupLocations" = REPLACE("pickupLocations"::text, 'Batkanangale', 'Batkangale')::jsonb
+    WHERE "pickupLocations"::text LIKE '%Batkanangale%';
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE public."RouteDetail" 
+    SET "pickupLocations" = REPLACE("pickupLocations"::text, 'Mahagaon', 'Mahagaon (Kolhapur)')::jsonb
+    WHERE "pickupLocations"::text LIKE '%Mahagaon%' AND "pickupLocations"::text NOT LIKE '%Mahagaon (Kolhapur)%';
+  `);
 
   // 7. Auto-broadcast all orders to matching approved SHGs
   console.log('- Auto-broadcasting orders to matching approved SHGs...');

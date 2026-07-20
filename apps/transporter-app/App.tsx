@@ -5,6 +5,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { OrderManagementProvider } from './src/context/OrderManagementContext';
 import { OnboardingProvider } from './src/context/OnboardingContext';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
+import { ScanSessionProvider } from './src/context/ScanSessionContext';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
@@ -62,8 +63,10 @@ export default function App() {
         <I18nextProvider i18n={i18n}>
           <OrderManagementProvider>
             <OnboardingProvider>
-              <AppNavigator />
-              <OnboardingOverlay />
+              <ScanSessionProvider>
+                <AppNavigator />
+                <OnboardingOverlay />
+              </ScanSessionProvider>
             </OnboardingProvider>
           </OrderManagementProvider>
         </I18nextProvider>

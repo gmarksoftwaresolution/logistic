@@ -26,6 +26,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
+import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'AcceptedOrders'>,
@@ -388,6 +389,21 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         );
       })()}
+
+      {activeTab === 'pickup' && (
+        <FloatingScannerButton
+          module="PICKUP"
+          orderIds={pickupOrders.map(o => o.orderId)}
+          navigation={navigation}
+        />
+      )}
+      {activeTab === 'delivery' && (
+        <FloatingScannerButton
+          module="DROP"
+          orderIds={deliveryOrders.map(o => o.orderId)}
+          navigation={navigation}
+        />
+      )}
     </SafeAreaView>
   );
 };

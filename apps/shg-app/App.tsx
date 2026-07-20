@@ -24,6 +24,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import { OnboardingProvider } from './src/context/OnboardingContext';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
+import { ScanSessionProvider } from './src/context/ScanSessionContext';
 import "./global.css";
 
 const SuccessToast = ({ text1, text2 }: any) => {
@@ -142,12 +143,14 @@ export default function App() {
         <UserProvider>
           <OrderProvider>
             <OnboardingProvider>
-              <SafeAreaProvider onLayout={onLayoutRootView}>
-                <NavigationContainer>
-                  <AppNavigator />
-                </NavigationContainer>
-                <Toast config={toastConfig} position="bottom" bottomOffset={110} />
-              </SafeAreaProvider>
+              <ScanSessionProvider>
+                <SafeAreaProvider onLayout={onLayoutRootView}>
+                  <NavigationContainer>
+                    <AppNavigator />
+                  </NavigationContainer>
+                  <Toast config={toastConfig} position="bottom" bottomOffset={110} />
+                </SafeAreaProvider>
+              </ScanSessionProvider>
             </OnboardingProvider>
           </OrderProvider>
         </UserProvider>

@@ -25,6 +25,7 @@ import { scale, verticalScale, moderateScale, cleanPersonName } from '../../util
 import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
+import { FloatingScannerButton } from '../../components/FloatingScannerButton/FloatingScannerButton';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useTranslation } from 'react-i18next';
 import {
@@ -1063,12 +1064,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                 </TouchableOpacity>
               )}
               */}
-              <TouchableOpacity
-                style={[styles.primaryConfirmBtn, { backgroundColor: '#073318', marginTop: verticalScale(4) }]}
-                onPress={handleQrScanSimulated}
-              >
-                <Text style={styles.primaryConfirmBtnText}>Scan QR Code (Simulated)</Text>
-              </TouchableOpacity>
+              {/* Removed Scan QR Code (Simulated) button */}
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
@@ -1440,18 +1436,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
             <View style={styles.scannerInputBox}>
               <TextInput
-                style={styles.scannerInput}
+                style={[styles.scannerInput, { marginRight: 0 }]}
                 placeholder="Enter barcode manually..."
                 placeholderTextColor="rgba(255, 255, 255, 0.4)"
                 value={manualBarcode}
                 onChangeText={setManualBarcode}
               />
-              <TouchableOpacity
-                style={styles.simulateScanBtn}
-                onPress={() => setManualBarcode(batch.handoverCode || '')}
-              >
-                <Text style={styles.simulateScanBtnText}>Fill Barcode</Text>
-              </TouchableOpacity>
             </View>
 
             {scannerError ? (
@@ -1482,6 +1472,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         message={failureMessage}
         onClose={() => setShowFailureDialog(false)}
       />
+      {canConfirm && (
+        <FloatingScannerButton
+          module={type === 'pickup' ? 'PICKUP' : 'DROP'}
+          orderIds={Array.from(new Set(orderParcels.map((p: any) => p.orderId)))}
+          navigation={navigation}
+        />
+      )}
     </SafeAreaView>
   );
 };

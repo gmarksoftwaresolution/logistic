@@ -1,0 +1,51 @@
+import { StyleSheet } from 'react-native';
+import { Colors } from '../../constants/theme';
+
+export const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 115,
+    right: 20,
+    zIndex: 9999,
+  },
+  button: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#073318',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6.68,
+    elevation: 10,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: Colors.secondary,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    minWidth: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  badgeText: {
+    color: '#073318',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+});

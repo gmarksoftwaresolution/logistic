@@ -442,6 +442,16 @@ export class VehicleDto {
   @IsUrl({ require_protocol: true, require_tld: false }, { message: 'Invalid vehicle image URL format' })
   @IsOptional()
   vehicleImageUrl?: string;
+
+  @ApiPropertyOptional({ example: 'Bike / Scooty', description: 'Selected vehicle name' })
+  @IsString()
+  @IsOptional()
+  vehicleName?: string;
+
+  @ApiPropertyOptional({ example: '30', description: 'Vehicle carrying capacity' })
+  @IsString()
+  @IsOptional()
+  carryingCapacity?: string;
 }
 
 export class OtherDetailsDto {

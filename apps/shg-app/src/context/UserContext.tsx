@@ -22,6 +22,7 @@ export interface UserProfile {
   homeAddress: string;
   shgUniqueId?: string;
   applicationStatus?: string;
+  vehicleCapacity?: number;
 }
 
 export type ApplicationStatus = 'Pending' | 'Under Review' | 'Approved' | 'Rejected' | null;
@@ -53,10 +54,27 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setToken(storedToken);
         try {
           setUser(storedUser ? JSON.parse(storedUser) : null);
+          
+          // Fetch latest profile from backend to ensure we have the most up-to-date photo, etc.
+          try {
+            const backendProfile = await userService.getProfile();
+            if (backendProfile) {
+              // The backend getProfile might return the DB user model directly.
+              // We just map profilePhoto to profileImage if necessary.
+              const freshData = {
+                ...backendProfile,
+                profileImage: backendProfile.profilePhoto || backendProfile.profileImage || null
+              };
+              const updatedUser = { ...(storedUser ? JSON.parse(storedUser) : {}), ...freshData };
+              setUser(updatedUser);
+              await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
+            }
+          } catch (apiError) {
+            console.error("Failed to fetch fresh profile from backend on startup:", apiError);
+          }
         } catch (e) {
           console.error("Failed to parse stored user profile:", e);
           setUser(null);
-          // Optional: clear corrupted data
           await AsyncStorage.removeItem('user_profile');
         }
       }
@@ -84,6 +102,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL);
     await AsyncStorage.removeItem('orders');
     await AsyncStorage.removeItem('orders_cache');
+    await AsyncStorage.removeItem('scan_session_pickup');
+    await AsyncStorage.removeItem('scan_session_drop');
   };
 
   const updateUser = async (data: Partial<UserProfile>) => {
@@ -93,16 +113,20 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
       
       try {
-        await userService.updateProfile({
+        const payload: any = {
           name: updatedUser.name,
           profileImage: updatedUser.profileImage,
-          pincode: updatedUser.pincode,
-          stateName: updatedUser.stateName,
-          district: updatedUser.district,
-          taluka: updatedUser.taluka,
-          village: updatedUser.village,
-          homeAddress: updatedUser.homeAddress,
-        });
+        };
+        
+        // Only include location fields if they exist and are not empty
+        if (updatedUser.pincode) payload.pincode = updatedUser.pincode;
+        if (updatedUser.stateName) payload.stateName = updatedUser.stateName;
+        if (updatedUser.district) payload.district = updatedUser.district;
+        if (updatedUser.taluka) payload.taluka = updatedUser.taluka;
+        if (updatedUser.village) payload.village = updatedUser.village;
+        if (updatedUser.homeAddress) payload.homeAddress = updatedUser.homeAddress;
+
+        await userService.updateProfile(payload);
       } catch (err) {
         console.error('Failed to sync profile update to backend', err);
       }

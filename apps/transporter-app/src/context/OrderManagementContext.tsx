@@ -220,11 +220,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
         status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || ((o.status === 'COMPLETED' || o.status === 'RETURNED') && !o.transporterId))
           ? 'NEW_ORDER'
-          : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED')
-            ? 'ACCEPTED_PICKUP'
-            : (o.pickupTransporterStatus === 'DROPPED')
-              ? 'DROP_COMPLETED'
-              : (o.status === 'COMPLETED' || o.status === 'RETURNED')
+          : (o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED' || ['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || ''))
+            ? 'DROP_COMPLETED'
+            : (o.pickupTransporterStatus === 'ACCEPTED')
+              ? 'ACCEPTED_PICKUP'
+              : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB')
                 ? 'PICKUP_COMPLETED'
                 : 'rejected',
         rejectReason: (() => {
@@ -260,7 +260,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             qty: item.quantity,
             weight: `${item.product?.weight || 1} kg`,
             legType: 'pickup' as const,
-            status: (o.status === 'COMPLETED' || o.status === 'RETURNED') && o.transporterId ? 'picked' : 'pending',
+            status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
             pickupPhoto: cached.pickupPhoto,
             pickupPhotoTime: cached.pickupPhotoTime,
             dropPhoto: cached.dropPhoto,
@@ -293,7 +293,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId) 
             ? 'NEW_ORDER' 
             : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED') 
-              ? (isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
+              ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || o.masterOrder?.status === 'PARCEL_AT_DROP_SHG' || o.masterOrder?.status === 'PARCEL_WITH_DROP_SHG' || o.masterOrder?.status === 'DELIVERED' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
               : (o.status === 'PICKED_UP' || o.status === 'RETURN_PICKED_UP')
                 ? ('PICKUP_COMPLETED' as const)
                 : (o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'DELIVERED') 

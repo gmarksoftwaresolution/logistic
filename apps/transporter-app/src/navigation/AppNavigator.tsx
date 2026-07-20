@@ -10,6 +10,8 @@ import ApprovalPendingScreen from '../screens/ApprovalPendingScreen';
 import GetStartedScreen from '../screens/GetStartedScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MainTabNavigator from './MainTabNavigator';
+import { PickupScannerScreen } from '../screens/OrderManagement/PickupScannerScreen';
+import { DropScannerScreen } from '../screens/OrderManagement/DropScannerScreen';
 
 export type RootStackParamList = {
   GetStarted: undefined;
@@ -19,6 +21,8 @@ export type RootStackParamList = {
   ApprovalPending: { transporterUniqueId?: string; requestId?: string } | undefined;
   Main: undefined;
   Profile: undefined;
+  PickupScanner: { sessionId?: string; orderIds?: string[] } | undefined;
+  DropScanner: { sessionId?: string; orderIds?: string[] } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,6 +40,8 @@ const AppNavigator = () => {
         <Stack.Screen name="ApprovalPending" component={ApprovalPendingScreen} />
         <Stack.Screen name="Main" component={MainTabNavigator} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="PickupScanner" component={PickupScannerScreen} />
+        <Stack.Screen name="DropScanner" component={DropScannerScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
