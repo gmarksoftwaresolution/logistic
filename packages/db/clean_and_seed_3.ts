@@ -10,6 +10,12 @@ async function main() {
 
   // 1. Clean up existing order tables
   console.log('Cleaning up existing order data...');
+  await prisma.scanSessionItem.deleteMany();
+  await prisma.scanSession.deleteMany();
+  await prisma.parcelScanHistory.deleteMany();
+  await prisma.parcel.deleteMany();
+  await prisma.verificationRecord.deleteMany();
+  await prisma.scanHistory.deleteMany();
   await prisma.pickupTracking.deleteMany();
   await prisma.dropTracking.deleteMany();
   await prisma.pickupOrderItem.deleteMany();
@@ -18,9 +24,11 @@ async function main() {
   await prisma.dropOrder.deleteMany();
   await prisma.masterOrderItem.deleteMany();
   await prisma.masterOrder.deleteMany();
-  console.log('Existing orders deleted successfully.');
+  await prisma.orderAssignment.deleteMany();
+  await prisma.order.deleteMany();
+  console.log('Existing orders and scan transactions deleted successfully.');
 
-  // 2. Ensure Seller User exists
+  // 2. Ensure Seller User and Seller Table record exists
   console.log('Ensuring Seller User exists (phone: 8888888888)...');
   let seller = await prisma.user.findUnique({
     where: { phoneNumber: '8888888888' },
@@ -36,7 +44,7 @@ async function main() {
         isVerified: true,
         address: {
           create: {
-            addressLine1: 'Sakhi Center, Near Primary School',
+            houseNo: 'Sakhi Center, Near Primary School',
             village: 'Nesari',
             taluka: 'Gadhinglaj',
             district: 'Kolhapur',
@@ -52,7 +60,28 @@ async function main() {
     console.log('Seller User already exists:', seller.fullName);
   }
 
-  // 3. Ensure Buyer User exists
+  let dbSeller = await prisma.seller.findFirst({
+    where: { mobileNumber: '8888888888' }
+  });
+  if (!dbSeller) {
+    dbSeller = await prisma.seller.create({
+      data: {
+        sellerCode: 'SEL-SEED-3',
+        sellerName: 'Mahila Bachat Gat (Sakhi Seller)',
+        mobileNumber: '8888888888',
+        village: 'Nesari',
+        taluka: 'Gadhinglaj',
+        district: 'Kolhapur',
+        state: 'Maharashtra',
+        pincode: '416504',
+      }
+    });
+    console.log('Created new Seller Table record:', dbSeller.sellerName);
+  } else {
+    console.log('Seller Table record already exists:', dbSeller.sellerName);
+  }
+
+  // 3. Ensure Buyer User and Buyer Table record exists
   console.log('Ensuring Buyer User exists (phone: 9999999991)...');
   let buyer = await prisma.user.findUnique({
     where: { phoneNumber: '9999999991' },
@@ -68,7 +97,7 @@ async function main() {
         isVerified: true,
         address: {
           create: {
-            addressLine1: 'Plot No 24, Nesari Stand Area',
+            houseNo: 'Plot No 24, Nesari Stand Area',
             village: 'Nesari',
             taluka: 'Gadhinglaj',
             district: 'Kolhapur',
@@ -84,7 +113,28 @@ async function main() {
     console.log('Buyer User already exists:', buyer.fullName);
   }
 
-  // 4. Ensure Product exists
+  let dbBuyer = await prisma.buyer.findFirst({
+    where: { mobileNumber: '9999999991' }
+  });
+  if (!dbBuyer) {
+    dbBuyer = await prisma.buyer.create({
+      data: {
+        buyerCode: 'BUY-SEED-3',
+        buyerName: 'Raju Patil (Buyer)',
+        mobileNumber: '9999999991',
+        village: 'Nesari',
+        taluka: 'Gadhinglaj',
+        district: 'Kolhapur',
+        state: 'Maharashtra',
+        pincode: '416504',
+      }
+    });
+    console.log('Created new Buyer Table record:', dbBuyer.buyerName);
+  } else {
+    console.log('Buyer Table record already exists:', dbBuyer.buyerName);
+  }
+
+  // 4. Ensure Product exists (Product links to User table for sellerId)
   console.log('Ensuring product exists...');
   let product = await prisma.product.findFirst({
     where: { name: 'Tasty Homemade Papad' }
@@ -120,7 +170,7 @@ async function main() {
         isVerified: true,
         address: {
           create: {
-            addressLine1: 'Gram Panchayat Road',
+            houseNo: 'Gram Panchayat Road',
             village: 'Halkarni',
             taluka: 'Gadhinglaj',
             district: 'Kolhapur',
@@ -150,7 +200,7 @@ async function main() {
         isVerified: true,
         address: {
           create: {
-            addressLine1: 'Main Road Nesari',
+            houseNo: 'Main Road Nesari',
             village: 'Nesari',
             taluka: 'Gadhinglaj',
             district: 'Kolhapur',
@@ -177,7 +227,7 @@ async function main() {
   const masterOrder1 = await prisma.masterOrder.create({
     data: {
       orderNumber: orderNo1,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       totalAmount: 360.0,
       paymentStatus: 'PENDING',
       paymentMethod: 'Online',
@@ -185,7 +235,7 @@ async function main() {
       items: {
         create: {
           productId: product.id,
-          sellerId: seller.id,
+          sellerId: dbSeller.id,
           quantity: 3,
           price: 120.0,
         }
@@ -197,7 +247,7 @@ async function main() {
     data: {
       pickupOrderNumber: `PKP-${orderNo1}`,
       masterOrderId: masterOrder1.id,
-      sellerId: seller.id,
+      sellerId: dbSeller.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'COMPLETED',
@@ -215,7 +265,7 @@ async function main() {
     data: {
       dropOrderNumber: `DRP-${orderNo1}`,
       masterOrderId: masterOrder1.id,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'ACCEPTED',
@@ -252,6 +302,39 @@ async function main() {
     }
   });
 
+  // Public Order & Assignment 1
+  const gmuOrder1 = await prisma.order.create({
+    data: {
+      orderId: orderNo1,
+      barcode: null,
+      phase: 'DROP',
+      sellerId: dbSeller.id,
+      buyerId: dbBuyer.id,
+      productCount: 1,
+      totalQty: 3,
+      totalWeight: 4.5,
+      pickupShgId: String(targetShg.id),
+      pickupTransporterId: String(targetTransporter.id),
+      dropShgId: String(targetShg.id),
+      dropTransporterId: String(targetTransporter.id),
+      mainStatus: 'DROP_SHG_ACCEPTED',
+      pickupShgStatus: 'PICKED',
+      pickupTransporterStatus: 'COMPLETED',
+      dropShgStatus: 'ACCEPTED',
+      dropTransporterStatus: 'COMPLETED',
+    }
+  });
+
+  await prisma.orderAssignment.create({
+    data: {
+      orderId: gmuOrder1.id,
+      assigneeId: String(targetShg.id),
+      assigneeType: 'SHG',
+      role: 'DROP',
+      status: 'ACCEPTED',
+    }
+  });
+
   // ==========================================
   // ORDER 2: Delivery Tab (Completed Pickup, Accepted Drop)
   // ==========================================
@@ -261,7 +344,7 @@ async function main() {
   const masterOrder2 = await prisma.masterOrder.create({
     data: {
       orderNumber: orderNo2,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       totalAmount: 240.0,
       paymentStatus: 'PENDING',
       paymentMethod: 'COD',
@@ -269,7 +352,7 @@ async function main() {
       items: {
         create: {
           productId: product.id,
-          sellerId: seller.id,
+          sellerId: dbSeller.id,
           quantity: 2,
           price: 120.0,
         }
@@ -281,7 +364,7 @@ async function main() {
     data: {
       pickupOrderNumber: `PKP-${orderNo2}`,
       masterOrderId: masterOrder2.id,
-      sellerId: seller.id,
+      sellerId: dbSeller.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'COMPLETED',
@@ -299,7 +382,7 @@ async function main() {
     data: {
       dropOrderNumber: `DRP-${orderNo2}`,
       masterOrderId: masterOrder2.id,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'ACCEPTED',
@@ -336,6 +419,39 @@ async function main() {
     }
   });
 
+  // Public Order & Assignment 2
+  const gmuOrder2 = await prisma.order.create({
+    data: {
+      orderId: orderNo2,
+      barcode: null,
+      phase: 'DROP',
+      sellerId: dbSeller.id,
+      buyerId: dbBuyer.id,
+      productCount: 1,
+      totalQty: 2,
+      totalWeight: 3.0,
+      pickupShgId: String(targetShg.id),
+      pickupTransporterId: String(targetTransporter.id),
+      dropShgId: String(targetShg.id),
+      dropTransporterId: String(targetTransporter.id),
+      mainStatus: 'DROP_SHG_ACCEPTED',
+      pickupShgStatus: 'PICKED',
+      pickupTransporterStatus: 'COMPLETED',
+      dropShgStatus: 'ACCEPTED',
+      dropTransporterStatus: 'COMPLETED',
+    }
+  });
+
+  await prisma.orderAssignment.create({
+    data: {
+      orderId: gmuOrder2.id,
+      assigneeId: String(targetShg.id),
+      assigneeType: 'SHG',
+      role: 'DROP',
+      status: 'ACCEPTED',
+    }
+  });
+
   // ==========================================
   // ORDER 3: Pickup Tab (Pending Pickup, Pending Drop)
   // ==========================================
@@ -345,7 +461,7 @@ async function main() {
   const masterOrder3 = await prisma.masterOrder.create({
     data: {
       orderNumber: orderNo3,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       totalAmount: 120.0,
       paymentStatus: 'PENDING',
       paymentMethod: 'Online',
@@ -353,7 +469,7 @@ async function main() {
       items: {
         create: {
           productId: product.id,
-          sellerId: seller.id,
+          sellerId: dbSeller.id,
           quantity: 1,
           price: 120.0,
         }
@@ -365,7 +481,7 @@ async function main() {
     data: {
       pickupOrderNumber: `PKP-${orderNo3}`,
       masterOrderId: masterOrder3.id,
-      sellerId: seller.id,
+      sellerId: dbSeller.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'PENDING',
@@ -382,7 +498,7 @@ async function main() {
     data: {
       dropOrderNumber: `DRP-${orderNo3}`,
       masterOrderId: masterOrder3.id,
-      buyerId: buyer.id,
+      buyerId: dbBuyer.id,
       shgId: targetShg.id,
       transporterId: targetTransporter.id,
       status: 'PENDING',
@@ -393,6 +509,37 @@ async function main() {
           quantity: 1,
         }
       }
+    }
+  });
+
+  // Public Order & Assignment 3
+  const gmuOrder3 = await prisma.order.create({
+    data: {
+      orderId: orderNo3,
+      barcode: null,
+      phase: 'PICKUP',
+      sellerId: dbSeller.id,
+      buyerId: dbBuyer.id,
+      productCount: 1,
+      totalQty: 1,
+      totalWeight: 1.5,
+      pickupShgId: null,
+      pickupTransporterId: null,
+      mainStatus: 'PICKUP_ASSIGNED',
+      pickupShgStatus: 'PENDING',
+      pickupTransporterStatus: 'PENDING',
+      dropShgStatus: 'PENDING',
+      dropTransporterStatus: 'PENDING',
+    }
+  });
+
+  await prisma.orderAssignment.create({
+    data: {
+      orderId: gmuOrder3.id,
+      assigneeId: String(targetShg.id),
+      assigneeType: 'SHG',
+      role: 'PICKUP',
+      status: 'PENDING',
     }
   });
 
