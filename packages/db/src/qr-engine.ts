@@ -104,7 +104,8 @@ export function determineTransition(
   userRole: string,
   userId: string,
   parcel: any,
-  order: any
+  order: any,
+  legType?: string
 ): TransitionResult {
   const currentStatus = normalizeStatus(parcel.parcelStatus);
   const finalRole = userRole.toUpperCase();
@@ -121,6 +122,9 @@ export function determineTransition(
       };
     }
     if (currentStatus === 'PARCEL_PICKED') {
+      if (!order.pickupTransporterId || order.pickupTransporterStatus !== 'ACCEPTED') {
+        throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
+      }
       // SHG Handover to Transporter
       const nextHolder = order.pickupTransporterId ? String(order.pickupTransporterId) : 'TRANSPORTER';
       return {
@@ -132,7 +136,8 @@ export function determineTransition(
       };
     }
     if (currentStatus === 'AT_BUYER_SHG' || currentStatus === 'OUT_FOR_DELIVERY') {
-      if (parcel.currentHolderId === userId) {
+      const isDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG';
+      if (isDelivery) {
         // Final delivery to buyer
         return {
           nextParcelStatus: 'DELIVERED',
@@ -142,6 +147,9 @@ export function determineTransition(
           message: 'Parcel delivered to Buyer',
         };
       } else {
+        if (currentStatus === 'OUT_FOR_DELIVERY' && userRole === 'SHG') {
+          throw new QrValidationError('The Transporter has not submitted the handover delivery yet. Please wait for the Transporter to submit.');
+        }
         // SHG receiving from transporter
         return {
           nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
@@ -156,14 +164,7 @@ export function determineTransition(
 
   if (finalRole === 'TRANSPORTER') {
     if (currentStatus === 'PARCEL_PICKED') {
-      // Transporter accepts from SHG
-      return {
-        nextParcelStatus: 'PARCEL_AT_TRANSPORTER',
-        nextHolderId: userId,
-        nextHolderType: 'TRANSPORTER',
-        action: 'TRANSPORTER_ACCEPT_PICKUP',
-        message: 'Transporter accepted pickup of parcel',
-      };
+      throw new QrValidationError('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
     }
     if (currentStatus === 'TRANSPORTER_ACCEPTED') {
       // Transporter loading parcel for transit to hub
@@ -185,7 +186,7 @@ export function determineTransition(
         message: 'Parcel delivered to GMU Hub by Transporter',
       };
     }
-    if (currentStatus === 'READY_FOR_DISPATCH' || currentStatus === 'STORED') {
+    if (currentStatus === 'READY_FOR_DISPATCH' || currentStatus === 'STORED' || currentStatus === 'AT_GMU') {
       // Transporter loading from Hub for delivery
       return {
         nextParcelStatus: 'IN_TRANSIT_TO_BUYER',
@@ -277,7 +278,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: { in: orderIdsList },
-        flowType: sessionType,
+        flowType: { in: ['PICKUP', 'DROP'] },
       },
     });
 
@@ -335,6 +336,15 @@ export class QrVerificationEngine {
     });
 
     if (existing) {
+      const orderIdsStr = orderIds.join(',');
+      if (existing.orderIds !== orderIdsStr) {
+        await this.prisma.scanSession.update({
+          where: { sessionId: existing.sessionId },
+          data: {
+            orderIds: orderIdsStr,
+          },
+        });
+      }
       return this.getSessionDetails(sessionType, userId, userRole.toUpperCase(), existing.sessionId);
     }
 
@@ -385,15 +395,27 @@ export class QrVerificationEngine {
     // Validate verificationToken
     validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
 
-    // Find the order for the parcel
-    const order = await this.prisma.order.findFirst({
+    // Find the order for the parcel (try DROP phase first, then PICKUP phase)
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
-        ]
+        ],
+        phase: 'DROP',
       }
     });
+    if (!order) {
+      order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: parcel.orderId },
+            { orderId: parcel.orderId }
+          ],
+          phase: 'PICKUP',
+        }
+      });
+    }
 
     if (!order) {
       throw new QrValidationError('Parcel order not found.');
@@ -401,12 +423,16 @@ export class QrVerificationEngine {
 
     // Validate user assignment if userRole is SHG or TRANSPORTER
     if (userRole === 'SHG' || userRole === 'TRANSPORTER') {
+      const allOrdersForMaster = await this.prisma.order.findMany({
+        where: { orderId: order.orderId }
+      });
+      const orderIds = allOrdersForMaster.map((o: any) => o.id);
+
       const assignment = await this.prisma.orderAssignment.findFirst({
         where: {
-          orderId: order.id,
+          orderId: { in: orderIds },
           assigneeId: userId,
           assigneeType: userRole,
-          role: parcel.flowType,
         }
       });
 
@@ -435,7 +461,7 @@ export class QrVerificationEngine {
     }
 
     // Validate State Machine Transition
-    determineTransition(sessionType, userRole, userId, parcel, order);
+    determineTransition(order.phase as SessionType, userRole, userId, parcel, order);
 
     // Duplicate Scan Protection
     const existingItem = await this.prisma.scanSessionItem.findUnique({
@@ -528,7 +554,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: { in: orderIdsList },
-        flowType: { in: orderPhases },
+        flowType: { in: ['PICKUP', 'DROP'] },
       },
     });
 
@@ -543,22 +569,33 @@ export class QrVerificationEngine {
       for (const item of session.items) {
         const parcel = item.parcel;
         
-        const order = await tx.order.findFirst({
+        let order = await tx.order.findFirst({
           where: {
             OR: [
               { id: parcel.orderId },
               { orderId: parcel.orderId }
             ],
-            phase: parcel.flowType,
+            phase: 'DROP',
           }
         });
+        if (!order) {
+          order = await tx.order.findFirst({
+            where: {
+              OR: [
+                { id: parcel.orderId },
+                { orderId: parcel.orderId }
+              ],
+              phase: 'PICKUP',
+            }
+          });
+        }
 
         if (!order) {
-          throw new QrValidationError(`Order associated with parcel ${parcel.parcelId} and phase ${parcel.flowType} not found`);
+          throw new QrValidationError(`Order associated with parcel ${parcel.parcelId} not found`);
         }
 
         const transition = determineTransition(
-          sessionType,
+          order.phase as SessionType,
           session.userRole,
           session.userId,
           parcel,
@@ -615,7 +652,8 @@ export class QrVerificationEngine {
           dropTransporterStatus = 'COMPLETED';
           dropShgStatus = 'ACCEPTED';
         } else if (normalizedMainStatus === 'DELIVERED') {
-          dropShgStatus = 'DELIVERED';
+          dropShgStatus = 'DROPPED';
+          dropTransporterStatus = 'COMPLETED';
         }
 
         await tx.order.update({
@@ -673,6 +711,13 @@ export class QrVerificationEngine {
             await tx.pickupOrder.updateMany({
               where: { masterOrderId: masterOrder.id },
               data: { status: 'COMPLETED', pickupTime: new Date() }
+            });
+          }
+
+          if (normalizedMainStatus === 'AT_BUYER_SHG') {
+            await tx.dropOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: { status: session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED' }
             });
           }
 
@@ -740,14 +785,26 @@ export class QrVerificationEngine {
       throw new QrValidationError('Session cannot be confirmed');
     }
 
-    const order = await this.prisma.order.findFirst({
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: orderId },
           { orderId: orderId }
-        ]
+        ],
+        phase: 'DROP',
       }
     });
+    if (!order) {
+      order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: orderId },
+            { orderId: orderId }
+          ],
+          phase: 'PICKUP',
+        }
+      });
+    }
 
     if (!order) {
       throw new QrValidationError(`Order ${orderId} not found`);
@@ -756,7 +813,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: order.orderId,
-        flowType: order.phase,
+        flowType: { in: ['PICKUP', 'DROP'] },
       },
     });
 
@@ -775,7 +832,7 @@ export class QrVerificationEngine {
         const parcel = item.parcel;
 
         const transition = determineTransition(
-          sessionType,
+          order.phase as SessionType,
           session.userRole,
           session.userId,
           parcel,
@@ -827,9 +884,10 @@ export class QrVerificationEngine {
           dropTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
           dropTransporterStatus = 'COMPLETED';
-          dropShgStatus = 'ACCEPTED';
+          dropShgStatus = session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED';
         } else if (normalizedMainStatus === 'DELIVERED') {
-          dropShgStatus = 'DELIVERED';
+          dropShgStatus = 'DROPPED';
+          dropTransporterStatus = 'COMPLETED';
         }
 
         await tx.order.update({
@@ -885,6 +943,13 @@ export class QrVerificationEngine {
             await tx.pickupOrder.updateMany({
               where: { masterOrderId: masterOrder.id },
               data: { status: 'COMPLETED', pickupTime: new Date() }
+            });
+          }
+
+          if (normalizedMainStatus === 'AT_BUYER_SHG') {
+            await tx.dropOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: { status: session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED' }
             });
           }
 

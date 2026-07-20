@@ -47,9 +47,9 @@ export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
     ]).start(() => {
       if (activeSession) {
         if (activeSession.sessionType === 'PICKUP') {
-          navigation.navigate('PickupScanner', { sessionId: activeSession.sessionId });
+          navigation.navigate('PickupScanner', { sessionId: activeSession.sessionId, orderIds });
         } else {
-          navigation.navigate('DropScanner', { sessionId: activeSession.sessionId });
+          navigation.navigate('DropScanner', { sessionId: activeSession.sessionId, orderIds });
         }
       } else {
         if (!orderIds || orderIds.length === 0) {

@@ -18,6 +18,7 @@ import { OrderModule } from './order/order.module';
 import { OrderHistoryModule } from './modules/order-history/order-history.module';
 import { QrModule } from './qr/qr.module';
 
+// Reload trigger: 2026-07-19
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),

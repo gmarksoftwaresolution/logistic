@@ -1148,8 +1148,8 @@ export class OrderService {
 
     if (dropOrder.status !== 'DELIVERED') {
       const expectedBarcode = dropOrder.handoverCode;
-      if (!code || code !== expectedBarcode) {
-        throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode || 'a valid barcode'}, received ${code || 'none'}.`);
+      if (expectedBarcode && (!code || code !== expectedBarcode)) {
+        throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode}, received ${code || 'none'}.`);
       }
     }
 
@@ -1178,13 +1178,19 @@ export class OrderService {
         },
       });
 
-      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'IN_TRANSIT_TO_BUYER';
-      const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-        WHERE "orderId" = $3 AND phase = 'DROP';
-      `, dropShgStatus, nextGmuStatus, orderNumber);
+      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
+      const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
+      await tx.order.updateMany({
+        where: {
+          orderId: orderNumber,
+          phase: 'DROP',
+        },
+        data: {
+          dropShgStatus,
+          mainStatus: nextGmuStatus,
+          updatedAt: new Date(),
+        },
+      });
 
       await tx.masterOrder.update({
         where: { id: dropOrder.masterOrderId },
@@ -1256,12 +1262,18 @@ export class OrderService {
         },
       });
 
-      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PARCEL_AT_BUYER';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropShgStatus" = 'DROPPED', "mainStatus" = $1, "updatedAt" = NOW()
-        WHERE "orderId" = $2 AND phase = 'DROP';
-      `, nextGmuStatus, masterOrder.orderNumber);
+      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'DELIVERED';
+      await tx.order.updateMany({
+        where: {
+          orderId: masterOrder.orderNumber,
+          phase: 'DROP',
+        },
+        data: {
+          dropShgStatus: 'DROPPED',
+          mainStatus: nextGmuStatus,
+          updatedAt: new Date(),
+        },
+      });
 
       await tx.masterOrder.update({
         where: { id: dropOrder.masterOrderId },
@@ -1969,15 +1981,29 @@ export class OrderService {
   // --- BEGIN SHARED ORDER FORMATTING HELPERS ---
 
   public async formatPickups(pickups: any[]) {
+    const orderIds = pickups
+      .filter((p: any) => p.parcelWeight === undefined && p.totalWeight === undefined && p.masterOrder?.totalWeight === undefined && p.masterOrder?.orderNumber)
+      .map((p: any) => p.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(pickups.map(async (p: any) => {
       let parcelWeight = p.parcelWeight ?? p.totalWeight ?? p.masterOrder?.totalWeight;
       
       // If undefined, attempt to fetch from the standalone Order table using the order number
-      if (parcelWeight === undefined && p.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: p.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && p.masterOrder?.orderNumber && orderWeights.has(p.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(p.masterOrder.orderNumber);
       }
 
       return {
@@ -2003,14 +2029,28 @@ export class OrderService {
   }
 
   public async formatInboundDrops(drops: any[]) {
+    const orderIds = drops
+      .filter((d: any) => d.parcelWeight === undefined && d.totalWeight === undefined && d.masterOrder?.totalWeight === undefined && d.masterOrder?.orderNumber)
+      .map((d: any) => d.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(drops.map(async (d: any) => {
       let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
 
-      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber && orderWeights.has(d.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(d.masterOrder.orderNumber);
       }
 
       return {
@@ -2048,14 +2088,28 @@ export class OrderService {
   }
 
   public async formatRegularDrops(drops: any[]) {
+    const orderIds = drops
+      .filter((d: any) => d.parcelWeight === undefined && d.totalWeight === undefined && d.masterOrder?.totalWeight === undefined && d.masterOrder?.orderNumber)
+      .map((d: any) => d.masterOrder.orderNumber);
+
+    const orderWeights = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const orders = await this.prisma.order.findMany({
+        where: { orderId: { in: Array.from(new Set(orderIds)) } },
+        select: { orderId: true, totalWeight: true }
+      });
+      orders.forEach(o => {
+        if (o.totalWeight !== undefined && o.totalWeight !== null) {
+          orderWeights.set(o.orderId, o.totalWeight);
+        }
+      });
+    }
+
     return Promise.all(drops.map(async (d: any) => {
       let parcelWeight = d.parcelWeight ?? d.totalWeight ?? d.masterOrder?.totalWeight;
 
-      if (parcelWeight === undefined && d.masterOrder?.orderNumber) {
-        const orderRecord = await this.prisma.order.findFirst({ where: { orderId: d.masterOrder.orderNumber } });
-        if (orderRecord && orderRecord.totalWeight !== undefined && orderRecord.totalWeight !== null) {
-          parcelWeight = orderRecord.totalWeight;
-        }
+      if (parcelWeight === undefined && d.masterOrder?.orderNumber && orderWeights.has(d.masterOrder.orderNumber)) {
+        parcelWeight = orderWeights.get(d.masterOrder.orderNumber);
       }
 
       return {
@@ -2198,7 +2252,7 @@ export class OrderService {
       where: {
         shgId,
         buyerId: { not: shgId },
-        status: 'DELIVERED',
+        status: { in: ['DELIVERED', 'COMPLETED'] },
         NOT: { dropOrderNumber: { startsWith: 'RET-' } }
       },
       include: {

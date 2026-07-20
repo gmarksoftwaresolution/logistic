@@ -51,6 +51,7 @@ export interface Order {
   acceptedAt?: string;
   completedAt?: string;
   legType?: 'pickup' | 'drop';
+  phase?: 'PICKUP' | 'DROP';
   isRejectedDelivery?: boolean;
   fromLocation?: string;
   toLocation?: string;
@@ -179,8 +180,8 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       date: dateStr,
       status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
               (type === 'pickup') ? (
-                ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(dbOrder.masterOrder?.status || '') ? (
-                  ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(dbOrder.masterOrder?.status || '') ? 'COMPLETED' : 'PickedUp'
+                ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? (
+                  ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? 'COMPLETED' : 'PickedUp'
                 ) : (
                   (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' : 'COMPLETED'
                 )
@@ -198,6 +199,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
       time: timeStr,
       legType: type,
+      phase: type === 'drop' ? 'DROP' : 'PICKUP',
       rejectReason: type === 'pickup'
         ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '')
         : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Delivery leg rejected by SHG. Reason: ', ''),

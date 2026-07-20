@@ -10,6 +10,7 @@ import { VerifyQrDto } from './dto/verify-qr.dto';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class QrController {
+  // Trigger watch reload 2
   constructor(private readonly qrService: QrService) {}
 
   @Post('generate')

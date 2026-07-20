@@ -58,12 +58,16 @@ async function main() {
   await prisma.$executeRawUnsafe(`DELETE FROM gmu."OrderAssignment";`);
   await prisma.$executeRawUnsafe(`DELETE FROM public."OrderAssignment";`);
 
-  // 6. Reset Order to initial pickup state in both schemas
-  console.log('- Resetting Order to ORDER_PLACED and PICKUP phase in both schemas...');
+  // 6. Delete Drop phase orders in both schemas
+  console.log('- Deleting Drop phase orders in both schemas to prevent duplicates...');
+  await prisma.$executeRawUnsafe(`DELETE FROM gmu."Order" WHERE phase = 'DROP' OR id LIKE '00000000-0000-4000-8000-%';`);
+  await prisma.$executeRawUnsafe(`DELETE FROM public."Order" WHERE phase = 'DROP' OR id LIKE '00000000-0000-4000-8000-%';`);
+
+  // 7. Reset remaining PICKUP Orders to initial pickup state in both schemas
+  console.log('- Resetting remaining PICKUP Orders to ORDER_PLACED in both schemas...');
   const resetQuery = `
     UPDATE %SCHEMA%."Order"
     SET 
-      phase = 'PICKUP',
       "mainStatus" = 'ORDER_PLACED',
       "pickupShgId" = NULL,
       "pickupShgStatus" = NULL,
@@ -74,7 +78,8 @@ async function main() {
       "dropTransporterId" = NULL,
       "dropTransporterStatus" = 'PENDING',
       "barcode" = NULL,
-      "updatedAt" = NOW();
+      "updatedAt" = NOW()
+    WHERE phase = 'PICKUP';
   `;
   await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'gmu'));
   await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'public'));

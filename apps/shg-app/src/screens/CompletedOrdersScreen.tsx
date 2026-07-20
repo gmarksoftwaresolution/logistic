@@ -160,7 +160,7 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         const currentData = activeTab === 'new' ? normalCompletedOrders : returnCompletedOrders;
         const filteredOrders = currentData.filter(item => {
           const info = getInfoForOrder(item);
-          const dateStr = item.time || info.date; 
+          const dateStr = item.date || info.date; 
           return isOrderInDateRange(dateStr, filterState);
         });
 

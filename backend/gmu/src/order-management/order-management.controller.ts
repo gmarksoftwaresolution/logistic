@@ -11,6 +11,7 @@ import { OrderFilterDto } from './dto/order-filter.dto';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class OrderManagementController {
+  // Trigger watch reload
   constructor(private readonly service: OrderManagementService) {}
 
   @Get('counts')
