@@ -859,3 +859,137 @@ model ScanSessionItem {
   @@unique([sessionId, parcelId])
   @@map("ScanSessionItem")
 }
+
+model CommunityMember {
+  id            String   @id @default(uuid())
+  memberCode    String?  @unique
+  type          String   // SHG, INDIVIDUAL
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt     DateTime @default(now())
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+
+  // Personal Details
+  profilePhoto      String?
+  fullName          String
+  mobileNumber      String
+  age               Int?
+  occupation        String?
+
+  // SHG Details
+  roleInShg         String?
+  shgName           String?
+  crpName           String?
+  crpMobile         String?
+  crpEmail          String?
+  leaderName        String?
+  leaderMobile      String?
+  groupSize         Int?
+  activeSince       String?
+
+  // Business Details
+  producesProducts  Boolean? @default(false)
+  businessTeamSize  Int?
+  productName       String?
+  productCategory   String?
+  dailyProduction   Float?
+  weeklyProduction  Float?
+  productionUnit    String?
+  pricePerUnit      Float?
+
+  // Address Details
+  houseNo           String?
+  deliveryAddress   String?
+  village           String?
+  taluka            String?
+  district          String?
+  state             String?
+  pincode           String?
+
+  // Document Details
+  aadhaarNumber     String?
+  panNumber         String?
+  aadhaarFrontPhoto String?
+  aadhaarBackPhoto  String?
+  panCardPhoto      String?
+
+  // Bank Details
+  accountHolderName String?
+  accountNumber     String?
+  ifscCode          String?
+  bankName          String?
+  branchName        String?
+  upiId             String?
+
+  // Storage Details
+  storageSpace      String?
+  storageWidth      Float?
+  storageHeight     Float?
+  storageDescription String?
+
+  // Vehicle Details
+  vehicleAvailable          Boolean? @default(false)
+  vehicleType               String?
+  vehicleRegistrationNumber String?
+  drivingLicenseNumber      String?
+  drivingLicensePhoto       String?
+  vehiclePhoto              String?
+}
+
+model TransporterMember {
+  id              String   @id @default(uuid())
+  transporterCode String?  @unique
+  type            String   // ROUTE_PARTNER, PERSONAL
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+
+  // Personal Details
+  profilePhoto    String?
+  firstName       String
+  lastName        String
+  mobileNumber    String
+  email           String?
+
+  // Address Details
+  residentialAddress String?
+  village            String?
+  taluka             String?
+  district           String?
+  state              String?
+  pincode            String?
+
+  // Driving Details
+  licenseNumber      String?
+  licensePhoto       String?
+  licenseExpiryDate  DateTime?
+  experienceYears    Int?
+
+  // Bank Details
+  accountHolderName  String?
+  accountNumber      String?
+  ifscCode           String?
+  bankName           String?
+  branchName         String?
+  upiId              String?
+
+  // Vehicle Details
+  vehicleCategory       String?
+  vehicleType           String?
+  vehicleMake           String?
+  vehicleNumber         String?
+  vehicleRcPhoto        String?
+  vehicleInsurancePhoto String?
+
+  // Route Details
+  assignedPincodes   Json?
+  assignedVillages   Json?
+  morningShift       String?
+  eveningShift       String?
+  workingDays        Json?
+
+  // Milk Organization Details
+  milkOrganizationName String?
+  milkCenterName       String?
+}
