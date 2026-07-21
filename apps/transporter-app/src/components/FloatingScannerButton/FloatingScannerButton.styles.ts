@@ -4,7 +4,6 @@ import { Colors } from '../../constants/Colors';
 export const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 115,
     right: 20,
     zIndex: 9999,
   },
