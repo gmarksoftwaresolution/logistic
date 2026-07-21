@@ -16,6 +16,8 @@ import {
   User,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -27,6 +29,15 @@ interface LayoutProps {
 export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('gmu_sidebar_collapsed') === 'true');
+
+  const toggleSidebar = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('gmu_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   const {
     pickupNewOrders,
@@ -104,50 +115,67 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="h-screen w-screen overflow-hidden bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
       {/* Premium Dark Sidebar (Desktop) */}
-      <aside className="hidden md:flex w-[300px] bg-[#073318] border-r border-[#073318] flex-col min-h-screen shadow-xl shrink-0 z-50 relative">
+      <aside className={`hidden md:flex bg-[#073318] border-r border-[#073318] flex-col h-screen shadow-xl shrink-0 z-50 relative transition-all duration-300 ease-in-out ${isCollapsed ? 'w-[80px]' : 'w-[300px]'}`}>
+        {/* Absolute positioned toggle expand/collapse button sitting on border */}
+        <button
+          onClick={toggleSidebar}
+          className="absolute top-[24px] -right-3 h-6 w-6 bg-[#B2D534] text-[#073318] hover:bg-[#B2D534]/90 rounded-full flex items-center justify-center cursor-pointer shadow-md z-[60] transition-transform active:scale-95 border border-[#073318]/20"
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 stroke-[3px]" /> : <ChevronLeft className="h-3.5 w-3.5 stroke-[3px]" />}
+        </button>
+
         {/* Glow effect */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
           <div className="absolute -top-[20%] -left-[20%] w-[140%] h-[40%] rounded-full bg-[#B2D534]/5 blur-[80px]" />
         </div>
 
-        <div className="h-[72px] flex items-center px-6 border-b border-white/10 relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-white flex items-center justify-center shadow-sm overflow-hidden p-1">
+        <div className="h-[72px] flex items-center px-5 border-b border-white/10 relative z-10 overflow-hidden">
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="h-9 w-9 rounded-xl bg-white flex items-center justify-center shadow-sm overflow-hidden p-1 shrink-0">
               <img src={logoImg} alt="GMU Logo" className="h-full w-full object-contain" />
             </div>
-            <span className="font-bold text-white tracking-wide text-md">GMU Hub</span>
+            <span className={`font-bold text-white tracking-wide text-md whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden pointer-events-none' : 'opacity-100 w-auto'}`}>
+              GMU Hub
+            </span>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1 relative z-10 custom-scrollbar">
+        <nav className={`flex-1 overflow-y-auto py-6 space-y-1 relative z-10 custom-scrollbar overflow-x-hidden transition-all duration-300 ${isCollapsed ? 'px-3' : 'px-4'}`}>
           {navItems.map((item) => {
             const isActive = currentPage === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer ${
+                className={`w-full flex items-center gap-3 py-3 rounded-xl transition-all duration-200 cursor-pointer ${
                   isActive
                     ? 'bg-[#B2D534] text-[#073318] shadow-sm font-semibold'
                     : 'text-slate-300 hover:bg-white/10 hover:text-white font-medium'
-                }`}
+                } ${isCollapsed ? 'justify-center px-0' : 'px-4'}`}
+                title={isCollapsed ? item.label : undefined}
               >
                 <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? 'text-[#073318]' : 'text-slate-400 group-hover:text-white'}`} />
-                <span className="text-[13px] tracking-wide text-left whitespace-nowrap">{item.label}</span>
+                <span className={`text-[13px] tracking-wide text-left whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden pointer-events-none' : 'opacity-100 w-auto'}`}>
+                  {item.label}
+                </span>
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10 relative z-10">
+        <div className="p-4 border-t border-white/10 relative z-10 overflow-hidden">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-300 hover:bg-red-400/10 hover:text-red-200 transition-all font-semibold text-[13px] tracking-wide cursor-pointer"
+            className={`w-full flex items-center gap-3 py-3 rounded-xl text-red-300 hover:bg-red-400/10 hover:text-red-200 transition-all font-semibold text-[13px] tracking-wide cursor-pointer ${isCollapsed ? 'justify-center px-0' : 'px-4'}`}
+            title={isCollapsed ? "Secure Logout" : undefined}
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            <span>Secure Logout</span>
+            <span className={`whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden pointer-events-none' : 'opacity-100 w-auto'}`}>
+              Secure Logout
+            </span>
           </button>
         </div>
       </aside>
@@ -214,7 +242,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Header Bar */}
         <header className="h-[72px] bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-40 shadow-sm shrink-0">
           <div className="flex items-center gap-3">

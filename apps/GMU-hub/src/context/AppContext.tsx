@@ -553,10 +553,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dropShgStatus: o.dropShgStatus || (flowType === 'drop' ? mappedShgStatus : undefined),
       pickupTransporterStatus: o.pickupTransporterStatus || (flowType === 'pickup' ? mappedTransporterStatus : undefined),
       dropTransporterStatus: o.dropTransporterStatus || (flowType === 'drop' ? mappedTransporterStatus : undefined),
-      pickupShgDetails,
-      dropShgDetails,
-      pickupTransporterDetails,
-      dropTransporterDetails,
     };
   };
 

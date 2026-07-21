@@ -109,13 +109,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     mapOrder,
   } = useAppContext();
 
-  // Top level sections: new | in_transit | completed
-  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
+  // Top level sections: new | in_transit | completed | rejected
+  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'rejected'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
 
   useEffect(() => {
     const syncActiveTab = () => {
       const val = localStorage.getItem('gmu_active_tab');
-      if (val && ['new', 'in_transit', 'completed'].includes(val)) {
+      if (val && ['new', 'in_transit', 'completed', 'rejected'].includes(val)) {
         setActiveTopTab(val as any);
       }
     };
@@ -127,7 +127,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   }, []);
 
-  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed') => {
+  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'rejected') => {
     localStorage.setItem('gmu_active_tab', tab);
     setActiveTopTab(tab);
   };
@@ -971,7 +971,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const orderDateStr = order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : '');
+        const rawDate = order.orderDate || order.created_at || '';
+        const orderDateStr = rawDate ? rawDate.split(' ')[0].split('T')[0] : '';
 
         if (dateFilter === 'today') {
           if (orderDateStr !== todayStr) return false;
@@ -987,16 +988,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   };
 
   // Section Partition
+  const isOrderRejected = (o: any) => {
+    return ['REJECTED', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'DECLINED'].includes(o.mainStatus) ||
+      o.pickupShgStatus?.toLowerCase() === 'rejected' ||
+      o.pickupTransporterStatus?.toLowerCase() === 'rejected' ||
+      o.dropShgStatus?.toLowerCase() === 'rejected' ||
+      o.dropTransporterStatus?.toLowerCase() === 'rejected' ||
+      o.assignments?.some((a: any) => a.status?.toLowerCase() === 'rejected');
+  };
+
   const newOrdersList = filterAndSearchOrders(
     allMergedOrders.filter(
       (o: any) =>
-        ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
-        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'))
+        !isOrderRejected(o) &&
+        (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
     )
   );
 
   const inTransitOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => {
+      if (isOrderRejected(o)) return false;
       const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
         (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
       if (isNew) return false;
@@ -1010,8 +1022,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   const completedOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) =>
+      !isOrderRejected(o) &&
       ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
     )
+  );
+
+  const rejectedOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => isOrderRejected(o))
   );
 
   const delayedCount = allMergedOrders.filter((o: any) => 
@@ -1262,7 +1279,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
     { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
     { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: any) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
+    { header: 'Start Date', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
     { header: 'Expected Delivery Date', accessor: (row: any) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
     { header: 'SHG Status', accessor: (row: any) => <StatusBadge status={row.pickupShgStatus || 'pending'} /> },
     { header: 'Action', accessor: (row: any) => (
@@ -1355,6 +1372,36 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     },
   ];
 
+  const rejectedColumns = [
+    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
+    { header: 'Status', accessor: (row: any) => (
+      <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
+        {row.mainStatus || 'Rejected'}
+      </span>
+    ) },
+    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
+    { header: 'Seller Village/City', accessor: 'sellerVillage' as keyof PickupOrder },
+    { header: 'Buyer Name', accessor: 'buyerName' as keyof PickupOrder },
+    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof PickupOrder },
+    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
+    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
+    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
+    { header: 'Date Placed', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
+    { header: 'Action', accessor: (row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewOrder(row);
+          }}
+          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span>View</span>
+        </button>
+      ) 
+    },
+  ];
+
   return (
     <Layout currentPage="order-management" onNavigate={onNavigate}>
       <div className="space-y-6">
@@ -1367,63 +1414,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </div>
           </div>
 
-          {/* Summary KPIs Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E8F5E9] text-[#2E7D32] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Package className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">New Orders</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{newOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Waiting to start</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E0F2F1] text-[#00695C] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Truck className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">In Transit</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{inTransitOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Active orders</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E3F2FD] text-[#1565C0] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Completed</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{completedOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">This month</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#FFF3E0] text-[#EF6C00] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Clock className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Delayed</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{delayedCount}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Need attention</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#F3E5F5] text-[#6A1B9A] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Today's Orders</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{todayOrdersCount}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Total orders</span>
-              </div>
-            </div>
-          </div>
 
           {/* Compact Filter Toolbar */}
           <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
@@ -1439,78 +1429,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               />
             </div>
 
-            {/* Date Select */}
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="">All Dates</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-            </select>
-
-            {/* Priority Select */}
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Priorities</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-
-            {/* Location Select */}
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Locations</option>
-              <option value="seller">At Seller</option>
-              <option value="shg">At SHG Partner</option>
-              <option value="transporter">In Transit</option>
-              <option value="gmu">At GMU Warehouse</option>
-              <option value="buyer">At Buyer</option>
-            </select>
-
-            {/* Village Select */}
-            <select
-              value={villageFilter}
-              onChange={(e) => setVillageFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Villages</option>
-              {uniqueVillages.map((v, i) => (
-                <option key={i} value={v}>{v}</option>
-              ))}
-            </select>
-
-            {/* Pincode Select */}
-            <select
-              value={pincodeFilter}
-              onChange={(e) => setPincodeFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Pincodes</option>
-              {uniquePincodes.map((p, i) => (
-                <option key={i} value={p}>{p}</option>
-              ))}
-            </select>
+            {/* Start Date Filter */}
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+              <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Start Date:</span>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="bg-transparent border-0 text-xs focus:outline-none cursor-pointer font-extrabold text-slate-750"
+              />
+              {dateFilter && (
+                <button
+                  onClick={() => setDateFilter('')}
+                  className="text-red-500 hover:text-red-750 font-extrabold text-xs ml-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
             {/* Divider */}
             <div className="h-6 w-[1px] bg-slate-200 hidden lg:block" />
-
-            {/* Refresh & Add Manual Order Buttons */}
-            <button
-              onClick={loadData}
-              className="p-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-[#073318] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 text-xs font-bold"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
 
             <button
               onClick={handleOpenAddOrderModalPickup}
@@ -1523,8 +1462,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         </div>
 
         {/* Section Tabs Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-lg">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-xl">
             <button
               onClick={() => handleTabChange('new')}
               className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -1566,29 +1505,31 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 {completedOrdersList.length}
               </span>
             </button>
+
+            <button
+              onClick={() => handleTabChange('rejected')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTopTab === 'rejected'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>Rejected</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {rejectedOrdersList.length}
+              </span>
+            </button>
           </div>
 
-          {/* Sorting and Grid Toggle (Right Side) */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Sort by:</span>
-            <select className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer">
-              <option>Latest Updated</option>
-              <option>Priority (High to Low)</option>
-              <option>Date Placed</option>
-            </select>
-
-            <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
-              <button className="p-1 hover:bg-white rounded-lg text-slate-600 shadow-xs cursor-pointer" title="List View">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-              <button className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer" title="Grid View">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h4v4H4V6zm10 0h4v4h-4V6zM4 16h4v4H4v-4zm10 0h4v4h-4v-4z" />
-                </svg>
-              </button>
-            </div>
+          {/* Shifted Filter Date & Refresh Component */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={loadData}
+              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
@@ -1608,6 +1549,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
                 onRefresh={loadData}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
               />
             )}
           </div>
@@ -1993,6 +1936,31 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
                 onRefresh={loadData}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ---------------- SECTION 4: REJECTED ORDERS ---------------- */}
+        {activeTopTab === 'rejected' && (
+          <div className="space-y-4">
+            {rejectedOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">✕</span>
+                <p className="text-sm">No rejected orders found matching the filter criteria.</p>
+              </div>
+            ) : (
+              <DataTable
+                columns={rejectedColumns}
+                data={rejectedOrdersList}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+                onRefresh={loadData}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
               />
             )}
           </div>
@@ -2389,7 +2357,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         <div className="text-left">
                           <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Order Date</p>
                           <p className="text-sm font-black text-[#073318] mt-0.5">
-                            {selectedOrderDetails.orderDate || (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : '-')}
+                            {selectedOrderDetails.orderDate ? (selectedOrderDetails.orderDate.split(' ')[0].split('T')[0]) : (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : '-')}
                           </p>
                         </div>
                         <Calendar className="h-5 w-5 text-slate-400" />
