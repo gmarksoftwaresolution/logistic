@@ -247,7 +247,7 @@ export class OrderService {
     return [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
   }
 
-  async acceptPickup(pickupOrderId: number, shgId: number) {
+  async acceptPickup(pickupOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: {
         id: pickupOrderId,
@@ -269,7 +269,7 @@ export class OrderService {
         },
       });
       if (dropOrder) {
-        return this.acceptDrop(pickupOrderId, shgId);
+        return this.acceptDrop(pickupOrderId, shgId, selectedVehicleName, selectedVehicleCapacity, selectedVehicleType);
       }
       throw new NotFoundException(`Pickup/Drop order with ID ${pickupOrderId} not available.`);
     }
@@ -324,7 +324,7 @@ export class OrderService {
         data: {
           pickupOrderId,
           status: nextStatus,
-          remarks: 'Pickup leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Pickup leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Pickup leg accepted by SHG.',
         },
       });
 
@@ -390,7 +390,7 @@ export class OrderService {
     }, { timeout: 30000 });
   }
 
-  async acceptDrop(dropOrderId: number, shgId: number) {
+  async acceptDrop(dropOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const dropOrder = await this.prisma.dropOrder.findFirst({
       where: {
         id: dropOrderId,
@@ -445,7 +445,7 @@ export class OrderService {
         data: {
           dropOrderId,
           status: nextStatus,
-          remarks: 'Delivery leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Delivery leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Delivery leg accepted by SHG.',
         },
       });
 
