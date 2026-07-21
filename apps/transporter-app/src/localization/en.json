@@ -249,6 +249,8 @@
     "accepted_orders": "Accepted Orders",
     "pickup_orders": "Pickup Orders",
     "drop_orders": "Drop Orders",
+    "picked_up": "Picked Up",
+    "dropped": "Dropped",
     "completed_orders": "Completed Orders",
     "reject": "Reject",
     "accept": "Accept",
