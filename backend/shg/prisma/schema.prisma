@@ -526,26 +526,20 @@ model DropTracking {
 
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
-  name           String
-  description    String?
-  branchType     String?
-  deliveryStatus String?
-  circle         String?
-  district       String
-  division       String?
-  region         String?
-  block          String?
-  state          String
-  country        String   @default("India")
+  village        String
+  postOffice     String
   pincode        String
+  taluka         String
+  district       String
+  state          String
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  @@index([name])
+  @@index([village])
   @@index([pincode])
   @@index([district])
-  @@index([block])
-  @@index([name, pincode])
+  @@index([taluka])
+  @@index([village, pincode])
   @@map("pincode_directory")
 }
 

@@ -1730,7 +1730,9 @@ export class OrderManagementService implements OnModuleInit {
     const matchingTransporters = await this.getMatchingTransporters(
       order.sellerVillage,
       order.sellerPincode,
-      order.sellerPostOffice || ''
+      order.sellerPostOffice || '',
+      [],
+      Number(order.totalWeight || 0),
     );
 
     if (matchingTransporters.length === 0) {
@@ -1864,7 +1866,8 @@ export class OrderManagementService implements OnModuleInit {
       order.sellerVillage,
       order.sellerPincode,
       order.sellerPostOffice || '',
-      rejectedIds
+      rejectedIds,
+      Number(order.totalWeight || 0),
     );
 
     if (matchingTransporters.length > 0) {
@@ -2431,6 +2434,8 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerVillage || '',
       order.buyerPincode || '',
       order.buyerPostOffice || '',
+      [],
+      Number(order.totalWeight || 0),
     );
 
     if (matchingTransporters.length === 0) {
@@ -2612,6 +2617,7 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerPincode || '',
       order.buyerPostOffice || '',
       rejectedIds,
+      Number(order.totalWeight || 0),
     );
 
     if (matchingTransporters.length > 0) {
@@ -2837,6 +2843,8 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerVillage || '',
       order.buyerPincode || '',
       order.buyerPostOffice || '',
+      [],
+      Number(order.totalWeight || 0),
     );
 
     if (matchingTransporters.length === 0) {
@@ -3039,16 +3047,23 @@ export class OrderManagementService implements OnModuleInit {
     }));
   }
 
-  async getMatchingTransporters(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
+  async getMatchingTransporters(
+    village: string,
+    pincode: string,
+    postOffice: string,
+    excludedIds: string[] = [],
+    totalWeight?: number,
+  ): Promise<any[]> {
     const whereExcluded = excludedIds.length > 0 
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
 
     const approvedTransporters = await this.prisma.$queryRawUnsafe(`
-      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations"
+      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
       FROM public."User" u
       JOIN public."Address" a ON u.id = a."userId"
       LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+      LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
       WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
     `) as any[];
 
@@ -3078,15 +3093,81 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, villages, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Match using BOTH Pincode AND Village (Both must match)
-    const matchingTransporters = approvedTransporters.filter((tr) => {
+    // Priority Step 1 & 2: Village Match AND Pincode Match
+    let villageMatchedCount = 0;
+    let pincodeMatchedCount = 0;
+
+    const locationMatchedTransporters = approvedTransporters.filter((tr) => {
       const { areas, villages, pincodes } = getTransporterInfo(tr);
-      const pinMatches = p && (pincodes.includes(p) || areas.includes(p));
-      const villageMatches = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
-      return pinMatches && villageMatches;
+      const villageMatches = Boolean(v && (villages.includes(normalizeStr(v)) || areas.includes(v)));
+      if (villageMatches) villageMatchedCount++;
+
+      const pinMatches = Boolean(p && (pincodes.includes(p) || areas.includes(p)));
+      if (pinMatches) pincodeMatchedCount++;
+
+      return villageMatches && pinMatches;
     });
 
-    return matchingTransporters.map(tr => ({
+    // Priority Step 3: Vehicle Capacity Match (minWeight <= totalWeight <= maxWeight)
+    const weightNum = typeof totalWeight === 'number' && !isNaN(totalWeight) ? totalWeight : null;
+    let weightEligibleTransporters = locationMatchedTransporters;
+
+    if (weightNum !== null && weightNum > 0) {
+      weightEligibleTransporters = locationMatchedTransporters.filter((tr) => {
+        const minW = tr.minWeight !== null && tr.minWeight !== undefined ? Number(tr.minWeight) : null;
+        const maxW = tr.maxWeight !== null && tr.maxWeight !== undefined ? Number(tr.maxWeight) : null;
+
+        if (minW !== null && weightNum < minW) {
+          return false;
+        }
+        if (maxW !== null && weightNum > maxW) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    if (weightEligibleTransporters.length === 0) {
+      console.log(`[Transporter Broadcast Matching]
+        Total Shipment Weight: ${weightNum !== null ? `${weightNum} kg` : 'N/A'}
+        Village Matched Transporters: ${villageMatchedCount}
+        Pincode Matched Transporters: ${pincodeMatchedCount}
+        Location Matched Transporters: ${locationMatchedTransporters.length}
+        Weight Eligible Transporters: 0
+        Lowest Rate Selected: N/A
+        Selected Transporter IDs: []
+        Reason: No location-matched transporter can carry the total weight (${weightNum} kg).
+      `);
+      return [];
+    }
+
+    // Priority Step 4: Lowest Rate Selection (ratePerKm)
+    const validRates = weightEligibleTransporters
+      .map(tr => (tr.ratePerKm !== null && tr.ratePerKm !== undefined ? Number(tr.ratePerKm) : null))
+      .filter((r): r is number => r !== null && !isNaN(r));
+
+    let finalSelectedTransporters = weightEligibleTransporters;
+    let lowestRateStr = 'N/A';
+
+    if (validRates.length > 0) {
+      const minRate = Math.min(...validRates);
+      lowestRateStr = `₹${minRate}/km`;
+      finalSelectedTransporters = weightEligibleTransporters.filter((tr) => {
+        const rate = tr.ratePerKm !== null && tr.ratePerKm !== undefined ? Number(tr.ratePerKm) : null;
+        return rate === minRate;
+      });
+    }
+
+    console.log(`[Transporter Broadcast Matching]
+      Total Shipment Weight: ${weightNum !== null ? `${weightNum} kg` : 'N/A'}
+      Village Matched Transporters: ${villageMatchedCount}
+      Pincode Matched Transporters: ${pincodeMatchedCount}
+      Weight Eligible Transporters: ${weightEligibleTransporters.length}
+      Lowest Rate Selected: ${lowestRateStr}
+      Broadcast Sent To Transporter IDs: ${JSON.stringify(finalSelectedTransporters.map(tr => String(tr.id)))}
+    `);
+
+    return finalSelectedTransporters.map(tr => ({
       ...tr,
       id: String(tr.id)
     }));

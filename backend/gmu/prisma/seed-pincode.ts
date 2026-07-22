@@ -50,7 +50,7 @@ function parseCSVLine(line: string): string[] {
 }
 
 async function main() {
-  const csvPath = path.join(__dirname, '../India_pincodes.csv');
+  const csvPath = path.join(__dirname, '../Locality_village_pincode_final_mar-2017.csv');
   if (!fs.existsSync(csvPath)) {
     console.error(`CSV file not found at: ${csvPath}`);
     process.exit(1);
@@ -73,7 +73,7 @@ async function main() {
   let batch: any[] = [];
   const BATCH_SIZE = 5000;
 
-  // In-memory unique verification key: Pincode + Name (Village)
+  // In-memory unique verification key: Pincode + name (Village)
   const seenUniqueKeys = new Set<string>();
 
   let totalProcessed = 0;
@@ -81,38 +81,26 @@ async function main() {
   let totalDuplicates = 0;
   let totalSkipped = 0;
 
-  // Headers structure: Name,Description,BranchType,DeliveryStatus,Circle,District,Division,Region,Block,State,Country,Pincode
-  let nameIdx = 0;
-  let descIdx = 1;
-  let branchTypeIdx = 2;
-  let deliveryStatusIdx = 3;
-  let circleIdx = 4;
-  let districtIdx = 5;
-  let divisionIdx = 6;
-  let regionIdx = 7;
-  let blockIdx = 8;
-  let stateIdx = 9;
-  let countryIdx = 10;
-  let pincodeIdx = 11;
+  // Headers structure in new CSV: Village/Locality name,Officename ( BO/SO/HO),Pincode,Sub-distname,Districtname,StateName
+  let villageIdx = 0;
+  let officenameIdx = 1;
+  let pincodeIdx = 2;
+  let subdistIdx = 3;
+  let districtIdx = 4;
+  let stateIdx = 5;
 
   for await (const line of rl) {
     if (!line.trim()) continue;
 
     if (isHeader) {
       isHeader = false;
-      const headers = parseCSVLine(line);
-      nameIdx = headers.indexOf('Name');
-      descIdx = headers.indexOf('Description');
-      branchTypeIdx = headers.indexOf('BranchType');
-      deliveryStatusIdx = headers.indexOf('DeliveryStatus');
-      circleIdx = headers.indexOf('Circle');
-      districtIdx = headers.indexOf('District');
-      divisionIdx = headers.indexOf('Division');
-      regionIdx = headers.indexOf('Region');
-      blockIdx = headers.indexOf('Block');
-      stateIdx = headers.indexOf('State');
-      countryIdx = headers.indexOf('Country');
-      pincodeIdx = headers.indexOf('Pincode');
+      const headers = parseCSVLine(line).map(h => h.trim());
+      villageIdx = headers.findIndex(h => h.toLowerCase() === 'village/locality name');
+      officenameIdx = headers.findIndex(h => h.toLowerCase().startsWith('officename'));
+      pincodeIdx = headers.findIndex(h => h.toLowerCase() === 'pincode');
+      subdistIdx = headers.findIndex(h => h.toLowerCase() === 'sub-distname');
+      districtIdx = headers.findIndex(h => h.toLowerCase() === 'districtname');
+      stateIdx = headers.findIndex(h => h.toLowerCase() === 'statename');
       
       console.log('Detected CSV Column Headers Mapping successfully.');
       continue;
@@ -120,32 +108,26 @@ async function main() {
 
     totalProcessed++;
     const columns = parseCSVLine(line);
-    if (columns.length < 12) {
+    if (columns.length < 6) {
       totalSkipped++;
       continue;
     }
 
-    const name = columns[nameIdx];
-    const description = columns[descIdx] || null;
-    const branchType = columns[branchTypeIdx] || null;
-    const deliveryStatus = columns[deliveryStatusIdx] || null;
-    const circle = columns[circleIdx] || null;
-    const district = columns[districtIdx];
-    const division = columns[divisionIdx] || null;
-    const region = columns[regionIdx] || null;
-    const block = columns[blockIdx] || null;
-    const state = columns[stateIdx];
-    const country = columns[countryIdx] || 'India';
+    const village = columns[villageIdx];
+    const postOffice = columns[officenameIdx];
     const pincode = columns[pincodeIdx];
+    const taluka = columns[subdistIdx];
+    const district = columns[districtIdx];
+    const state = columns[stateIdx];
 
     // Validations: Required fields and pincode length
-    if (!pincode || pincode.length !== 6 || !/^\d{6}$/.test(pincode) || !name || !district || !state) {
+    if (!pincode || pincode.length !== 6 || !/^\d{6}$/.test(pincode) || !village || !district || !state) {
       totalSkipped++;
       continue;
     }
 
-    // Ignore duplicates (pincode + name combination)
-    const uniqueKey = `${pincode}_${name.toLowerCase().trim()}`;
+    // Ignore duplicates (pincode + village combination)
+    const uniqueKey = `${pincode}_${village.toLowerCase().trim()}`;
     if (seenUniqueKeys.has(uniqueKey)) {
       totalDuplicates++;
       continue;
@@ -153,18 +135,12 @@ async function main() {
     seenUniqueKeys.add(uniqueKey);
 
     batch.push({
-      name,
-      description,
-      branchType,
-      deliveryStatus,
-      circle,
-      district,
-      division,
-      region,
-      block,
-      state,
-      country,
+      village,
+      postOffice,
       pincode,
+      taluka,
+      district,
+      state,
     });
 
     if (batch.length >= BATCH_SIZE) {

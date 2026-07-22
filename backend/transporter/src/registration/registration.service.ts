@@ -434,16 +434,16 @@ export class RegistrationService {
       success: true,
       state: data.state,
       district: data.district,
-      taluka: data.block || data.district,
+      taluka: data.taluka || data.district,
     };
   }
 
   async getPincodeVillages(pincode: string) {
     const records = await this.locationService.findByPincode(pincode);
     return records.map(r => ({
-      name: r.name,
-      taluka: r.block || r.district || '',
-      postOffice: r.name,
+      name: r.village,
+      taluka: r.taluka || r.district || '',
+      postOffice: r.postOffice || r.village,
     }));
   }
 
@@ -613,7 +613,7 @@ export class RegistrationService {
           const trimmedVillage = village.trim();
           if (!trimmedVillage) continue;
           const records = await tx.pincodeDirectory.findMany({
-            where: { name: { equals: trimmedVillage, mode: 'insensitive' } },
+            where: { village: { equals: trimmedVillage, mode: 'insensitive' } },
             select: { pincode: true },
           });
           records.forEach(r => pincodes.push(r.pincode));
