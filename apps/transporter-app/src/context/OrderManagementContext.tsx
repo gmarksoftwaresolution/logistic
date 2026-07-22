@@ -75,6 +75,7 @@ export interface BatchOrder {
   products: ProductItem[];
   rejectReason?: string;
   timestamp?: string;
+  createdAt?: string;
 }
 
 export interface ActivityEntry {
@@ -143,7 +144,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const [batches, setBatches] = useState<BatchOrder[]>([]);
   const [rejectedBatches, setRejectedBatches] = useState<BatchOrder[]>([]);
   const [completedBatches, setCompletedBatches] = useState<BatchOrder[]>([]);
-  const [activities, setActivities] = useState<ActivityEntry[]>([]);
+  const [activitiesState, setActivities] = useState<ActivityEntry[]>([]);
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, { pickupPhoto?: string; pickupPhotoTime?: number; dropPhoto?: string; dropPhotoTime?: number }>>({});
   const [completedDropPickups, setCompletedDropPickups] = useState<string[]>([]);
 
@@ -242,13 +243,29 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         handoverCode: o.handoverCode,
         isRTO: o.isRTO || false,
         shgContact: {
-          name: o.shg?.fullName || 'SHG Member',
-          phone: o.shg?.phoneNumber || '',
-          address: o.shg?.address ? `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim() : 'SHG Address',
-          village: o.shg?.address?.village || 'Nesari',
-          pincode: o.shg?.address?.pincode || '416504',
-          taluka: o.shg?.address?.taluka || '',
-          district: o.shg?.address?.district || '',
+          name: o.shg?.fullName || o.seller?.sellerName || 'SHG Member',
+          phone: o.shg?.phoneNumber || o.seller?.mobileNumber || '',
+          address: (() => {
+            if (o.seller) {
+              const parts = [
+                o.seller.addressLine1,
+                o.seller.addressLine2,
+                o.seller.village,
+                o.seller.taluka,
+                o.seller.district,
+                o.seller.pincode
+              ].filter(Boolean);
+              if (parts.length > 0) return parts.join(', ');
+            }
+            if (o.shg?.address) {
+              return `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim();
+            }
+            return 'Nesari Stand';
+          })(),
+          village: o.shg?.address?.village || o.seller?.village || 'Nesari',
+          pincode: o.shg?.address?.pincode || o.seller?.pincode || '416504',
+          taluka: o.shg?.address?.taluka || o.seller?.taluka || '',
+          district: o.shg?.address?.district || o.seller?.district || '',
         },
         products: o.items?.map((item: any) => {
           const pId = String(item.id);
@@ -272,6 +289,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           };
         }) || [],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdAt: o.createdAt,
       }));
 
       const mappedDrops = rawDrops.map((o: any) => {
@@ -344,6 +362,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           };
         }) || [],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdAt: o.createdAt,
       };
     });
 
@@ -520,6 +539,96 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     b => !rejectedBatches.some(rb => rb.id === b.id) && !completedBatches.some(cb => cb.id === b.id)
   );
   const allBatches = [...activeBatches, ...rejectedBatches, ...completedBatches];
+
+  const activities = useMemo(() => {
+    const list: { entry: ActivityEntry; timeMs: number }[] = [];
+    
+    const formatActivityTimestamp = (dateInput?: string | Date): string => {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dateObj = dateInput ? new Date(dateInput) : new Date();
+      const dateStr = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+      const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${dateStr}, ${timeStr}`;
+    };
+
+    allBatches.forEach(b => {
+      const routeStr = `From - ${b.pickupPointName} To ${b.dropPointName}`;
+      const dateObj = b.createdAt ? new Date(b.createdAt) : new Date();
+      const timeMs = dateObj.getTime();
+      const timeStr = formatActivityTimestamp(dateObj);
+
+      if (b.status === 'ACCEPTED_PICKUP') {
+        list.push({
+          entry: {
+            id: `act-accepted-${b.id}`,
+            orderId: b.id,
+            route: routeStr,
+            status: 'Accepted',
+            qty: b.totalQty,
+            weight: b.totalWeight,
+            timestamp: timeStr,
+          },
+          timeMs,
+        });
+      } else if (b.status === 'PICKUP_COMPLETED') {
+        list.push({
+          entry: {
+            id: `act-picked-${b.id}`,
+            orderId: b.id,
+            route: routeStr,
+            status: 'Picked',
+            qty: b.totalQty,
+            weight: b.totalWeight,
+            timestamp: timeStr,
+          },
+          timeMs,
+        });
+      } else if (b.status === 'DROP_COMPLETED') {
+        list.push({
+          entry: {
+            id: `act-dropped-${b.id}`,
+            orderId: b.id,
+            route: routeStr,
+            status: 'Dropped',
+            qty: b.totalQty,
+            weight: b.totalWeight,
+            timestamp: timeStr,
+          },
+          timeMs,
+        });
+      } else if (b.status === 'rejected') {
+        list.push({
+          entry: {
+            id: `act-rejected-${b.id}`,
+            orderId: b.id,
+            route: routeStr,
+            status: 'Rejected',
+            qty: b.totalQty,
+            weight: b.totalWeight,
+            timestamp: timeStr,
+          },
+          timeMs,
+        });
+      }
+    });
+
+    activitiesState.forEach(act => {
+      if (!list.some(item => item.entry.id === act.id || item.entry.orderId === act.orderId)) {
+        let timeMs = Date.now();
+        try {
+          const parts = act.timestamp.split(',');
+          if (parts.length >= 2) {
+            timeMs = new Date(parts[0] + ' ' + parts[1]).getTime();
+          }
+        } catch (e) {}
+        list.push({ entry: act, timeMs });
+      }
+    });
+
+    return list
+      .sort((a, b) => b.timeMs - a.timeMs)
+      .map(item => item.entry);
+  }, [allBatches, activitiesState]);
 
   const newOrdersCount = activeBatches.filter(b => b.status === 'NEW_ORDER').length;
   const acceptedOrdersCount = activeBatches.filter(b => b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED').length;

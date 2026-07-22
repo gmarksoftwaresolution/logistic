@@ -1730,7 +1730,9 @@ export class OrderManagementService implements OnModuleInit {
     const matchingTransporters = await this.getMatchingTransporters(
       order.sellerVillage,
       order.sellerPincode,
-      order.sellerPostOffice || ''
+      order.sellerPostOffice || '',
+      [],
+      order.totalWeight || 0
     );
 
     if (matchingTransporters.length === 0) {
@@ -1864,7 +1866,8 @@ export class OrderManagementService implements OnModuleInit {
       order.sellerVillage,
       order.sellerPincode,
       order.sellerPostOffice || '',
-      rejectedIds
+      rejectedIds,
+      order.totalWeight || 0
     );
 
     if (matchingTransporters.length > 0) {
@@ -2431,6 +2434,8 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerVillage || '',
       order.buyerPincode || '',
       order.buyerPostOffice || '',
+      [],
+      order.totalWeight || 0
     );
 
     if (matchingTransporters.length === 0) {
@@ -2612,6 +2617,7 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerPincode || '',
       order.buyerPostOffice || '',
       rejectedIds,
+      order.totalWeight || 0
     );
 
     if (matchingTransporters.length > 0) {
@@ -2837,6 +2843,8 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerVillage || '',
       order.buyerPincode || '',
       order.buyerPostOffice || '',
+      [],
+      order.totalWeight || 0
     );
 
     if (matchingTransporters.length === 0) {
@@ -3039,16 +3047,17 @@ export class OrderManagementService implements OnModuleInit {
     }));
   }
 
-  async getMatchingTransporters(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
+  async getMatchingTransporters(village: string, pincode: string, postOffice: string, excludedIds: string[] = [], orderWeight?: number): Promise<any[]> {
     const whereExcluded = excludedIds.length > 0 
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
 
     const approvedTransporters = await this.prisma.$queryRawUnsafe(`
-      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations"
+      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations", od."maxWeight", od."minWeight"
       FROM public."User" u
       JOIN public."Address" a ON u.id = a."userId"
       LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+      LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
       WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
     `) as any[];
 
@@ -3078,17 +3087,42 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, villages, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Match using BOTH Pincode AND Village (Both must match)
+    // Match using BOTH Pincode AND Village (Both must match) and check weight tolerance
     const matchingTransporters = approvedTransporters.filter((tr) => {
       const { areas, villages, pincodes } = getTransporterInfo(tr);
       const pinMatches = p && (pincodes.includes(p) || areas.includes(p));
       const villageMatches = v && (villages.includes(normalizeStr(v)) || areas.includes(v));
-      return pinMatches && villageMatches;
+
+      let weightMatches = true;
+      if (orderWeight !== undefined && orderWeight !== null) {
+        const maxWeight = tr.maxWeight ? Number(tr.maxWeight) : 0;
+        let marginPercentage = 0.01; // Default 1%
+        if (maxWeight <= 2000) {
+          marginPercentage = 0.02;   // 2% for small vehicles (<= 2 Tons)
+        } else if (maxWeight <= 5000) {
+          marginPercentage = 0.015;  // 1.5% for medium vehicles (2 to 5 Tons)
+        }
+        const totalAllowedWeight = maxWeight + (maxWeight * marginPercentage);
+        weightMatches = Number(orderWeight) <= totalAllowedWeight;
+      }
+
+      return pinMatches && villageMatches && weightMatches;
     });
 
-    return matchingTransporters.map(tr => ({
-      ...tr,
-      id: String(tr.id)
-    }));
+    // Deduplicate transporters (in case they have multiple vehicles/OtherDetails rows)
+    const uniqueMatches = [];
+    const seenIds = new Set();
+    for (const tr of matchingTransporters) {
+      const stringId = String(tr.id);
+      if (!seenIds.has(stringId)) {
+        seenIds.add(stringId);
+        uniqueMatches.push({
+          ...tr,
+          id: stringId
+        });
+      }
+    }
+
+    return uniqueMatches;
   }
 }
