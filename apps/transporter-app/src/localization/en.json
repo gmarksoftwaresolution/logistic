@@ -173,11 +173,13 @@
     "license_photo_required": "License photo is required",
     "license_expiry_required": "License expiry date is required",
     "license_length": "Driving License must be exactly 15 characters",
+    "driving_experience_minimum": "Driving experience must be at least 1 year",
     "account_number_length": "Account number must be at least 9 digits",
     "account_number_max": "Account number cannot exceed 20 digits"
   },
   "common": {
     "continue": "Continue",
+    "years": "Years",
     "under_development": "is under development",
     "coming_soon": "We're building something amazing for you.",
     "accept": "Accept",
@@ -247,6 +249,8 @@
     "accepted_orders": "Accepted Orders",
     "pickup_orders": "Pickup Orders",
     "drop_orders": "Drop Orders",
+    "picked_up": "Picked Up",
+    "dropped": "Dropped",
     "completed_orders": "Completed Orders",
     "reject": "Reject",
     "accept": "Accept",

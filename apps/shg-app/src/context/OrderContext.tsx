@@ -78,7 +78,7 @@ interface OrderContextType {
   orders: Order[];
   highlightedOrders: Record<string, 'new' | 'updated'>;
   getStockItems: () => Order[];
-  acceptOrder: (order: Order) => Promise<void>;
+  acceptOrder: (order: Order, selectedVehicle?: VehicleInfo) => Promise<void>;
   acceptOrders: (orders: Order[]) => Promise<void>;
   acceptAllOrders: () => Promise<void>;
   rejectOrder: (order: Order) => Promise<void>;
@@ -588,12 +588,19 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const acceptOrder = async (order: Order) => {
+  const acceptOrder = async (order: Order, selectedVehicle?: VehicleInfo) => {
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
       const endpoint = `/orders/new/${rawId}/accept`;
 
-      await axiosInstance.post(endpoint, { legType: order.legType });
+      const payload: any = { legType: order.legType };
+      if (selectedVehicle) {
+        payload.selectedVehicleName = selectedVehicle.name;
+        payload.selectedVehicleCapacity = selectedVehicle.capacity;
+        payload.selectedVehicleType = selectedVehicle.name;
+      }
+
+      await axiosInstance.post(endpoint, payload);
       await clearLocalStateForOrders([order.id]);
       await refreshOrdersList();
     } catch (error) {

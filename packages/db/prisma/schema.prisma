@@ -342,6 +342,7 @@ model StepTracking {
   updatedAt     DateTime @updatedAt
 
   @@unique([userId, step])
+  @@index([userId, step])
 }
 
 //////////////////////////////////////////////////////

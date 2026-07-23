@@ -366,7 +366,7 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -758,7 +758,7 @@ export class OrderService {
       } else if (drop.transporterId === null) {
         // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
         const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
         `, drop.masterOrder.orderNumber) as any[];
         if (gmuOrders.length > 0) {
           const orderUuid = gmuOrders[0].id;
@@ -1013,7 +1013,7 @@ export class OrderService {
             "dropTransporterStatus" = $2, 
             "mainStatus" = CASE WHEN "mainStatus" = 'DELIVERED' THEN 'DELIVERED' ELSE $3 END, 
             "updatedAt" = NOW()
-        WHERE "orderId" = $4 AND phase = 'DROP';
+        WHERE "orderId" = $4 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $4 AND phase = 'DROP')));
       `, pickupTransporterStatus, dropTransporterStatus, nextGmuStatus, masterOrder.orderNumber);
 
       // Disable drop creation trigger in transporter service (moved to GMU warehouse storage transition)
@@ -1023,7 +1023,7 @@ export class OrderService {
 
       // Find the gmu.Order UUID and update assignments
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1103,7 +1103,7 @@ export class OrderService {
         SET "dropTransporterStatus" = 'PICKED', 
             "mainStatus" = $1, 
             "updatedAt" = NOW()
-        WHERE "orderId" = $2 AND phase = 'DROP';
+        WHERE "orderId" = $2 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $2 AND phase = 'DROP')));
       `, nextGmuStatus, masterOrder.orderNumber);
 
       await tx.masterOrder.update({

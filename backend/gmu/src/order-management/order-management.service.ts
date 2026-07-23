@@ -5,7 +5,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrderManagementService implements OnModuleInit {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   onModuleInit() {
     // Start background auto-broadcast polling loop
@@ -15,7 +15,7 @@ export class OrderManagementService implements OnModuleInit {
       } catch (err: any) {
         console.error('[AutoBroadcastLoop] Error running loop:', err.message);
       }
-    }, 5000); // Check every 5 seconds
+    }, 10000); // Check every 10 seconds
   }
 
   async runAutoBroadcastLoop() {
@@ -31,6 +31,7 @@ export class OrderManagementService implements OnModuleInit {
         mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
       },
       include: {
+        seller: true,
         assignments: {
           where: {
             role: 'PICKUP',
@@ -42,10 +43,17 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     for (const order of ordersPlaced) {
-      const validShgAssignments = order.assignments.filter(a => 
-        a.assigneeType === 'SHG' && approvedShgIds.includes(a.assigneeId)
+      const matchingShgs = await this.getMatchingShgs(
+        order.seller?.village || '',
+        order.seller?.pincode || '',
+        order.seller?.postOffice || ''
       );
-      if (validShgAssignments.length === 0) {
+      const existingAssigneeIds = new Set(
+        order.assignments.filter(a => a.assigneeType === 'SHG').map(a => String(a.assigneeId))
+      );
+      const isMissingPartner = matchingShgs.some(s => !existingAssigneeIds.has(String(s.id)));
+
+      if (order.assignments.length === 0 || isMissingPartner || order.pickupShgStatus === 'NO_PARTNERS_FOUND') {
         console.log(`[AutoBroadcastLoop] Automatically triggering SHG broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastShg(order.id);
@@ -59,9 +67,11 @@ export class OrderManagementService implements OnModuleInit {
     const ordersAtShg = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
-        mainStatus: 'PARCEL_AT_SHG',
+        mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'] },
+        pickupTransporterId: null,
       },
       include: {
+        seller: true,
         assignments: {
           where: {
             role: 'PICKUP',
@@ -73,7 +83,21 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     for (const order of ordersAtShg) {
-      if (order.assignments.length === 0) {
+      const matchingTransporters = await this.getMatchingTransporters(
+        order.seller?.village || '',
+        order.seller?.pincode || '',
+        order.seller?.postOffice || '',
+        [],
+        Number(order.totalWeight || 0)
+      );
+      const existingAssigneeIds = new Set(
+        order.assignments.filter(a => a.assigneeType === 'TRANSPORTER').map(a => String(a.assigneeId))
+      );
+      const matchingIds = new Set(matchingTransporters.map(t => String(t.id)));
+      const hasStaleAssignments = order.assignments.some(a => !matchingIds.has(String(a.assigneeId)));
+      const isMissingPartner = matchingTransporters.some(t => !existingAssigneeIds.has(String(t.id)));
+
+      if (order.assignments.length === 0 || isMissingPartner || hasStaleAssignments || order.pickupTransporterStatus === 'NO_PARTNERS_FOUND') {
         console.log(`[AutoBroadcastLoop] Automatically triggering Transporter broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastTransporter(order.id);
@@ -147,7 +171,7 @@ export class OrderManagementService implements OnModuleInit {
       try {
         const parsed = JSON.parse(fieldVal);
         if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
+      } catch (e) { }
     }
     return [];
   }
@@ -599,7 +623,7 @@ export class OrderManagementService implements OnModuleInit {
     }
     const order = await this.prisma.order.findFirst({
       where: whereClause,
-      include: { 
+      include: {
         assignments: true,
         seller: true,
         buyer: true,
@@ -962,7 +986,7 @@ export class OrderManagementService implements OnModuleInit {
 
   async createOrder(dto: CreateOrderDto) {
     const orderId = dto.orderId || `ORD-PICK-${Math.floor(1000 + Math.random() * 9000)}`;
-    
+
     // Check uniqueness of orderId for PICKUP phase
     const existing = await this.prisma.order.findFirst({ where: { orderId, phase: 'PICKUP' } });
     if (existing) {
@@ -976,9 +1000,9 @@ export class OrderManagementService implements OnModuleInit {
       let seller = await tx.seller.findFirst({
         where: { mobileNumber: dto.sellerMobile },
       });
-      
+
       const sellerCode = seller?.sellerCode || `SEL-${Math.floor(100000 + Math.random() * 900000)}`;
-      
+
       if (!seller) {
         seller = await tx.seller.create({
           data: {
@@ -1040,7 +1064,7 @@ export class OrderManagementService implements OnModuleInit {
             INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
             VALUES ($1, $2::uuid, 'SELLER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
           `, seller.id, uuidv4(), dto.sellerMobile, dto.sellerName);
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
         }
       }
@@ -1049,7 +1073,7 @@ export class OrderManagementService implements OnModuleInit {
       let buyer = await tx.buyer.findFirst({
         where: { mobileNumber: dto.buyerMobile },
       });
-      
+
       const buyerCode = buyer?.buyerCode || `BUY-${Math.floor(100000 + Math.random() * 900000)}`;
 
       if (!buyer) {
@@ -1113,7 +1137,7 @@ export class OrderManagementService implements OnModuleInit {
             INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
             VALUES ($1, $2::uuid, 'BUYER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
           `, buyer.id, uuidv4(), dto.buyerMobile, dto.buyerName);
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
         }
       }
@@ -1145,7 +1169,7 @@ export class OrderManagementService implements OnModuleInit {
             RETURNING id;
           `, seller.id, item.name, item.category || 'FOOD', price, weight, item.unit || 'Packet') as any[];
           productId = insertProd[0].id;
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.products', 'id'), COALESCE(MAX(id), 1)) FROM public.products;`);
         }
 
@@ -1257,9 +1281,9 @@ export class OrderManagementService implements OnModuleInit {
       let seller = await tx.seller.findFirst({
         where: { mobileNumber: dto.sellerMobile },
       });
-      
+
       const sellerCode = seller?.sellerCode || `SEL-${Math.floor(100000 + Math.random() * 900000)}`;
-      
+
       if (!seller) {
         seller = await tx.seller.create({
           data: {
@@ -1300,7 +1324,7 @@ export class OrderManagementService implements OnModuleInit {
             INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
             VALUES ($1, $2::uuid, 'SELLER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
           `, seller.id, uuidv4(), dto.sellerMobile, dto.sellerName);
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
         }
       }
@@ -1309,7 +1333,7 @@ export class OrderManagementService implements OnModuleInit {
       let buyer = await tx.buyer.findFirst({
         where: { mobileNumber: dto.buyerMobile },
       });
-      
+
       const buyerCode = buyer?.buyerCode || `BUY-${Math.floor(100000 + Math.random() * 900000)}`;
 
       if (!buyer) {
@@ -1352,7 +1376,7 @@ export class OrderManagementService implements OnModuleInit {
             INSERT INTO public."User" (id, "authId", role, "phoneNumber", "fullName", "isVerified", "currentStep", "profileCompletion", "applicationStatus", "createdAt", "updatedAt")
             VALUES ($1, $2::uuid, 'BUYER', $3, $4, true, 4, 100, 'APPROVED', NOW(), NOW());
           `, buyer.id, uuidv4(), dto.buyerMobile, dto.buyerName);
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public."User"', 'id'), COALESCE(MAX(id), 1)) FROM public."User";`);
         }
       }
@@ -1384,7 +1408,7 @@ export class OrderManagementService implements OnModuleInit {
             RETURNING id;
           `, seller.id, item.name, item.category || 'FOOD', price, weight, item.unit || 'Packet') as any[];
           productId = insertProd[0].id;
-          
+
           await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.products', 'id'), COALESCE(MAX(id), 1)) FROM public.products;`);
         }
 
@@ -1753,11 +1777,20 @@ export class OrderManagementService implements OnModuleInit {
       });
     }
 
-    // Create PENDING assignments with duplicate protection
+    // Clean up any existing pending transporter assignments for this order
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+      },
+    });
+
     let assignmentsCreatedCount = 0;
     for (const t of matchingTransporters) {
-      const existing = await this.prisma.orderAssignment.findFirst({
-        where: {
+      await this.prisma.orderAssignment.create({
+        data: {
           orderId: order.id,
           assigneeId: t.id,
           assigneeType: 'TRANSPORTER',
@@ -1765,18 +1798,7 @@ export class OrderManagementService implements OnModuleInit {
           status: 'PENDING',
         },
       });
-      if (!existing) {
-        await this.prisma.orderAssignment.create({
-          data: {
-            orderId: order.id,
-            assigneeId: t.id,
-            assigneeType: 'TRANSPORTER',
-            role: 'PICKUP',
-            status: 'PENDING',
-          },
-        });
-        assignmentsCreatedCount++;
-      }
+      assignmentsCreatedCount++;
     }
 
     console.log(`[Transporter Broadcast]
@@ -1989,7 +2011,7 @@ export class OrderManagementService implements OnModuleInit {
           if (!isNaN(parsed.getTime())) {
             return parsed.toISOString();
           }
-        } catch (e) {}
+        } catch (e) { }
         return null;
       };
 
@@ -2469,12 +2491,12 @@ export class OrderManagementService implements OnModuleInit {
 
   async rebroadcastForApprovedPartner(partnerId: string, role: 'SHG' | 'TRANSPORTER') {
     console.log(`[rebroadcastForApprovedPartner] Triggered rebroadcast for approved partner: ${partnerId} (${role})`);
-    
+
     if (role === 'SHG') {
       const pickupOrders = await this.prisma.order.findMany({
         where: {
           phase: 'PICKUP',
-          mainStatus: 'ORDER_PLACED',
+          mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
           pickupShgId: null,
         }
       });
@@ -3016,10 +3038,10 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getMatchingShgs(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
-    const whereExcluded = excludedIds.length > 0 
+    const whereExcluded = excludedIds.length > 0
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
-      
+
     const approvedShgs = await this.prisma.$queryRawUnsafe(`
       SELECT u.id, a.pincode, a.village, a."postOffice"
       FROM public."User" u
@@ -3036,7 +3058,7 @@ export class OrderManagementService implements OnModuleInit {
     const op = pincode;
 
     // Match on Pincode AND Village (Both must match)
-    const matchingShgs = approvedShgs.filter(shg => 
+    const matchingShgs = approvedShgs.filter(shg =>
       (shg.pincode && op && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()) &&
       (shg.village && ov && normalizeStr(shg.village) === normalizeStr(ov))
     );
@@ -3054,12 +3076,12 @@ export class OrderManagementService implements OnModuleInit {
     excludedIds: string[] = [],
     totalWeight?: number,
   ): Promise<any[]> {
-    const whereExcluded = excludedIds.length > 0 
+    const whereExcluded = excludedIds.length > 0
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
 
     const approvedTransporters = await this.prisma.$queryRawUnsafe(`
-      SELECT u.id, a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
+      SELECT u.id, a.village as "homeVillage", a.pincode as "homePincode", a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
       FROM public."User" u
       JOIN public."Address" a ON u.id = a."userId"
       LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
@@ -3070,7 +3092,7 @@ export class OrderManagementService implements OnModuleInit {
     const parseJsonArray = (val: any) => {
       if (Array.isArray(val)) return val;
       if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch(e) {}
+        try { return JSON.parse(val); } catch (e) { }
       }
       return [];
     };
@@ -3087,10 +3109,9 @@ export class OrderManagementService implements OnModuleInit {
       const areas = tr.operatingArea
         ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
         : [];
-      const villages = areas;
       const pincodes = parseJsonArray(tr.pickupLocations).map((s: any) => String(s).trim().toLowerCase());
       const transporterPostOffice = tr.postOffice ? normalizeStr(tr.postOffice) : '';
-      return { areas, villages, pincodes, postOffice: transporterPostOffice };
+      return { areas, pincodes, postOffice: transporterPostOffice };
     };
 
     // Priority Step 1 & 2: Village Match AND Pincode Match
@@ -3098,17 +3119,36 @@ export class OrderManagementService implements OnModuleInit {
     let pincodeMatchedCount = 0;
 
     const locationMatchedTransporters = approvedTransporters.filter((tr) => {
-      const { areas, villages, pincodes } = getTransporterInfo(tr);
-      const villageMatches = Boolean(v && (villages.includes(normalizeStr(v)) || areas.includes(v)));
+      const homeV = tr.homeVillage ? normalizeStr(tr.homeVillage) : '';
+      const homeP = tr.homePincode ? tr.homePincode.trim().toLowerCase() : '';
+      const { areas, pincodes } = getTransporterInfo(tr);
+
+      const villageMatches = Boolean(
+        v && (homeV === normalizeStr(v) || areas.includes(normalizeStr(v)))
+      );
       if (villageMatches) villageMatchedCount++;
 
-      const pinMatches = Boolean(p && (pincodes.includes(p) || areas.includes(p)));
+      const pinMatches = Boolean(
+        p && (homeP === p || pincodes.includes(p) || areas.includes(p))
+      );
       if (pinMatches) pincodeMatchedCount++;
 
       return villageMatches && pinMatches;
     });
 
-    // Priority Step 3: Vehicle Capacity Match (minWeight <= totalWeight <= maxWeight)
+    // Helper function to calculate effective maximum weight with tier-based tolerance buffer
+    const getEffectiveMaxWeight = (maxW: number | null): number | null => {
+      if (maxW === null || isNaN(maxW)) return null;
+      let bufferPercent = 0.02; // Default 2% for heavy vehicles (> 500 kg)
+      if (maxW <= 50) {
+        bufferPercent = 0.05; // 5% for small vehicles (<= 50 kg)
+      } else if (maxW <= 500) {
+        bufferPercent = 0.03; // 3% for medium vehicles (50 kg < maxW <= 500 kg)
+      }
+      return maxW * (1 + bufferPercent);
+    };
+
+    // Priority Step 3: Vehicle Capacity Match (minWeight <= totalWeight <= effectiveMaxWeight)
     const weightNum = typeof totalWeight === 'number' && !isNaN(totalWeight) ? totalWeight : null;
     let weightEligibleTransporters = locationMatchedTransporters;
 
@@ -3116,11 +3156,12 @@ export class OrderManagementService implements OnModuleInit {
       weightEligibleTransporters = locationMatchedTransporters.filter((tr) => {
         const minW = tr.minWeight !== null && tr.minWeight !== undefined ? Number(tr.minWeight) : null;
         const maxW = tr.maxWeight !== null && tr.maxWeight !== undefined ? Number(tr.maxWeight) : null;
+        const effectiveMaxW = getEffectiveMaxWeight(maxW);
 
         if (minW !== null && weightNum < minW) {
           return false;
         }
-        if (maxW !== null && weightNum > maxW) {
+        if (effectiveMaxW !== null && weightNum > effectiveMaxW) {
           return false;
         }
         return true;

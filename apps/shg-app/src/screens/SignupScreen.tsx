@@ -719,8 +719,8 @@ export default function SignupScreen({
       // Fallback for older records
       let derivedName = data.vehicleType;
       if (data.vehicleType === 'TWO_WHEELER') derivedName = 'Bike / Scooty';
-      else if (data.vehicleType === 'THREE_WHEELER') derivedName = 'Auto Rickshaw (Cargo)';
-      else if (data.vehicleType === 'FOUR_WHEELER') derivedName = 'Pickup (Tata Ace / Bolero Pickup)'; // default for FOUR_WHEELER
+      else if (data.vehicleType === 'THREE_WHEELER') derivedName = 'Auto Rickshaw';
+      else if (data.vehicleType === 'FOUR_WHEELER') derivedName = 'Pickup'; // default for FOUR_WHEELER
       else if (data.vehicleType === 'MILK_VAN') derivedName = 'Mini Van';
       else if (data.vehicleType === 'OTHER') derivedName = 'Other';
       setVehicleName(derivedName);
@@ -3259,10 +3259,10 @@ export default function SignupScreen({
                 <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
                 {[
                   { id: 'TWO_WHEELER', name: 'Bike / Scooty', capacity: '30', capacityLabel: 'Up to 30 kg', desc: 'Best for small parcels & light items', icon: 'bicycle-outline' },
-                  { id: 'THREE_WHEELER', name: 'Auto Rickshaw (Cargo)', capacity: '250', capacityLabel: 'Up to 250 kg', desc: 'Suitable for medium size deliveries', icon: 'car-outline' },
-                  { id: 'FOUR_WHEELER', name: 'Pickup (Tata Ace / Bolero Pickup)', capacity: '750', capacityLabel: 'Up to 750 kg', desc: 'Ideal for large volume deliveries', icon: 'car-sport-outline' },
+                  { id: 'THREE_WHEELER', name: 'Auto Rickshaw', capacity: '250', capacityLabel: 'Up to 250 kg', desc: 'Suitable for medium size deliveries', icon: 'car-outline' },
                   { id: 'FOUR_WHEELER', name: 'Car', capacity: '400', capacityLabel: 'Up to 400 kg', desc: 'Standard car for regular items', icon: 'car-sport-outline' },
                   { id: 'MILK_VAN', name: 'Mini Van', capacity: '500', capacityLabel: 'Up to 500 kg', desc: 'Good for secure medium transport', icon: 'bus-outline' },
+                  { id: 'FOUR_WHEELER', name: 'Pickup', capacity: '750', capacityLabel: 'Up to 750 kg', desc: 'Ideal for large volume deliveries', icon: 'car-sport-outline' },
                   { id: 'OTHER', name: 'Small Truck', capacity: '2000', capacityLabel: 'Up to 2000 kg', desc: 'For heavy cargo', icon: 'bus-outline' },
                   { id: 'OTHER', name: 'Tractor / Trolley', capacity: '5000', capacityLabel: 'Up to 5000 kg', desc: 'For very heavy or agricultural loads', icon: 'car-outline' },
                   { id: 'OTHER', name: 'Above 5000 kg', capacity: '5000', capacityLabel: 'Above 5000 kg', desc: 'Specialized heavy transport', icon: 'car-outline' },

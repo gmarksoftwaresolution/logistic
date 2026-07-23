@@ -50,7 +50,8 @@ export class OrderService {
         SELECT o."orderId" 
         FROM public."OrderAssignment" oa
         JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status = 'PENDING' AND o.phase = 'DROP';
+        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status = 'PENDING'
+          AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = o."orderId" AND phase = 'DROP')));
       `, shgUuid) as any[];
       assignedDropOrderIds = dropAssignments.map(a => a.orderId);
     }
@@ -247,7 +248,7 @@ export class OrderService {
     return [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
   }
 
-  async acceptPickup(pickupOrderId: number, shgId: number) {
+  async acceptPickup(pickupOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: {
         id: pickupOrderId,
@@ -269,7 +270,7 @@ export class OrderService {
         },
       });
       if (dropOrder) {
-        return this.acceptDrop(pickupOrderId, shgId);
+        return this.acceptDrop(pickupOrderId, shgId, selectedVehicleName, selectedVehicleCapacity, selectedVehicleType);
       }
       throw new NotFoundException(`Pickup/Drop order with ID ${pickupOrderId} not available.`);
     }
@@ -324,7 +325,7 @@ export class OrderService {
         data: {
           pickupOrderId,
           status: nextStatus,
-          remarks: 'Pickup leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Pickup leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Pickup leg accepted by SHG.',
         },
       });
 
@@ -390,7 +391,7 @@ export class OrderService {
     }, { timeout: 30000 });
   }
 
-  async acceptDrop(dropOrderId: number, shgId: number) {
+  async acceptDrop(dropOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const dropOrder = await this.prisma.dropOrder.findFirst({
       where: {
         id: dropOrderId,
@@ -419,7 +420,7 @@ export class OrderService {
         SELECT o.id, o."dropShgStatus", o."dropShgId", o."mainStatus", b.village as "buyerVillage", b.pincode as "buyerPincode"
         FROM public."Order" o
         JOIN public.buyers b ON o."buyerId" = b.id
-        WHERE o."orderId" = $1 AND o.phase = 'DROP' LIMIT 1;
+        WHERE o."orderId" = $1 AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -445,7 +446,7 @@ export class OrderService {
         data: {
           dropOrderId,
           status: nextStatus,
-          remarks: 'Delivery leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Delivery leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Delivery leg accepted by SHG.',
         },
       });
 
@@ -1180,10 +1181,15 @@ export class OrderService {
 
       const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
       const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
+      const hasDropRow = await tx.order.count({
+        where: { orderId: orderNumber, phase: 'DROP' }
+      });
+      const targetPhase = hasDropRow > 0 ? 'DROP' : 'PICKUP';
+
       await tx.order.updateMany({
         where: {
           orderId: orderNumber,
-          phase: 'DROP',
+          phase: targetPhase,
         },
         data: {
           dropShgStatus,
@@ -1198,7 +1204,8 @@ export class OrderService {
       });
 
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id FROM public."Order"
+        WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1487,7 +1494,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "rescheduledAt" = $1, "rescheduleType" = $2, "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'DROP';
+          WHERE "orderId" = $3 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $3 AND phase = 'DROP')));
         `, finalDate, 'SHG', masterOrder.orderNumber);
 
         await tx.dropTracking.create({
@@ -1557,7 +1564,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "rescheduledAt" = $1, "rescheduleType" = $2, "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'DROP';
+          WHERE "orderId" = $3 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $3 AND phase = 'DROP')));
         `, finalDate, 'SHG', masterOrder.orderNumber);
 
         await tx.dropTracking.create({

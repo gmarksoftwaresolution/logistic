@@ -606,19 +606,22 @@ export class RegistrationService {
         });
       }
 
-      // Helper to resolve pincodes for a list of villages
+      // Helper to resolve pincodes for a list of villages (optimized batch query)
       const resolvePincodesForVillages = async (villagesList: string[]): Promise<string[]> => {
-        const pincodes: string[] = [];
-        for (const village of villagesList) {
-          const trimmedVillage = village.trim();
-          if (!trimmedVillage) continue;
+        const cleanVillages = villagesList.map(v => v.trim()).filter(Boolean);
+        if (cleanVillages.length === 0) return [];
+
+        try {
           const records = await tx.pincodeDirectory.findMany({
-            where: { village: { equals: trimmedVillage, mode: 'insensitive' } },
+            where: { village: { in: cleanVillages, mode: 'insensitive' } },
             select: { pincode: true },
+            take: 100,
           });
-          records.forEach(r => pincodes.push(r.pincode));
+          return [...new Set(records.map(r => r.pincode))];
+        } catch (e) {
+          console.warn('[resolvePincodesForVillages] Failed to fetch pincodes:', e);
+          return [];
         }
-        return [...new Set(pincodes)];
       };
 
       // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
@@ -716,7 +719,7 @@ export class RegistrationService {
       }
 
       return updated;
-    });
+    }, { timeout: 30000 });
 
     return {
       message: 'Registration steps completed. Your application is under review.',

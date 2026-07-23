@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Linking, Alert, Modal, Image, Animated, ActivityIndicator, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
+import { useUser } from '../context/UserContext';
 import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
 import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
@@ -28,6 +29,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const context = useContext(LanguageContext);
   const { t } = context!;
   const { isActive, currentStep, nextStep } = useOnboarding();
+  const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -219,6 +222,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [activeScanningParcel, setActiveScanningParcel] = useState<any>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [showRedirectModal, setShowRedirectModal] = useState<boolean>(false);
 
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
@@ -1084,6 +1088,36 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
 
 
+      {/* Redirect Button */}
+      {(() => {
+        let uCarrying: string | null | undefined = undefined;
+        if (Array.isArray(user?.otherDetails)) {
+          uCarrying = user?.otherDetails[0]?.carryingCapacity;
+        } else if (user?.otherDetails) {
+          uCarrying = (user.otherDetails as any).carryingCapacity;
+        }
+
+        const uVehicle = user?.vehicleCapacity;
+        const oWeight = order.parcelWeight;
+        const parsedWeight = Number(oWeight);
+        // Default to 30 if carrying capacity is missing, since we updated all DB users to 30
+        const parsedCap = Number(uCarrying ?? uVehicle ?? 30);
+        
+        const isHeavy = parsedWeight > parsedCap;
+        const showRedirect = !isDeliveryPhase && order.status?.toUpperCase() === 'ACCEPTED' && order.recommendedVehicle && oWeight !== undefined && isHeavy;
+
+        return showRedirect ? (
+          <View className="px-2 mt-3.5">
+            <TouchableOpacity
+              onPress={() => setShowRedirectModal(true)}
+              className="bg-[#9333EA] h-12 rounded-[16px] flex-row items-center justify-center w-full shadow-sm active:bg-[#7E22CE]"
+            >
+              <Text className="text-[14px] font-bold text-white">Redirect Order</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null;
+      })()}
+
       {/* Action Buttons Row */}
         {(!order.isRejectedDelivery && order.status !== 'REJECTED') && (
           <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
@@ -1297,6 +1331,49 @@ const OrderDetailsScreen: React.FC<Props> = ({
             }
           }}
         />
+
+        {/* Redirect Confirmation Modal */}
+        <Modal
+          visible={showRedirectModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowRedirectModal(false)}
+        >
+          <View 
+            className="flex-1 bg-black/50 justify-center px-6"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
+            <View className="bg-white rounded-[24px] p-6 shadow-lg">
+              <View className="items-center mb-4">
+                <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-3">
+                  <Ionicons name="alert-circle-outline" size={28} color="#F59E0B" />
+                </View>
+                <Text className="text-[18px] font-black text-[#111827] text-center mb-2">Redirect Order</Text>
+                <Text className="text-[14px] font-medium text-[#4B5563] text-center px-2">
+                  Are you sure you want to redirect this order to the transporter?
+                </Text>
+              </View>
+
+              <View className="flex-row gap-3 mt-4">
+                <TouchableOpacity
+                  onPress={() => setShowRedirectModal(false)}
+                  className="flex-1 bg-white border border-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+                >
+                  <Text className="text-[14px] font-bold text-[#9333EA]">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log("Redirect confirmed");
+                    setShowRedirectModal(false);
+                  }}
+                  className="flex-1 bg-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+                >
+                  <Text className="text-[14px] font-bold text-white">Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         {((isPickupAccepted || isDeliveryPhase) && order.status !== 'Delivered') && (
           <FloatingScannerButton
             module={isDeliveryPhase ? 'DROP' : 'PICKUP'}

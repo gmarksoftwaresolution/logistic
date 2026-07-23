@@ -402,8 +402,10 @@ const parseDimensions = (storageSpace?: string) => {
   return { width: '', height: '' };
 };
 
+import { useAppContext } from '../context/AppContext';
+
 export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
-  const [shgList, setShgList] = useState<SHGProfileExt[]>([]);
+  const { communityMembersList: shgList, setCommunityMembersList: setShgList } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
@@ -429,8 +431,10 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
     documentNumber?: string
   } | null>(null);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchData = async (isManualRefresh = false) => {
+    if (shgList.length === 0 || isManualRefresh) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       let requests: any[] = [];
@@ -454,58 +458,58 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       const mapItem = (item: any) => {
         const dims = parseDimensions(item.storageSpace);
         return {
-          id: item.id,
-          memberCode: item.memberCode || item.id,
-          type: (item.type === 'SHG' ? 'SHG Group' : 'Individual') as any,
-          fullName: item.fullName,
-          mobile: item.mobileNumber,
+          id: item.memberCode || String(item.id),
+          memberCode: item.memberCode || String(item.id),
+          type: (activeTopSection === 'shg' ? 'SHG Group' : 'Individual') as any,
+          fullName: item.fullName || '',
+          mobile: item.mobileNumber || '',
           village: item.village || '',
           pincode: item.pincode || '',
           role: (item.roleInShg || 'N/A') as any,
           shgName: item.shgName || 'N/A',
-          storageAvailable: item.storageSpace || (item.storageWidth && item.storageHeight ? `${item.storageWidth * item.storageHeight} sq ft` : 'N/A'),
+          storageAvailable: item.storageSpace ? item.storageSpace : 'N/A',
           vehicleAvailable: item.vehicleAvailable ? 'Yes' : 'No',
           registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
-          status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
+          status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
           activeOrders: 0,
           completedOrders: 0,
-          photo: normalizeUrl(item.profilePhoto) || '',
+          photo: item.profilePhoto || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
           age: item.age || 0,
-          occupation: item.occupation || '',
-          crpName: item.crpName || '',
-          crpMobile: item.crpMobile || '',
-          crpEmail: item.crpEmail || '',
-          shgActiveSince: item.activeSince || '',
+          occupation: 'N/A',
+          crpName: item.crpName || 'N/A',
+          crpMobile: item.crpMobile || 'N/A',
+          crpEmail: item.crpEmail || 'N/A',
+          shgActiveSince: item.activeSince ? new Date(item.activeSince).toISOString().split('T')[0] : 'N/A',
           shgGroupSize: item.groupSize || 0,
-          groupLeaderName: item.leaderName || '',
-          groupLeaderMobile: item.leaderMobile || '',
+          groupLeaderName: item.leaderName || 'N/A',
+          groupLeaderMobile: item.leaderMobile || 'N/A',
           producesProducts: item.producesProducts ? 'Yes' : 'No',
           businessTeamSize: item.businessTeamSize || 0,
-          productName: item.productName || '',
-          productCategory: item.productCategory || '',
-          dailyProduction: item.dailyProduction ? `${item.dailyProduction} ${item.productionUnit || 'Kg'}` : '',
-          weeklyProduction: item.weeklyProduction ? `${item.weeklyProduction} ${item.productionUnit || 'Kg'}` : '',
-          unit: item.productionUnit || '',
+          productName: item.productName || 'N/A',
+          productCategory: item.productCategory || 'N/A',
+          dailyProduction: item.dailyProduction ? `${item.dailyProduction} ${item.productionUnit || ''}` : 'N/A',
+          weeklyProduction: item.weeklyProduction ? `${item.weeklyProduction} ${item.productionUnit || ''}` : 'N/A',
+          unit: item.productionUnit || 'N/A',
           pricePerUnit: item.pricePerUnit || 0,
-          houseNumber: item.houseNo || '',
-          address: item.deliveryAddress || '',
+          houseNumber: item.houseNo || 'N/A',
+          address: item.deliveryAddress || 'N/A',
           taluka: item.taluka || '',
           district: item.district || '',
           state: item.state || '',
-          aadhaarNumber: item.aadhaarNumber || '',
-          panNumber: item.panNumber || '',
-          aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || '',
-          aadhaarBack: normalizeUrl(item.aadhaarBackPhoto) || '',
-          panCard: normalizeUrl(item.panCardPhoto) || '',
-          accountHolderName: item.accountHolderName || '',
-          accountNumber: item.accountNumber || '',
-          ifscCode: item.ifscCode || '',
-          bankName: item.bankName || '',
-          branchName: item.branchName || '',
-          upiId: item.upiId || '',
-          width: item.storageWidth ? `${item.storageWidth} ft` : dims.width,
-          height: item.storageHeight ? `${item.storageHeight} ft` : dims.height,
-          storageDescription: item.storageDescription || 'Clean and dry ventilated room storage.',
+          aadhaarNumber: item.aadhaarNumber || 'N/A',
+          panNumber: item.panNumber || 'N/A',
+          aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || 'N/A',
+          aadhaarBack: normalizeUrl(item.aadhaarBackPhoto) || 'N/A',
+          panCard: normalizeUrl(item.panCardPhoto) || 'N/A',
+          accountHolderName: item.accountHolderName || 'N/A',
+          accountNumber: item.accountNumber || 'N/A',
+          ifscCode: item.ifscCode || 'N/A',
+          bankName: item.bankName || 'N/A',
+          branchName: item.branchName || 'N/A',
+          upiId: item.upiId || 'N/A',
+          width: dims.width,
+          height: dims.height,
+          storageDescription: item.storageSpace || 'N/A',
           vehicleType: item.vehicleType || 'N/A',
           registrationNumber: item.vehicleRegistrationNumber || 'N/A',
           drivingLicenseNumber: item.drivingLicenseNumber || 'N/A',

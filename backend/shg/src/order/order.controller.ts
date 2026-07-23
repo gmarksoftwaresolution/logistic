@@ -44,11 +44,14 @@ export class OrderController {
     @Param('id', ParseIntPipe) id: number,
     @GetUser() user: User,
     @Body('legType') legType?: 'pickup' | 'drop',
+    @Body('selectedVehicleName') selectedVehicleName?: string,
+    @Body('selectedVehicleCapacity') selectedVehicleCapacity?: number,
+    @Body('selectedVehicleType') selectedVehicleType?: string,
   ) {
     if (legType === 'drop') {
-      return this.orderService.acceptDrop(id, user.id);
+      return this.orderService.acceptDrop(id, user.id, selectedVehicleName, selectedVehicleCapacity, selectedVehicleType);
     }
-    return this.orderService.acceptPickup(id, user.id);
+    return this.orderService.acceptPickup(id, user.id, selectedVehicleName, selectedVehicleCapacity, selectedVehicleType);
   }
 
   @Post('new/:id/reject')

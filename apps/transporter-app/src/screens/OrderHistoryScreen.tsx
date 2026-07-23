@@ -50,11 +50,12 @@ const OrderHistoryScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [detailsBatch, setDetailsBatch] = useState<BatchOrder | null>(null);
+  const [detailsActivityStatus, setDetailsActivityStatus] = useState<string | null>(null);
   const [visitedTabs, setVisitedTabs] = useState<string[]>(['All']);
   const [dateFilterType, setDateFilterType] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customSelectedDate, setCustomSelectedDate] = useState<Date | null>(null);
   const [showDateModal, setShowDateModal] = useState(false);
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 4, 18));
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
   const pagerRef = useRef<ScrollView>(null);
   const tabListRef = useRef<FlatList>(null);
@@ -78,7 +79,7 @@ const OrderHistoryScreen = () => {
     lastOffsetY.current = currentOffset;
   };
 
-  const filters = ['All', 'Pickup Completed', 'Drop Completed', 'Rejected'];
+  const filters = ['All', 'Picked Up', 'Dropped', 'Rejected'];
 
   const selectTab = (index: number) => {
     const filter = filters[index];
@@ -104,10 +105,11 @@ const OrderHistoryScreen = () => {
   const groupedActivitiesPerFilter = useMemo(() => {
     const result: Record<string, Record<string, ActivityEntry[]>> = {};
     
-    const today = new Date(2026, 4, 18); // Mock app context date May 18, 2026
+    const today = new Date();
     const todayStr = formatDateToHuman(today);
 
-    const yesterday = new Date(2026, 4, 17); // Mock app context yesterday May 17, 2026
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = formatDateToHuman(yesterday);
 
     const customStr = customSelectedDate ? formatDateToHuman(customSelectedDate) : '';
@@ -116,6 +118,7 @@ const OrderHistoryScreen = () => {
       const filtered = activities.filter((act) => {
         // Only show Picked, Dropped, Completed, and Rejected history items. Exclude Accepted.
         const isValidHistoryStatus = 
+          act.status === 'Accepted' ||
           act.status === 'Picked' || 
           act.status === 'Dropped' || 
           act.status === 'Completed' ||
@@ -129,8 +132,8 @@ const OrderHistoryScreen = () => {
         
         const matchesFilter = 
           filter === 'All' || 
-          (filter === 'Pickup Completed' && act.status === 'Picked') ||
-          (filter === 'Drop Completed' && (act.status === 'Dropped' || act.status === 'Completed')) ||
+          (filter === 'Picked Up' && (act.status === 'Picked' || act.status === 'Dropped' || act.status === 'Completed')) ||
+          (filter === 'Dropped' && (act.status === 'Dropped' || act.status === 'Completed')) ||
           (filter === 'Rejected' && act.status === 'Rejected');
 
         // Check date filter prefix
@@ -301,12 +304,12 @@ const OrderHistoryScreen = () => {
   const getActivityBadgeStyle = (status: ActivityEntry['status']) => {
     switch (status) {
       case 'Picked':
-        return { bg: '#EFF6FF', text: '#2563EB', icon: <Package size={scale(11)} color="#2563EB" />, label: t('orders.pickup_order', { defaultValue: 'Pickup Completed' }) };
+        return { bg: '#EFF6FF', text: '#2563EB', icon: <Package size={scale(11)} color="#2563EB" />, label: t('orders.picked', { defaultValue: 'Picked' }) };
       case 'Dropped':
       case 'Completed':
-        return { bg: '#ECFDF5', text: '#059669', icon: <CheckCircle size={scale(11)} color="#059669" />, label: t('orders.drop_order', { defaultValue: 'Drop Completed' }) };
+        return { bg: '#ECFDF5', text: '#059669', icon: <CheckCircle size={scale(11)} color="#059669" />, label: t('orders.dropped', { defaultValue: 'Dropped' }) };
       case 'Accepted':
-        return { bg: '#F0FDF4', text: '#16A34A', icon: <Clock size={scale(11)} color="#16A34A" />, label: t('orders.accepted_to_process', { defaultValue: 'Accepted' }) };
+        return { bg: '#F0FDF4', text: '#16A34A', icon: <Clock size={scale(11)} color="#16A34A" />, label: t('orders.accepted', { defaultValue: 'Accepted' }) };
       case 'Rejected':
         return { bg: '#FEF2F2', text: '#DC2626', icon: <XCircle size={scale(11)} color="#DC2626" />, label: t('orders.reject', { defaultValue: 'Rejected' }) };
       default:
@@ -315,7 +318,8 @@ const OrderHistoryScreen = () => {
   };
 
   const renderActivityCard = ({ item }: { item: ActivityEntry }) => {
-    const badge = getActivityBadgeStyle(item.status);
+    const displayStatus = (selectedFilter === 'Picked Up') ? 'Picked' : item.status;
+    const badge = getActivityBadgeStyle(displayStatus);
     const batch = batchesMap[item.orderId];
 
     const cardContent = (
@@ -323,7 +327,10 @@ const OrderHistoryScreen = () => {
         style={styles.activityCard} 
         activeOpacity={0.7}
         onPress={() => {
-          if (batch) setDetailsBatch(batch);
+          if (batch) {
+            setDetailsBatch(batch);
+            setDetailsActivityStatus(displayStatus);
+          }
         }}
       >
         {/* Top Header Section */}
@@ -336,7 +343,7 @@ const OrderHistoryScreen = () => {
               adjustsFontSizeToFit 
               minimumFontScale={0.8}
             >
-              {item.orderId}
+              {batch?.displayId || item.orderId}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
@@ -457,9 +464,9 @@ const OrderHistoryScreen = () => {
               renderItem={({ item, index }) => {
                 const getFilterLabel = (filter: string) => {
                   switch (filter) {
-                    case 'All': return t('orders.all_time', { defaultValue: 'All' });
-                    case 'Pickup Completed': return t('orders.pickup_orders', { defaultValue: 'Pickup Completed' });
-                    case 'Drop Completed': return t('orders.drop_orders', { defaultValue: 'Drop Completed' });
+                    case 'All': return t('orders.all_time', { defaultValue: 'All Time' });
+                    case 'Picked Up': return t('orders.picked_up', { defaultValue: 'Picked Up' });
+                    case 'Dropped': return t('orders.dropped', { defaultValue: 'Dropped' });
                     case 'Rejected': return t('orders.reject', { defaultValue: 'Rejected' });
                     default: return filter;
                   }
@@ -573,7 +580,7 @@ const OrderHistoryScreen = () => {
                 style={[styles.datePresetChip, dateFilterType === 'today' && styles.datePresetChipActive]}
                 onPress={() => {
                   setDateFilterType('today');
-                  setCustomSelectedDate(new Date(2026, 4, 18));
+                  setCustomSelectedDate(new Date());
                   setShowDateModal(false);
                 }}
               >
@@ -586,7 +593,9 @@ const OrderHistoryScreen = () => {
                 style={[styles.datePresetChip, dateFilterType === 'yesterday' && styles.datePresetChipActive]}
                 onPress={() => {
                   setDateFilterType('yesterday');
-                  setCustomSelectedDate(new Date(2026, 4, 17));
+                  const yest = new Date();
+                  yest.setDate(yest.getDate() - 1);
+                  setCustomSelectedDate(yest);
                   setShowDateModal(false);
                 }}
               >
@@ -633,7 +642,7 @@ const OrderHistoryScreen = () => {
             <View style={styles.detailsHeader}>
               <View>
                 <Text style={styles.detailsTitle}>{t('orders.order_details')}</Text>
-                <Text style={styles.detailsBatchId}>#{detailsBatch?.id}</Text>
+                <Text style={styles.detailsBatchId}>#{detailsBatch?.displayId || detailsBatch?.id}</Text>
               </View>
               <TouchableOpacity 
                 style={styles.closeModalBtn} 
@@ -648,7 +657,9 @@ const OrderHistoryScreen = () => {
               <View style={styles.modalSummaryCard}>
                 <View style={styles.summaryRow}>
                   <MapPin size={scale(18)} color={Colors.primary} strokeWidth={2.5} />
-                  <Text style={styles.summaryRouteText}>{detailsBatch?.areaName}</Text>
+                  <Text style={styles.summaryRouteText}>
+                    {detailsBatch?.pickupPointName} → {detailsBatch?.dropPointName}
+                  </Text>
                 </View>
                 <View style={styles.summaryFooter}>
                   <View style={styles.summaryPill}>
@@ -662,60 +673,128 @@ const OrderHistoryScreen = () => {
                 </View>
               </View>
 
-              <View style={styles.itemsListTitleRow}>
-                <Text style={styles.itemsListTitle}>{t('orders.contact_info')}</Text>
-                <View style={styles.contactIconBox}>
-                  <Phone size={scale(14)} color={Colors.primary} />
-                </View>
-              </View>
-
-              <View style={styles.contactDetailsCard}>
-                <View style={styles.contactRow}>
-                  <User size={scale(18)} color={Colors.textSecondary} />
-                  <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>{cleanPersonName(detailsBatch?.shgContact.name)}</Text>
-                    <Text style={styles.contactRole}>{t('orders.shg_lead', { defaultValue: 'SHG Lead Representative' })}</Text>
+              {/* Pickup Point Info */}
+              {(selectedFilter === 'All' || selectedFilter === 'Picked Up' || selectedFilter === 'Rejected') && (
+                <>
+                  <View style={styles.itemsListTitleRow}>
+                    <Text style={styles.itemsListTitle}>{t('orders.pickup_point', { defaultValue: 'Pickup Point' })}</Text>
+                    <View style={styles.contactIconBox}>
+                      <MapPin size={scale(14)} color={Colors.primary} />
+                    </View>
                   </View>
-                </View>
-                <View style={styles.contactRow}>
-                  <Phone size={scale(18)} color={Colors.textSecondary} />
-                  <Text style={styles.contactPhone}>{detailsBatch?.shgContact.phone}</Text>
-                </View>
-                <View style={styles.contactRow}>
-                  <MapPin size={scale(18)} color={Colors.textSecondary} />
-                  <Text style={styles.contactAddress}>{detailsBatch?.shgContact.address}</Text>
-                </View>
-              </View>
+
+                  <View style={styles.contactDetailsCard}>
+                    <View style={styles.contactRow}>
+                      <User size={scale(18)} color={Colors.textSecondary} />
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>
+                          {detailsBatch?.flowType === 'gmu_to_shg' ? 'Prasad Patil (Hub Manager)' : cleanPersonName(detailsBatch?.shgContact.name)}
+                        </Text>
+                        <Text style={styles.contactRole}>
+                          {detailsBatch?.flowType === 'gmu_to_shg' ? 'Hub Manager' : t('orders.shg_lead', { defaultValue: 'SHG Lead Representative' })}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.contactRow}>
+                      <Phone size={scale(18)} color={Colors.textSecondary} />
+                      <Text style={styles.contactPhone}>
+                        {detailsBatch?.flowType === 'gmu_to_shg' ? '+91 9123456789' : detailsBatch?.shgContact.phone}
+                      </Text>
+                    </View>
+                    <View style={styles.contactRow}>
+                      <MapPin size={scale(18)} color={Colors.textSecondary} />
+                      <Text style={styles.contactAddress}>
+                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Delivery Point Info */}
+              {(selectedFilter === 'All' || selectedFilter === 'Dropped' || selectedFilter === 'Rejected') && (
+                <>
+                  <View style={styles.itemsListTitleRow}>
+                    <Text style={styles.itemsListTitle}>{t('orders.delivery_point', { defaultValue: 'Delivery Point' })}</Text>
+                    <View style={styles.contactIconBox}>
+                      <MapPin size={scale(14)} color={Colors.primary} />
+                    </View>
+                  </View>
+
+                  <View style={styles.contactDetailsCard}>
+                    <View style={styles.contactRow}>
+                      <User size={scale(18)} color={Colors.textSecondary} />
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>
+                          {detailsBatch?.flowType === 'shg_to_gmu' ? 'Prasad Patil (Hub Manager)' : cleanPersonName(detailsBatch?.shgContact.name)}
+                        </Text>
+                        <Text style={styles.contactRole}>
+                          {detailsBatch?.flowType === 'shg_to_gmu' ? 'Hub Manager' : t('orders.shg_lead', { defaultValue: 'SHG Lead Representative' })}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.contactRow}>
+                      <Phone size={scale(18)} color={Colors.textSecondary} />
+                      <Text style={styles.contactPhone}>
+                        {detailsBatch?.flowType === 'shg_to_gmu' ? '+91 9123456789' : detailsBatch?.shgContact.phone}
+                      </Text>
+                    </View>
+                    <View style={styles.contactRow}>
+                      <MapPin size={scale(18)} color={Colors.textSecondary} />
+                      <Text style={styles.contactAddress}>
+                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
 
               <Text style={styles.itemsListTitle}>{t('orders.product_details')}</Text>
               
               {/* Products List */}
-              {detailsBatch?.products.map((product, index) => (
-                <View key={product.id || index} style={styles.itemRow}>
-                  <View style={styles.itemIconBox}>
-                    <Package size={scale(18)} color={Colors.primary} />
+              {detailsBatch?.products.map((product, index) => {
+                const getProductDisplayStatus = () => {
+                  if (product.status?.toLowerCase() === 'rejected') {
+                    return { key: 'orders.rejected', defaultText: 'Rejected', color: '#DC2626', bg: '#FEF2F2' };
+                  }
+                  if (detailsActivityStatus === 'Dropped' || detailsActivityStatus === 'Completed') {
+                    return { key: 'orders.dropped', defaultText: 'Dropped', color: '#059669', bg: '#ECFDF5' };
+                  }
+                  if (detailsActivityStatus === 'Picked') {
+                    return { key: 'orders.picked', defaultText: 'Picked', color: '#059669', bg: '#ECFDF5' };
+                  }
+                  if (detailsActivityStatus === 'Accepted') {
+                    return { key: 'orders.accepted', defaultText: 'Accepted', color: '#16A34A', bg: '#F0FDF4' };
+                  }
+                  
+                  const isSuccess = product.status === 'completed' || product.status === 'picked';
+                  return {
+                    key: `orders.${product.status}`,
+                    defaultText: product.status,
+                    color: isSuccess ? '#059669' : '#64748B',
+                    bg: isSuccess ? '#ECFDF5' : '#F1F5F9'
+                  };
+                };
+
+                const prodStatus = getProductDisplayStatus();
+
+                return (
+                  <View key={product.id || index} style={styles.itemRow}>
+                    <View style={styles.itemIconBox}>
+                      <Package size={scale(18)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{product.name}</Text>
+                      <Text style={styles.itemMeta}>{product.qty} {t('orders.units', { defaultValue: 'Units' })} • {product.weight}</Text>
+                    </View>
+                    <View style={[styles.itemStatusBadge, { backgroundColor: prodStatus.bg }]}>
+                      <Text style={[styles.itemStatusText, { color: prodStatus.color }]}>
+                        {t(prodStatus.key, { defaultValue: prodStatus.defaultText }).toUpperCase()}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{product.name}</Text>
-                    <Text style={styles.itemMeta}>{product.qty} {t('orders.units', { defaultValue: 'Units' })} • {product.weight}</Text>
-                  </View>
-                  <View style={[
-                    styles.itemStatusBadge, 
-                    product.status === 'completed' || product.status === 'picked'
-                      ? { backgroundColor: '#ECFDF5' } 
-                      : { backgroundColor: '#F1F5F9' }
-                  ]}>
-                    <Text style={[
-                      styles.itemStatusText,
-                      product.status === 'completed' || product.status === 'picked'
-                        ? { color: '#059669' }
-                        : { color: '#64748B' }
-                    ]}>
-                      {t(`orders.${product.status}`, { defaultValue: product.status }).toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
 
               <View style={styles.modalBottomSpacer} />
             </ScrollView>
@@ -1174,8 +1253,9 @@ const styles = StyleSheet.create({
     marginTop: verticalScale(16),
   },
   calendarFilterBtn: {
-    width: scale(88),
-    height: scale(48),
+    minWidth: scale(88),
+    paddingHorizontal: scale(12),
+    height: verticalScale(48),
     borderRadius: moderateScale(14),
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
