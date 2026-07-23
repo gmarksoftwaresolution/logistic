@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, SectionList, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, SectionList, ActivityIndicator } from 'react-native';
+import { SharedRefreshControl } from '../../../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -103,7 +104,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={true}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+            <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}

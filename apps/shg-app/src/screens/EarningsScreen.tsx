@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SharedHeader } from '../components/SharedHeader';
@@ -31,7 +32,7 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+          <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
         <SharedHeader title={title} subtitle={subtitle} navigation={navigation} />

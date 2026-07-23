@@ -10,6 +10,7 @@ import {
   Dimensions,
   FlatList
 } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -41,20 +42,31 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder, highlightedOrders } = useOrders();
+  const { acceptedOrders, receiveOrder, highlightedOrders, refreshOrdersList } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Delivery tab
+  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Drop tab
   const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
   const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
-  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>(
-    route.params?.initialTab === 'delivery' ? 'delivery' : 'pickup'
+  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>(
+    route.params?.initialTab === 'drop' ? 'drop' : 'pickup'
   );
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const PAGE_SIZE = 5;
   const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
@@ -63,8 +75,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   // Sync tab index when navigating between routes or receiving new initialTab param
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    const isDelivery = route.params?.initialTab === 'delivery';
-    setActiveTab(isDelivery ? 'delivery' : 'pickup');
+    const isDelivery = route.params?.initialTab === 'drop';
+    setActiveTab(isDelivery ? 'drop' : 'pickup');
     timer = setTimeout(() => {
       scrollViewRef.current?.scrollTo({
         x: isDelivery ? SCREEN_WIDTH : 0,
@@ -74,7 +86,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => clearTimeout(timer);
   }, [route.params?.initialTab, route.name]);
 
-  const handleTabPress = (tab: 'pickup' | 'delivery') => {
+  const handleTabPress = (tab: 'pickup' | 'drop') => {
     setActiveTab(tab);
     scrollViewRef.current?.scrollTo({
       x: tab === 'pickup' ? 0 : SCREEN_WIDTH,
@@ -85,7 +97,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / SCREEN_WIDTH);
-    const newTab = index === 0 ? 'pickup' : 'delivery';
+    const newTab = index === 0 ? 'pickup' : 'drop';
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
@@ -179,14 +191,14 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
 
-        {/* Delivery Tab Button */}
+        {/* Drop Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('delivery')}
+          onPress={() => handleTabPress('drop')}
           activeOpacity={0.8}
           className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'delivery' ? 'bg-[#073318]' : 'bg-transparent'
+            activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'
           }`}
-          style={activeTab === 'delivery' ? {
+          style={activeTab === 'drop' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -195,21 +207,21 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'delivery' ? "bicycle" : "bicycle-outline"}
+            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
             size={16}
-            color={activeTab === 'delivery' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
           />
           <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+            activeTab === 'drop' ? 'text-white' : 'text-slate-500'
           }`}>
-            {t("tab_delivery")}
+            Drop
           </Text>
           <View 
             className="px-2.5 py-0.5 rounded-full ml-2"
-            style={activeTab === 'delivery' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
             <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+              activeTab === 'drop' ? 'text-white' : 'text-slate-500'
             }`}>
               {deliveryOrders.length}
             </Text>
@@ -230,6 +242,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
       >
         {/* Page 1: Pickup Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -295,6 +308,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Page 2: Delivery Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -397,7 +411,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           navigation={navigation}
         />
       )}
-      {activeTab === 'delivery' && (
+      {activeTab === 'drop' && (
         <FloatingScannerButton
           module="DROP"
           orderIds={deliveryOrders.map(o => o.orderId)}

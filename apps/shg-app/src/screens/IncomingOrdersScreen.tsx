@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -326,16 +327,14 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       }
     });
   };
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
     setIsRefreshing(true);
-    setTimeout(() => {
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
       setIsRefreshing(false);
-      Toast.show({
-        type: 'success',
-        text1: t("su_refreshed_396"),
-        text2: t("su_your_order_list_is_u_397")
-      });
-    }, 1500);
+    }
   };
   return <SafeAreaView className="flex-1" style={{
     backgroundColor: Colors.background
@@ -343,6 +342,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       <SharedHeader title="Incoming Orders" subtitle="Review and manage newly received orders" navigation={navigation} />
 
       <FlatList 
+        refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={{ paddingBottom: 120 }}
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
@@ -665,13 +665,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             onPress={() => activeTab === 'new' ? setVisibleCount(prev => prev + PAGE_SIZE) : setVisibleReturnCount(prev => prev + PAGE_SIZE)}
           />
         )}
-        {/* Refresh Orders Button */}
-        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
-            {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
-                <Ionicons name="refresh-outline" size={16} color="#073318" />
-                <Text className="text-[#073318] font-bold text-sm ml-2">{t("su_refresh_orders_407")}</Text>
-              </>}
-          </TouchableOpacity>}
+
         <View className="h-28" />
         </>}
       />

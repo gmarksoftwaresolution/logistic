@@ -22,7 +22,7 @@ import CompletedOrdersScreen from '../screens/CompletedOrdersScreen';
 import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
-import DeliveryScreen from '../screens/DeliveryScreen';
+import DropScreen from '../screens/DropScreen';
 import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
@@ -171,9 +171,9 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
   );
 };
 
-const DeliveryRedirectScreen = ({ navigation }: any) => {
+const DropRedirectScreen = ({ navigation }: any) => {
   useEffect(() => {
-    navigation.replace('AcceptedOrders', { initialTab: 'delivery' });
+    navigation.replace('AcceptedOrders', { initialTab: 'drop' });
   }, [navigation]);
   return null;
 };
@@ -187,7 +187,7 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} options={{ gestureEnabled: false }} />
       <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
-      <OrdersStack.Screen name="Delivery" component={DeliveryRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
+      <OrdersStack.Screen name="Drop" component={DropRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
       <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />

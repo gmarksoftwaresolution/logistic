@@ -1,10 +1,10 @@
 export type OrdersStackParamList = {
   OrderManagement: { filter?: string } | undefined;
   IncomingOrders: undefined;
-  AcceptedOrders: { initialTab?: 'pickup' | 'delivery' } | undefined;
+  AcceptedOrders: { initialTab?: 'pickup' | 'drop' } | undefined;
   RejectedOrders: undefined;
   ReturnedOrders: undefined;
-  Delivery: undefined;
+  Drop: undefined;
   CompletedOrders: undefined;
   OrderDetails: { order: any };
   CompletedOrderDetails: { order: any };
@@ -41,7 +41,7 @@ export type RootStackParamList = {
   Terms: undefined;
   Privacy: undefined;
   ApplicationStatus: undefined;
-  Delivery: undefined;
+  Drop: undefined;
   CompletedOrderDetails: { order: any };
   OrderHistoryDetails: { order: any };
   PickupScanner: { sessionId?: string; orderIds?: string[] } | undefined;

@@ -6,6 +6,7 @@ import {
   ScrollView,
   FlatList
 } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -37,7 +38,7 @@ type Props = CompositeScreenProps<
 const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { deliveredOrders, highlightedOrders } = useOrders();
+  const { deliveredOrders, highlightedOrders, refreshOrdersList } = useOrders();
   
   const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-'));
   const returnCompletedOrders = deliveredOrders.filter(o => o.isReturn || o.id.startsWith('RTO-'));
@@ -51,6 +52,17 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   if (!context || !user) return null;
   const { t } = context;
@@ -166,6 +178,7 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
 
         return (
           <FlatList
+            refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
             className="flex-1 pt-2"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 24 }}

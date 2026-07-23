@@ -33,7 +33,7 @@ export const SharedHeader: React.FC<SharedHeaderProps> = ({ title, subtitle, nav
         colors={['#FFFFFF', '#E8F5EC']} 
         start={{ x: 0, y: 0 }} 
         end={{ x: 1, y: 0 }}
-        className="flex-1 h-[76px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
+        className="flex-1 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
         style={{ 
           borderRadius: 30,
           overflow: 'hidden',

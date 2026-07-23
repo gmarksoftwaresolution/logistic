@@ -29,7 +29,7 @@ import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
 
 type Props = CompositeScreenProps<
-  NativeStackScreenProps<OrdersStackParamList, 'Delivery'>,
+  NativeStackScreenProps<OrdersStackParamList, 'Drop'>,
   CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList>,
     NativeStackScreenProps<RootStackParamList>
@@ -38,7 +38,7 @@ type Props = CompositeScreenProps<
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
+const DropScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
   const { acceptedOrders, receiveOrder } = useOrders();
@@ -52,7 +52,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
   const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
-  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>('delivery');
+  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('drop');
   const scrollViewRef = useRef<ScrollView>(null);
 
   const PAGE_SIZE = 5;
@@ -67,7 +67,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => clearTimeout(timer);
   }, [route.name]);
 
-  const handleTabPress = (tab: 'pickup' | 'delivery') => {
+  const handleTabPress = (tab: 'pickup' | 'drop') => {
     if (tab === 'pickup') {
       navigation.navigate('AcceptedOrders');
     }
@@ -76,7 +76,7 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / SCREEN_WIDTH);
-    const newTab = index === 0 ? 'pickup' : 'delivery';
+    const newTab = index === 0 ? 'pickup' : 'drop';
     if (newTab === 'pickup') {
       navigation.navigate('AcceptedOrders');
     }
@@ -166,14 +166,14 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
 
-        {/* Delivery Tab Button */}
+        {/* Drop Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('delivery')}
+          onPress={() => handleTabPress('drop')}
           activeOpacity={0.8}
           className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'delivery' ? 'bg-[#073318] shadow-sm' : 'bg-transparent'
+            activeTab === 'drop' ? 'bg-[#073318] shadow-sm' : 'bg-transparent'
           }`}
-          style={activeTab === 'delivery' ? {
+          style={activeTab === 'drop' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -182,20 +182,20 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'delivery' ? "bicycle" : "bicycle-outline"}
+            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
             size={16}
-            color={activeTab === 'delivery' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
           />
           <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+            activeTab === 'drop' ? 'text-white' : 'text-slate-500'
           }`}>
-            {t("tab_delivery")}
+            Drop
           </Text>
           <View className={`px-2.5 py-0.5 rounded-full ml-2 ${
-            activeTab === 'delivery' ? 'bg-white/20' : 'bg-[#F1F5F9]'
+            activeTab === 'drop' ? 'bg-white/20' : 'bg-[#F1F5F9]'
           }`}>
             <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+              activeTab === 'drop' ? 'text-white' : 'text-slate-500'
             }`}>
               {deliveryOrders.length}
             </Text>
@@ -363,4 +363,4 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
   );
 };
 
-export default DeliveryScreen;
+export default DropScreen;

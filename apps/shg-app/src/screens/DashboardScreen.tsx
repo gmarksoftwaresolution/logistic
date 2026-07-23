@@ -1,6 +1,7 @@
 import { LanguageContext } from '../context/LanguageContext';
 import React, { useContext, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl, Modal, Alert, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Modal, Alert, ActivityIndicator, Animated } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -73,7 +74,7 @@ export default function DashboardScreen({
           contentContainerStyle={{ flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+            <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
           
@@ -84,7 +85,7 @@ export default function DashboardScreen({
         }} end={{
           x: 1,
           y: 0
-        }} className="mx-4 mt-4 h-[76px] border border-[#D5EFE0] flex-row justify-between items-center px-5" style={{
+        }} className="mx-4 mt-4 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" style={{
           borderRadius: 30,
           overflow: 'hidden',
           elevation: 4,
@@ -162,7 +163,7 @@ export default function DashboardScreen({
         {/* Large Notification Popup */}
         {showNotifications && (
           <View 
-            className="absolute z-50 left-6 right-6 top-[76px] bg-white border border-[#D5EFE0] rounded-[28px] overflow-hidden"
+            className="absolute z-50 left-6 right-6 top-[68px] bg-white border border-[#D5EFE0] rounded-[28px] overflow-hidden"
             style={{
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 15 },

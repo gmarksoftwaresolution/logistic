@@ -7,6 +7,7 @@ import {
   Dimensions,
   FlatList
 } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { CompositeScreenProps } from '@react-navigation/native';
@@ -37,7 +38,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { returnedOrders, highlightedOrders, receiveOrder } = useOrders();
+  const { returnedOrders, highlightedOrders, receiveOrder, refreshOrdersList } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
@@ -46,14 +47,25 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const pickupOrders = returnedOrders.filter(o => o.status === 'Accepted');
   const deliveryOrders = returnedOrders.filter(o => o.status === 'PickedUp');
 
-  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>('pickup');
+  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const PAGE_SIZE = 5;
   const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
   const [deliveryVisibleCount, setDeliveryVisibleCount] = useState(PAGE_SIZE);
 
-  const handleTabPress = (tab: 'pickup' | 'delivery') => {
+  const handleTabPress = (tab: 'pickup' | 'drop') => {
     setActiveTab(tab);
     scrollViewRef.current?.scrollTo({
       x: tab === 'pickup' ? 0 : SCREEN_WIDTH,
@@ -64,7 +76,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / SCREEN_WIDTH);
-    const newTab = index === 0 ? 'pickup' : 'delivery';
+    const newTab = index === 0 ? 'pickup' : 'drop';
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
@@ -144,7 +156,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           <Text className={`font-bold text-[13px] ml-1.5 ${
             activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
           }`}>
-            Pickup Return
+            Pickup ( Return )
           </Text>
           <View 
             className="px-2.5 py-0.5 rounded-full ml-2"
@@ -158,14 +170,14 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
 
-        {/* Delivery Tab Button */}
+        {/* Drop Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('delivery')}
+          onPress={() => handleTabPress('drop')}
           activeOpacity={0.8}
           className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'delivery' ? 'bg-[#073318]' : 'bg-transparent'
+            activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'
           }`}
-          style={activeTab === 'delivery' ? {
+          style={activeTab === 'drop' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -174,21 +186,21 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'delivery' ? "bicycle" : "bicycle-outline"}
+            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
             size={16}
-            color={activeTab === 'delivery' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
           />
           <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+            activeTab === 'drop' ? 'text-white' : 'text-slate-500'
           }`}>
-            Delivery Return
+            Drop ( Return )
           </Text>
           <View 
             className="px-2.5 py-0.5 rounded-full ml-2"
-            style={activeTab === 'delivery' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
             <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+              activeTab === 'drop' ? 'text-white' : 'text-slate-500'
             }`}>
               {deliveryOrders.length}
             </Text>
@@ -209,6 +221,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       >
         {/* Page 1: Pickup Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -276,6 +289,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Page 2: Delivery Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
