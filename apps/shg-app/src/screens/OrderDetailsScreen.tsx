@@ -641,7 +641,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
         }
       }
     } catch (error) {
@@ -684,7 +684,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
         }
       }} className="w-11 h-11 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" style={{
         elevation: 2
@@ -1319,7 +1319,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
               if (navigation.canGoBack()) {
                 navigation.goBack();
               } else {
-                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
               }
             } catch (error: any) {
               const errMsg = error.response?.data?.message || error.message || "Failed to reschedule order.";
