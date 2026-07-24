@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { OrderManagementService } from './order-management.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -362,6 +362,26 @@ export class OrderManagementController {
   @ApiOperation({ summary: 'GMU Intake for buyer return parcel (sets status to RETURN_COMPLETED)' })
   async buyerReturnIntakeNew(@Param('id') id: string) {
     return this.service.buyerReturnIntake(id);
+  }
+
+  @Post(':id/buyer-return-scan')
+  @ApiOperation({ summary: 'Perform buyer return scan and intake' })
+  async buyerReturnScan(@Param('id') id: string, @Body('barcode') barcode: string) {
+    const order = await this.service.getOrderDetails(id);
+    if (order.barcode && order.barcode !== barcode) {
+      throw new BadRequestException(`Barcode scan verification failed. Expected ${order.barcode}, received ${barcode || 'none'}.`);
+    }
+    return this.service.buyerReturnIntake(id);
+  }
+
+  @Post(':id/transporter-return-scan')
+  @ApiOperation({ summary: 'Perform transporter return scan and intake' })
+  async transporterReturnScan(@Param('id') id: string, @Body('barcode') barcode: string) {
+    const order = await this.service.getOrderDetails(id);
+    if (order.barcode && order.barcode !== barcode) {
+      throw new BadRequestException(`Barcode scan verification failed. Expected ${order.barcode}, received ${barcode || 'none'}.`);
+    }
+    return this.service.transporterReturnIntake(id);
   }
 
 

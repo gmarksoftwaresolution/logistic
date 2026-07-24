@@ -72,7 +72,8 @@ export class OrderService {
         SELECT o."orderId" 
         FROM public."OrderAssignment" oa
         JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') AND o.phase = 'PICKUP';
+        WHERE oa."assigneeId" = $1 AND (oa.role = 'PICKUP' OR oa.role = 'RETURN') AND oa."assigneeType" = 'TRANSPORTER' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') 
+          AND (o.phase = 'PICKUP' OR o."returnType" = 'BUYER_RETURN');
       `, transporterUuid) as any[];
       assignedPickupOrderIds = transporterAssignments.map(a => a.orderId);
     }
@@ -98,9 +99,17 @@ export class OrderService {
           },
         },
         shg: {
-          include: {
-            shgDetail: true,
-          },
+          select: {
+            id: true,
+            fullName: true,
+            phoneNumber: true,
+            address: true,
+            shgDetail: {
+              select: {
+                shgName: true,
+              }
+            }
+          }
         },
         items: {
           include: {
@@ -134,10 +143,10 @@ export class OrderService {
         filteredPickups.push(pickup);
       } else if (pickup.transporterId === null) {
         // Must be completed (picked up by SHG) and match transporter's operating area
-        if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED') {
+        if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED' || pickup.status === 'RETURN_PENDING') {
           // Check gmu.Order mainStatus
           const gmuOrders = await this.prisma.$queryRawUnsafe(`
-            SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+            SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') LIMIT 1;
           `, pickup.masterOrder.orderNumber) as any[];
           if (gmuOrders.length > 0) {
             const orderUuid = gmuOrders[0].id;
@@ -151,11 +160,11 @@ export class OrderService {
             // Check if there is a PENDING assignment for this transporter
             const assignments = await this.prisma.$queryRawUnsafe(`
               SELECT id FROM public."OrderAssignment"
-              WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
+              WHERE "orderId" = $1 AND "assigneeId" = $2 AND (role = 'PICKUP' OR role = 'RETURN') AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
             `, orderUuid, transporterUuid) as any[];
 
             if (assignments.length > 0) {
-              if (mainStatus === 'PARCEL_AT_SHG' || mainStatus === 'RETURN_PARCEL_AT_SHG') {
+              if (mainStatus === 'PARCEL_AT_SHG' || mainStatus === 'RETURN_PARCEL_AT_SHG' || mainStatus === 'RETURN_TRANSPORTER_REQUESTED') {
                 if (matchesRoute(pickup.seller.pincode, pickup.seller.village)) {
                   filteredPickups.push(pickup);
                 }
@@ -169,7 +178,7 @@ export class OrderService {
     const updatedPickups = [];
     for (const p of filteredPickups) {
       const gmuOrders = await this.prisma.$queryRawUnsafe(`
-        SELECT "pickupTransporterStatus", "mainStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT "pickupTransporterStatus", "mainStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') LIMIT 1;
       `, p.masterOrder.orderNumber) as any[];
       const pickupTransporterStatus = gmuOrders?.[0]?.pickupTransporterStatus || null;
       const mainStatus = gmuOrders?.[0]?.mainStatus || null;
@@ -231,7 +240,7 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -242,7 +251,7 @@ export class OrderService {
       }
 
       const generatedCode = '1234';
-      const isReturn = pickupOrder.status === 'RETURN_PENDING' || pickupOrder.status === 'RETURNED';
+      const isReturn = pickupOrder.status === 'RETURN_PENDING' || pickupOrder.status === 'RETURN_ACCEPTED' || pickupOrder.status === 'RETURNED';
       const nextStatus = isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED';
       const updated = await tx.pickupOrder.update({
         where: { id: pickupOrderId },
@@ -279,11 +288,19 @@ export class OrderService {
 
       // Update gmu.Order status
       const nextGmuStatus = isReturn ? 'RETURN_TRANSPORTER_ACCEPTED' : 'PICKUP_TRANSPORTER_ACCEPTED';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "pickupTransporterId" = $1, "pickupTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
-        WHERE id = $4;
-      `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      if (isReturn) {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "pickupTransporterId" = $1, "returnTransporterId" = $1, "dropTransporterId" = $1, "pickupTransporterStatus" = $2, "dropTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      } else {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "pickupTransporterId" = $1, "pickupTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      }
 
       // Update public.master_orders status
       await tx.masterOrder.update({
@@ -292,8 +309,6 @@ export class OrderService {
       });
 
       // Automatically accept and assign the associated delivery leg (DropOrder) if it exists and is PENDING
-      // (Disabled in separated phase architecture)
-      /*
       const associatedDrops = await tx.dropOrder.findMany({
         where: {
           masterOrderId: pickupOrder.masterOrderId,
@@ -324,7 +339,6 @@ export class OrderService {
           });
         }
       }
-      */
 
       return updated;
     });
@@ -366,7 +380,7 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+        SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -377,7 +391,7 @@ export class OrderService {
       }
 
       const generatedCode = '1234';
-      const isReturn = dropOrder.status === 'RETURN_PENDING';
+      const isReturn = dropOrder.status === 'RETURN_PENDING' || dropOrder.status === 'RETURN_ACCEPTED';
       const nextStatus = isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
@@ -414,11 +428,19 @@ export class OrderService {
 
       // Update gmu.Order status
       const nextGmuStatus = isReturn ? 'RETURN_TRANSPORTER_ACCEPTED' : 'DROP_TRANSPORTER_ACCEPTED';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropTransporterId" = $1, "dropTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
-        WHERE id = $4;
-      `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      if (isReturn) {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "pickupTransporterId" = $1, "returnTransporterId" = $1, "dropTransporterId" = $1, "pickupTransporterStatus" = $2, "dropTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      } else {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "dropTransporterId" = $1, "dropTransporterStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, transporterUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      }
 
       // Update public.master_orders status
       await tx.masterOrder.update({
@@ -427,8 +449,6 @@ export class OrderService {
       });
 
       // Automatically accept and assign the associated pickup leg (PickupOrder) if it exists and is PENDING
-      // (Disabled in separated phase architecture)
-      /*
       const associatedPickups = await tx.pickupOrder.findMany({
         where: {
           masterOrderId: dropOrder.masterOrderId,
@@ -459,7 +479,6 @@ export class OrderService {
           });
         }
       }
-      */
 
       return updated;
     });
@@ -477,6 +496,30 @@ export class OrderService {
 
     if (pickupOrder.status !== 'ACCEPTED' && pickupOrder.status !== 'RETURN_ACCEPTED') {
       throw new BadRequestException(`Cannot complete pickup order in its current status (${pickupOrder.status}). It must be ACCEPTED or RETURN_ACCEPTED.`);
+    }
+
+    const isReturn = pickupOrder.status === 'RETURN_ACCEPTED';
+    if (isReturn) {
+      const masterOrder = await this.prisma.masterOrder.findUnique({
+        where: { id: pickupOrder.masterOrderId }
+      });
+      const orderNumber = masterOrder?.orderNumber || `ORD-${pickupOrder.masterOrderId}`;
+
+      const gmuOrder = await this.prisma.$queryRawUnsafe(`
+        SELECT barcode FROM public."Order" WHERE "orderId" = $1 LIMIT 1;
+      `, orderNumber) as any[];
+      const originalBarcode = gmuOrder?.[0]?.barcode;
+      if (originalBarcode && (!code || code !== originalBarcode)) {
+        throw new BadRequestException(`Barcode scan verification failed. Expected ${originalBarcode}, received ${code || 'none'}.`);
+      }
+
+      await this.prisma.pickupOrderItem.updateMany({
+        where: { pickupOrderId },
+        data: {
+          verificationStatus: 'VERIFIED',
+          verifiedTime: new Date(),
+        }
+      });
     }
 
     const sellerName = pickupOrder.seller?.sellerName || '';
@@ -502,14 +545,14 @@ export class OrderService {
       });
 
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id, "pickupShgStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT id, "pickupShgStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       let shgDropped = false;
       let orderUuid = null;
       if (rawGmuOrder.length > 0) {
         orderUuid = rawGmuOrder[0].id;
-        shgDropped = ['DROPPED', 'RETURNED'].includes(rawGmuOrder[0].pickupShgStatus);
+        shgDropped = ['DROPPED', 'RETURNED', 'PICKED'].includes(rawGmuOrder[0].pickupShgStatus);
       }
 
       if (!shgDropped) {
@@ -536,7 +579,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
-          WHERE "orderId" = $2 AND phase = 'PICKUP';
+          WHERE "orderId" = $2 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
         `, nextGmuStatus, masterOrder.orderNumber);
 
         await tx.masterOrder.update({
@@ -548,7 +591,7 @@ export class OrderService {
           await tx.$executeRawUnsafe(`
             UPDATE public."OrderAssignment"
             SET status = 'COMPLETED', "updatedAt" = NOW()
-            WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
+            WHERE "orderId" = $1 AND role IN ('PICKUP', 'RETURN') AND "assigneeType" = 'TRANSPORTER';
           `, orderUuid);
         }
 
@@ -574,7 +617,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
-          WHERE "orderId" = $2 AND phase = 'PICKUP';
+          WHERE "orderId" = $2 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
         `, nextGmuStatus, masterOrder.orderNumber);
 
         await tx.masterOrder.update({
@@ -592,36 +635,35 @@ export class OrderService {
       }
 
       // Automatically transition any associated PENDING drop orders to ACCEPTED and assign to the transporter
-      // (Disabled in separated phase architecture)
-      // const associatedDrops = await tx.dropOrder.findMany({
-      //   where: {
-      //     masterOrderId: pickupOrder.masterOrderId,
-      //     status: 'PENDING',
-      //   },
-      // });
-      //
-      // if (associatedDrops.length > 0) {
-      //   await tx.dropOrder.updateMany({
-      //     where: {
-      //       masterOrderId: pickupOrder.masterOrderId,
-      //       status: 'PENDING',
-      //     },
-      //     data: {
-      //       status: isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED',
-      //       transporterId,
-      //     },
-      //   });
-      //
-      //   for (const drop of associatedDrops) {
-      //     await tx.dropTracking.create({
-      //       data: {
-      //         dropOrderId: drop.id,
-      //         status: isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED',
-      //         remarks: 'Delivery leg accepted automatically via pickup completion.',
-      //       },
-      //     });
-      //   }
-      // }
+      const associatedDrops = await tx.dropOrder.findMany({
+        where: {
+          masterOrderId: pickupOrder.masterOrderId,
+          status: 'PENDING',
+        },
+      });
+
+      if (associatedDrops.length > 0) {
+        await tx.dropOrder.updateMany({
+          where: {
+            masterOrderId: pickupOrder.masterOrderId,
+            status: 'PENDING',
+          },
+          data: {
+            status: isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+            transporterId,
+          },
+        });
+
+        for (const drop of associatedDrops) {
+          await tx.dropTracking.create({
+            data: {
+              dropOrderId: drop.id,
+              status: isReturn ? 'RETURN_ACCEPTED' : 'ACCEPTED',
+              remarks: 'Delivery leg accepted automatically via pickup completion.',
+            },
+          });
+        }
+      }
 
       return updated;
     });
@@ -758,7 +800,7 @@ export class OrderService {
       } else if (drop.transporterId === null) {
         // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
         const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
         `, drop.masterOrder.orderNumber) as any[];
         if (gmuOrders.length > 0) {
           const orderUuid = gmuOrders[0].id;
@@ -1016,14 +1058,14 @@ export class OrderService {
         WHERE "orderId" = $4 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $4 AND phase = 'DROP')));
       `, pickupTransporterStatus, dropTransporterStatus, nextGmuStatus, masterOrder.orderNumber);
 
-      // Disable drop creation trigger in transporter service (moved to GMU warehouse storage transition)
-      // if (isToGmuHub) {
-      //   await this.autoBroadcastDropShg(tx, dropOrder.masterOrderId, masterOrder.orderNumber);
-      // }
+      // Automatically trigger drop creation and broadcasting
+      if (isToGmuHub) {
+        await this.autoBroadcastDropShg(tx, dropOrder.masterOrderId, masterOrder.orderNumber);
+      }
 
       // Find the gmu.Order UUID and update assignments
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+        SELECT id FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1307,21 +1349,31 @@ export class OrderService {
       });
 
       // 2. Update gmu.Order status and mainStatus
-      const nextGmuStatus = (pickupOrder.status === 'RETURN_PENDING' || pickupOrder.status === 'RETURN_ACCEPTED' || pickupOrder.status === 'RETURNED')
+      const gmuOrder = await tx.order.findFirst({
+        where: { orderId: masterOrder.orderNumber }
+      });
+      const isBuyerReturn = gmuOrder?.returnType === 'BUYER_RETURN';
+
+      let nextGmuStatus = (pickupOrder.status === 'RETURN_PENDING' || pickupOrder.status === 'RETURN_ACCEPTED' || pickupOrder.status === 'RETURNED')
         ? 'RETURN_PARCEL_AT_HUB'
         : 'PARCEL_AT_HUB';
-      const pickupTransporterStatus = 'DROPPED';
+      let pickupTransporterStatus = 'DROPPED';
+
+      if (isBuyerReturn) {
+        nextGmuStatus = 'BUYER_RETURN_COMPLETED';
+        pickupTransporterStatus = 'DELIVERED_TO_GMU';
+      }
 
       await tx.$executeRawUnsafe(`
         UPDATE public."Order"
         SET "pickupTransporterStatus" = $1, 
             "mainStatus" = $2, 
             "updatedAt" = NOW()
-        WHERE "orderId" = $3 AND phase = 'PICKUP';
+        WHERE "orderId" = $3 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
       `, pickupTransporterStatus, nextGmuStatus, masterOrder.orderNumber);
 
-      // Disable auto-broadcasting drop leg inside transporter completion methods (moved to GMU warehouse storage transition)
-      // await this.autoBroadcastDropShg(tx, pickupOrder.masterOrderId, masterOrder.orderNumber);
+      // Automatically broadcast drop leg inside transporter completion methods
+      await this.autoBroadcastDropShg(tx, pickupOrder.masterOrderId, masterOrder.orderNumber);
 
       // 3. Update public.master_orders status
       await tx.masterOrder.update({
@@ -1331,7 +1383,7 @@ export class OrderService {
 
       // 4. Update public."OrderAssignment" status to COMPLETED
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        SELECT id FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1339,7 +1391,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."OrderAssignment"
           SET status = 'COMPLETED', "updatedAt" = NOW()
-          WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
+          WHERE "orderId" = $1 AND "assigneeId" = $2 AND role IN ('PICKUP', 'RETURN') AND "assigneeType" = 'TRANSPORTER';
         `, orderUuid, String(transporterId));
       }
 

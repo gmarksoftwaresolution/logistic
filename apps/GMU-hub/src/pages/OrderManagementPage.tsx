@@ -109,13 +109,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     mapOrder,
   } = useAppContext();
 
-  // Top level sections: new | in_transit | completed | rejected
-  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'rejected'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
+  // Top level sections: new | in_transit | completed | rejected | returned
+  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'rejected' | 'returned'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
 
   useEffect(() => {
     const syncActiveTab = () => {
       const val = localStorage.getItem('gmu_active_tab');
-      if (val && ['new', 'in_transit', 'completed', 'rejected'].includes(val)) {
+      if (val && ['new', 'in_transit', 'completed', 'rejected', 'returned'].includes(val)) {
         setActiveTopTab(val as any);
       }
     };
@@ -127,7 +127,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   }, []);
 
-  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'rejected') => {
+  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'rejected' | 'returned') => {
     localStorage.setItem('gmu_active_tab', tab);
     setActiveTopTab(tab);
   };
@@ -151,6 +151,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   // Pagination for transit view
   const [transitPage, setTransitPage] = useState(1);
   const transitItemsPerPage = 10;
+
+  // Pagination for return view
+  const [returnPage, setReturnPage] = useState(1);
+  const returnItemsPerPage = 10;
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -558,7 +562,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       returnDropCompleted,
     } = allLists;
 
-    const tempPrimary = dropCompleted.find((o: any) => o.id === orderId) ||
+    const tempPrimary = returnPickupCompleted.find((o: any) => o.id === orderId) ||
+      returnDropCompleted.find((o: any) => o.id === orderId) ||
+      returnPickupNew.find((o: any) => o.id === orderId) ||
+      returnDropNew.find((o: any) => o.id === orderId) ||
+      dropCompleted.find((o: any) => o.id === orderId) ||
       dropRescheduled.find((o: any) => o.id === orderId) ||
       dropRejected.find((o: any) => o.id === orderId) ||
       dropAssigned.find((o: any) => o.id === orderId) ||
@@ -567,11 +575,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       pickupRescheduled.find((o: any) => o.id === orderId) ||
       pickupRejected.find((o: any) => o.id === orderId) ||
       pickupAssigned.find((o: any) => o.id === orderId) ||
-      pickupNew.find((o: any) => o.id === orderId) ||
-      returnPickupCompleted.find((o: any) => o.id === orderId) ||
-      returnDropCompleted.find((o: any) => o.id === orderId) ||
-      returnPickupNew.find((o: any) => o.id === orderId) ||
-      returnDropNew.find((o: any) => o.id === orderId);
+      pickupNew.find((o: any) => o.id === orderId);
 
     if (!tempPrimary) return null;
 
@@ -999,6 +1003,99 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
     };
 
+    const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
+      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+      'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+      'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
+      'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'
+    ].includes(order.mainStatus);
+
+    if (isBuyerReturn) {
+      // 1. Buyer: always completed
+      const buyerState = 'completed';
+
+      // 2. SHG: active if status is PENDING or ACCEPTED, completed if PICKED or later
+      let shgState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || ['PICKED', 'RETURN_PICKED_BY_SHG'].includes(order.pickupShgStatus || '')) {
+        shgState = 'completed';
+      } else if (['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG'].includes(order.mainStatus)) {
+        shgState = 'active';
+      }
+
+      // 3. Transporter: active if PENDING or ACCEPTED, completed if IN_TRANSIT or later
+      let transporterState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || order.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB') {
+        transporterState = 'completed';
+      } else if (['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG'].includes(order.mainStatus)) {
+        transporterState = 'active';
+      }
+
+      // 4. GMU Hub: active if IN_TRANSIT or RECEIVED, completed if INVENTORY/COMPLETED
+      let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+        gmuHubState = 'completed';
+      } else if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED'].includes(order.mainStatus)) {
+        gmuHubState = 'active';
+      }
+
+      return [
+        {
+          id: 'buyer',
+          label: 'Buyer',
+          state: buyerState,
+          details: {
+            'Person Name': order.buyerName || 'N/A',
+            'Role': 'Consignee / Buyer',
+            'Mobile Number': order.buyerMobile || 'N/A',
+            'Address': order.buyerAddress || 'N/A',
+            'Order ID': order.id,
+            'Status': 'RETURN_INITIATED',
+            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING'])
+          }
+        },
+        {
+          id: 'shg',
+          label: 'SHG',
+          state: shgState,
+          details: order.pickupShgDetails || order.shgDetails ? {
+            'Person Name': order.pickupShgDetails?.name || order.shgDetails?.name || 'N/A',
+            'Role': 'Return Pickup SHG',
+            'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
+            'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': order.shgStatus || 'PENDING',
+            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
+          } : null
+        },
+        {
+          id: 'transporter',
+          label: 'Transporter',
+          state: transporterState,
+          details: order.pickupTransporterDetails || order.transporterDetails ? {
+            'Person Name': order.pickupTransporterDetails?.name || order.transporterDetails?.name || 'N/A',
+            'Role': 'Return Transporter',
+            'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
+            'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': order.transporterStatus || 'PENDING',
+            'Full Scan History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
+          } : null
+        },
+        {
+          id: 'gmu_hub',
+          label: 'GMU Hub',
+          state: gmuHubState,
+          details: {
+            'Warehouse': 'GMU Hub Central Warehouse',
+            'Order ID': order.id,
+            'Stored Time': order.storedDate || 'N/A',
+            'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
+            'Full Scan History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+          }
+        }
+      ];
+    }
+
     // 1. Seller: always completed
     const sellerState = 'completed';
 
@@ -1155,10 +1252,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       o.assignments?.some((a: any) => a.status?.toLowerCase() === 'rejected');
   };
 
+  const isOrderReturn = (o: any) => {
+    return o.returnType === 'BUYER_RETURN' || [
+      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+      'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+      'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
+      'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'
+    ].includes(o.mainStatus);
+  };
+
   const newOrdersList = filterAndSearchOrders(
     allMergedOrders.filter(
       (o: any) =>
         !isOrderRejected(o) &&
+        !isOrderReturn(o) &&
         (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
           (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
     )
@@ -1167,6 +1274,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const inTransitOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => {
       if (isOrderRejected(o)) return false;
+      if (isOrderReturn(o)) return false;
       const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
         (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
       if (isNew) return false;
@@ -1188,12 +1296,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const completedOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) =>
       !isOrderRejected(o) &&
+      !isOrderReturn(o) &&
       ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
     )
   );
 
   const rejectedOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => isOrderRejected(o))
+    allMergedOrders.filter((o: any) => isOrderRejected(o) && !isOrderReturn(o))
+  );
+
+  const returnOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => isOrderReturn(o))
   );
 
   const delayedCount = allMergedOrders.filter((o: any) =>
@@ -1231,22 +1344,41 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const lbl = nodeLabel.toLowerCase();
     let timestamp: string | null = null;
 
+    const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
+      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+      'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+      'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
+      'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'
+    ].includes(order.mainStatus);
+
     if (order.tracking && order.tracking.length > 0) {
       let statusKeywords: string[] = [];
-      if (lbl === 'seller') {
-        statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
-      } else if (lbl === 'pickup shg') {
-        statusKeywords = ['PARCEL_AT_SHG', 'PICKED', 'PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'];
-      } else if (lbl === 'pickup transporter') {
-        statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'];
-      } else if (lbl === 'gmu hub') {
-        statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
-      } else if (lbl === 'drop transporter') {
-        statusKeywords = ['DROP_TRANSPORTER', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'];
-      } else if (lbl === 'drop shg') {
-        statusKeywords = ['DROP_SHG', 'DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG'];
-      } else if (lbl === 'buyer') {
-        statusKeywords = ['DELIVERED', 'COMPLETED'];
+      if (isBuyerReturn) {
+        if (lbl === 'buyer') {
+          statusKeywords = ['RETURN_SHG_PENDING'];
+        } else if (lbl === 'shg') {
+          statusKeywords = ['RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG'];
+        } else if (lbl === 'transporter') {
+          statusKeywords = ['RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'];
+        } else if (lbl === 'gmu hub' || lbl === 'last hub' || lbl === 'hub') {
+          statusKeywords = ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'];
+        }
+      } else {
+        if (lbl === 'seller') {
+          statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
+        } else if (lbl === 'pickup shg') {
+          statusKeywords = ['PARCEL_AT_SHG', 'PICKED', 'PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'];
+        } else if (lbl === 'pickup transporter') {
+          statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'];
+        } else if (lbl === 'gmu hub') {
+          statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
+        } else if (lbl === 'drop transporter') {
+          statusKeywords = ['DROP_TRANSPORTER', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'];
+        } else if (lbl === 'drop shg') {
+          statusKeywords = ['DROP_SHG', 'DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG'];
+        } else if (lbl === 'buyer') {
+          statusKeywords = ['DELIVERED', 'COMPLETED'];
+        }
       }
 
       const event = order.tracking.find((t: any) =>
@@ -1258,20 +1390,32 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
 
     if (!timestamp) {
-      if (lbl === 'seller') {
-        timestamp = order.createdAt || order.orderDate;
-      } else if (lbl === 'pickup shg') {
-        timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
-      } else if (lbl === 'pickup transporter') {
-        timestamp = order.pickupTransporterDetails?.acceptedAt;
-      } else if (lbl === 'gmu hub') {
-        timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
-      } else if (lbl === 'drop transporter') {
-        timestamp = order.dropTransporterDetails?.acceptedAt;
-      } else if (lbl === 'drop shg') {
-        timestamp = order.dropShgDetails?.acceptedAt;
-      } else if (lbl === 'buyer') {
-        timestamp = order.deliveredAt || order.completedAt;
+      if (isBuyerReturn) {
+        if (lbl === 'buyer') {
+          timestamp = order.createdAt;
+        } else if (lbl === 'shg') {
+          timestamp = order.shgDetails?.acceptedAt || order.acceptedAt;
+        } else if (lbl === 'transporter') {
+          timestamp = order.transporterDetails?.acceptedAt;
+        } else if (lbl === 'gmu hub') {
+          timestamp = order.storedAt || order.warehouseReceivedAt;
+        }
+      } else {
+        if (lbl === 'seller') {
+          timestamp = order.createdAt || order.orderDate;
+        } else if (lbl === 'pickup shg') {
+          timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
+        } else if (lbl === 'pickup transporter') {
+          timestamp = order.pickupTransporterDetails?.acceptedAt;
+        } else if (lbl === 'gmu hub') {
+          timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
+        } else if (lbl === 'drop transporter') {
+          timestamp = order.dropTransporterDetails?.acceptedAt;
+        } else if (lbl === 'drop shg') {
+          timestamp = order.dropShgDetails?.acceptedAt;
+        } else if (lbl === 'buyer') {
+          timestamp = order.deliveredAt || order.completedAt;
+        }
       }
     }
 
@@ -1435,6 +1579,37 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     },
   ];
 
+  const returnColumns = [
+    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
+    {
+      header: 'Status', accessor: (row: any) => (
+        <StatusBadge status={row.mainStatus} />
+      )
+    },
+    { header: 'Buyer Name', accessor: 'buyerName' as keyof PickupOrder },
+    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof PickupOrder },
+    { header: 'SHG Name', accessor: (row: any) => row.shgDetails?.name || 'N/A' },
+    { header: 'Transporter Name', accessor: (row: any) => row.transporterDetails?.name || 'N/A' },
+    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
+    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
+    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
+    { header: 'Date Placed', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
+    {
+      header: 'Action', accessor: (row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewOrder(row);
+          }}
+          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span>View</span>
+        </button>
+      )
+    },
+  ];
+
   return (
     <Layout currentPage="order-management" onNavigate={onNavigate}>
       <div className="space-y-6">
@@ -1475,7 +1650,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
         {/* Section Tabs Switcher */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-xl">
+          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-2xl">
             <button
               onClick={() => handleTabChange('new')}
               className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'new'
@@ -1525,6 +1700,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>Rejected</span>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
                 {rejectedOrdersList.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('returned')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'returned'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <span>Return Orders</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'returned' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {returnOrdersList.length}
               </span>
             </button>
           </div>
@@ -2003,6 +2191,313 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           </div>
         )}
 
+        {/* ---------------- SECTION 5: RETURN ORDERS ---------------- */}
+        {activeTopTab === 'returned' && (
+          <div className="space-y-6">
+            {returnOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">📦</span>
+                <p className="text-sm">No return orders currently found matching the filter criteria.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {returnOrdersList
+                    .slice((returnPage - 1) * returnItemsPerPage, returnPage * returnItemsPerPage)
+                    .map((order) => {
+                      const isExpanded = !!expandedOrders[order.id];
+                      const nodes = getTimelineNodes(order);
+
+                      const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
+
+                      return (
+                        <div
+                          key={order.id}
+                          className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
+                        >
+                          {/* Decorative Left Border based on Priority */}
+                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
+                            ? 'bg-[#EF4444]'
+                            : order.priority?.toLowerCase() === 'medium'
+                              ? 'bg-[#F59E0B]'
+                              : 'bg-[#10B981]'
+                            }`} />
+
+                          {/* Center Column (Visual Journey Stepper) */}
+                          <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
+                            <div className="min-w-[700px] relative flex items-center justify-between h-12">
+
+                              {/* Horizontal Connecting Line Track */}
+                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
+
+                              {/* Segmented active/completed highlight line */}
+                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
+                                {nodes.slice(0, -1).map((node, idx) => {
+                                  const nextNode = nodes[idx + 1];
+                                  let segmentBg = 'bg-slate-200'; // Pending
+
+                                  if (node.state === 'completed' && nextNode.state === 'completed') {
+                                    segmentBg = 'bg-[#073318]'; // completed (sidebar green)
+                                  } else if (
+                                    (node.state === 'completed' && nextNode.state === 'active') ||
+                                    node.state === 'active'
+                                  ) {
+                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
+                                  }
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
+                                    />
+                                  );
+                                })}
+                              </div>
+
+                              {/* Stepper Nodes */}
+                              {nodes.map((node, idx) => {
+                                let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
+                                let iconContent = null;
+                                let labelColor = 'text-slate-405';
+                                let ringClass = '';
+                                const isClickable = !!node.details;
+
+                                // Node Labels & Icons mapping
+                                const getIconForNode = (label: string) => {
+                                  const lbl = label.toLowerCase();
+                                  if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
+                                  if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
+                                  return <User className="h-3.5 w-3.5" />;
+                                };
+
+                                const iconElement = getIconForNode(node.label);
+
+                                if (node.state === 'completed') {
+                                  nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
+                                  iconContent = (
+                                    <div className="relative">
+                                      {iconElement}
+                                      <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
+                                    </div>
+                                  );
+                                  labelColor = 'text-[#073318] font-bold';
+                                } else if (node.state === 'active') {
+                                  nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
+                                  iconContent = (
+                                    <div className="relative animate-pulse">
+                                      {iconElement}
+                                    </div>
+                                  );
+                                  labelColor = 'text-[#0284C7] font-black';
+                                  ringClass = 'active-node-ring-blue';
+                                } else {
+                                  nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
+                                  iconContent = iconElement;
+                                }
+
+                                const dateDetails = getNodeTimeAndDate(order, node.label);
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={() => isClickable && handleNodeClick(node.label, node.details)}
+                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
+                                  >
+                                    {/* Current Location floating badge above active node */}
+                                    {node.state === 'active' && (
+                                      <div className="absolute -top-8 flex flex-col items-center gap-0.5 whitespace-nowrap z-50">
+                                        <span className="text-[9px] font-black text-[#073318] tracking-wide uppercase">Current Location</span>
+                                        <span className="text-[#073318] text-[8px] leading-none animate-bounce">▼</span>
+                                      </div>
+                                    )}
+
+                                    <div className={`h-[32px] w-[32px] rounded-full border-2 flex items-center justify-center font-bold transition-all relative ${nodeBg} ${ringClass} ${isClickable ? 'cursor-pointer' : ''}`}>
+                                      {iconContent}
+                                      {/* Orbiting Satellite Dots Radar Ring */}
+                                      {node.state === 'active' && (
+                                        <div className="absolute inset-0 -m-2.5 border border-[#0284C7]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
+                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
+                                      {node.label}
+                                    </span>
+                                    {/* Timestamp underneath completed/active nodes */}
+                                    {node.state === 'active' ? (
+                                      <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
+                                    ) : dateDetails ? (
+                                      <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
+                                        <span className="block font-bold text-slate-600">{dateDetails.time}</span>
+                                        <span className="block">{dateDetails.date}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[8px] font-medium text-slate-305 mt-1">-</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Right Column (Status, ID & Actions) */}
+                          <div className="w-full lg:w-[250px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-8 self-stretch py-1">
+                            {/* Top row: Status info badge and time ago (centered) */}
+                            <div className="flex flex-col items-center text-center space-y-0.5">
+                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                                {order.mainStatus.replace(/[-_]/g, ' ')}
+                              </span>
+                              <span className="block text-[10px] text-slate-400 font-semibold">
+                                • {getUpdatedTimeAgo(order)}
+                              </span>
+                            </div>
+
+                            {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
+                            <div className="w-full flex flex-row items-center justify-between gap-3">
+                              <div className="flex items-center gap-1">
+                                <span className="text-sm font-black text-slate-800 tracking-tight whitespace-nowrap">
+                                  {(() => {
+                                    const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
+                                    return `ID - ${match ? match[1] : order.id}`;
+                                  })()}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(order.id);
+                                    alert(`Order ID ${order.id} copied to clipboard!`);
+                                  }}
+                                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+                                  title="Copy Order ID"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              </div>
+
+                              <div className="flex flex-row gap-2 items-center">
+                                {needsIntake && (
+                                  <button
+                                    onClick={() => {
+                                      const intakeKind = order.returnType
+                                        ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                                        : 'pickup';
+                                      handleIntakeClick(order, intakeKind);
+                                    }}
+                                    title="Scan to Intake"
+                                    className="px-3 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
+                                  >
+                                    <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                                    <span>Scan</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => handleViewOrder(order)}
+                                  title="View Details"
+                                  className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
+                                >
+                                  <Eye className="h-4 w-4 text-[#B2D534]" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Expanded Details Section */}
+                          {isExpanded && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5 border-t border-slate-100 animate-in fade-in duration-200">
+                              {/* Product Details Table */}
+                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                  <Package className="h-3.5 w-3.5" />
+                                  Product details
+                                </h5>
+                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-500 font-extrabold uppercase text-[9px] border-b border-slate-200">
+                                        <th className="p-2.5">Item</th>
+                                        <th className="p-2.5">Qty</th>
+                                        <th className="p-2.5">Weight</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {order.items?.map((item: any, i: number) => (
+                                        <tr key={i} className="hover:bg-slate-50/50 font-semibold text-slate-700">
+                                          <td className="p-2.5">{item.name}</td>
+                                          <td className="p-2.5">{item.quantity}</td>
+                                          <td className="p-2.5">{item.weight} kg</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+
+                              {/* Partner Details Table */}
+                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                  <Users className="h-3.5 w-3.5" />
+                                  Assigned Partners Info
+                                </h5>
+                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs p-3 space-y-3">
+                                  <div className="flex items-start justify-between text-xs">
+                                    <div>
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Buyer</span>
+                                      <span className="font-extrabold text-slate-750">{order.buyerName || 'N/A'}</span>
+                                      <span className="block text-[10px] text-slate-500">{order.buyerMobile}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">SHG Member</span>
+                                      <span className="font-extrabold text-slate-750">{order.pickupShgDetails?.name || 'N/A'}</span>
+                                      <span className="block text-[10px] text-slate-500">{order.pickupShgDetails?.mobile}</span>
+                                    </div>
+                                  </div>
+                                  <div className="border-t border-slate-100 pt-2 flex items-start justify-between text-xs">
+                                    <div>
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Transporter</span>
+                                      <span className="font-extrabold text-slate-750">{order.pickupTransporterDetails?.name || 'N/A'}</span>
+                                      <span className="block text-[10px] text-slate-500">{order.pickupTransporterDetails?.mobile}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Pagination Controls */}
+                {returnOrdersList.length > returnItemsPerPage && (
+                  <div className="flex items-center justify-center gap-4 text-xs font-semibold text-slate-600 mt-6 select-none">
+                    <button
+                      disabled={returnPage === 1}
+                      onClick={() => setReturnPage((prev) => Math.max(prev - 1, 1))}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <span>Page {returnPage} of {Math.ceil(returnOrdersList.length / returnItemsPerPage)}</span>
+                    <button
+                      disabled={returnPage >= Math.ceil(returnOrdersList.length / returnItemsPerPage)}
+                      onClick={() => setReturnPage((prev) => prev + 1)}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* --- DYNAMIC SIDE DRAWER FOR TIMELINE NODE CLICKS --- */}
         {isNodeDrawerOpen && activeNodeDetails && (
           <>
@@ -2343,13 +2838,27 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </div>
                 </div>
 
-                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
-                  <span className={`px-4 py-2 rounded-xl font-bold ${['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
-                  <span className="text-slate-300 px-1 font-bold">➔</span>
-                  <span className={`px-4 py-2 rounded-xl font-bold ${['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
-                  <span className="text-slate-300 px-1 font-bold">➔</span>
-                  <span className={`px-4 py-2 rounded-xl font-bold ${['DELIVERED', 'COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
-                </div>
+                {selectedOrderDetails.returnType === 'BUYER_RETURN' || [
+                  'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+                  'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+                  'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+                ].includes(selectedOrderDetails.mainStatus) ? (
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>INITIATED</span>
+                    <span className="text-slate-300 px-1 font-bold">➔</span>
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
+                    <span className="text-slate-300 px-1 font-bold">➔</span>
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>RETURNED</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
+                    <span className="text-slate-300 px-1 font-bold">➔</span>
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
+                    <span className="text-slate-300 px-1 font-bold">➔</span>
+                    <span className={`px-4 py-2 rounded-xl font-bold ${['DELIVERED', 'COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

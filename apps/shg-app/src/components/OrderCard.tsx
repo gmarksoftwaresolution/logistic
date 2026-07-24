@@ -176,17 +176,38 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         <View className="flex-row items-center">
           <OrderDistance distance={distance} />
           
-          {/* Right Icon - Circular Outline Style */}
-          <View style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
-            borderWidth: 2,
-            borderColor: '#CBD5E1',
-            backgroundColor: 'white'
-          }} className="items-center justify-center ml-2">
-            <Ionicons name="eye" size={24} color="#073318" />
-          </View>
+          {showScanner && onScan ? (
+            <TouchableOpacity 
+              onPress={(e) => {
+                e.stopPropagation();
+                onScan();
+              }}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: '#073318',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: 8
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="qr-code-outline" size={16} color="white" />
+            </TouchableOpacity>
+          ) : (
+            /* Right Icon - Circular Outline Style */
+            <View style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              borderWidth: 2,
+              borderColor: '#CBD5E1',
+              backgroundColor: 'white'
+            }} className="items-center justify-center ml-2">
+              <Ionicons name="eye" size={24} color="#073318" />
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     </HighlightCardWrapper>

@@ -29,6 +29,9 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
+        NOT: {
+          pickupShgStatus: 'NO_PARTNERS_FOUND'
+        }
       },
       include: {
         assignments: {
@@ -60,6 +63,9 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'PICKUP',
         mainStatus: 'PARCEL_AT_SHG',
+        NOT: {
+          pickupTransporterStatus: 'NO_PARTNERS_FOUND'
+        }
       },
       include: {
         assignments: {
@@ -88,6 +94,9 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'DROP',
         mainStatus: { in: ['DROP_PENDING', 'DROP_CREATED'] },
+        NOT: {
+          dropShgStatus: 'NO_PARTNERS_FOUND'
+        }
       },
       include: {
         assignments: {
@@ -115,7 +124,10 @@ export class OrderManagementService implements OnModuleInit {
     const dropOrdersForTransporter = await this.prisma.order.findMany({
       where: {
         phase: 'DROP',
-        mainStatus: { in: ['DROP_SHG_ACCEPTED', 'RETURN_SHG_ACCEPTED'] },
+        mainStatus: 'DROP_SHG_ACCEPTED',
+        NOT: {
+          returnType: 'BUYER_RETURN',
+        },
       },
       include: {
         assignments: {
@@ -398,7 +410,7 @@ export class OrderManagementService implements OnModuleInit {
       ];
     }
     if (s === 'PICKED') {
-      return ['PARCEL_AT_SHG', 'PARCEL_AT_DROP_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_COMPLETED', 'STORED', 'INVENTORY_TRANSPORTER_RETURN', 'INVENTORY_BUYER_RETURN'];
+      return ['PARCEL_AT_SHG', 'PARCEL_AT_DROP_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_COMPLETED', 'STORED', 'INVENTORY_TRANSPORTER_RETURN', 'INVENTORY_BUYER_RETURN'];
     }
 
     return [s, status];
@@ -551,7 +563,7 @@ export class OrderManagementService implements OnModuleInit {
     const transporterReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) });
 
     // return.buyer
-    const buyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) });
+    const buyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED']) });
 
     // inventory.stored
     const inventoryStored = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) });
@@ -910,9 +922,10 @@ export class OrderManagementService implements OnModuleInit {
       { returnType: 'BUYER_RETURN' },
       filter,
       [
-        'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG',
-        'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED',
-        'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED',
+        'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+        'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+        'RETURN_IN_TRANSIT_TO_HUB', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB',
+        'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
       ]
     );
     return this.prisma.order.findMany({
@@ -2744,38 +2757,180 @@ export class OrderManagementService implements OnModuleInit {
   // --- NEW BUYER RETURN FLOW ---
 
   async requestBuyerReturn(id: string) {
-    const order = await this.getOrderDetails(id);
+    let order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id },
+          { orderId: id }
+        ],
+        phase: 'DROP'
+      },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      }
+    });
+
+    if (!order) {
+      order = await this.getOrderDetails(id);
+    }
+    if (!order) {
+      throw new NotFoundException(`Order with ID/OrderId ${id} not found`);
+    }
 
     if (order.mainStatus !== 'DELIVERED') {
       throw new BadRequestException(`Order must be in DELIVERED status to create a buyer return request`);
     }
 
-    if (!order.dropShgId) {
+    let originalDropShgAuthId = order.dropShgId;
+    if (!originalDropShgAuthId) {
+      const dropAssignment = await this.prisma.orderAssignment.findFirst({
+        where: {
+          order: { orderId: order.orderId },
+          role: 'DROP',
+          assigneeType: 'SHG',
+          status: { in: ['ACCEPTED', 'COMPLETED'] }
+        }
+      });
+      if (dropAssignment) {
+        originalDropShgAuthId = dropAssignment.assigneeId;
+      }
+    }
+
+    if (!originalDropShgAuthId) {
       throw new BadRequestException(`No original SHG drop assignment found to return to`);
     }
 
-    // Deletes any old return assignments just in case
+    // 1. Find master order
+    const masterOrder = await this.prisma.masterOrder.findFirst({
+      where: { orderNumber: order.orderId }
+    });
+    if (!masterOrder) {
+      throw new BadRequestException(`No master order record found for ${order.orderId}`);
+    }
+
+    // 2. Find SHG user and their ID
+    let shgUser = null;
+    const isNumber = !isNaN(Number(originalDropShgAuthId));
+    if (isNumber) {
+      shgUser = await this.prisma.user.findFirst({
+        where: { id: Number(originalDropShgAuthId) }
+      });
+    } else {
+      shgUser = await this.prisma.user.findFirst({
+        where: { authId: originalDropShgAuthId }
+      });
+    }
+    if (!shgUser) {
+      throw new BadRequestException(`No SHG user record found for original Drop SHG identifier ${originalDropShgAuthId}`);
+    }
+    const shgId = shgUser.id;
+
+    // Ensure the SHG has a corresponding Buyer record in public.buyers to satisfy the foreign key constraint
+    const existingShgBuyer = await this.prisma.$queryRawUnsafe(`
+      SELECT id FROM public.buyers WHERE id = $1 LIMIT 1;
+    `, shgId) as any[];
+
+    if (existingShgBuyer.length === 0) {
+      const shgAddress = await this.prisma.address.findFirst({
+        where: { userId: shgId }
+      });
+      const shgCode = `SHG-${shgId}`;
+      const shgName = shgUser.fullName || 'SHG Center';
+      const shgPhone = shgUser.phoneNumber || '0000000000';
+      const village = shgAddress?.village || '';
+      const taluka = shgAddress?.taluka || '';
+      const district = shgAddress?.district || '';
+      const state = shgAddress?.state || 'Maharashtra';
+      const pincode = shgAddress?.pincode || '';
+      const postOffice = shgAddress?.postOffice || '';
+
+      await this.prisma.$executeRawUnsafe(`
+        INSERT INTO public.buyers (id, buyer_code, buyer_name, mobile_number, village, taluka, district, state, pincode, post_office, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW());
+      `, shgId, shgCode, shgName, shgPhone, village, taluka, district, state, pincode, postOffice);
+      await this.prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.buyers', 'id'), COALESCE(MAX(id), 1)) FROM public.buyers;`);
+    }
+
+    // 3. Deletes any old return assignments just in case
     await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'RETURN' },
+      where: { orderId: order.id, role: { in: ['DROP', 'RETURN'] } },
     });
 
+    // 4. Create OrderAssignment with role DROP so that SHG acceptDrop updates it correctly
     await this.prisma.orderAssignment.create({
       data: {
         orderId: order.id,
-        assigneeId: order.dropShgId,
+        assigneeId: shgUser.authId,
         assigneeType: 'SHG',
-        role: 'RETURN',
+        role: 'DROP',
         status: 'PENDING',
       },
     });
+
+    // 5. Create drop order for return
+    // Retrieve SHG address to use as deliveryAddress for return destination
+    const shgAddressRecord = await this.prisma.address.findFirst({
+      where: { userId: shgId }
+    });
+    const deliveryAddress = shgAddressRecord
+      ? [shgAddressRecord.houseNo, shgAddressRecord.deliveryAddress, shgAddressRecord.village, shgAddressRecord.taluka, shgAddressRecord.district, shgAddressRecord.pincode].filter(Boolean).join(', ')
+      : 'SHG Center Address';
+
+    const dropOrderNumber = `RET-${order.orderId}`;
+    
+    // Check if a drop order with this number already exists and delete it
+    const existingDropOrder = await this.prisma.dropOrder.findFirst({
+      where: { dropOrderNumber }
+    });
+    if (existingDropOrder) {
+      await this.prisma.dropOrderItem.deleteMany({
+        where: { dropOrderId: existingDropOrder.id }
+      });
+      await this.prisma.dropTracking.deleteMany({
+        where: { dropOrderId: existingDropOrder.id }
+      });
+      await this.prisma.dropOrder.delete({
+        where: { id: existingDropOrder.id }
+      });
+    }
+
+    const insertDo = await this.prisma.$queryRawUnsafe(`
+      INSERT INTO public.drop_orders (master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number)
+      VALUES ($1, $2, 'RETURN_PENDING', $3, NOW(), $4)
+      RETURNING id;
+    `, masterOrder.id, shgId, deliveryAddress, dropOrderNumber) as any[];
+    const returnDropOrderId = insertDo[0].id;
+    await this.prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_orders;`);
+
+    // Create drop order items
+    const masterItems = await this.prisma.masterOrderItem.findMany({
+      where: { masterOrderId: masterOrder.id }
+    });
+    for (const item of masterItems) {
+      await this.prisma.$executeRawUnsafe(`
+        INSERT INTO public.drop_order_items (drop_order_id, product_id, quantity, verification_status)
+        VALUES ($1, $2, $3, 'PENDING');
+      `, returnDropOrderId, item.productId, item.quantity);
+    }
+    await this.prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_order_items;`);
+
+    // Create drop tracking
+    await this.prisma.$executeRawUnsafe(`
+      INSERT INTO public.drop_tracking (drop_order_id, status, remarks, updated_at)
+      VALUES ($1, 'RETURN_PENDING', 'Return request initiated by buyer', NOW());
+    `, returnDropOrderId);
+    await this.prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_tracking;`);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
         returnType: 'BUYER_RETURN',
         mainStatus: 'RETURN_SHG_PENDING',
-        pickupReturnShgId: order.dropShgId,
+        pickupReturnShgId: shgUser.authId,
         pickupShgStatus: 'PENDING',
+        buyerId: shgId,
       },
     });
   }
@@ -2822,7 +2977,7 @@ export class OrderManagementService implements OnModuleInit {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        pickupShgStatus: 'PICKED',
+        pickupShgStatus: 'RETURN_PICKED_BY_SHG',
       },
     });
 
@@ -2860,7 +3015,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'RETURN_TRANSPORTER_PENDING',
+        mainStatus: 'RETURN_TRANSPORTER_REQUESTED',
         pickupTransporterStatus: 'PENDING',
       },
       include: { assignments: true },
@@ -2897,8 +3052,11 @@ export class OrderManagementService implements OnModuleInit {
       where: { id: order.id },
       data: {
         returnTransporterId: transporterId,
+        pickupTransporterId: transporterId,
+        dropTransporterId: transporterId,
         mainStatus: 'RETURN_TRANSPORTER_ACCEPTED',
         pickupTransporterStatus: 'ACCEPTED',
+        dropTransporterStatus: 'ACCEPTED',
       },
     });
   }

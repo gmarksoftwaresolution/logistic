@@ -58,22 +58,40 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     const lbl = nodeLabel.toLowerCase();
     let timestamp: string | null = null;
     
+    const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
+      'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+      'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+      'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+    ].includes(order.mainStatus);
+
     if (order.tracking && order.tracking.length > 0) {
       let statusKeywords: string[] = [];
-      if (lbl === 'seller') {
-        statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
-      } else if (lbl === 'pickup shg') {
-        statusKeywords = ['PARCEL_AT_SHG', 'PICKED', 'PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'];
-      } else if (lbl === 'pickup transporter') {
-        statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'];
-      } else if (lbl === 'gmu hub') {
-        statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
-      } else if (lbl === 'drop transporter') {
-        statusKeywords = ['DROP_TRANSPORTER', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'];
-      } else if (lbl === 'drop shg') {
-        statusKeywords = ['DROP_SHG', 'DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG'];
-      } else if (lbl === 'buyer') {
-        statusKeywords = ['DELIVERED', 'COMPLETED'];
+      if (isBuyerReturn) {
+        if (lbl === 'buyer') {
+          statusKeywords = ['RETURN_SHG_PENDING'];
+        } else if (lbl === 'shg') {
+          statusKeywords = ['RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG'];
+        } else if (lbl === 'transporter') {
+          statusKeywords = ['RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'];
+        } else if (lbl === 'gmu hub' || lbl === 'last hub' || lbl === 'hub') {
+          statusKeywords = ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'];
+        }
+      } else {
+        if (lbl === 'seller') {
+          statusKeywords = ['ORDER_PLACED', 'CREATED', 'PLACED'];
+        } else if (lbl === 'pickup shg') {
+          statusKeywords = ['PARCEL_AT_SHG', 'PICKED', 'PICKUP_SHG_ACCEPTED', 'SHG_ACCEPTED'];
+        } else if (lbl === 'pickup transporter') {
+          statusKeywords = ['TRANSPORTER_ACCEPTED', 'TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB'];
+        } else if (lbl === 'gmu hub') {
+          statusKeywords = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'STORED', 'DISPATCHED'];
+        } else if (lbl === 'drop transporter') {
+          statusKeywords = ['DROP_TRANSPORTER', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'];
+        } else if (lbl === 'drop shg') {
+          statusKeywords = ['DROP_SHG', 'DROP_SHG_ACCEPTED', 'PARCEL_AT_DROP_SHG'];
+        } else if (lbl === 'buyer') {
+          statusKeywords = ['DELIVERED', 'COMPLETED'];
+        }
       }
 
       const event = order.tracking.find((t: any) => 
@@ -85,20 +103,32 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     }
     
     if (!timestamp) {
-      if (lbl === 'seller') {
-        timestamp = order.createdAt || order.orderDate;
-      } else if (lbl === 'pickup shg') {
-        timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
-      } else if (lbl === 'pickup transporter') {
-        timestamp = order.pickupTransporterDetails?.acceptedAt;
-      } else if (lbl === 'gmu hub') {
-        timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
-      } else if (lbl === 'drop transporter') {
-        timestamp = order.dropTransporterDetails?.acceptedAt;
-      } else if (lbl === 'drop shg') {
-        timestamp = order.dropShgDetails?.acceptedAt;
-      } else if (lbl === 'buyer') {
-        timestamp = order.deliveredAt || order.completedAt;
+      if (isBuyerReturn) {
+        if (lbl === 'buyer') {
+          timestamp = order.createdAt;
+        } else if (lbl === 'shg') {
+          timestamp = order.shgDetails?.acceptedAt || order.acceptedAt;
+        } else if (lbl === 'transporter') {
+          timestamp = order.transporterDetails?.acceptedAt;
+        } else if (lbl === 'gmu hub') {
+          timestamp = order.storedAt || order.warehouseReceivedAt;
+        }
+      } else {
+        if (lbl === 'seller') {
+          timestamp = order.createdAt || order.orderDate;
+        } else if (lbl === 'pickup shg') {
+          timestamp = order.pickupShgDetails?.acceptedAt || order.acceptedAt;
+        } else if (lbl === 'pickup transporter') {
+          timestamp = order.pickupTransporterDetails?.acceptedAt;
+        } else if (lbl === 'gmu hub') {
+          timestamp = order.warehouseReceivedDate || order.warehouseReceivedAt;
+        } else if (lbl === 'drop transporter') {
+          timestamp = order.dropTransporterDetails?.acceptedAt;
+        } else if (lbl === 'drop shg') {
+          timestamp = order.dropShgDetails?.acceptedAt;
+        } else if (lbl === 'buyer') {
+          timestamp = order.deliveredAt || order.completedAt;
+        }
       }
     }
 
@@ -124,6 +154,98 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
       if (matching.length === 0) return 'No scan events logged yet for this stage.';
       return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
     };
+
+    const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
+      'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+      'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+      'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+    ].includes(order.mainStatus);
+
+    if (isBuyerReturn) {
+      // 1. Buyer: always completed
+      const buyerState = 'completed';
+
+      // 2. SHG: active if status is PENDING or ACCEPTED, completed if PICKED or later
+      let shgState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || ['PICKED', 'RETURN_PICKED_BY_SHG'].includes(order.pickupShgStatus || '')) {
+        shgState = 'completed';
+      } else if (['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG'].includes(order.mainStatus)) {
+        shgState = 'active';
+      }
+
+      // 3. Transporter: active if PENDING or ACCEPTED, completed if IN_TRANSIT or later
+      let transporterState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || order.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB') {
+        transporterState = 'completed';
+      } else if (['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG'].includes(order.mainStatus)) {
+        transporterState = 'active';
+      }
+
+      // 4. GMU Hub: active if IN_TRANSIT or RECEIVED, completed if INVENTORY/COMPLETED
+      let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+        gmuHubState = 'completed';
+      } else if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED'].includes(order.mainStatus)) {
+        gmuHubState = 'active';
+      }
+
+      return [
+        {
+          id: 'buyer',
+          label: 'Buyer',
+          state: buyerState,
+          details: {
+            'Person Name': order.buyerName || 'N/A',
+            'Role': 'Consignee / Buyer',
+            'Mobile Number': order.buyerMobile || 'N/A',
+            'Address': order.buyerAddress || 'N/A',
+            'Order ID': order.id,
+            'Status': 'RETURN_INITIATED',
+            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING'])
+          }
+        },
+        {
+          id: 'shg',
+          label: 'SHG',
+          state: shgState,
+          details: order.pickupShgDetails || order.shgDetails ? {
+            'Person Name': order.pickupShgDetails?.name || order.shgDetails?.name || 'N/A',
+            'Role': 'Return Pickup SHG',
+            'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
+            'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': order.shgStatus || 'PENDING',
+            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
+          } : null
+        },
+        {
+          id: 'transporter',
+          label: 'Transporter',
+          state: transporterState,
+          details: order.pickupTransporterDetails || order.transporterDetails ? {
+            'Person Name': order.pickupTransporterDetails?.name || order.transporterDetails?.name || 'N/A',
+            'Role': 'Return Transporter',
+            'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
+            'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': order.transporterStatus || 'PENDING',
+            'Full Scan History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
+          } : null
+        },
+        {
+          id: 'gmu_hub',
+          label: 'GMU Hub',
+          state: gmuHubState,
+          details: {
+            'Warehouse': 'GMU Hub Central Warehouse',
+            'Order ID': order.id,
+            'Stored Time': order.storedDate || 'N/A',
+            'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
+            'Full Scan History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+          }
+        }
+      ];
+    }
 
     // Seller: always completed
     const sellerState = 'completed';
@@ -726,13 +848,27 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                     </div>
                   </div>
 
-                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
-                    <span className={`px-4 py-2 rounded-xl font-bold ${['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
-                    <span className="text-slate-300 px-1 font-bold">➔</span>
-                    <span className={`px-4 py-2 rounded-xl font-bold ${['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
-                    <span className="text-slate-300 px-1 font-bold">➔</span>
-                    <span className={`px-4 py-2 rounded-xl font-bold ${['DELIVERED', 'COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
-                  </div>
+                  {selectedOrderDetails.returnType === 'BUYER_RETURN' || [
+                    'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+                    'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+                    'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'
+                  ].includes(selectedOrderDetails.mainStatus) ? (
+                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>INITIATED</span>
+                      <span className="text-slate-300 px-1 font-bold">➔</span>
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
+                      <span className="text-slate-300 px-1 font-bold">➔</span>
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>RETURNED</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl p-1 text-xs">
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>NEW</span>
+                      <span className="text-slate-300 px-1 font-bold">➔</span>
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>IN TRANSIT</span>
+                      <span className="text-slate-300 px-1 font-bold">➔</span>
+                      <span className={`px-4 py-2 rounded-xl font-bold ${['DELIVERED', 'COMPLETED'].includes(selectedOrderDetails.mainStatus) ? 'bg-[#073318] text-white' : 'text-slate-500'}`}>COMPLETED</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* --- GRAPHICAL STATUS TIMELINE --- */}

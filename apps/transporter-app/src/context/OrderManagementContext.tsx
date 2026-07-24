@@ -209,10 +209,10 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedPickups = rawPickups.map((o: any) => ({
         id: `pickup-${o.id}`,
         displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.address?.taluka || 'Nesari',
+        areaName: o.seller?.taluka || o.seller?.address?.taluka || 'Nesari',
         flowType: 'shg_to_gmu' as FlowType,
         shgName: o.shg?.shgDetail?.shgName || 'Local SHG',
-        pickupPointName: o.seller?.address?.village || 'Nesari Stand',
+        pickupPointName: o.seller?.village || o.seller?.address?.village || 'Nesari Stand',
         dropPointName: 'Gadhinglaj Hub',
         pickupCount: 1,
         dropCount: 0,
@@ -281,7 +281,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         return {
           id: bId,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: o.buyer?.address?.taluka || 'Nesari',
+          areaName: o.buyer?.taluka || o.buyer?.address?.taluka || 'Nesari',
           flowType: 'gmu_to_shg' as FlowType,
           shgName: 'Gadhinglaj Hub',
           pickupPointName: 'Gadhinglaj Hub',

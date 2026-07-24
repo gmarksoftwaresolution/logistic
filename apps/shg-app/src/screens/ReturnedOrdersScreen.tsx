@@ -71,28 +71,53 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   // Confirm Modal State
+  const [barcodeInput, setBarcodeInput] = useState('');
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: '',
     message: '',
     confirmText: 'Confirm',
-    onConfirm: () => { },
+    showInput: false,
+    onConfirm: (code?: string) => Promise.resolve(),
   });
 
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleQRScan = (order: Order) => {
+    setBarcodeInput('');
     setModalConfig({
       visible: true,
       title: t('confirm_pickup') || "Confirm Pickup",
-      message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
+      message: (t('confirm_pickup_message') || `Please scan or enter the original delivery QR/barcode to collect "{parcel}".`).replace('{parcel}', order.parcelName),
       confirmText: t('su_confirm_358') || 'Confirm',
-      onConfirm: async () => {
+      showInput: true,
+      onConfirm: async (scannedCode?: string) => {
         try {
-          await receiveOrder(order);
+          await receiveOrder(order, scannedCode);
           Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
-        } catch (error) {
-          Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to confirm pickup' });
+        } catch (error: any) {
+          const errMsg = error.response?.data?.message || 'Failed to confirm pickup';
+          Toast.show({ type: 'error', text1: 'Error', text2: Array.isArray(errMsg) ? errMsg[0] : errMsg });
+        }
+      }
+    });
+  };
+
+  const handleHandoverScan = (order: Order) => {
+    setBarcodeInput('');
+    setModalConfig({
+      visible: true,
+      title: "Verify Handover to Transporter",
+      message: `Please scan or enter the original delivery QR/barcode to verify handover for "${order.parcelName}".`,
+      confirmText: t('su_confirm_358') || 'Confirm',
+      showInput: true,
+      onConfirm: async (scannedCode?: string) => {
+        try {
+          await receiveOrder(order, scannedCode);
+          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: 'Handover successfully verified.' });
+        } catch (error: any) {
+          const errMsg = error.response?.data?.message || 'Failed to verify handover';
+          Toast.show({ type: 'error', text1: 'Error', text2: Array.isArray(errMsg) ? errMsg[0] : errMsg });
         }
       }
     });
@@ -318,7 +343,8 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
-                showScanner={false}
+                showScanner={true}
+                onScan={() => handleHandoverScan(item)}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
@@ -347,10 +373,20 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         title={modalConfig.title}
         message={modalConfig.message}
         confirmText={modalConfig.confirmText}
-        onCancel={() => setModalConfig({ ...modalConfig, visible: false })}
-        onConfirm={() => {
-          modalConfig.onConfirm();
-          setModalConfig({ ...modalConfig, visible: false });
+        showInput={(modalConfig as any).showInput}
+        inputValue={barcodeInput}
+        onInputChange={setBarcodeInput}
+        inputPlaceholder="Scan or enter delivery QR/barcode"
+        onCancel={() => {
+          setModalConfig({ ...modalConfig, visible: false } as any);
+          setBarcodeInput('');
+        }}
+        onConfirm={async () => {
+          if ((modalConfig as any).onConfirm) {
+            await (modalConfig as any).onConfirm(barcodeInput);
+          }
+          setModalConfig({ ...modalConfig, visible: false } as any);
+          setBarcodeInput('');
         }}
       />
 

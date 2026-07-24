@@ -839,6 +839,16 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
   console.log('Seeding Transporters as real User profiles...');
   const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
+  // Retrieve matching villages and pincodes dynamically from public.pincode_directory
+  const pincodeRows = await prisma.$queryRawUnsafe(`
+    SELECT DISTINCT village, pincode FROM public.pincode_directory
+    WHERE LOWER(village) IN ('dundage', 'gadhinglaj', 'mahagaon', 'batkanangale', 'nesari')
+      AND district = 'KOLHAPUR';
+  `) as any[];
+
+  const uniqueVillages = Array.from(new Set(pincodeRows.map(r => r.village)));
+  const pincodes = Array.from(new Set(pincodeRows.map(r => r.pincode)));
+
   const list = [
     {
       firstName: 'Balasaheb',
@@ -871,14 +881,6 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
       type: 'PERSONAL',
       vehicleType: 'Two Wheeler',
       villageIndex: 4
-    },
-    {
-      firstName: 'Sandip',
-      lastName: 'Patil',
-      mobileNumber: '9900000004',
-      type: 'PERSONAL',
-      vehicleType: 'Two Wheeler',
-      villageIndex: 5
     }
   ];
 
@@ -944,9 +946,6 @@ async function seedTransporterUsers(prisma: any, locations: any[]) {
     `, userId, `MH-09-L-${1000 + userId}`, new Date(Date.now() + 365*24*60*60*1000), 'http://dummy.url/license.jpg');
 
     // 5. Create RouteDetail
-    const uniqueVillages = ['Dundage', 'Gadhinglaj', 'Inchnal', 'Mahagaon', 'Batkanangale', 'Nesari'];
-    const pincodes = ['416501', '416502', '416503', '416504'];
-
     await prisma.$executeRawUnsafe(`
       INSERT INTO public."RouteDetail" ("userId", "operatingArea", "pickupLocations", "dropLocations", "workingDays", "workingSchedule", "createdAt", "updatedAt")
       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW(), NOW());

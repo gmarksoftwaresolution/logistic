@@ -196,6 +196,9 @@ model User {
   shgDropOrders       DropOrder[]         @relation("ShgDropOrders")
   transporterDrops    DropOrder[]         @relation("TransporterDropOrders")
 
+  shgReturnOrders         ReturnOrder[]       @relation("ShgReturnOrders")
+  transporterReturnOrders ReturnOrder[]       @relation("TransporterReturnOrders")
+
   @@index([phoneNumber])
   @@index([role])
 }
@@ -216,7 +219,7 @@ model Address {
   village       String?
   taluka        String?
   district      String
-  state         String   @default("Maharashtra")
+  state         String
   pincode       String
   postOffice    String?
 
@@ -506,8 +509,6 @@ model OTPVerification {
   @@index([phoneNumber])
 }
 
-
-
 //////////////////////////////////////////////////////
 // NEW CLEAN ARCHITECTURE MODELS
 //////////////////////////////////////////////////////
@@ -531,6 +532,7 @@ model Product {
   pickupOrderItems   PickupOrderItem[]
   warehouseInventory WarehouseInventory[]
   dropOrderItems     DropOrderItem[]
+  returnOrderItems   ReturnOrderItem[]
 
   @@index([sellerId])
   @@index([category])
@@ -663,6 +665,7 @@ model DropOrder {
 
   items           DropOrderItem[]
   tracking        DropTracking[]
+  returnOrders    ReturnOrder[]
 
   @@index([masterOrderId])
   @@index([buyerId])
@@ -716,18 +719,12 @@ model DropTracking {
 
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
-  name           String
-  description    String?
-  branchType     String?
-  deliveryStatus String?
-  circle         String?
+  name           String   @map("village")
   district       String
-  division       String?
-  region         String?
-  block          String?
+  block          String?  @map("taluka")
   state          String
-  country        String   @default("India")
   pincode        String
+  postOffice     String?  @map("postOffice")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -750,7 +747,7 @@ model Seller {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -774,7 +771,7 @@ model Buyer {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -783,9 +780,12 @@ model Buyer {
   masterOrders     MasterOrder[]     @relation("BuyerOrders")
   dropOrders       DropOrder[]
   orders           Order[]
+  returnOrders     ReturnOrder[]
 
   @@map("buyers")
 }
+
+
 
 model VerificationRecord {
   id               Int       @id @default(autoincrement())
@@ -809,6 +809,7 @@ model VerificationRecord {
 
   @@map("VerificationRecord")
 }
+
 
 model ScanHistory {
   id           Int       @id @default(autoincrement())
@@ -896,6 +897,59 @@ model ScanSessionItem {
 
   @@unique([sessionId, parcelId])
   @@map("ScanSessionItem")
+}
+
+
+model ReturnOrder {
+  id                   Int                 @id @default(autoincrement())
+  returnOrderNumber    String?             @unique @map("return_order_number")
+  originalOrderId      Int                 @map("original_order_id")
+  originalOrder        DropOrder           @relation(fields: [originalOrderId], references: [id])
+  buyerId              Int                 @map("buyer_id")
+  buyer                Buyer               @relation(fields: [buyerId], references: [id])
+  shgId                Int?                @map("shg_id")
+  shg                  User?               @relation("ShgReturnOrders", fields: [shgId], references: [id])
+  transporterId        Int?                @map("transporter_id")
+  transporter          User?               @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
+  status               String              @default("RETURN_REQUESTED")
+  returnReason         String?             @map("return_reason")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  items                ReturnOrderItem[]
+  tracking             ReturnTracking[]
+
+  @@index([originalOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("return_orders")
+}
+
+model ReturnOrderItem {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+  productId     Int         @map("product_id")
+  product       Product     @relation(fields: [productId], references: [id])
+  quantity      Int?
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@map("return_order_items")
+}
+
+model ReturnTracking {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+  status        String?
+  remarks       String?
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  @@index([returnOrderId])
+  @@map("return_tracking")
 }
 
 

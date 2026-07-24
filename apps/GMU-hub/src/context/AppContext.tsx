@@ -335,8 +335,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dynamic details mapping helpers
   const mapOrder = (o: any, flowType?: 'pickup' | 'drop' | 'return'): any => {
     const isBuyerReturnFlow = flowType 
-      ? flowType === 'return' && (o.returnType === 'BUYER_RETURN' || ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus))
-      : ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus) || o.returnType === 'BUYER_RETURN';
+      ? flowType === 'return' && (o.returnType === 'BUYER_RETURN' || ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus))
+      : ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(o.mainStatus) || o.returnType === 'BUYER_RETURN';
 
     const isDropOrTransporterReturnFlow = flowType
       ? flowType === 'drop' || (flowType === 'return' && (o.returnType === 'TRANSPORTER_RETURN' || ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus)))
@@ -401,6 +401,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : o.mainStatus === 'RETURN_SHG_ACCEPTED'
               ? 'accepted'
               : [
+                  'RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED',
                   'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING',
                   'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB',
                   'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
@@ -421,7 +422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const mappedTransporterStatus = isBuyerReturnFlow
       ? (
-          o.mainStatus === 'RETURN_TRANSPORTER_PENDING'
+          (o.mainStatus === 'RETURN_TRANSPORTER_PENDING' || o.mainStatus === 'RETURN_TRANSPORTER_REQUESTED')
             ? 'pending'
             : o.mainStatus === 'RETURN_TRANSPORTER_ACCEPTED'
               ? 'accepted'
@@ -521,6 +522,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mainStatus: o.mainStatus,
       status: o.mainStatus,
       phase: o.phase,
+      returnType: o.returnType,
       created_at: o.createdAt ? o.createdAt.replace('T', ' ').substring(0, 16) : '',
       updated_at: o.updatedAt ? o.updatedAt.replace('T', ' ').substring(0, 16) : '',
       shgDetails,

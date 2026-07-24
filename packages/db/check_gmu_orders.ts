@@ -2,19 +2,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const gmuOrders = await prisma.$queryRawUnsafe(`
-    SELECT id, "orderId", phase, "mainStatus", "pickupShgStatus", "pickupShgId", "pickupTransporterStatus", "pickupTransporterId"
-    FROM public."Order"
-    LIMIT 20;
-  `) as any[];
-  console.log('GMU Orders:', gmuOrders);
-  
-  const assignments = await prisma.$queryRawUnsafe(`
-    SELECT id, "orderId", "assigneeId", "assigneeType", role, status
-    FROM public."OrderAssignment"
-    LIMIT 30;
-  `) as any[];
-  console.log('Assignments:', assignments);
+  const updated = await prisma.dropOrder.update({
+    where: { id: 11 },
+    data: { status: 'RETURN_ACCEPTED' }
+  });
+  console.log('Successfully updated DropOrder 11 status to RETURN_ACCEPTED:', updated.status);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

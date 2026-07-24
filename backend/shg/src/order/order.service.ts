@@ -408,7 +408,6 @@ export class OrderService {
 
     return this.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.findUnique({ where: { id: shgId } });
-      const shgUuid = String(shgId);
 
       // Find order number
       const masterOrder = await tx.masterOrder.findUnique({
@@ -417,17 +416,34 @@ export class OrderService {
 
       // Find gmu.Order UUID and verify First Accept Wins
       const gmuOrders = await tx.$queryRawUnsafe(`
-        SELECT o.id, o."dropShgStatus", o."dropShgId", o."mainStatus", b.village as "buyerVillage", b.pincode as "buyerPincode"
-        FROM public."Order" o
-        JOIN public.buyers b ON o."buyerId" = b.id
-        WHERE o."orderId" = $1 AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+        SELECT id, "dropShgStatus", "dropShgId", "pickupShgStatus", "pickupReturnShgId", "returnType" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
       }
       const orderUuid = gmuOrders[0].id;
-      if (gmuOrders[0].dropShgStatus === 'ACCEPTED' || gmuOrders[0].dropShgStatus === 'DELIVERED') {
-        if (gmuOrders[0].dropShgId === shgUuid) {
+      const isBuyerReturn = gmuOrders[0].returnType === 'BUYER_RETURN';
+
+      // Check which identifier format was used for the assignment (UUID vs stringified Int ID)
+      let shgUuid = String(shgId);
+      if (user?.authId) {
+        const hasUuidAssignment = await tx.orderAssignment.findFirst({
+          where: {
+            orderId: orderUuid,
+            assigneeId: user.authId,
+            role: 'DROP',
+            assigneeType: 'SHG'
+          }
+        });
+        if (hasUuidAssignment) {
+          shgUuid = user.authId;
+        }
+      }
+
+      const currentStatus = isBuyerReturn ? gmuOrders[0].pickupShgStatus : gmuOrders[0].dropShgStatus;
+      const currentDropShgId = isBuyerReturn ? gmuOrders[0].pickupReturnShgId : gmuOrders[0].dropShgId;
+      if (currentStatus === 'ACCEPTED' || currentStatus === 'DELIVERED') {
+        if (currentDropShgId === shgUuid) {
           return dropOrder;
         }
         throw new BadRequestException('This order drop-off has already been accepted by another SHG.');
@@ -468,17 +484,29 @@ export class OrderService {
 
       // Update gmu.Order status
       const nextGmuStatus = nextStatus === 'RETURN_ACCEPTED' ? 'RETURN_SHG_ACCEPTED' : 'DROP_SHG_ACCEPTED';
-      await tx.$executeRawUnsafe(`
-        UPDATE public."Order"
-        SET "dropShgId" = $1, "dropShgStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
-        WHERE id = $4;
-      `, shgUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      if (isBuyerReturn) {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "pickupReturnShgId" = $1, "pickupShgStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, shgUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      } else {
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET "dropShgId" = $1, "dropShgStatus" = $2, "mainStatus" = $3, "updatedAt" = NOW()
+          WHERE id = $4;
+        `, shgUuid, 'ACCEPTED', nextGmuStatus, orderUuid);
+      }
 
       // Update public.master_orders status
       await tx.masterOrder.update({
         where: { id: dropOrder.masterOrderId },
         data: { status: nextGmuStatus },
       });
+
+      if (isBuyerReturn) {
+        return updated;
+      }
 
       // Broadcast to matching transporters based on configured routes (priority: Pincode -> Village -> Taluka -> District)
       const rawBuyer = await tx.$queryRawUnsafe(`
@@ -571,21 +599,86 @@ export class OrderService {
       }
 
       if (matchingTransporters.length > 0) {
-        await tx.$executeRawUnsafe(`
-          DELETE FROM public."OrderAssignment" WHERE "orderId" = $1 AND role = 'DROP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
-        `, orderUuid);
-
-        for (const t of matchingTransporters) {
-          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+        if (isBuyerReturn) {
+          // Clear any old transporter assignments for this return order
           await tx.$executeRawUnsafe(`
-            INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
-            VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW());
-          `, uuidv4(), orderUuid, t.id);
-        }
+            DELETE FROM public."OrderAssignment" WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
+          `, orderUuid);
 
-        await tx.$executeRawUnsafe(`
-          UPDATE public."Order" SET "dropTransporterStatus" = 'PENDING' WHERE id = $1;
-        `, orderUuid);
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          for (const t of matchingTransporters) {
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+              VALUES ($1, $2, $3, 'TRANSPORTER', 'PICKUP', 'PENDING', NOW(), NOW());
+            `, uuidv4(), orderUuid, t.id);
+          }
+
+          // Create the pickup_orders record so Transporter backend queries match it!
+          const pickupOrderNumber = `RET-PKP-${masterOrder.orderNumber}`;
+          const originalPickup = await tx.pickupOrder.findFirst({
+            where: { masterOrderId: masterOrder.id }
+          });
+          const sellerId = originalPickup ? originalPickup.sellerId : 1;
+
+          // Clean any existing RET-PKP pickup order just in case
+          const existingRetPickup = await tx.pickupOrder.findFirst({
+            where: { pickupOrderNumber }
+          });
+          if (existingRetPickup) {
+            await tx.pickupOrderItem.deleteMany({ where: { pickupOrderId: existingRetPickup.id } });
+            await tx.pickupTracking.deleteMany({ where: { pickupOrderId: existingRetPickup.id } });
+            await tx.pickupOrder.delete({ where: { id: existingRetPickup.id } });
+          }
+
+          const insertPo = await tx.$queryRawUnsafe(`
+            INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
+            VALUES ($1, $2, $3, 'RETURN_PENDING', NOW())
+            RETURNING id;
+          `, pickupOrderNumber, masterOrder.id, sellerId) as any[];
+          const returnPickupOrderId = insertPo[0].id;
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
+
+          // Create pickup order items
+          const masterItems = await tx.masterOrderItem.findMany({
+            where: { masterOrderId: masterOrder.id }
+          });
+          for (const item of masterItems) {
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity, verification_status)
+              VALUES ($1, $2, $3, 'PENDING');
+            `, returnPickupOrderId, item.productId, item.quantity);
+          }
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
+
+          // Create pickup tracking
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
+            VALUES ($1, 'RETURN_PENDING', 'Return pickup initiated from SHG', NOW());
+          `, returnPickupOrderId);
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
+
+          // Update order return statuses
+          await tx.$executeRawUnsafe(`
+            UPDATE public."Order" SET "pickupTransporterStatus" = 'PENDING' WHERE id = $1;
+          `, orderUuid);
+
+        } else {
+          await tx.$executeRawUnsafe(`
+            DELETE FROM public."OrderAssignment" WHERE "orderId" = $1 AND role = 'DROP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
+          `, orderUuid);
+
+          for (const t of matchingTransporters) {
+            const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+              VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW());
+            `, uuidv4(), orderUuid, t.id);
+          }
+
+          await tx.$executeRawUnsafe(`
+            UPDATE public."Order" SET "dropTransporterStatus" = 'PENDING' WHERE id = $1;
+          `, orderUuid);
+        }
       }
 
       return updated;
@@ -760,19 +853,29 @@ export class OrderService {
       return updated;
     });
   }
-
-  async completePickup(pickupOrderId: number, shgId: number, code?: string, legType?: string) {
-    const pickupOrder = await this.prisma.pickupOrder.findFirst({
+async completePickup(pickupOrderId: number, shgId: number, code?: string, legType?: string) {
+    let pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: { id: pickupOrderId, shgId },
     });
 
     if (!pickupOrder) {
       const dropOrder = await this.prisma.dropOrder.findFirst({
         where: { id: pickupOrderId, shgId },
+        include: { masterOrder: { include: { pickupOrders: true } } }
       });
       if (dropOrder) {
-        return this.pickupDrop(pickupOrderId, shgId, code);
+        const associatedPickup = dropOrder.masterOrder.pickupOrders.find(
+          po => po.pickupOrderNumber?.startsWith('RET-PKP-')
+        );
+        if (legType === 'handover' && associatedPickup) {
+          pickupOrder = associatedPickup;
+        } else {
+          return this.pickupDrop(pickupOrderId, shgId, code);
+        }
       }
+    }
+
+    if (!pickupOrder) {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
     }
 
@@ -817,12 +920,31 @@ export class OrderService {
         }
       });
     } else {
-      const items = await this.prisma.pickupOrderItem.findMany({
-        where: { pickupOrderId }
-      });
-      const allVerified = items.every(item => item.verificationStatus === 'VERIFIED');
-      if (!allVerified) {
-        throw new BadRequestException('Handover verification not completed. Please verify all product codes.');
+      const isReturn = pickupOrder.status === 'RETURN_ACCEPTED';
+      if (isReturn) {
+        const gmuOrder = await this.prisma.$queryRawUnsafe(`
+          SELECT barcode FROM public."Order" WHERE "orderId" = $1 LIMIT 1;
+        `, orderNumber) as any[];
+        const expectedBarcode = gmuOrder?.[0]?.barcode;
+        if (expectedBarcode && (!code || code !== expectedBarcode)) {
+          throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode}, received ${code || 'none'}.`);
+        }
+        // Mark items as verified
+        await this.prisma.pickupOrderItem.updateMany({
+          where: { pickupOrderId: pickupOrder.id },
+          data: {
+            verificationStatus: 'VERIFIED',
+            verifiedTime: new Date(),
+          }
+        });
+      } else {
+        const items = await this.prisma.pickupOrderItem.findMany({
+          where: { pickupOrderId: pickupOrder.id }
+        });
+        const allVerified = items.every(item => item.verificationStatus === 'VERIFIED');
+        if (!allVerified) {
+          throw new BadRequestException('Handover verification not completed. Please verify all product codes.');
+        }
       }
     }
 
@@ -875,12 +997,12 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "pickupShgStatus" = $1, "mainStatus" = $2, "pickupTransporterId" = NULL, "pickupTransporterStatus" = 'PENDING', "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'PICKUP';
+          WHERE "orderId" = $3 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
         `, nextShgStatus, nextGmuStatus, masterOrder.orderNumber);
 
         // Find the gmu.Order UUID
         const rawGmuOrder = await tx.$queryRawUnsafe(`
-          SELECT o.id FROM public."Order" o WHERE o."orderId" = $1 AND o.phase = 'PICKUP' LIMIT 1;
+          SELECT o.id FROM public."Order" o WHERE o."orderId" = $1 AND (o.phase = 'PICKUP' OR o."returnType" = 'BUYER_RETURN') LIMIT 1;
         `, masterOrder.orderNumber) as any[];
         if (rawGmuOrder.length > 0) {
           orderUuidToBroadcast = rawGmuOrder[0].id;
@@ -896,7 +1018,7 @@ export class OrderService {
       } else {
         // Transporter Handover Phase
         const rawGmuOrder = await tx.$queryRawUnsafe(`
-          SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+          SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN') LIMIT 1;
         `, masterOrder.orderNumber) as any[];
 
         let transporterPicked = false;
@@ -915,7 +1037,7 @@ export class OrderService {
           const nextGmuStatus = isReturn ? 'RETURN_IN_TRANSIT_TO_HUB' : 'IN_TRANSIT_TO_HUB';
 
           await tx.pickupOrder.update({
-            where: { id: pickupOrderId },
+            where: { id: pickupOrder.id },
             data: {
               status: nextStatus,
               pickupTime: new Date(),
@@ -925,7 +1047,7 @@ export class OrderService {
           await tx.$executeRawUnsafe(`
             UPDATE public."Order"
             SET "pickupShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-            WHERE "orderId" = $3 AND phase = 'PICKUP';
+            WHERE "orderId" = $3 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
           `, shgStatusVal, nextGmuStatus, masterOrder.orderNumber);
 
           await tx.masterOrder.update({
@@ -944,7 +1066,7 @@ export class OrderService {
           // Create tracking
           await tx.pickupTracking.create({
             data: {
-              pickupOrderId,
+              pickupOrderId: pickupOrder.id,
               status: nextStatus,
               remarks: 'Handover to transporter completed. Package in transit to GMU Hub.',
             },
@@ -969,7 +1091,7 @@ export class OrderService {
           const nextStatus = isReturn ? 'RETURNED' : 'COMPLETED';
 
           await tx.pickupOrder.update({
-            where: { id: pickupOrderId },
+            where: { id: pickupOrder.id },
             data: {
               status: nextStatus,
               pickupTime: new Date(),
@@ -979,7 +1101,7 @@ export class OrderService {
           await tx.$executeRawUnsafe(`
             UPDATE public."Order"
             SET "pickupShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-            WHERE "orderId" = $3 AND phase = 'PICKUP';
+            WHERE "orderId" = $3 AND (phase = 'PICKUP' OR "returnType" = 'BUYER_RETURN');
           `, shgStatusVal, nextGmuStatus, masterOrder.orderNumber);
 
           await tx.masterOrder.update({
@@ -989,7 +1111,7 @@ export class OrderService {
 
           await tx.pickupTracking.create({
             data: {
-              pickupOrderId,
+              pickupOrderId: pickupOrder.id,
               status: pickupOrder.status,
               remarks: 'Package dropped to transporter by SHG. Awaiting transporter confirmation.',
             },
@@ -1147,8 +1269,19 @@ export class OrderService {
       throw new BadRequestException(`Cannot complete drop order in its current status (${dropOrder.status}).`);
     }
 
+    const returnOrderFirst = await this.prisma.order.findFirst({
+      where: { orderId: dropOrder.masterOrder.orderNumber, returnType: 'BUYER_RETURN' }
+    });
+    const isBuyerReturnFirst = !!returnOrderFirst;
+
     if (dropOrder.status !== 'DELIVERED') {
-      const expectedBarcode = dropOrder.handoverCode;
+      let expectedBarcode = dropOrder.handoverCode;
+      if (isBuyerReturnFirst) {
+        const gmuOrder = await this.prisma.$queryRawUnsafe(`
+          SELECT barcode FROM public."Order" WHERE "orderId" = $1 LIMIT 1;
+        `, dropOrder.masterOrder.orderNumber) as any[];
+        expectedBarcode = gmuOrder?.[0]?.barcode || expectedBarcode;
+      }
       if (expectedBarcode && (!code || code !== expectedBarcode)) {
         throw new BadRequestException(`Barcode scan verification failed. Expected ${expectedBarcode}, received ${code || 'none'}.`);
       }
@@ -1164,7 +1297,9 @@ export class OrderService {
       ) VALUES ($1, $2, 'Drop', 'SHG Location', $3, 'SHG', 'SUCCESS');
     `, masterOrder.id.toString(), code, shgId);
 
-    return this.prisma.$transaction(async (tx: any) => {
+    let returnOrderUuid: string | null = null;
+
+    const result = await this.prisma.$transaction(async (tx: any) => {
       const nextStatus = dropOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'PICKED_UP';
       const updated = await tx.dropOrder.update({
         where: { id: dropOrderId },
@@ -1179,33 +1314,226 @@ export class OrderService {
         },
       });
 
-      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
-      const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
-      const hasDropRow = await tx.order.count({
-        where: { orderId: orderNumber, phase: 'DROP' }
+      // Check if this is a buyer return
+      const returnOrder = await tx.order.findFirst({
+        where: { orderId: orderNumber, returnType: 'BUYER_RETURN' }
       });
-      const targetPhase = hasDropRow > 0 ? 'DROP' : 'PICKUP';
+      const isBuyerReturn = !!returnOrder;
 
-      await tx.order.updateMany({
-        where: {
-          orderId: orderNumber,
-          phase: targetPhase,
-        },
-        data: {
-          dropShgStatus,
-          mainStatus: nextGmuStatus,
-          updatedAt: new Date(),
-        },
-      });
+      if (isBuyerReturn) {
+        const nextGmuStatus = 'RETURN_TRANSPORTER_REQUESTED';
+        
+        await tx.order.updateMany({
+          where: {
+            orderId: orderNumber,
+            returnType: 'BUYER_RETURN',
+          },
+          data: {
+            pickupShgStatus: 'RETURN_PICKED_BY_SHG',
+            mainStatus: nextGmuStatus,
+            updatedAt: new Date(),
+          },
+        });
 
-      await tx.masterOrder.update({
-        where: { id: dropOrder.masterOrderId },
-        data: { status: nextGmuStatus },
-      });
+        await tx.masterOrder.update({
+          where: { id: dropOrder.masterOrderId },
+          data: { status: nextGmuStatus },
+        });
+
+        if (returnOrder) {
+          returnOrderUuid = returnOrder.id;
+        }
+
+        // Get buyer details
+        const rawBuyer = await tx.$queryRawUnsafe(`
+          SELECT village, pincode, taluka, district FROM public.buyers WHERE id = $1 LIMIT 1;
+        `, dropOrder.buyerId) as any[];
+        const buyerVillage = rawBuyer?.[0]?.village || '';
+        const buyerPincode = rawBuyer?.[0]?.pincode || '';
+        const buyerTaluka = rawBuyer?.[0]?.taluka || '';
+        const buyerDistrict = rawBuyer?.[0]?.district || '';
+
+        const approvedTransportersRaw = await tx.$queryRawUnsafe(`
+          SELECT 
+            u.id as "userId",
+            rd."operatingArea",
+            rd."pickupLocations" as "routePincodes",
+            mv."assignedVillages" as "milkVanVillages"
+          FROM public."User" u
+          LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+          LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+          WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+        `) as any[];
+
+        const parseJsonArray = (val: any) => {
+          if (Array.isArray(val)) return val;
+          if (typeof val === 'string') {
+            try { return JSON.parse(val); } catch(e) {}
+          }
+          return [];
+        };
+
+        const approvedTransporters = approvedTransportersRaw.map(t => {
+          const mvVillages = parseJsonArray(t.milkVanVillages);
+          const areaVillages = t.operatingArea 
+            ? t.operatingArea.split(',').map((s: string) => s.trim()) 
+            : [];
+          const assignedVillages = mvVillages.length > 0 ? mvVillages : areaVillages;
+          const assignedPincodes = parseJsonArray(t.routePincodes);
+
+          return {
+            id: String(t.userId),
+            userId: t.userId,
+            assignedVillages,
+            assignedPincodes,
+            operatingArea: t.operatingArea
+          };
+        });
+
+        const p = buyerPincode?.toLowerCase();
+        const v = buyerVillage?.toLowerCase();
+        const tal = buyerTaluka?.toLowerCase();
+        const dist = buyerDistrict?.toLowerCase();
+
+        const getTransporterLocations = (tr: any) => {
+          const areas = tr.operatingArea
+            ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+            : [];
+          const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+          const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+          return { areas, villages, pincodes };
+        };
+
+        // Priority 1: Pincode
+        let matchingTransporters = approvedTransporters.filter(tr => {
+          const { areas, pincodes } = getTransporterLocations(tr);
+          return p && (pincodes.includes(p) || areas.includes(p));
+        });
+
+        // Priority 2: Village
+        if (matchingTransporters.length === 0 && v) {
+          matchingTransporters = approvedTransporters.filter(tr => {
+            const { areas, villages } = getTransporterLocations(tr);
+            return villages.includes(v) || areas.includes(v);
+          });
+        }
+
+        // Priority 3: Taluka
+        if (matchingTransporters.length === 0 && tal) {
+          matchingTransporters = approvedTransporters.filter(tr => {
+            const { areas } = getTransporterLocations(tr);
+            return areas.includes(tal);
+          });
+        }
+
+        // Priority 4: District
+        if (matchingTransporters.length === 0 && dist) {
+          matchingTransporters = approvedTransporters.filter(tr => {
+            const { areas } = getTransporterLocations(tr);
+            return areas.includes(dist);
+          });
+        }
+
+        if (matchingTransporters.length > 0 && returnOrder) {
+          const returnOrderUuid = returnOrder.id;
+
+          // Clear any old transporter assignments for this return order
+          await tx.$executeRawUnsafe(`
+            DELETE FROM public."OrderAssignment" WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING';
+          `, returnOrderUuid);
+
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          for (const tr of matchingTransporters) {
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+              VALUES ($1, $2, $3, 'TRANSPORTER', 'PICKUP', 'PENDING', NOW(), NOW());
+            `, uuidv4(), returnOrderUuid, tr.id);
+          }
+
+          // Create the pickup_orders record so Transporter backend queries match it!
+          const pickupOrderNumber = `RET-PKP-${masterOrder.orderNumber}`;
+          const originalPickup = await tx.pickupOrder.findFirst({
+            where: { masterOrderId: masterOrder.id }
+          });
+          const sellerId = originalPickup ? originalPickup.sellerId : 1;
+
+          // Clean any existing RET-PKP pickup order just in case
+          const existingRetPickup = await tx.pickupOrder.findFirst({
+            where: { pickupOrderNumber }
+          });
+          if (existingRetPickup) {
+            await tx.pickupOrderItem.deleteMany({ where: { pickupOrderId: existingRetPickup.id } });
+            await tx.pickupTracking.deleteMany({ where: { pickupOrderId: existingRetPickup.id } });
+            await tx.pickupOrder.delete({ where: { id: existingRetPickup.id } });
+          }
+
+          const insertPo = await tx.$queryRawUnsafe(`
+            INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
+            VALUES ($1, $2, $3, 'RETURN_PENDING', NOW())
+            RETURNING id;
+          `, pickupOrderNumber, masterOrder.id, sellerId) as any[];
+          const returnPickupOrderId = insertPo[0].id;
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
+
+          // Create pickup order items
+          const masterItems = await tx.masterOrderItem.findMany({
+            where: { masterOrderId: masterOrder.id }
+          });
+          for (const mItem of masterItems) {
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity, verification_status)
+              VALUES ($1, $2, $3, 'PENDING');
+            `, returnPickupOrderId, mItem.productId, mItem.quantity);
+          }
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
+
+          // Create pickup tracking
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
+            VALUES ($1, 'RETURN_PENDING', 'Return pickup initiated from SHG', NOW());
+          `, returnPickupOrderId);
+          await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
+
+          // Update order return statuses
+          await tx.order.updateMany({
+            where: {
+              orderId: orderNumber,
+              returnType: 'BUYER_RETURN',
+            },
+            data: {
+              pickupTransporterStatus: 'PENDING',
+            },
+          });
+        }
+      } else {
+        const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
+        const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
+        const hasDropRow = await tx.order.count({
+          where: { orderId: orderNumber, phase: 'DROP' }
+        });
+        const targetPhase = hasDropRow > 0 ? 'DROP' : 'PICKUP';
+
+        await tx.order.updateMany({
+          where: {
+            orderId: orderNumber,
+            phase: targetPhase,
+          },
+          data: {
+            dropShgStatus,
+            mainStatus: nextGmuStatus,
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.masterOrder.update({
+          where: { id: dropOrder.masterOrderId },
+          data: { status: nextGmuStatus },
+        });
+      }
 
       const rawGmuOrder = await tx.$queryRawUnsafe(`
         SELECT id FROM public."Order"
-        WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+        WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) ORDER BY (CASE WHEN "returnType" = 'BUYER_RETURN' THEN 1 ELSE 2 END) ASC, "createdAt" DESC LIMIT 1;
       `, orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1219,6 +1547,22 @@ export class OrderService {
 
       return updated;
     });
+
+    if (returnOrderUuid) {
+      try {
+        await axios.post(`http://localhost:3001/orders/${returnOrderUuid}/buyer-return/broadcast-transporter`, {}, {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-bypass-token': 'GMU_INTERNAL_BYPASS'
+          }
+        });
+        console.log(`[SHG Backend] Successfully triggered transporter return broadcast for ${returnOrderUuid}`);
+      } catch (error: any) {
+        console.error(`[SHG Backend] Failed to trigger transporter return broadcast for ${returnOrderUuid}:`, error.message);
+      }
+    }
+
+    return result;
   }
 
 
