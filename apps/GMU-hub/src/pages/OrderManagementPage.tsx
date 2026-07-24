@@ -6,32 +6,32 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import type { PickupOrder, DropOrder, ReturnOrder } from '../context/AppContext';
-import { 
-  Eye, 
-  ShieldAlert, 
-  ClipboardCheck, 
-  CheckCircle2, 
-  Copy, 
+import {
+  Eye,
+  ShieldAlert,
+  ClipboardCheck,
+  CheckCircle2,
+  Copy,
   Download,
-  X, 
-  FileText, 
-  MoreVertical, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  Truck, 
-  Clock, 
-  Package, 
-  Layers, 
-  QrCode, 
-  Plus, 
-  ChevronDown, 
-  ChevronUp, 
+  X,
+  FileText,
+  MoreVertical,
+  Phone,
+  MapPin,
+  Calendar,
+  Truck,
+  Clock,
+  Package,
+  Layers,
+  QrCode,
+  Plus,
+  ChevronDown,
+  ChevronUp,
   RefreshCw,
   Store,
   Users,
   Home,
-  User 
+  User
 } from 'lucide-react';
 import { api } from '../utils/api';
 
@@ -49,10 +49,10 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
 const getUpdatedTimeAgo = (order: any) => {
   const updatedTime = order.rawUpdatedAt || order.updatedAt;
   if (!updatedTime) return 'Updated 1 min ago';
-  
+
   const diffMs = Date.now() - new Date(updatedTime).getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  
+
   if (diffMins <= 1) {
     return 'Updated 1 min ago';
   }
@@ -109,13 +109,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     mapOrder,
   } = useAppContext();
 
-  // Top level sections: new | in_transit | completed
-  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
+  // Top level sections: new | in_transit | completed | rejected
+  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'rejected'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
 
   useEffect(() => {
     const syncActiveTab = () => {
       const val = localStorage.getItem('gmu_active_tab');
-      if (val && ['new', 'in_transit', 'completed'].includes(val)) {
+      if (val && ['new', 'in_transit', 'completed', 'rejected'].includes(val)) {
         setActiveTopTab(val as any);
       }
     };
@@ -127,7 +127,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   }, []);
 
-  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed') => {
+  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'rejected') => {
     localStorage.setItem('gmu_active_tab', tab);
     setActiveTopTab(tab);
   };
@@ -146,6 +146,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [pincodeFilter, setPincodeFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
+  const [transitStatusFilter, setTransitStatusFilter] = useState('all');
 
   // Pagination for transit view
   const [transitPage, setTransitPage] = useState(1);
@@ -203,7 +204,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setTimeout(async () => {
       try {
         await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
-        setIntakeParcels(prev => 
+        setIntakeParcels(prev =>
           prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'HUB_RECEIVED' } : p)
         );
       } catch (err: any) {
@@ -393,7 +394,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setSellerState('');
     setSellerPincode('');
     setSellerVillages([]);
-    
+
     setBuyerName('');
     setBuyerMobile('');
     setBuyerAddress('');
@@ -403,12 +404,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setBuyerState('');
     setBuyerPincode('');
     setBuyerVillages([]);
-    
+
     setFormOrderId('');
     setOrderDate(new Date().toISOString().split('T')[0]);
     setExpectedDeliveryDate(new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0]);
     setPriority('Medium');
-    
+
     setProducts([{ name: '', category: 'FOOD', quantity: 1, unit: 'Packet', weight: 0.5, price: 100 }]);
     setValidationError('');
     setIsCreatingOrder(false);
@@ -503,7 +504,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       } else {
         await api.orders.create(payload);
       }
-      
+
       loadData();
       setIsAddOrderOpen(false);
     } catch (err: any) {
@@ -643,7 +644,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       pickupTransporterStatus: pAssigned?.transporterStatus || pWh?.transporterStatus || pRej?.transporterStatus || pRes?.transporterStatus,
       dropShgStatus: dNew?.shgStatus || dAssigned?.shgStatus || dRej?.shgStatus || dRes?.shgStatus || dComp?.shgStatus,
       dropTransporterStatus: dAssigned?.transporterStatus || dRej?.transporterStatus || dRes?.transporterStatus || dComp?.transporterStatus,
-      
+
       pickupShgDetails,
       dropShgDetails,
       returnShgDetails,
@@ -655,28 +656,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   };
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isManualRefresh = false) => {
+    const hasData = (activeTopTab === 'new' && (pickupNewOrders.length > 0 || dropNewOrders.length > 0)) ||
+                    (activeTopTab === 'in_transit' && (pickupAssignedOrders.length > 0 || pickupWarehouseOrders.length > 0 || dropAssignedOrders.length > 0 || returnDropNewOrders.length > 0)) ||
+                    (activeTopTab === 'completed' && (dropCompletedOrders.length > 0 || returnPickupCompletedOrders.length > 0)) ||
+                    (activeTopTab === 'rejected' && (pickupRejectedOrders.length > 0 || dropRejectedOrders.length > 0));
+
+    if (!hasData || isManualRefresh) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;
       const df = dateFilter || undefined;
       await loadCounts();
 
-      await Promise.all([
-        loadPickupNew(sf, df),
-        loadPickupAssigned(sf, df),
-        loadPickupWarehouse(sf, df),
-        loadPickupRejected(sf, df),
-        loadPickupRescheduled(sf, df),
-        loadDropNew(sf, df),
-        loadDropAssigned(sf, df),
-        loadDropRejected(sf, df),
-        loadDropRescheduled(sf, df),
-        loadDropCompleted(sf, df),
-        loadReturnsTransporter(sf, df),
-        loadReturnsBuyer(sf, df),
-      ]);
+      if (activeTopTab === 'new') {
+        await Promise.all([
+          loadPickupNew(sf, df),
+          loadDropNew(sf, df),
+        ]);
+      } else if (activeTopTab === 'in_transit') {
+        await Promise.all([
+          loadPickupAssigned(sf, df),
+          loadPickupWarehouse(sf, df),
+          loadPickupRescheduled(sf, df),
+          loadDropAssigned(sf, df),
+          loadDropRescheduled(sf, df),
+          loadReturnsTransporter(sf, df),
+        ]);
+      } else if (activeTopTab === 'completed') {
+        await Promise.all([
+          loadDropCompleted(sf, df),
+          loadReturnsBuyer(sf, df),
+        ]);
+      } else if (activeTopTab === 'rejected') {
+        await Promise.all([
+          loadPickupRejected(sf, df),
+          loadDropRejected(sf, df),
+        ]);
+      }
     } catch (e: any) {
       setErrorMsg(e.message || 'Failed to load data from server.');
     } finally {
@@ -687,6 +706,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   useEffect(() => {
     loadData();
   }, [
+    activeTopTab,
     statusFilter,
     dateFilter
   ]);
@@ -702,51 +722,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setTransitPage(1);
   }, [activeTopTab]);
 
-  // Poll in background every 5 seconds
-  useEffect(() => {
-    const timer = setInterval(async () => {
-      try {
-        const sf = statusFilter === 'all' ? undefined : statusFilter;
-        const df = dateFilter || undefined;
-        await loadCounts();
-        await Promise.all([
-          loadPickupNew(sf, df),
-          loadPickupAssigned(sf, df),
-          loadPickupWarehouse(sf, df),
-          loadPickupRejected(sf, df),
-          loadPickupRescheduled(sf, df),
-          loadDropNew(sf, df),
-          loadDropAssigned(sf, df),
-          loadDropRejected(sf, df),
-          loadDropRescheduled(sf, df),
-          loadDropCompleted(sf, df),
-          loadReturnsTransporter(sf, df),
-          loadReturnsBuyer(sf, df),
-        ]);
-      } catch (err) {
-        console.warn("Background poll failed to refresh lists:", err);
-      }
 
-      if (isViewModalOpen && selectedOrderDetails) {
-        try {
-          const fresh = await api.orders.getDetails(selectedOrderDetails.uuid || selectedOrderDetails.id);
-          if (fresh) {
-            const mapped = mapOrder(fresh, 'pickup');
-            setSelectedOrderDetails(mapped);
-          }
-        } catch (err) {
-          console.warn("Background poll failed to refresh viewed order:", err);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [
-    statusFilter,
-    dateFilter,
-    isViewModalOpen,
-    selectedOrderDetails
-  ]);
 
   // Handle View Action
   const handleViewOrder = async (order: any) => {
@@ -808,12 +784,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Handle QR Codes Action
   const handleParcelQrClick = async (orderId: string) => {
-    const order = pickupWarehouseOrders.find((o) => o.id === orderId) || 
-                  pickupNewOrders.find((o) => o.id === orderId) || 
-                  pickupAssignedOrders.find((o) => o.id === orderId) || 
-                  dropNewOrders.find((o) => o.id === orderId) || 
-                  dropAssignedOrders.find((o) => o.id === orderId) || 
-                  dropCompletedOrders.find((o) => o.id === orderId);
+    const order = pickupWarehouseOrders.find((o) => o.id === orderId) ||
+      pickupNewOrders.find((o) => o.id === orderId) ||
+      pickupAssignedOrders.find((o) => o.id === orderId) ||
+      dropNewOrders.find((o) => o.id === orderId) ||
+      dropAssignedOrders.find((o) => o.id === orderId) ||
+      dropCompletedOrders.find((o) => o.id === orderId);
     setParcelQrOrder(order || null);
     setParcelQrOrderId(orderId);
     setIsParcelQrModalOpen(true);
@@ -971,7 +947,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const orderDateStr = order.orderDate || (order.created_at ? order.created_at.split(' ')[0] : '');
+        const rawDate = order.orderDate || order.created_at || '';
+        const orderDateStr = rawDate ? rawDate.split(' ')[0].split('T')[0] : '';
 
         if (dateFilter === 'today') {
           if (orderDateStr !== todayStr) return false;
@@ -986,68 +963,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     });
   };
 
-  // Section Partition
-  const newOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter(
-      (o: any) =>
-        ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
-        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'))
-    )
-  );
-
-  const inTransitOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => {
-      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
-        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
-      if (isNew) return false;
-
-      const isCompleted = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus);
-      if (isCompleted) return false;
-
-      return true;
-    })
-  );
-
-  const completedOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) =>
-      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
-    )
-  );
-
-  const delayedCount = allMergedOrders.filter((o: any) => 
-    o.rescheduleType || 
-    ['delayed', 'DELAYED'].includes(o.pickupShgStatus) || 
-    ['delayed', 'DELAYED'].includes(o.pickupTransporterStatus) || 
-    ['delayed', 'DELAYED'].includes(o.dropTransporterStatus) || 
-    ['delayed', 'DELAYED'].includes(o.dropShgStatus)
-  ).length;
-
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayOrdersCount = allMergedOrders.filter((o: any) => {
-    const oDate = o.orderDate || (o.created_at ? o.created_at.split(' ')[0] : '');
-    return oDate && oDate.includes(todayStr);
-  }).length;
-
-  const calculateProgressWidth = (nodes: any[]) => {
-    const completedIndex = nodes.reduce((max: number, node: any, idx: number) => {
-      if (node.state === 'completed') return idx;
-      return max;
-    }, -1);
-    
-    if (completedIndex === -1) return '0%';
-    if (completedIndex === nodes.length - 1) return '100%';
-    
-    const basePercent = (completedIndex / (nodes.length - 1)) * 100;
-    const activeNext = nodes[completedIndex + 1]?.state === 'active';
-    const extra = activeNext ? (0.5 / (nodes.length - 1)) * 100 : 0;
-    return `${Math.min(basePercent + extra, 100)}%`;
-  };
-
   // Graphical tracking nodes calculator
   const getTimelineNodes = (order: any) => {
     const getLogsForStage = (stageKeywords: string[]) => {
       if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
-      const matching = order.tracking.filter((t: any) => 
+      const matching = order.tracking.filter((t: any) =>
         stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw))
       );
       if (matching.length === 0) return 'No scan events logged yet for this stage.';
@@ -1112,84 +1032,180 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     }
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
-      { id: 'seller', label: 'Seller', state: sellerState, details: {
-        'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
-        'Role': 'Seller / Farmer',
-        'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
-        'Address': order.sellerAddress || order.seller?.address || 'N/A',
-        'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Order Placed Date': order.orderDate || 'N/A',
-        'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
-        'Status': 'PLACED',
-        'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
-      } },
-      { id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: (order.pickupShgDetails) ? {
-        'Person Name': order.pickupShgDetails.name || 'N/A',
-        'Role': 'Pickup Self Help Group',
-        'Mobile': order.pickupShgDetails.mobile || 'N/A',
-        'Address': order.pickupShgDetails.address || 'N/A',
-        'Order ID': order.id,
-        'Status': order.pickupShgStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
-      } : null },
-      { id: 'pickup_transporter', label: 'Pickup Transporter', state: pickupTransporterState, details: (order.pickupTransporterDetails) ? {
-        'Person Name': order.pickupTransporterDetails.name || 'N/A',
-        'Role': 'Pickup Transporter',
-        'Mobile': order.pickupTransporterDetails.mobile || 'N/A',
-        'Address': order.pickupTransporterDetails.address || 'N/A',
-        'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
-        'Order ID': order.id,
-        'Status': order.pickupTransporterStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
-      } : null },
-      { id: 'gmu_hub', label: 'GMU Hub', state: gmuHubState, details: {
-        'Warehouse': 'GMU Hub Central Warehouse',
-        'Order ID': order.id,
-        'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Intake Time': order.warehouseReceivedDate || 'N/A',
-        'Stored Time': order.storedDate || 'N/A',
-        'Status': isHubCompleted ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
-        'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
-      } },
-      { id: 'drop_transporter', label: 'Drop Transporter', state: dropTransporterState, details: (order.dropTransporterDetails) ? {
-        'Person Name': order.dropTransporterDetails.name || 'N/A',
-        'Role': 'Drop Transporter',
-        'Mobile': order.dropTransporterDetails.mobile || 'N/A',
-        'Address': order.dropTransporterDetails.address || 'N/A',
-        'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
-        'Order ID': order.id,
-        'Status': order.dropTransporterStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
-      } : null },
-      { id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: (order.dropShgDetails) ? {
-        'Person Name': order.dropShgDetails.name || 'N/A',
-        'Role': 'Drop Self Help Group',
-        'Mobile': order.dropShgDetails.mobile || 'N/A',
-        'Address': order.dropShgDetails.address || 'N/A',
-        'Order ID': order.id,
-        'Status': order.dropShgStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
-      } : null },
-      { id: 'buyer', label: 'Buyer', state: buyerState, details: {
-        'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
-        'Role': 'Consignee / Buyer',
-        'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
-        'Address': order.buyerAddress || order.buyer?.address || 'N/A',
-        'Order ID': order.id,
-        'Delivery Completed Date': order.deliveredAt || 'N/A',
-        'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
-        'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
-      } }
+      {
+        id: 'seller', label: 'Seller', state: sellerState, details: {
+          'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
+          'Role': 'Seller / Farmer',
+          'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
+          'Address': order.sellerAddress || order.seller?.address || 'N/A',
+          'Order ID': order.id,
+          'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+          'Order Placed Date': order.orderDate || 'N/A',
+          'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
+          'Status': 'PLACED',
+          'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
+        }
+      },
+      {
+        id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: (order.pickupShgDetails) ? {
+          'Person Name': order.pickupShgDetails.name || 'N/A',
+          'Role': 'Pickup Self Help Group',
+          'Mobile': order.pickupShgDetails.mobile || 'N/A',
+          'Address': order.pickupShgDetails.address || 'N/A',
+          'Order ID': order.id,
+          'Status': order.pickupShgStatus || 'PENDING',
+          'Full Scan History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
+        } : null
+      },
+      {
+        id: 'pickup_transporter', label: 'Pickup Transporter', state: pickupTransporterState, details: (order.pickupTransporterDetails) ? {
+          'Person Name': order.pickupTransporterDetails.name || 'N/A',
+          'Role': 'Pickup Transporter',
+          'Mobile': order.pickupTransporterDetails.mobile || 'N/A',
+          'Address': order.pickupTransporterDetails.address || 'N/A',
+          'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
+          'Order ID': order.id,
+          'Status': order.pickupTransporterStatus || 'PENDING',
+          'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
+        } : null
+      },
+      {
+        id: 'gmu_hub', label: 'GMU Hub', state: gmuHubState, details: {
+          'Warehouse': 'GMU Hub Central Warehouse',
+          'Order ID': order.id,
+          'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+          'Intake Time': order.warehouseReceivedDate || 'N/A',
+          'Stored Time': order.storedDate || 'N/A',
+          'Status': isHubCompleted ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
+          'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
+        }
+      },
+      {
+        id: 'drop_transporter', label: 'Drop Transporter', state: dropTransporterState, details: (order.dropTransporterDetails) ? {
+          'Person Name': order.dropTransporterDetails.name || 'N/A',
+          'Role': 'Drop Transporter',
+          'Mobile': order.dropTransporterDetails.mobile || 'N/A',
+          'Address': order.dropTransporterDetails.address || 'N/A',
+          'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
+          'Order ID': order.id,
+          'Status': order.dropTransporterStatus || 'PENDING',
+          'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
+        } : null
+      },
+      {
+        id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: (order.dropShgDetails) ? {
+          'Person Name': order.dropShgDetails.name || 'N/A',
+          'Role': 'Drop Self Help Group',
+          'Mobile': order.dropShgDetails.mobile || 'N/A',
+          'Address': order.dropShgDetails.address || 'N/A',
+          'Order ID': order.id,
+          'Status': order.dropShgStatus || 'PENDING',
+          'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
+        } : null
+      },
+      {
+        id: 'buyer', label: 'Buyer', state: buyerState, details: {
+          'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
+          'Role': 'Consignee / Buyer',
+          'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
+          'Address': order.buyerAddress || order.buyer?.address || 'N/A',
+          'Order ID': order.id,
+          'Delivery Completed Date': order.deliveredAt || 'N/A',
+          'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
+          'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
+        }
+      }
     ];
 
     return nodes;
   };
 
+  // Section Partition
+  const isOrderRejected = (o: any) => {
+    return ['REJECTED', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'DECLINED'].includes(o.mainStatus) ||
+      o.pickupShgStatus?.toLowerCase() === 'rejected' ||
+      o.pickupTransporterStatus?.toLowerCase() === 'rejected' ||
+      o.dropShgStatus?.toLowerCase() === 'rejected' ||
+      o.dropTransporterStatus?.toLowerCase() === 'rejected' ||
+      o.assignments?.some((a: any) => a.status?.toLowerCase() === 'rejected');
+  };
+
+  const newOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter(
+      (o: any) =>
+        !isOrderRejected(o) &&
+        (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+          (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
+    )
+  );
+
+  const inTransitOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => {
+      if (isOrderRejected(o)) return false;
+      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
+      if (isNew) return false;
+
+      const isCompleted = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus);
+      if (isCompleted) return false;
+
+      // Stage filtering for Transit tab
+      if (transitStatusFilter !== 'all') {
+        const nodes = getTimelineNodes(o);
+        const activeNode = nodes.find(n => n.state === 'active');
+        if (!activeNode || activeNode.id !== transitStatusFilter) return false;
+      }
+
+      return true;
+    })
+  );
+
+  const completedOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) =>
+      !isOrderRejected(o) &&
+      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
+    )
+  );
+
+  const rejectedOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => isOrderRejected(o))
+  );
+
+  const delayedCount = allMergedOrders.filter((o: any) =>
+    o.rescheduleType ||
+    ['delayed', 'DELAYED'].includes(o.pickupShgStatus) ||
+    ['delayed', 'DELAYED'].includes(o.pickupTransporterStatus) ||
+    ['delayed', 'DELAYED'].includes(o.dropTransporterStatus) ||
+    ['delayed', 'DELAYED'].includes(o.dropShgStatus)
+  ).length;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayOrdersCount = allMergedOrders.filter((o: any) => {
+    const oDate = o.orderDate || (o.created_at ? o.created_at.split(' ')[0] : '');
+    return oDate && oDate.includes(todayStr);
+  }).length;
+
+  const calculateProgressWidth = (nodes: any[]) => {
+    const completedIndex = nodes.reduce((max: number, node: any, idx: number) => {
+      if (node.state === 'completed') return idx;
+      return max;
+    }, -1);
+
+    if (completedIndex === -1) return '0%';
+    if (completedIndex === nodes.length - 1) return '100%';
+
+    const basePercent = (completedIndex / (nodes.length - 1)) * 100;
+    const activeNext = nodes[completedIndex + 1]?.state === 'active';
+    const extra = activeNext ? (0.5 / (nodes.length - 1)) * 100 : 0;
+    return `${Math.min(basePercent + extra, 100)}%`;
+  };
+
+
+
   const getNodeTimeAndDate = (order: any, nodeLabel: string) => {
     const lbl = nodeLabel.toLowerCase();
     let timestamp: string | null = null;
-    
+
     if (order.tracking && order.tracking.length > 0) {
       let statusKeywords: string[] = [];
       if (lbl === 'seller') {
@@ -1208,14 +1224,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         statusKeywords = ['DELIVERED', 'COMPLETED'];
       }
 
-      const event = order.tracking.find((t: any) => 
+      const event = order.tracking.find((t: any) =>
         statusKeywords.some(kw => t.status === kw || t.status?.toUpperCase().includes(kw))
       );
       if (event) {
         timestamp = event.updatedAt || event.scanTime || event.createdAt;
       }
     }
-    
+
     if (!timestamp) {
       if (lbl === 'seller') {
         timestamp = order.createdAt || order.orderDate;
@@ -1233,7 +1249,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         timestamp = order.deliveredAt || order.completedAt;
       }
     }
-    
+
     if (timestamp) {
       const dt = new Date(timestamp);
       if (!isNaN(dt.getTime())) {
@@ -1262,10 +1278,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
     { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
     { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Start Date', accessor: (row: any) => row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : '-') },
+    { header: 'Start Date', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
     { header: 'Expected Delivery Date', accessor: (row: any) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
     { header: 'SHG Status', accessor: (row: any) => <StatusBadge status={row.pickupShgStatus || 'pending'} /> },
-    { header: 'Action', accessor: (row: any) => (
+    {
+      header: 'Action', accessor: (row: any) => (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1276,36 +1293,41 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           <Eye className="h-3.5 w-3.5" />
           <span>View</span>
         </button>
-      ) 
+      )
     },
   ];
 
   const completedColumns = [
     { header: 'Order ID', accessor: 'id' as keyof DropOrder },
-    { header: 'Status', accessor: (row: any) => (
-      <span className="bg-emerald-50 text-[#073318] border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
-        Completed
-      </span>
-    ) },
-    { header: 'QR Codes', accessor: (row: any) => (
-      <button 
-        onClick={(e) => {
-          e.stopPropagation();
-          handleParcelQrClick(row.id);
-        }}
-        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#073318] rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-      >
-        <QrCode className="h-2.5 w-2.5" />
-        <span>View QRs</span>
-      </button>
-    ) },
+    {
+      header: 'Status', accessor: (row: any) => (
+        <span className="bg-emerald-50 text-[#073318] border border-emerald-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
+          Completed
+        </span>
+      )
+    },
+    {
+      header: 'QR Codes', accessor: (row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleParcelQrClick(row.id);
+          }}
+          className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#073318] rounded-lg font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+        >
+          <QrCode className="h-2.5 w-2.5" />
+          <span>View QRs</span>
+        </button>
+      )
+    },
     { header: 'Buyer Name', accessor: 'buyerName' as keyof DropOrder },
     { header: 'Buyer Address', accessor: 'buyerAddress' as keyof DropOrder },
     { header: 'Completed Date', accessor: (row: any) => row.deliveredAt ? row.deliveredAt.split('T')[0] : (row.updated_at ? row.updated_at.split(' ')[0] : '-') },
     { header: 'Priority', accessor: (row: any) => <StatusBadge status={row.priority} /> },
     { header: 'Product Count', accessor: 'productCount' as keyof DropOrder },
     { header: 'Total Qty', accessor: 'totalQty' as keyof DropOrder },
-    { header: 'Action', accessor: (row: any) => (
+    {
+      header: 'Action', accessor: (row: any) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
@@ -1317,7 +1339,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             <Eye className="h-3 w-3" />
             <span>View</span>
           </button>
-          
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1351,7 +1373,40 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </button>
           )}
         </div>
-      ) 
+      )
+    },
+  ];
+
+  const rejectedColumns = [
+    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
+    {
+      header: 'Status', accessor: (row: any) => (
+        <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
+          {row.mainStatus || 'Rejected'}
+        </span>
+      )
+    },
+    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
+    { header: 'Seller Village/City', accessor: 'sellerVillage' as keyof PickupOrder },
+    { header: 'Buyer Name', accessor: 'buyerName' as keyof PickupOrder },
+    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof PickupOrder },
+    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
+    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
+    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
+    { header: 'Date Placed', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
+    {
+      header: 'Action', accessor: (row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewOrder(row);
+          }}
+          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span>View</span>
+        </button>
+      )
     },
   ];
 
@@ -1367,63 +1422,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </div>
           </div>
 
-          {/* Summary KPIs Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E8F5E9] text-[#2E7D32] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Package className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">New Orders</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{newOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Waiting to start</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E0F2F1] text-[#00695C] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Truck className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">In Transit</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{inTransitOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Active orders</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#E3F2FD] text-[#1565C0] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Completed</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{completedOrdersList.length}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">This month</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#FFF3E0] text-[#EF6C00] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Clock className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Delayed</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{delayedCount}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Need attention</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4 text-left flex-1">
-              <div className="p-3.5 rounded-2xl bg-[#F3E5F5] text-[#6A1B9A] text-xl font-bold flex items-center justify-center h-12 w-12 shrink-0">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Today's Orders</span>
-                <span className="text-2xl font-black text-[#073318] block leading-tight">{todayOrdersCount}</span>
-                <span className="text-[10px] text-slate-400 font-semibold block">Total orders</span>
-              </div>
-            </div>
-          </div>
 
           {/* Compact Filter Toolbar */}
           <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
@@ -1439,78 +1437,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               />
             </div>
 
-            {/* Date Select */}
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="">All Dates</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-            </select>
-
-            {/* Priority Select */}
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Priorities</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-
-            {/* Location Select */}
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Locations</option>
-              <option value="seller">At Seller</option>
-              <option value="shg">At SHG Partner</option>
-              <option value="transporter">In Transit</option>
-              <option value="gmu">At GMU Warehouse</option>
-              <option value="buyer">At Buyer</option>
-            </select>
-
-            {/* Village Select */}
-            <select
-              value={villageFilter}
-              onChange={(e) => setVillageFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Villages</option>
-              {uniqueVillages.map((v, i) => (
-                <option key={i} value={v}>{v}</option>
-              ))}
-            </select>
-
-            {/* Pincode Select */}
-            <select
-              value={pincodeFilter}
-              onChange={(e) => setPincodeFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <option value="all">All Pincodes</option>
-              {uniquePincodes.map((p, i) => (
-                <option key={i} value={p}>{p}</option>
-              ))}
-            </select>
-
-            {/* Divider */}
-            <div className="h-6 w-[1px] bg-slate-200 hidden lg:block" />
-
-            {/* Refresh & Add Manual Order Buttons */}
-            <button
-              onClick={loadData}
-              className="p-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-[#073318] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 text-xs font-bold"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
 
             <button
               onClick={handleOpenAddOrderModalPickup}
@@ -1523,15 +1449,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         </div>
 
         {/* Section Tabs Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-lg">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex bg-slate-100 border border-slate-200 rounded-2xl p-1 max-w-xl">
             <button
               onClick={() => handleTabChange('new')}
-              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTopTab === 'new'
-                  ? 'bg-[#073318] text-white shadow-md'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'new'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
             >
               <span>New Orders</span>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'new' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
@@ -1541,11 +1466,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
             <button
               onClick={() => handleTabChange('in_transit')}
-              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTopTab === 'in_transit'
-                  ? 'bg-[#073318] text-white shadow-md'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'in_transit'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
             >
               <span>In Transit</span>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'in_transit' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
@@ -1555,40 +1479,81 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
             <button
               onClick={() => handleTabChange('completed')}
-              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTopTab === 'completed'
-                  ? 'bg-[#073318] text-white shadow-md'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'completed'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
             >
               <span>Completed</span>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'completed' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
                 {completedOrdersList.length}
               </span>
             </button>
+
+            <button
+              onClick={() => handleTabChange('rejected')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'rejected'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <span>Rejected</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {rejectedOrdersList.length}
+              </span>
+            </button>
           </div>
 
-          {/* Sorting and Grid Toggle (Right Side) */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Sort by:</span>
-            <select className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer">
-              <option>Latest Updated</option>
-              <option>Priority (High to Low)</option>
-              <option>Date Placed</option>
-            </select>
+          {/* Shifted Filter Date & Refresh Component */}
+          <div className="flex items-center gap-3">
+            {activeTopTab === 'new' && (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+                <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Start Date:</span>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="bg-transparent border-0 text-xs focus:outline-none cursor-pointer font-extrabold text-slate-750"
+                />
+                {dateFilter && (
+                  <button
+                    onClick={() => setDateFilter('')}
+                    className="text-red-500 hover:text-red-750 font-extrabold text-xs ml-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
 
-            <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1">
-              <button className="p-1 hover:bg-white rounded-lg text-slate-600 shadow-xs cursor-pointer" title="List View">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-              <button className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer" title="Grid View">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h4v4H4V6zm10 0h4v4h-4V6zM4 16h4v4H4v-4zm10 0h4v4h-4v-4z" />
-                </svg>
-              </button>
-            </div>
+            {activeTopTab === 'in_transit' && (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-205/80 rounded-xl px-3 py-1.5 shadow-xs">
+                <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Stage:</span>
+                <select
+                  value={transitStatusFilter}
+                  onChange={(e) => {
+                    setTransitStatusFilter(e.target.value);
+                    setTransitPage(1);
+                  }}
+                  className="bg-transparent border-0 text-xs focus:outline-none cursor-pointer font-extrabold text-slate-750 pr-4"
+                >
+                  <option value="all">All Stages</option>
+                  <option value="pickup_shg">Pickup SHG</option>
+                  <option value="pickup_transporter">Pickup Transporter</option>
+                  <option value="gmu_hub">GMU Hub</option>
+                  <option value="drop_transporter">Drop Transporter</option>
+                  <option value="drop_shg">Drop SHG</option>
+                </select>
+              </div>
+            )}
+
+            <button
+              onClick={() => loadData(true)}
+              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
@@ -1607,7 +1572,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
               />
             )}
           </div>
@@ -1616,7 +1583,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* ---------------- SECTION 2: IN TRANSIT ORDERS ---------------- */}
         {activeTopTab === 'in_transit' && (
           <div className="space-y-6">
-            <style dangerouslySetInnerHTML={{__html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
               @keyframes activePulse {
                 0% {
                   box-shadow: 0 0 0 0 rgba(178, 213, 52, 0.7);
@@ -1657,72 +1625,44 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       const needsBarcode = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
                       return (
-                        <div 
-                          key={order.id} 
+                        <div
+                          key={order.id}
                           className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
                         >
                           {/* Decorative Left Border based on Priority */}
-                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${
-                            order.priority?.toLowerCase() === 'high' 
-                              ? 'bg-[#EF4444]' 
-                              : order.priority?.toLowerCase() === 'medium'
-                                ? 'bg-[#F59E0B]'
-                                : 'bg-[#10B981]'
-                          }`} />
-
-                          {/* Left Column (Metadata) */}
-                          <div className="w-full lg:w-[150px] shrink-0 space-y-2 pr-1">
-                            <div className="space-y-0.5">
-                              {order.priority && (
-                                <span className="text-[9px] font-extrabold uppercase bg-amber-50 text-amber-705 border border-amber-100 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-                                  ★ {order.priority}
-                                </span>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-md font-black text-slate-800 tracking-tight">{order.id}</h4>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(order.id);
-                                    alert(`Order ID ${order.id} copied to clipboard!`);
-                                  }}
-                                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-405 hover:text-slate-650 transition-colors cursor-pointer"
-                                  title="Copy Order ID"
-                                >
-                                  <Copy className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-
-                            </div>
-
-
-                          </div>
+                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
+                            ? 'bg-[#EF4444]'
+                            : order.priority?.toLowerCase() === 'medium'
+                              ? 'bg-[#F59E0B]'
+                              : 'bg-[#10B981]'
+                            }`} />
 
                           {/* Center Column (Visual Journey Stepper) */}
                           <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
                             <div className="min-w-[700px] relative flex items-center justify-between h-12">
-                              
+
                               {/* Horizontal Connecting Line Track */}
                               <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
-                              
+
                               {/* Segmented active/completed highlight line */}
                               <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
                                 {nodes.slice(0, -1).map((node, idx) => {
                                   const nextNode = nodes[idx + 1];
                                   let segmentBg = 'bg-slate-200'; // Pending
-                                  
+
                                   if (node.state === 'completed' && nextNode.state === 'completed') {
                                     segmentBg = 'bg-[#073318]'; // completed (sidebar green)
                                   } else if (
-                                    (node.state === 'completed' && nextNode.state === 'active') || 
+                                    (node.state === 'completed' && nextNode.state === 'active') ||
                                     node.state === 'active'
                                   ) {
                                     segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
                                   }
-                                  
+
                                   return (
-                                    <div 
-                                      key={idx} 
-                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`} 
+                                    <div
+                                      key={idx}
+                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
                                     />
                                   );
                                 })}
@@ -1735,7 +1675,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 let labelColor = 'text-slate-405';
                                 let ringClass = '';
                                 const isClickable = !!node.details;
-                                
+
                                 // Node Labels & Icons mapping
                                 const getIconForNode = (label: string) => {
                                   const lbl = label.toLowerCase();
@@ -1774,10 +1714,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 const dateDetails = getNodeTimeAndDate(order, node.label);
 
                                 return (
-                                  <div 
+                                  <div
                                     key={idx}
                                     onClick={() => isClickable && handleNodeClick(node.label, node.details)}
-                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
+                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
                                   >
                                     {/* Current Location floating badge above active node */}
                                     {node.state === 'active' && (
@@ -1819,53 +1759,68 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                             </div>
                           </div>
 
-                          {/* Right Column (Status pill & Actions) */}
-                          <div className="w-full lg:w-[180px] shrink-0 flex flex-col items-start lg:items-end justify-between gap-2 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-4 self-stretch">
-                            <div className="text-left lg:text-right space-y-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
-                                {order.mainStatus.replace(/[-_]/g, ' ')}
-                              </span>
-                              <span className="block text-[10px] text-slate-400 font-semibold">
-                                • {getUpdatedTimeAgo(order)}
-                              </span>
-                            </div>
+                           {/* Right Column (Status, ID & Actions) */}
+                           <div className="w-full lg:w-[250px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-8 self-stretch py-1">
+                             {/* Top row: Status info badge and time ago (centered) */}
+                             <div className="flex flex-col items-center text-center space-y-0.5">
+                               <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
+                                 <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                                 {order.mainStatus.replace(/[-_]/g, ' ')}
+                               </span>
+                               <span className="block text-[10px] text-slate-400 font-semibold">
+                                 • {getUpdatedTimeAgo(order)}
+                               </span>
+                             </div>
 
-                             {/* View action button */}
-                             <div className="flex flex-row gap-2 justify-start lg:justify-end items-center">
-                               <button
-                                 onClick={() => handleParcelQrClick(order.id)}
-                                 title="Parcel QR Codes"
-                                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-[#073318] border border-emerald-200 rounded-xl font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs shrink-0"
-                               >
-                                 <QrCode className="h-4 w-4" />
-                               </button>
-
-                               {needsIntake && (
+                             {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
+                             <div className="w-full flex flex-row items-center justify-between gap-3">
+                               {/* Order ID display styled as "ID - [id number]" */}
+                               <div className="flex items-center gap-1">
+                                 <span className="text-sm font-black text-slate-800 tracking-tight whitespace-nowrap">
+                                   {(() => {
+                                     const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
+                                     return `ID - ${match ? match[1] : order.id}`;
+                                   })()}
+                                 </span>
                                  <button
                                    onClick={() => {
-                                     const intakeKind = order.returnType 
-                                       ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
-                                       : 'pickup';
-                                     handleIntakeClick(order, intakeKind);
+                                     navigator.clipboard.writeText(order.id);
+                                     alert(`Order ID ${order.id} copied to clipboard!`);
                                    }}
-                                   title="Scan to Intake"
-                                   className="px-3.5 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-sm text-xs shrink-0 active-node-glow"
+                                   className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+                                   title="Copy Order ID"
                                  >
-                                   <QrCode className="h-4 w-4 text-[#B2D534]" />
-                                   <span>Scan</span>
+                                   <Copy className="h-3 w-3" />
                                  </button>
-                               )}
+                               </div>
 
-                               <button
-                                 onClick={() => handleViewOrder(order)}
-                                 title="View Details"
-                                 className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
-                               >
-                                 <Eye className="h-4 w-4 text-[#B2D534]" />
-                               </button>
+                               <div className="flex flex-row gap-2 items-center">
+                                 {needsIntake && (
+                                   <button
+                                     onClick={() => {
+                                       const intakeKind = order.returnType
+                                         ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                                         : 'pickup';
+                                       handleIntakeClick(order, intakeKind);
+                                     }}
+                                     title="Scan to Intake"
+                                     className="px-3 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
+                                   >
+                                     <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                                     <span>Scan</span>
+                                   </button>
+                                 )}
+
+                                 <button
+                                   onClick={() => handleViewOrder(order)}
+                                   title="View Details"
+                                   className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
+                                 >
+                                   <Eye className="h-4 w-4 text-[#B2D534]" />
+                                 </button>
+                               </div>
                              </div>
-                          </div>
+                           </div>
 
                           {/* Expanded Details Section */}
                           {isExpanded && (
@@ -1921,10 +1876,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                     order.tracking.map((t: any, idx: number) => {
                                       const timeStr = t.updatedAt
                                         ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: true
-                                          })
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          hour12: true
+                                        })
                                         : '08:30 AM';
                                       return (
                                         <div key={idx} className="flex gap-3 text-xs">
@@ -1992,7 +1947,32 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ---------------- SECTION 4: REJECTED ORDERS ---------------- */}
+        {activeTopTab === 'rejected' && (
+          <div className="space-y-4">
+            {rejectedOrdersList.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                <span className="text-4xl block">✕</span>
+                <p className="text-sm">No rejected orders found matching the filter criteria.</p>
+              </div>
+            ) : (
+              <DataTable
+                columns={rejectedColumns}
+                data={rejectedOrdersList}
+                selectedDate={dateFilter}
+                onDateChange={setDateFilter}
+                onRowDoubleClick={handleViewOrder}
+                onRefresh={() => loadData(true)}
+                hideDateAndRefresh={true}
+                hideSearchAndFilters={true}
               />
             )}
           </div>
@@ -2001,7 +1981,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* --- DYNAMIC SIDE DRAWER FOR TIMELINE NODE CLICKS --- */}
         {isNodeDrawerOpen && activeNodeDetails && (
           <>
-            <div 
+            <div
               onClick={() => setIsNodeDrawerOpen(false)}
               className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity duration-300"
             />
@@ -2012,7 +1992,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   <Package className="h-5 w-5 text-[#B2D534]" />
                   {activeNodeTitle} Details
                 </h4>
-                <button 
+                <button
                   onClick={() => setIsNodeDrawerOpen(false)}
                   className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 cursor-pointer"
                 >
@@ -2121,7 +2101,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     <span className="font-extrabold text-xs text-[#073318] uppercase tracking-wider">Parcels Handover Verification</span>
                     <span className="text-[11px] font-black text-slate-500">{verifiedCount} of {intakeParcels.length} verified</span>
                   </div>
-                  
+
                   {loadingIntakeParcels ? (
                     <p className="text-xs text-slate-400 italic">Loading parcels information...</p>
                   ) : (
@@ -2134,7 +2114,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                               <p className="font-bold text-xs text-slate-800">{parcel.productName}</p>
                               <p className="text-[10px] text-slate-450 font-semibold mt-0.5">Parcel #{parcel.parcelNumber} of {parcel.totalParcels} | {parcel.weight}</p>
                             </div>
-                            
+
                             {isItemVerified ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
                                 ✓ Verified
@@ -2165,7 +2145,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   >
                     Cancel
                   </button>
-                   <button
+                  <button
                     onClick={handleConfirmIntake}
                     disabled={actionProcessing || !allVerified || loadingIntakeParcels}
                     className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -2259,9 +2239,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       <div className="md:col-span-2 space-y-3">
                         <div className="flex items-center justify-between">
                           <h6 className="font-extrabold text-[#073318] text-xs uppercase tracking-wide leading-none">{parcel.productName}</h6>
-                          <span className={`inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full border ${
-                            parcel.parcelStatus === 'PENDING' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-250'
-                          }`}>
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full border ${parcel.parcelStatus === 'PENDING' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-250'
+                            }`}>
                             {parcel.parcelStatus}
                           </span>
                         </div>
@@ -2389,7 +2368,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         <div className="text-left">
                           <p className="text-[9px] text-slate-455 font-bold uppercase tracking-wider">Order Date</p>
                           <p className="text-sm font-black text-[#073318] mt-0.5">
-                            {selectedOrderDetails.orderDate || (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : '-')}
+                            {selectedOrderDetails.orderDate ? (selectedOrderDetails.orderDate.split(' ')[0].split('T')[0]) : (selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ')[0] : '-')}
                           </p>
                         </div>
                         <Calendar className="h-5 w-5 text-slate-400" />
@@ -2530,13 +2509,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                   Qty: {parcel.quantity} ({parcel.weight})
                                 </span>
                               </div>
-                              <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${
-                                parcel.parcelStatus === 'DELIVERED' || parcel.parcelStatus === 'COMPLETED'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : parcel.parcelStatus.includes('IN_TRANSIT') || parcel.parcelStatus === 'DISPATCHED'
+                              <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${parcel.parcelStatus === 'DELIVERED' || parcel.parcelStatus === 'COMPLETED'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : parcel.parcelStatus.includes('IN_TRANSIT') || parcel.parcelStatus === 'DISPATCHED'
                                   ? 'bg-blue-50 text-blue-700'
                                   : 'bg-amber-50 text-amber-700'
-                              }`}>
+                                }`}>
                                 {parcel.parcelStatus.replace(/[-_]/g, ' ')}
                               </span>
                             </div>
@@ -2576,10 +2554,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           selectedOrderDetails.tracking.map((t: any, idx: number) => {
                             const timeStr = t.updatedAt
                               ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  hour12: true
-                                })
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })
                               : '08:30 AM';
                             return (
                               <div key={idx} className="relative">

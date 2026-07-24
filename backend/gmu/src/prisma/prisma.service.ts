@@ -285,14 +285,12 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     return [];
   };
 
-  // Fetch all concurrently
-  const [items, tracking, shgDetails, transporterDetails, parcels] = await Promise.all([
-    getItems(),
-    getTracking(),
-    getShgDetails(),
-    getTransporterDetails(),
-    getParcels()
-  ]);
+  // Fetch subqueries sequentially to prevent Supabase connection pool exhaustion
+  const items = await getItems();
+  const tracking = await getTracking();
+  const shgDetails = await getShgDetails();
+  const transporterDetails = await getTransporterDetails();
+  const parcels = await getParcels();
 
   return {
     ...rest,
@@ -340,9 +338,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             const result = await query(args);
             if (result && ['findUnique', 'findFirst', 'findMany', 'create', 'update'].includes(operation)) {
               if (Array.isArray(result)) {
-                return Promise.all(result.map(o => mapOrderToLegacy(self._extendedClient, o)));
+                const mapped = [];
+                for (const o of result) {
+                  mapped.push(await mapOrderToLegacy(self, o));
+                }
+                return mapped;
               } else {
-                return mapOrderToLegacy(self._extendedClient, result);
+                return mapOrderToLegacy(self, result);
               }
             }
             return result;

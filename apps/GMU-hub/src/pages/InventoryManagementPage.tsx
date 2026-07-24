@@ -340,8 +340,11 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isManualRefresh = false) => {
+    const hasData = incomingInventory.length > 0 || returnDropInventory.length > 0 || returnPickupInventory.length > 0;
+    if (!hasData || isManualRefresh) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;

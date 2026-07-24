@@ -298,8 +298,10 @@ const initialTransporters: TransporterProfileExt[] = [
   }
 ];
 
+import { useAppContext } from '../context/AppContext';
+
 export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
-  const [transporterList, setTransporterList] = useState<TransporterProfileExt[]>([]);
+  const { transportersManagementList: transporterList, setTransportersManagementList: setTransporterList } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
@@ -335,8 +337,10 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
     return [];
   };
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchData = async (isManualRefresh = false) => {
+    if (transporterList.length === 0 || isManualRefresh) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       let requests: any[] = [];

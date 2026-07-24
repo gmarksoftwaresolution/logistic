@@ -52,7 +52,8 @@ export class OrderService {
         SELECT o."orderId" 
         FROM public."OrderAssignment" oa
         JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status = 'PENDING' AND o.phase = 'DROP';
+        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status = 'PENDING'
+          AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = o."orderId" AND phase = 'DROP')));
       `, shgUuid) as any[];
       assignedDropOrderIds = dropAssignments.map(a => a.orderId);
     }
@@ -421,7 +422,7 @@ export class OrderService {
         SELECT o.id, o."dropShgStatus", o."dropShgId", o."mainStatus", b.village as "buyerVillage", b.pincode as "buyerPincode"
         FROM public."Order" o
         JOIN public.buyers b ON o."buyerId" = b.id
-        WHERE o."orderId" = $1 AND o.phase = 'DROP' LIMIT 1;
+        WHERE o."orderId" = $1 AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, masterOrder.orderNumber) as any[];
       if (gmuOrders.length === 0) {
         throw new NotFoundException(`Order ${masterOrder.orderNumber} not found in GMU hub.`);
@@ -1212,10 +1213,15 @@ export class OrderService {
 
       const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_WITH_DROP_SHG';
       const dropShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED_UP';
+      const hasDropRow = await tx.order.count({
+        where: { orderId: orderNumber, phase: 'DROP' }
+      });
+      const targetPhase = hasDropRow > 0 ? 'DROP' : 'PICKUP';
+
       await tx.order.updateMany({
         where: {
           orderId: orderNumber,
-          phase: 'DROP',
+          phase: targetPhase,
         },
         data: {
           dropShgStatus,
@@ -1230,7 +1236,8 @@ export class OrderService {
       });
 
       const rawGmuOrder = await tx.$queryRawUnsafe(`
-        SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP' LIMIT 1;
+        SELECT id FROM public."Order"
+        WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
       `, orderNumber) as any[];
 
       if (rawGmuOrder.length > 0) {
@@ -1529,7 +1536,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "rescheduledAt" = $1, "rescheduleType" = $2, "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'DROP';
+          WHERE "orderId" = $3 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $3 AND phase = 'DROP')));
         `, finalDate, 'SHG', masterOrder.orderNumber);
 
         await tx.dropTracking.create({
@@ -1599,7 +1606,7 @@ export class OrderService {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET "rescheduledAt" = $1, "rescheduleType" = $2, "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'DROP';
+          WHERE "orderId" = $3 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $3 AND phase = 'DROP')));
         `, finalDate, 'SHG', masterOrder.orderNumber);
 
         await tx.dropTracking.create({

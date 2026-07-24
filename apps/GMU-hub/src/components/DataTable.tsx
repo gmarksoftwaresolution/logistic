@@ -21,6 +21,8 @@ interface DataTableProps<T> {
   onDateChange?: (date: string) => void;
   onRefresh?: () => void;
   extraControls?: React.ReactNode;
+  hideDateAndRefresh?: boolean;
+  hideSearchAndFilters?: boolean;
 }
 
 export function getStatusDisplayLabel(status: string): string {
@@ -206,6 +208,8 @@ export function DataTable<T extends Record<string, any>>({
   onDateChange,
   onRefresh,
   extraControls,
+  hideDateAndRefresh = false,
+  hideSearchAndFilters = false,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [internalSelectedStatus, setInternalSelectedStatus] = useState<string>('all');
@@ -333,161 +337,167 @@ export function DataTable<T extends Record<string, any>>({
   return (
     <div className="space-y-5">
       {/* Controls: Search & Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-[20px] border border-slate-200/80 backdrop-blur-md shadow-sm transition-all duration-300">
-        {/* Search */}
-        <div className="flex items-center gap-3 flex-1 max-w-md">
-          <div className="relative flex-1 group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#073318] transition-colors" />
-            <input
-              type="text"
-              placeholder={searchPlaceholder}
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm transition-all duration-200 placeholder:text-slate-400 text-slate-700 hover:border-slate-300 focus:shadow-md"
-            />
-          </div>
-          {searchTerm !== '' && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setCurrentPage(1);
-              }}
-              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
-            >
-              ✕ Clear Search
-            </button>
-          )}
-        </div>
-
-        {/* Filters Container */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
-          {/* Date Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Date:</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer font-extrabold text-slate-750 transition-all duration-200 hover:border-slate-300 focus:shadow-md"
-            />
-          </div>
-          {selectedDate !== '' && (
-            <button
-              onClick={() => {
-                setSelectedDate('');
-                setCurrentPage(1);
-              }}
-              className="px-3.5 py-2 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
-            >
-              ✕ Clear Date
-            </button>
-          )}
-
-          {/* Status Filter */}
-          {statusFilterField && (statusFilterOptions || uniqueStatuses.length > 0) && (
-            <div className="flex items-center gap-2.5 relative">
-              <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Status:</span>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 hover:border-slate-300 hover:bg-slate-50/50 transition-all duration-200 shadow-sm cursor-pointer min-w-[140px] focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5"
-                >
-                  <span className="capitalize">
-                    {selectedStatus === 'all' 
-                      ? 'All Statuses' 
-                      : (statusFilterOptions?.includes(selectedStatus) 
-                        ? selectedStatus 
-                        : getStatusDisplayLabel(selectedStatus))}
-                  </span>
-                  <ChevronDown className={`h-4.5 w-4.5 text-slate-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {isDropdownOpen && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40 cursor-default" 
-                      onClick={() => setIsDropdownOpen(false)} 
-                    />
-                    <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150 max-h-60 overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus('all');
-                          setCurrentPage(1);
-                          setIsDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer ${
-                          selectedStatus === 'all'
-                            ? 'bg-[#073318] text-white shadow-sm'
-                            : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
-                        }`}
-                      >
-                        <span>All Statuses</span>
-                        {selectedStatus === 'all' && <Check className="h-3.5 w-3.5" />}
-                      </button>
-                      {(statusFilterOptions || uniqueStatuses).map((status) => {
-                        const isSelected = selectedStatus === status;
-                        const label = statusFilterOptions ? status : getStatusDisplayLabel(status);
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() => {
-                              setSelectedStatus(status);
-                              setCurrentPage(1);
-                              setIsDropdownOpen(false);
-                            }}
-                            className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer capitalize ${
-                              isSelected
-                                ? 'bg-[#073318] text-white shadow-sm'
-                                : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
-                            }`}
-                          >
-                            <span>{label}</span>
-                            {isSelected && <Check className="h-3.5 w-3.5" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+      {!hideSearchAndFilters && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-[20px] border border-slate-200/80 backdrop-blur-md shadow-sm transition-all duration-300">
+          {/* Search */}
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#073318] transition-colors" />
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm transition-all duration-200 placeholder:text-slate-400 text-slate-700 hover:border-slate-300 focus:shadow-md"
+              />
             </div>
-          )}
+            {searchTerm !== '' && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              >
+                ✕ Clear Search
+              </button>
+            )}
+          </div>
+
+          {/* Filters Container */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+            {/* Date Filter */}
+            {!hideDateAndRefresh && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Date:</span>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5 shadow-sm cursor-pointer font-extrabold text-slate-750 transition-all duration-200 hover:border-slate-300 focus:shadow-md"
+                  />
+                </div>
+                {selectedDate !== '' && (
+                  <button
+                    onClick={() => {
+                      setSelectedDate('');
+                      setCurrentPage(1);
+                    }}
+                    className="px-3.5 py-2 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+                  >
+                    ✕ Clear Date
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Status Filter */}
+            {statusFilterField && (statusFilterOptions || uniqueStatuses.length > 0) && (
+              <div className="flex items-center gap-2.5 relative">
+                <span className="text-[10px] font-extrabold text-[#073318]/70 uppercase tracking-wider whitespace-nowrap">Filter Status:</span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-750 hover:border-slate-300 hover:bg-slate-50/50 transition-all duration-200 shadow-sm cursor-pointer min-w-[140px] focus:outline-none focus:border-[#073318] focus:ring-4 focus:ring-[#073318]/5"
+                  >
+                    <span className="capitalize">
+                      {selectedStatus === 'all' 
+                        ? 'All Statuses' 
+                        : (statusFilterOptions?.includes(selectedStatus) 
+                          ? selectedStatus 
+                          : getStatusDisplayLabel(selectedStatus))}
+                    </span>
+                    <ChevronDown className={`h-4.5 w-4.5 text-slate-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {isDropdownOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40 cursor-default" 
+                        onClick={() => setIsDropdownOpen(false)} 
+                      />
+                      <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-200/60 z-50 p-1.5 space-y-0.5 animate-in fade-in slide-in-from-top-2 duration-150 max-h-60 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedStatus('all');
+                            setCurrentPage(1);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer ${
+                            selectedStatus === 'all'
+                              ? 'bg-[#073318] text-white shadow-sm'
+                              : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
+                          }`}
+                        >
+                          <span>All Statuses</span>
+                          {selectedStatus === 'all' && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                        {(statusFilterOptions || uniqueStatuses).map((status) => {
+                          const isSelected = selectedStatus === status;
+                          const label = statusFilterOptions ? status : getStatusDisplayLabel(status);
+                          return (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => {
+                                setSelectedStatus(status);
+                                setCurrentPage(1);
+                                setIsDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-between cursor-pointer capitalize ${
+                                isSelected
+                                  ? 'bg-[#073318] text-white shadow-sm'
+                                  : 'text-slate-750 hover:bg-[#073318]/5 hover:text-[#073318]'
+                              }`}
+                            >
+                              <span>{label}</span>
+                              {isSelected && <Check className="h-3.5 w-3.5" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
 
-          {statusFilterField && selectedStatus !== 'all' && (
-            <button
-              onClick={() => {
-                setSelectedStatus('all');
-                setCurrentPage(1);
-              }}
-              className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200/80 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
-            >
-              ✕ Clear Filter
-            </button>
-          )}
+            {statusFilterField && selectedStatus !== 'all' && (
+              <button
+                onClick={() => {
+                  setSelectedStatus('all');
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2.5 text-xs font-extrabold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200/80 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 whitespace-nowrap"
+              >
+                ✕ Clear Filter
+              </button>
+            )}
 
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              className="px-4 py-2.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
-            >
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span>Refresh</span>
-            </button>
-          )}
+            {!hideDateAndRefresh && onRefresh && (
+              <button
+                onClick={onRefresh}
+                className="px-4 py-2.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+              >
+                <RefreshCcw className="h-3.5 w-3.5" />
+                <span>Refresh</span>
+              </button>
+            )}
 
-          {extraControls}
+            {extraControls}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Responsive Table Wrapper */}
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">

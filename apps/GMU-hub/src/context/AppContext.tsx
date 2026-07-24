@@ -233,6 +233,11 @@ export interface AppContextType {
   shgList: SHGProfile[];
   transporterList: TransporterProfile[];
 
+  communityMembersList: any[];
+  setCommunityMembersList: React.Dispatch<React.SetStateAction<any[]>>;
+  transportersManagementList: any[];
+  setTransportersManagementList: React.Dispatch<React.SetStateAction<any[]>>;
+
   // Action methods
   loadPickupNew: (status?: string, date?: string) => Promise<void>;
   loadPickupAssigned: (status?: string, date?: string) => Promise<void>;
@@ -326,6 +331,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [shgList, setShgList] = useState<SHGProfile[]>([]);
   const [transporterList, setTransporterList] = useState<TransporterProfile[]>([]);
+
+  const [communityMembersList, setCommunityMembersList] = useState<any[]>([]);
+  const [transportersManagementList, setTransportersManagementList] = useState<any[]>([]);
 
   const returnCompletedOrders = [
     ...returnPickupCompletedOrders,
@@ -553,10 +561,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dropShgStatus: o.dropShgStatus || (flowType === 'drop' ? mappedShgStatus : undefined),
       pickupTransporterStatus: o.pickupTransporterStatus || (flowType === 'pickup' ? mappedTransporterStatus : undefined),
       dropTransporterStatus: o.dropTransporterStatus || (flowType === 'drop' ? mappedTransporterStatus : undefined),
-      pickupShgDetails,
-      dropShgDetails,
-      pickupTransporterDetails,
-      dropTransporterDetails,
     };
   };
 
@@ -630,7 +634,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const token = localStorage.getItem('gmu_token');
     if (token && currentPage !== 'landing') {
-      fetchPartners();
       loadCounts();
     }
   }, [currentPage]);
@@ -1018,6 +1021,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         returnDropInventory,
         shgList,
         transporterList,
+
+        communityMembersList,
+        setCommunityMembersList,
+        transportersManagementList,
+        setTransportersManagementList,
 
         loadPickupNew,
         loadPickupAssigned,
