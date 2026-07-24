@@ -49,6 +49,12 @@ model Order {
   rescheduledAt           DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
+  isPickupRedirected      Boolean?          @default(false)
+  isDropRedirected        Boolean?          @default(false)
+  redirectedPickupAt      DateTime?         @db.Timestamp(6)
+  redirectedDropAt        DateTime?         @db.Timestamp(6)
+  redirectedPickupShgId   String?
+  redirectedDropShgId     String?
   buyer                   Buyer             @relation(fields: [buyerId], references: [id])
   seller                  Seller            @relation(fields: [sellerId], references: [id])
   assignments             OrderAssignment[]
@@ -67,49 +73,56 @@ model OrderAssignment {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([assigneeId, assigneeType, role, status], map: "idx_orderassignment_assignee_role_status")
 }
 
 model User {
-  id                 Int                @id @default(autoincrement())
-  authId             String             @unique @db.Uuid
-  role               UserRole
-  phoneNumber        String             @unique
-  email              String?            @unique
-  fullName           String?
-  profilePhoto       String?
-  language           String?            @default("English")
-  isVerified         Boolean            @default(false)
-  currentStep        Int                @default(0)
-  profileCompletion  Int                @default(0)
-  applicationStatus  ApplicationStatus  @default(PENDING)
-  uniqueCode         String?            @unique
-  approvedAt         DateTime?
-  rejectedAt         DateTime?
-  rejectionReason    String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  deletedAt          DateTime?
-  address            Address?
-  applications       Application[]
-  auditLogs          AuditLog[]
-  bankDetails        BankDetail[]
-  businessDetail     BusinessDetail?
-  documents          Document[]
-  drivingDetail      DrivingDetail?
-  milkVanDetail      MilkVanDetail?
-  otherDetails       OtherDetails[]
-  routeDetail        RouteDetail?
-  shgDetail          ShgDetail?
-  stepTracking       StepTracking[]
-  transporterDetail  TransporterDetail?
-  shgDropOrders      DropOrder[]        @relation("ShgDropOrders")
-  transporterDrops   DropOrder[]        @relation("TransporterDropOrders")
-  shgPickupOrders    PickupOrder[]      @relation("ShgPickupOrders")
-  transporterPickups PickupOrder[]      @relation("TransporterPickupOrders")
-  products           Product[]
+  id                        Int                         @id @default(autoincrement())
+  authId                    String                      @unique @db.Uuid
+  role                      UserRole
+  phoneNumber               String                      @unique
+  email                     String?                     @unique
+  fullName                  String?
+  profilePhoto              String?
+  language                  String?                     @default("English")
+  isVerified                Boolean                     @default(false)
+  currentStep               Int                         @default(0)
+  profileCompletion         Int                         @default(0)
+  applicationStatus         ApplicationStatus           @default(PENDING)
+  uniqueCode                String?                     @unique
+  approvedAt                DateTime?
+  rejectedAt                DateTime?
+  rejectionReason           String?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  deletedAt                 DateTime?
+  address                   Address?
+  applications              Application[]
+  auditLogs                 AuditLog[]
+  bankDetails               BankDetail[]
+  businessDetail            BusinessDetail?
+  documents                 Document[]
+  drivingDetail             DrivingDetail?
+  milkVanDetail             MilkVanDetail?
+  otherDetails              OtherDetails[]
+  routeDetail               RouteDetail?
+  shgDetail                 ShgDetail?
+  stepTracking              StepTracking[]
+  transporterDetail         TransporterDetail?
+  shgDropOrders             DropOrder[]                 @relation("ShgDropOrders")
+  transporterDrops          DropOrder[]                 @relation("TransporterDropOrders")
+  shgPickupOrders           PickupOrder[]               @relation("ShgPickupOrders")
+  transporterPickups        PickupOrder[]               @relation("TransporterPickupOrders")
+  products                  Product[]
+  return_order_assignments  return_order_assignments[]
+  return_order_scan_history return_order_scan_history[]
+  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
+  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
 
   @@index([phoneNumber])
   @@index([role])
+  @@index([role, applicationStatus, currentStep], map: "idx_user_role_appstatus_step")
 }
 
 model Address {
@@ -120,15 +133,17 @@ model Address {
   village         String?
   taluka          String?
   district        String
+  state           String
   pincode         String
+  postOffice      String?
   landmark        String?
   latitude        Float?
   longitude       Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  postOffice      String?
-  state           String   @default("Maharashtra")
   user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_address_userid")
 }
 
 model BankDetail {
@@ -147,6 +162,7 @@ model BankDetail {
   user              User      @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId], map: "idx_bankdetail_userid")
 }
 
 model Document {
@@ -162,6 +178,7 @@ model Document {
   user            User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId], map: "idx_document_userid")
 }
 
 model OtherDetails {
@@ -178,17 +195,18 @@ model OtherDetails {
   width              Float?
   storageSpace       String?
   DLurl              String?
+  wheeler            String?
+  minWeight          Float?
+  maxWeight          Float?
+  ratePerKm          Float?
+  carryingCapacity   String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   deletedAt          DateTime?
-  wheeler            String?
-  maxWeight          Float?
-  minWeight          Float?
-  ratePerKm          Float?
-  carryingCapacity   String?
   user               User        @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId], map: "idx_otherdetails_userid")
 }
 
 model Application {
@@ -204,6 +222,7 @@ model Application {
   user            User              @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId, status], map: "idx_application_userid_status")
 }
 
 model StepTracking {
@@ -219,6 +238,7 @@ model StepTracking {
   user       User       @relation(fields: [userId], references: [id])
 
   @@unique([userId, step])
+  @@index([userId, step], map: "idx_steptracking_userid_step")
 }
 
 model ShgDetail {
@@ -228,6 +248,7 @@ model ShgDetail {
   shgName          String?
   shgLeaderName    String?
   shgLeaderContact String?
+  memberCode       String?
   shgRole          ShgRole?
   crpName          String?
   crpMobile        String?
@@ -237,8 +258,9 @@ model ShgDetail {
   age              Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  memberCode       String?
   user             User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_shgdetail_userid")
 }
 
 model BusinessDetail {
@@ -345,6 +367,7 @@ model Product {
   masterOrderItems   MasterOrderItem[]
   pickupOrderItems   PickupOrderItem[]
   seller             User                 @relation(fields: [sellerId], references: [id])
+  returnOrderItems   ReturnOrderItem[]
   warehouseInventory WarehouseInventory[]
 
   @@index([sellerId])
@@ -364,7 +387,7 @@ model MasterOrder {
   updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at")
   dropOrders    DropOrder[]
   items         MasterOrderItem[]
-  buyer         Buyer             @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_master_orders_buyer")
+  buyer         Buyer             @relation("BuyerOrders", fields: [buyerId], references: [id])
   pickupOrders  PickupOrder[]
 
   @@index([buyerId])
@@ -379,9 +402,9 @@ model MasterOrderItem {
   sellerId      Int         @map("seller_id")
   quantity      Int
   price         Float
-  seller        Seller      @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_master_order_items_seller")
   masterOrder   MasterOrder @relation(fields: [masterOrderId], references: [id])
   product       Product     @relation(fields: [productId], references: [id])
+  seller        Seller      @relation(fields: [sellerId], references: [id])
 
   @@index([masterOrderId])
   @@index([productId])
@@ -401,8 +424,8 @@ model PickupOrder {
   handoverCode      String?           @map("handover_code")
   createdAt         DateTime          @default(now()) @map("created_at")
   items             PickupOrderItem[]
-  seller            Seller            @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_pickup_orders_seller")
   masterOrder       MasterOrder       @relation(fields: [masterOrderId], references: [id])
+  seller            Seller            @relation(fields: [sellerId], references: [id])
   shg               User?             @relation("ShgPickupOrders", fields: [shgId], references: [id])
   transporter       User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
   tracking          PickupTracking[]
@@ -474,6 +497,7 @@ model DropOrder {
   shg             User?           @relation("ShgDropOrders", fields: [shgId], references: [id])
   transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
   tracking        DropTracking[]
+  returnOrders    ReturnOrder[]
 
   @@index([masterOrderId])
   @@index([buyerId])
@@ -526,20 +550,26 @@ model DropTracking {
 
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
-  village        String
-  postOffice     String
   pincode        String
-  taluka         String
   district       String
   state          String
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
+  block          String?
+  branchType     String?
+  circle         String?
+  country        String   @default("India")
+  deliveryStatus String?
+  description    String?
+  division       String?
+  name           String
+  region         String?
 
-  @@index([village])
   @@index([pincode])
   @@index([district])
-  @@index([taluka])
-  @@index([village, pincode])
+  @@index([block])
+  @@index([name])
+  @@index([name, pincode])
   @@map("pincode_directory")
 }
 
@@ -554,11 +584,11 @@ model Seller {
   village          String
   taluka           String
   district         String
+  state            String
   pincode          String
+  postOffice       String?           @map("post_office")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at")
-  postOffice       String?           @map("post_office")
-  state            String            @default("Maharashtra")
   orders           Order[]
   masterOrderItems MasterOrderItem[]
   pickupOrders     PickupOrder[]
@@ -577,14 +607,15 @@ model Buyer {
   village      String
   taluka       String
   district     String
+  state        String
   pincode      String
+  postOffice   String?       @map("post_office")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at")
-  postOffice   String?       @map("post_office")
-  state        String        @default("Maharashtra")
   orders       Order[]
   dropOrders   DropOrder[]
   masterOrders MasterOrder[] @relation("BuyerOrders")
+  returnOrders ReturnOrder[]
 
   @@map("buyers")
 }
@@ -647,7 +678,7 @@ model Parcel {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   scanHistories     ParcelScanHistory[]
-  ScanSessionItem   ScanSessionItem[]
+  scanSessionItems  ScanSessionItem[]
 
   @@map("Parcel")
 }
@@ -674,26 +705,113 @@ model ParcelScanHistory {
 }
 
 model ScanSession {
-  sessionId       String            @id
-  userId          String
-  userRole        String
-  sessionType     String
-  status          String
-  orderIds        String
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @default(now())
-  items           ScanSessionItem[]
+  sessionId   String            @id @default(uuid())
+  userId      String
+  userRole    String
+  sessionType String
+  status      String
+  orderIds    String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  items       ScanSessionItem[]
+
+  @@map("ScanSession")
 }
 
 model ScanSessionItem {
-  id          String      @id
-  sessionId   String
-  parcelId    String
-  scannedAt   DateTime    @default(now())
-  parcel      Parcel      @relation(fields: [parcelId], references: [parcelId], onDelete: Cascade)
-  ScanSession ScanSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  id        String      @id @default(uuid())
+  sessionId String
+  parcelId  String
+  scannedAt DateTime    @default(now())
+  parcel    Parcel      @relation(fields: [parcelId], references: [parcelId], onDelete: Cascade)
+  session   ScanSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
   @@unique([sessionId, parcelId])
+  @@map("ScanSessionItem")
+}
+
+model ReturnOrder {
+  id                        Int                         @id @default(autoincrement())
+  returnOrderNumber         String?                     @unique @map("return_order_number")
+  originalOrderId           Int                         @map("original_order_id")
+  buyerId                   Int                         @map("buyer_id")
+  shgId                     Int?                        @map("shg_id")
+  transporterId             Int?                        @map("transporter_id")
+  status                    String                      @default("RETURN_REQUESTED")
+  returnReason              String?                     @map("return_reason")
+  barcode                   String?                     @unique
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
+  return_order_assignments  return_order_assignments[]
+  items                     ReturnOrderItem[]
+  return_order_scan_history return_order_scan_history[]
+  return_order_timeline     return_order_timeline[]
+  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
+  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
+  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
+  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
+
+  @@index([originalOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("return_orders")
+}
+
+model ReturnOrderItem {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  productId     Int         @map("product_id")
+  quantity      Int?
+  product       Product     @relation(fields: [productId], references: [id])
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@map("return_order_items")
+}
+
+model return_order_assignments {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  assignee_id     Int
+  assigneeType    String
+  status          String      @default("PENDING")
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @default(now())
+  User            User        @relation(fields: [assignee_id], references: [id])
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([assignee_id])
+  @@index([return_order_id])
+}
+
+model return_order_scan_history {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  scanned_by      Int
+  userRole        String
+  scanResult      String
+  barcode         String
+  scanLocation    String?
+  timestamp       DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+  User            User        @relation(fields: [scanned_by], references: [id])
+
+  @@index([return_order_id])
+  @@index([scanned_by])
+}
+
+model return_order_timeline {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  status          String
+  remarks         String?
+  updated_at      DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([return_order_id])
 }
 
 enum UserRole {
@@ -741,22 +859,3 @@ enum ShgRole {
   LEADER
   MEMBER
 }
-
-model Earning {
-  id              Int       @id @default(autoincrement())
-  
-  shgId           Int       @map("shg_id")
-  orderId         String    @map("order_id")
-  orderNumber     String    @map("order_number")
-  
-  amount          Decimal   @db.Decimal(10,2)
-  completedAt     DateTime  @map("completed_at")
-  
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  @@index([shgId, completedAt])
-  @@unique([shgId, orderId])
-  @@map("earnings")
-}
-
