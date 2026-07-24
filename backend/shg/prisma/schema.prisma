@@ -814,6 +814,25 @@ model return_order_timeline {
   @@index([return_order_id])
 }
 
+model Earning {
+  id              Int       @id @default(autoincrement())
+
+  shgId           Int       @map("shg_id")
+  orderId         String    @map("order_id")
+  orderNumber     String    @map("order_number")
+
+  amount          Decimal   @db.Decimal(10,2)
+  completedAt     DateTime  @map("completed_at")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([shgId, completedAt])
+  @@unique([shgId, orderId])
+  @@map("earnings")
+}
+
+
 enum UserRole {
   SHG
   INDIVIDUAL
