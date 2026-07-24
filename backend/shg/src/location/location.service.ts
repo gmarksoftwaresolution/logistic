@@ -10,13 +10,13 @@ export class LocationService {
   async findByPincode(pincode: string) {
     return this.prisma.pincodeDirectory.findMany({
       where: { pincode: pincode.trim() },
-      orderBy: { village: 'asc' },
+      orderBy: { name: 'asc' },
     });
   }
 
   async findByVillage(village: string) {
     return this.prisma.pincodeDirectory.findMany({
-      where: { village: { equals: village.trim(), mode: 'insensitive' } },
+      where: { name: { equals: village.trim(), mode: 'insensitive' } },
       orderBy: { pincode: 'asc' },
     });
   }
@@ -24,7 +24,7 @@ export class LocationService {
   async findVillageAndPincode(village: string, pincode: string) {
     return this.prisma.pincodeDirectory.findFirst({
       where: {
-        village: { equals: village.trim(), mode: 'insensitive' },
+        name: { equals: village.trim(), mode: 'insensitive' },
         pincode: pincode.trim(),
       },
     });
@@ -34,16 +34,16 @@ export class LocationService {
     const skip = (page - 1) * limit;
     const items = await this.prisma.pincodeDirectory.findMany({
       where: {
-        village: { contains: query.trim(), mode: 'insensitive' },
+        name: { contains: query.trim(), mode: 'insensitive' },
       },
-      distinct: ['village'],
+      distinct: ['name'],
       take: limit,
       skip: skip,
-      orderBy: { village: 'asc' },
+      orderBy: { name: 'asc' },
     });
     const total = await this.prisma.pincodeDirectory.count({
       where: {
-        village: { contains: query.trim(), mode: 'insensitive' },
+        name: { contains: query.trim(), mode: 'insensitive' },
       },
     });
     return { items, total, page, limit };
@@ -77,9 +77,9 @@ export class LocationService {
       ? { pincode: { startsWith: trimmed } }
       : {
           OR: [
-            { village: { contains: trimmed, mode: 'insensitive' as const } },
+            { name: { contains: trimmed, mode: 'insensitive' as const } },
             { district: { contains: trimmed, mode: 'insensitive' as const } },
-            { taluka: { contains: trimmed, mode: 'insensitive' as const } },
+            { block: { contains: trimmed, mode: 'insensitive' as const } },
             { state: { contains: trimmed, mode: 'insensitive' as const } },
           ],
         };
@@ -88,7 +88,7 @@ export class LocationService {
       where,
       take: limit,
       skip: skip,
-      orderBy: [{ pincode: 'asc' }, { village: 'asc' }],
+      orderBy: [{ pincode: 'asc' }, { name: 'asc' }],
     });
 
     const total = await this.prisma.pincodeDirectory.count({ where });
@@ -121,11 +121,11 @@ export class LocationService {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
       },
-      select: { taluka: true },
-      distinct: ['taluka'],
-      orderBy: { taluka: 'asc' },
+      select: { block: true },
+      distinct: ['block'],
+      orderBy: { block: 'asc' },
     });
-    return records.map(r => r.taluka).filter(Boolean);
+    return records.map(r => r.block).filter(Boolean);
   }
 
   async getVillages(state: string, district: string, block: string) {
@@ -133,21 +133,21 @@ export class LocationService {
       where: {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
-        taluka: block ? { equals: block.trim(), mode: 'insensitive' } : undefined,
+        block: block ? { equals: block.trim(), mode: 'insensitive' } : undefined,
       },
-      select: { village: true },
-      distinct: ['village'],
-      orderBy: { village: 'asc' },
+      select: { name: true },
+      distinct: ['name'],
+      orderBy: { name: 'asc' },
     });
-    return records.map(r => r.village);
+    return records.map(r => r.name);
   }
 
   async validateLocation(pincode: string, village: string, taluka: string, district: string, state: string) {
     const record = await this.prisma.pincodeDirectory.findFirst({
       where: {
         pincode: pincode.trim(),
-        village: { equals: village.trim(), mode: 'insensitive' },
-        taluka: taluka ? { equals: taluka.trim(), mode: 'insensitive' } : undefined,
+        name: { equals: village.trim(), mode: 'insensitive' },
+        block: taluka ? { equals: taluka.trim(), mode: 'insensitive' } : undefined,
         district: { equals: district.trim(), mode: 'insensitive' },
         state: { equals: state.trim(), mode: 'insensitive' },
       },
@@ -166,11 +166,11 @@ export class LocationService {
 
     if (records && records.length > 0) {
       const first = records[0];
-      const villages = [...new Set(records.map((r: any) => r.village))].sort();
+      const villages = [...new Set(records.map((r: any) => r.name))].sort();
       return {
         state: first.state,
         district: first.district,
-        taluka: first.taluka || first.district || 'N/A',
+        taluka: first.block || first.district || 'N/A',
         villages: villages,
         postOffices: villages,
         source: 'local_db',

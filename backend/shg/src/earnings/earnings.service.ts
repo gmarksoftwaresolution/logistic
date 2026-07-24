@@ -119,7 +119,7 @@ export class EarningsService {
           perOrderRate: PER_ORDER_RATE,
           totalEarnings,
         },
-        recentEarnings: recentEarnings.map(e => ({
+        recentEarnings: recentEarnings.map((e: any) => ({
           ...e,
           amount: Number(e.amount) // convert Decimal to number for JSON response
         })),
