@@ -656,8 +656,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   };
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isManualRefresh = false) => {
+    const hasData = (activeTopTab === 'new' && (pickupNewOrders.length > 0 || dropNewOrders.length > 0)) ||
+                    (activeTopTab === 'in_transit' && (pickupAssignedOrders.length > 0 || pickupWarehouseOrders.length > 0 || dropAssignedOrders.length > 0 || returnDropNewOrders.length > 0)) ||
+                    (activeTopTab === 'completed' && (dropCompletedOrders.length > 0 || returnPickupCompletedOrders.length > 0)) ||
+                    (activeTopTab === 'rejected' && (pickupRejectedOrders.length > 0 || dropRejectedOrders.length > 0));
+
+    if (!hasData || isManualRefresh) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;
@@ -699,6 +706,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   useEffect(() => {
     loadData();
   }, [
+    activeTopTab,
     statusFilter,
     dateFilter
   ]);
@@ -1540,7 +1548,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             )}
 
             <button
-              onClick={loadData}
+              onClick={() => loadData(true)}
               className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -1564,7 +1572,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
               />
@@ -1939,7 +1947,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
               />
@@ -1962,7 +1970,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
               />

@@ -471,120 +471,124 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getCounts() {
-    // pickup.new — Phase 1
-    const pickupNew = await this.prisma.order.count({
-      where: this.applyFilters(
-        {
-          phase: 'PICKUP',
-          returnType: null,
-          OR: [
-            { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
-            { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
-          ]
-        },
-        undefined,
-        ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
-      )
-    });
-
-    // pickup.assigned — Phase 2-4
-    const pickupAssigned = await this.prisma.order.count({
-      where: this.applyFilters(
-        {
-          phase: 'PICKUP',
-          returnType: null,
-          OR: [
-            { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
-            { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
-          ]
-        },
-        undefined,
-        ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
-      )
-    });
-
-    // pickup.warehouse — Phase 5
-    const pickupWarehouse = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) });
-
-    // pickup.rejected — orders with any rejected assignment
-    const pickupRejected = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) });
-
-    // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
-    const pickupRescheduled = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) });
-
-    // drop.new — Phase 5 dispatch
-    const dropNew = await this.prisma.order.count({
-      where: this.applyFilters(
-        {
-          phase: 'DROP',
-          AND: [
-            {
-              OR: [
-                { returnType: null },
-                { returnType: 'TRANSPORTER_RETURN' }
-              ]
-            },
-            {
-              OR: [
-                { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
-                { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
-              ]
-            }
-          ]
-        },
-        undefined,
-        ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
-      )
-    });
-
-    // drop.assigned — Phase 6-7
-    const dropAssigned = await this.prisma.order.count({
-      where: this.applyFilters(
-        {
-          phase: 'DROP',
-          AND: [
-            {
-              OR: [
-                { returnType: null },
-                { returnType: 'TRANSPORTER_RETURN' }
-              ]
-            },
-            {
-              OR: [
-                { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } },
-                { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
-              ]
-            }
-          ]
-        },
-        undefined,
-        ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG']
-      )
-    });
-
-    // drop.completed — Phase 7-8
-    const dropCompleted = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) });
-
-    // drop.rejected
-    const dropRejected = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) });
-
-    // drop.rescheduled
-    const dropRescheduled = await this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) });
-
-    // return.transporter
-    const transporterReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) });
-
-    // return.buyer
-    const buyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) });
-
-    // inventory.stored
-    const inventoryStored = await this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) });
-
-    // inventory.transporterReturn
-    const inventoryTransporterReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['INVENTORY_TRANSPORTER_RETURN', 'DROP_ASSIGNED', 'DISPATCHED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']) });
-
-    // inventory.buyerReturn
-    const inventoryBuyerReturn = await this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) });
+    const [
+      pickupNew,
+      pickupAssigned,
+      pickupWarehouse,
+      pickupRejected,
+      pickupRescheduled,
+      dropNew,
+      dropAssigned,
+      dropCompleted,
+      dropRejected,
+      dropRescheduled,
+      transporterReturn,
+      buyerReturn,
+      inventoryStored,
+      inventoryTransporterReturn,
+      inventoryBuyerReturn,
+    ] = await Promise.all([
+      // pickup.new — Phase 1
+      this.prisma.order.count({
+        where: this.applyFilters(
+          {
+            phase: 'PICKUP',
+            returnType: null,
+            OR: [
+              { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
+              { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
+            ]
+          },
+          undefined,
+          ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
+        )
+      }),
+      // pickup.assigned — Phase 2-4
+      this.prisma.order.count({
+        where: this.applyFilters(
+          {
+            phase: 'PICKUP',
+            returnType: null,
+            OR: [
+              { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
+              { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
+            ]
+          },
+          undefined,
+          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
+        )
+      }),
+      // pickup.warehouse — Phase 5
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) }),
+      // pickup.rejected — orders with any rejected assignment
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
+      // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) }),
+      // drop.new — Phase 5 dispatch
+      this.prisma.order.count({
+        where: this.applyFilters(
+          {
+            phase: 'DROP',
+            AND: [
+              {
+                OR: [
+                  { returnType: null },
+                  { returnType: 'TRANSPORTER_RETURN' }
+                ]
+              },
+              {
+                OR: [
+                  { mainStatus: { in: ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB'] } },
+                  { mainStatus: 'DROP_ASSIGNED', OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] }
+                ]
+              }
+            ]
+          },
+          undefined,
+          ['DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
+        )
+      }),
+      // drop.assigned — Phase 6-7
+      this.prisma.order.count({
+        where: this.applyFilters(
+          {
+            phase: 'DROP',
+            AND: [
+              {
+                OR: [
+                  { returnType: null },
+                  { returnType: 'TRANSPORTER_RETURN' }
+                ]
+              },
+              {
+                OR: [
+                  { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } },
+                  { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
+                ]
+              }
+            ]
+          },
+          undefined,
+          ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG']
+        )
+      }),
+      // drop.completed — Phase 7-8
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) }),
+      // drop.rejected
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
+      // drop.rescheduled
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['DROP_SHG', 'DROP_TRANSPORTER'] }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }) }),
+      // return.transporter
+      this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED']) }),
+      // return.buyer
+      this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED']) }),
+      // inventory.stored
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']) }),
+      // inventory.transporterReturn
+      this.prisma.order.count({ where: this.applyFilters({ returnType: 'TRANSPORTER_RETURN' }, undefined, ['INVENTORY_TRANSPORTER_RETURN', 'DROP_ASSIGNED', 'DISPATCHED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']) }),
+      // inventory.buyerReturn
+      this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) }),
+    ]);
 
     return {
       pickup: {
@@ -677,9 +681,14 @@ export class OrderManagementService implements OnModuleInit {
       filter,
       ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
     );
+    const defaultInclude = {
+      assignments: true,
+      seller: true,
+      buyer: true,
+    };
     return this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -704,7 +713,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -718,7 +731,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -744,7 +761,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -761,7 +782,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -815,9 +840,18 @@ export class OrderManagementService implements OnModuleInit {
       filter,
       ['DROP_PENDING', 'DROP_ASSIGNED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'INVENTORY_TRANSPORTER_RETURN', 'DROP_CREATED', 'DROP_TRANSPORTER_PENDING', 'PARCEL_AT_HUB']
     );
+    const defaultInclude = {
+      assignments: true,
+      items: true,
+      tracking: { orderBy: { timestamp: 'desc' as const } },
+      parcels: true,
+      seller: true,
+      buyer: true,
+    };
+
     const orders = await this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -853,7 +887,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     const orders = await this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -868,7 +906,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     const orders = await this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -893,7 +935,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     const orders = await this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -911,7 +957,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     const orders = await this.prisma.order.findMany({
       where,
-      include: { assignments: true },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -925,6 +975,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -941,6 +996,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -954,6 +1014,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -966,6 +1031,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -978,6 +1048,11 @@ export class OrderManagementService implements OnModuleInit {
     );
     return this.prisma.order.findMany({
       where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
