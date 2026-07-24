@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { VehicleSuggestionService } from './vehicle-suggestion.service';
+import { EarningsService } from '../earnings/earnings.service';
 import axios from 'axios';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private vehicleSuggestionService: VehicleSuggestionService,
+    private earningsService: EarningsService,
   ) { }
 
   //////////////////////////////////////////////////////
@@ -891,6 +893,16 @@ export class OrderService {
           data: { status: nextGmuStatus },
         });
 
+        if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+          await this.earningsService.createForCompletedOrder(
+            tx,
+            shgId,
+            pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
+            'PICKUP',
+            new Date()
+          );
+        }
+
         return updated;
       } else {
         // Transporter Handover Phase
@@ -949,6 +961,16 @@ export class OrderService {
             },
           });
 
+          if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+            await this.earningsService.createForCompletedOrder(
+              tx,
+              shgId,
+              pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
+              'PICKUP',
+              new Date()
+            );
+          }
+
           const associatedDrop = await tx.dropOrder.findFirst({
             where: { masterOrderId: pickupOrder.masterOrderId }
           });
@@ -993,6 +1015,16 @@ export class OrderService {
               remarks: 'Package dropped to transporter by SHG. Awaiting transporter confirmation.',
             },
           });
+
+          if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+            await this.earningsService.createForCompletedOrder(
+              tx,
+              shgId,
+              pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
+              'PICKUP',
+              new Date()
+            );
+          }
 
           const associatedDrop = await tx.dropOrder.findFirst({
             where: { masterOrderId: pickupOrder.masterOrderId }
@@ -1279,6 +1311,16 @@ export class OrderService {
         where: { id: dropOrder.masterOrderId },
         data: { status: nextGmuStatus },
       });
+
+      if (nextStatus === 'DELIVERED' || nextStatus === 'RETURNED') {
+        await this.earningsService.createForCompletedOrder(
+          tx,
+          shgId,
+          dropOrder.dropOrderNumber || `ORD-${dropOrder.masterOrderId}`,
+          'DROP',
+          new Date()
+        );
+      }
 
       return updated;
     });
