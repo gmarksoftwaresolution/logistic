@@ -18,7 +18,7 @@ interface OrderCardProps {
   distance?: string | number;
   onViewAddress?: () => void;
   isHighlighted?: 'new' | 'updated';
-  isRejectedDelivery?: boolean;
+  
   isRescheduled?: boolean;
   transporterName?: string;
   transporterMobile?: string;
@@ -39,7 +39,6 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   distance,
   onViewAddress,
   isHighlighted,
-  isRejectedDelivery,
   isRescheduled,
   transporterName,
   transporterMobile,
@@ -107,14 +106,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 </Text>
               </TouchableOpacity>
               
-              {isRejectedDelivery && (
-                <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#EF4444]/40 bg-[#FEF2F2]">
-                  <Ionicons name="information-circle" size={10} color="#DC2626" style={{ marginRight: 4 }} />
-                  <Text className="text-[9px] font-black text-[#DC2626] tracking-wide">
-                    Return Address Updated
-                  </Text>
-                </View>
-              )}
+              
             </View>
           )}
 

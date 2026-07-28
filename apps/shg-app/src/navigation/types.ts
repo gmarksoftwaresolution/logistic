@@ -2,7 +2,6 @@ export type OrdersStackParamList = {
   OrderManagement: { filter?: string } | undefined;
   IncomingOrders: undefined;
   AcceptedOrders: { initialTab?: 'pickup' | 'drop' } | undefined;
-  RejectedOrders: undefined;
   ReturnedOrders: undefined;
   Drop: undefined;
   CompletedOrders: undefined;
@@ -33,7 +32,6 @@ export type RootStackParamList = {
   Orders: { filter?: string } | undefined;
   OrderManagement: undefined;
   IncomingOrders: undefined;
-  RejectedOrders: undefined;
   Settings: undefined;
   Profile: undefined;
   PersonalDetails: undefined;

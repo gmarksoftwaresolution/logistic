@@ -30,14 +30,11 @@ export class OrderHistoryService {
       if (status === OrderHistoryStatus.COMPLETED) {
         pickupWhere.status = 'COMPLETED';
         dropWhere.status = 'COMPLETED';
-      } else if (status === OrderHistoryStatus.REJECTED) {
-        pickupWhere.status = { in: ['REJECTED', 'CANCELLED'] };
-        dropWhere.status = { in: ['REJECTED', 'CANCELLED'] };
       }
     } else {
-      // Order History is Read-Only, only fetch Completed/Rejected
-      pickupWhere.status = { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] };
-      dropWhere.status = { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] };
+      // Order History is Read-Only, only fetch Completed/Cancelled
+      pickupWhere.status = { in: ['COMPLETED', 'CANCELLED'] };
+      dropWhere.status = { in: ['COMPLETED', 'CANCELLED'] };
     }
 
     const fetchLimit = skip + limit;
@@ -178,11 +175,11 @@ export class OrderHistoryService {
   async getStats(shgId: number): Promise<IHistoryStats> {
     const [pickups, drops] = await Promise.all([
       this.prisma.pickupOrder.findMany({ 
-        where: { shgId, status: { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] } }, 
+        where: { shgId, status: { in: ['COMPLETED', 'CANCELLED'] } }, 
         select: { status: true } 
       }),
       this.prisma.dropOrder.findMany({ 
-        where: { shgId, status: { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] } }, 
+        where: { shgId, status: { in: ['COMPLETED', 'CANCELLED'] } }, 
         select: { status: true } 
       })
     ]);
@@ -191,12 +188,10 @@ export class OrderHistoryService {
 
     const totalOrders = all.length;
     const completedOrders = all.filter(o => o.status === 'COMPLETED').length;
-    const rejectedOrders = all.filter(o => ['CANCELLED', 'REJECTED'].includes(o.status)).length;
 
     return {
       totalOrders,
       completedOrders,
-      rejectedOrders,
     };
   }
 

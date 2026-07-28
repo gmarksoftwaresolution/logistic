@@ -23,7 +23,6 @@ import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScr
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
 import DropScreen from '../screens/DropScreen';
-import RejectedOrdersScreen from '../screens/RejectedOrdersScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
 import VehicleSuggestionDetailsScreen from '../screens/VehicleSuggestionDetailsScreen';
@@ -186,7 +185,6 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="OrderManagement" component={OrderManagementScreen} />
       <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} options={{ gestureEnabled: false }} />
       <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
-      <OrdersStack.Screen name="RejectedOrders" component={RejectedOrdersScreen} />
       <OrdersStack.Screen name="Drop" component={DropRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
       <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />

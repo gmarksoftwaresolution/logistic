@@ -336,7 +336,6 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
-                isRejectedDelivery={item.isRejectedDelivery}
                 isRescheduled={!!item.rescheduledDate}
               />
             );
@@ -378,7 +377,6 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             pickupAddress={pickup}
             deliveryAddress={delivery}
             distance={selectedAddressOrder.distance || '0'}
-            isRejectedDelivery={selectedAddressOrder.isRejectedDelivery}
           />
         );
       })()}
