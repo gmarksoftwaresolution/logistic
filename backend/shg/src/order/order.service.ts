@@ -898,8 +898,7 @@ export class OrderService {
           await this.earningsService.createForCompletedOrder(
             tx,
             shgId,
-            pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
-            'PICKUP',
+            masterOrder.orderNumber,
             new Date()
           );
         }
@@ -966,8 +965,7 @@ export class OrderService {
             await this.earningsService.createForCompletedOrder(
               tx,
               shgId,
-              pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
-              'PICKUP',
+              masterOrder.orderNumber,
               new Date()
             );
           }
@@ -1021,8 +1019,7 @@ export class OrderService {
             await this.earningsService.createForCompletedOrder(
               tx,
               shgId,
-              pickupOrder.pickupOrderNumber || `ORD-${pickupOrder.masterOrderId}`,
-              'PICKUP',
+              masterOrder.orderNumber,
               new Date()
             );
           }
@@ -1323,8 +1320,7 @@ export class OrderService {
         await this.earningsService.createForCompletedOrder(
           tx,
           shgId,
-          dropOrder.dropOrderNumber || `ORD-${dropOrder.masterOrderId}`,
-          'DROP',
+          masterOrder.orderNumber,
           new Date()
         );
       }

@@ -152,13 +152,19 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
           </TouchableOpacity>
         </View>
 
+        {loading && !refreshing && (
+          <View style={{ marginTop: 40 }}>
+            <ActivityIndicator size="large" color="#16A34A" />
+          </View>
+        )}
+
         {recent.length === 0 && !loading && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No recent earnings found.</Text>
           </View>
         )}
 
-        {recent.map((earning: any, index: number) => {
+        {!loading && recent.map((earning: any, index: number) => {
           const date = new Date(earning.completedAt);
           const today = new Date();
           const yesterday = new Date(today);
@@ -205,19 +211,10 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
           <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {renderSummaryCards()}
         {renderFilterTabs()}
-        
-        {loading && !refreshing ? (
-          <View style={{ marginTop: 40 }}>
-            <ActivityIndicator size="large" color="#16A34A" />
-          </View>
-        ) : (
-          <>
-            {renderSummaryCards()}
-            {renderEarningsSummary()}
-            {renderRecentEarnings()}
-          </>
-        )}
+        {renderEarningsSummary()}
+        {renderRecentEarnings()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -229,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   filterContainer: {
     flexDirection: 'row',

@@ -5,16 +5,16 @@ export const PER_ORDER_RATE = 15.00;
 export const DEFAULT_PAGE = 1;
 export const MAX_LIMIT = 100;
 
-export function buildEarningOrderId(workflowType: 'PICKUP' | 'DROP', orderNumber: string): string {
-  return `${workflowType}-${orderNumber}`;
+export function buildEarningOrderId(orderNumber: string): string {
+  return orderNumber;
 }
 
 @Injectable()
 export class EarningsService {
   constructor(private prisma: PrismaService) {}
 
-  async createForCompletedOrder(tx: any, shgId: number, orderNumber: string, workflowType: 'PICKUP' | 'DROP', completedAt: Date) {
-    const orderId = buildEarningOrderId(workflowType, orderNumber);
+  async createForCompletedOrder(tx: any, shgId: number, orderNumber: string, completedAt: Date) {
+    const orderId = buildEarningOrderId(orderNumber);
     
     // Application-level duplicate check
     // @ts-ignore
@@ -40,7 +40,78 @@ export class EarningsService {
     });
   }
 
+  private async syncMissingEarnings(shgId: number) {
+    try {
+      // @ts-ignore
+      const completedPickups = await this.prisma.pickupOrder.findMany({
+        where: { shgId, status: { in: ['COMPLETED', 'RETURNED'] } },
+        select: { 
+          masterOrder: { select: { orderNumber: true, updatedAt: true } },
+          tracking: {
+            where: { status: { in: ['COMPLETED', 'RETURNED'] } },
+            orderBy: { updatedAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      // @ts-ignore
+      const completedDrops = await this.prisma.dropOrder.findMany({
+        where: { shgId, status: { in: ['DELIVERED', 'RETURNED'] } },
+        select: { 
+          masterOrder: { select: { orderNumber: true, updatedAt: true } },
+          tracking: {
+            where: { status: { in: ['DELIVERED', 'RETURNED'] } },
+            orderBy: { updatedAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      const orderMap = new Map<string, Date>();
+      
+      for (const p of completedPickups) {
+        const orderNumber = p.masterOrder.orderNumber;
+        const completedAt = p.tracking[0]?.updatedAt || p.masterOrder.updatedAt || new Date();
+        if (!orderMap.has(orderNumber) || orderMap.get(orderNumber)! < completedAt) {
+          orderMap.set(orderNumber, completedAt);
+        }
+      }
+
+      for (const d of completedDrops) {
+        const orderNumber = d.masterOrder.orderNumber;
+        const completedAt = d.tracking[0]?.updatedAt || d.masterOrder.updatedAt || new Date();
+        if (!orderMap.has(orderNumber) || orderMap.get(orderNumber)! < completedAt) {
+          orderMap.set(orderNumber, completedAt);
+        }
+      }
+
+      if (orderMap.size === 0) return;
+
+      // @ts-ignore
+      const existingEarnings = await this.prisma.earning.findMany({
+        where: { shgId },
+        select: { orderId: true }
+      });
+      const existingOrderIds = new Set(existingEarnings.map((e: any) => e.orderId));
+
+      for (const [orderNumber, completedAt] of orderMap.entries()) {
+        if (!existingOrderIds.has(buildEarningOrderId(orderNumber))) {
+          try {
+            await this.createForCompletedOrder(this.prisma, shgId, orderNumber, completedAt);
+          } catch (err) {
+            console.error(`Failed to backfill earning for SHG ${shgId} and Order ${orderNumber}:`, err);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to sync missing earnings for SHG ${shgId}:`, error);
+    }
+  }
+
   async getEarnings(shgId: number, filter: string = 'today', page: number = DEFAULT_PAGE, limit: number = 20) {
+    await this.syncMissingEarnings(shgId);
+
     const validLimit = Math.min(Number(limit) || 20, MAX_LIMIT);
     const validPage = Math.max(Number(page) || 1, 1);
     const skip = (validPage - 1) * validLimit;
