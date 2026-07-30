@@ -5,7 +5,6 @@ import { HistoryFilterDto } from './history-filter.dto';
 export enum OrderHistoryStatus {
   ALL = 'All',
   COMPLETED = 'Completed',
-  REJECTED = 'Rejected',
 }
 
 export class HistoryQueryDto extends HistoryFilterDto {

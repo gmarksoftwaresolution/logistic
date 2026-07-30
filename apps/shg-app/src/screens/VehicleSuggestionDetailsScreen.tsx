@@ -46,7 +46,7 @@ const VehicleSuggestionDetailsScreen: React.FC<Props> = ({ route, navigation }) 
         text1: t("su_success_388") || "Success",
         text2: "Order accepted with selected vehicle."
       });
-      navigation.navigate('AcceptedOrders', { initialTab: order.legType === 'drop' ? 'delivery' : 'pickup' });
+      navigation.navigate('AcceptedOrders', { initialTab: order.legType === 'drop' ? 'drop' : 'pickup' });
     } catch (error) {
       Toast.show({
         type: 'error',
@@ -88,7 +88,7 @@ const VehicleSuggestionDetailsScreen: React.FC<Props> = ({ route, navigation }) 
           colors={['#FFFFFF', '#E8F5EC']} 
           start={{ x: 0, y: 0 }} 
           end={{ x: 1, y: 0 }}
-          className="flex-1 h-[76px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
+          className="flex-1 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
           style={{ 
             borderRadius: 30,
             overflow: 'hidden',

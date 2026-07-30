@@ -1,7 +1,6 @@
 export interface IHistoryStats {
   totalOrders: number;
   completedOrders: number;
-  rejectedOrders: number;
 }
 
 export interface IHistoryResponse {

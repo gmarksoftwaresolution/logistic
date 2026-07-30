@@ -18,7 +18,7 @@ interface OrderCardProps {
   distance?: string | number;
   onViewAddress?: () => void;
   isHighlighted?: 'new' | 'updated';
-  isRejectedDelivery?: boolean;
+  
   isRescheduled?: boolean;
   isRedirected?: boolean;
   onRedirect?: () => void;
@@ -41,7 +41,6 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   distance,
   onViewAddress,
   isHighlighted,
-  isRejectedDelivery,
   isRescheduled,
   isRedirected = false,
   onRedirect,

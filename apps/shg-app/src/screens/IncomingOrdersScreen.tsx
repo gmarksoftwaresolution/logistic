@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -19,7 +20,6 @@ import { AddressDetailsModal } from '../components/AddressDetailsModal';
 import { normalize, moderateScale } from '../utils/responsive';
 import { SharedHeader } from '../components/SharedHeader';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { RejectReasonModal } from '../components/RejectReasonModal';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { OrderDistance } from '../components/OrderDistance';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
@@ -41,11 +41,9 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     acceptOrder,
     acceptOrders,
     acceptAllOrders,
-    rejectOrder,
     highlightedOrders,
     incomingReturnOrders,
-    acceptReturnOrders,
-    rejectReturnOrders
+    acceptReturnOrders
   } = useOrders();
   const { isActive, currentStep, nextStep } = useOnboarding();
   const insets = useSafeAreaInsets();
@@ -100,12 +98,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
     onConfirm: () => {}
   });
 
-  // Reject Reason Modal state
-  const [rejectModalVisible, setRejectModalVisible] = useState(false);
-  const [ordersToRejectBatch, setOrdersToRejectBatch] = useState<Order[]>([]);
-  const [currentRejectIndex, setCurrentRejectIndex] = useState(0);
-
-  // Reschedule state hooks
+  // Confirm Modal State
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [tempSelectedDay, setTempSelectedDay] = useState(18);
   const [tempSelectedTime, setTempSelectedTime] = useState('11:00 AM');
@@ -233,51 +226,6 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       }
     });
   };
-  const handleRejectSelected = () => {
-    const isReturnsTab = activeTab === 'returns';
-    const sourceArray = isReturnsTab ? incomingReturnOrders : incomingOrders;
-    const currentSelected = isReturnsTab ? selectedReturnIds : selectedIds;
-    
-    const batch = sourceArray.filter(o => currentSelected.includes(o.id));
-    if (batch.length === 0) return;
-    setOrdersToRejectBatch(batch);
-    setCurrentRejectIndex(0);
-    setRejectModalVisible(true);
-  };
-  const handleRejectModalSubmit = async (order: Order, reason: string) => {
-    try {
-      if (activeTab === 'returns') {
-        const idsToReject = ordersToRejectBatch.map(o => o.id);
-        await rejectReturnOrders(idsToReject, reason);
-      } else {
-        await Promise.all(ordersToRejectBatch.map(o => 
-          rejectOrder({
-            ...o,
-            rejectReason: reason
-          })
-        ));
-      }
-      setRejectModalVisible(false);
-      if (activeTab === 'returns') {
-        setSelectedReturnIds([]);
-      } else {
-        setSelectedIds([]);
-      }
-      import('react-native-toast-message').then(({
-        default: Toast
-      }) => Toast.show({
-        type: 'success',
-        text1: t("su_done_359"),
-        text2: t("su_selected_orders_have_391")
-      }));
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to reject order.'
-      });
-    }
-  };
   const handleAcceptAll = () => {
     const ordersToAccept = selectedIds.length > 0 ? incomingOrders.filter(o => selectedIds.includes(o.id)) : incomingOrders;
     if (ordersToAccept.length === 0) {
@@ -327,16 +275,14 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       }
     });
   };
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
     setIsRefreshing(true);
-    setTimeout(() => {
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
       setIsRefreshing(false);
-      Toast.show({
-        type: 'success',
-        text1: t("su_refreshed_396"),
-        text2: t("su_your_order_list_is_u_397")
-      });
-    }, 1500);
+    }
   };
   return <SafeAreaView className="flex-1" style={{
     backgroundColor: Colors.background
@@ -344,6 +290,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       <SharedHeader title="Incoming Orders" subtitle="Review and manage newly received orders" navigation={navigation} />
 
       <FlatList 
+        refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={{ paddingBottom: 120 }}
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
@@ -666,13 +613,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
             onPress={() => activeTab === 'new' ? setVisibleCount(prev => prev + PAGE_SIZE) : setVisibleReturnCount(prev => prev + PAGE_SIZE)}
           />
         )}
-        {/* Refresh Orders Button */}
-        {(activeTab === 'new' ? incomingOrders.length : incomingReturnOrders.length) > 0 && <TouchableOpacity onPress={handleRefresh} disabled={isRefreshing} className="flex-row items-center justify-center py-5">
-            {isRefreshing ? <ActivityIndicator size="small" color="#073318" /> : <>
-                <Ionicons name="refresh-outline" size={16} color="#073318" />
-                <Text className="text-[#073318] font-bold text-sm ml-2">{t("su_refresh_orders_407")}</Text>
-              </>}
-          </TouchableOpacity>}
+
         <View className="h-28" />
         </>}
       />
@@ -692,22 +633,6 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       shadowRadius: 16,
       elevation: 10
     }} className="absolute bottom-[110px] left-6 right-6 bg-white border border-[#F1F5F9] rounded-[30px] p-4 flex-row gap-3">
-          {/* Reject Button */}
-          <TouchableOpacity onPress={handleRejectSelected} activeOpacity={0.8} className="flex-1 flex-row items-center justify-center bg-[#DC2626] py-3.5 rounded-[22px] shadow-sm" style={{
-        shadowColor: '#DC2626',
-        shadowOffset: {
-          width: 0,
-          height: 2
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 3,
-        elevation: 3
-      }}>
-            <Ionicons name="close-circle" size={18} color="white" />
-            <Text className="text-white font-extrabold text-[14px] tracking-wide ml-2">{t("su_reject_408")}{currentSelectedIds.length})
-            </Text>
-          </TouchableOpacity>
-
           {/* Accept Button */}
           {modalConfig.visible ? (
             <View style={{ flex: 1 }}>
@@ -958,11 +883,6 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       modalConfig.onConfirm();
     }} />
 
-      {/* Reject Reason Modal */}
-      <RejectReasonModal visible={rejectModalVisible} order={ordersToRejectBatch[currentRejectIndex] || null} onClose={() => {
-      setRejectModalVisible(false);
-      setSelectedIds([]);
-    }} onSubmit={handleRejectModalSubmit} />
       {selectedAddressOrder && (() => {
         const { pickup, delivery } = getModalAddresses(selectedAddressOrder, t);
         return (
