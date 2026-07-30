@@ -137,7 +137,6 @@ export class OrderService {
             }
           }
         ],
-        buyerId: shgId, // Buyer is the SHG
         status: { in: ['PENDING', 'ACCEPTED', 'REJECTED', 'DELIVERED'] },
         NOT: {
           dropOrderNumber: { startsWith: 'RET-' }
@@ -245,7 +244,9 @@ export class OrderService {
     const formattedInboundDrops = await this.formatInboundDrops(filteredInboundDrops);
     const formattedRegularDrops = await this.formatRegularDrops(updatedRegularDrops);
 
-    return [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
+    const allFormatted = [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
+    const uniqueOrders = Array.from(new Map(allFormatted.map((o: any) => [o.orderId || o.orderNumber || o.id, o])).values());
+    return uniqueOrders;
   }
 
   async acceptPickup(pickupOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
@@ -580,7 +581,7 @@ export class OrderService {
           await tx.$executeRawUnsafe(`
             INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
             VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW());
-          `, uuidv4(), orderUuid, t.id);
+          `, uuidv4(), orderUuid, String(t.userId));
         }
 
         await tx.$executeRawUnsafe(`
@@ -590,6 +591,94 @@ export class OrderService {
 
       return updated;
     }, { timeout: 30000 });
+  }
+
+  async redirectOrder(orderId: number, shgId: number, legType: 'pickup' | 'drop' = 'pickup', reason: string = '') {
+    return this.prisma.$transaction(async (tx: any) => {
+      const shgUuid = String(shgId);
+
+      if (legType === 'drop') {
+        const dropOrder = await tx.dropOrder.findUnique({ where: { id: orderId } });
+        if (!dropOrder) throw new NotFoundException(`Drop order ${orderId} not found`);
+        const orderUuid = dropOrder.uuid || String(dropOrder.id);
+
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order" 
+          SET "isDropRedirected" = true, 
+              "redirectedDropAt" = NOW(), 
+              "redirectedDropShgId" = $1, 
+              "dropShgStatus" = 'REDIRECTED', 
+              "mainStatus" = 'DROP_REDIRECT_PENDING', 
+              "updatedAt" = NOW() 
+          WHERE id = $2;
+        `, shgUuid, orderUuid);
+
+        // Auto-broadcast: create pending OrderAssignment for Transporters
+        const approvedTransporters = await tx.transporterDetail.findMany({
+          where: { isVerified: true },
+          select: { userId: true }
+        });
+
+        for (const tr of approvedTransporters) {
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW())
+            ON CONFLICT DO NOTHING;
+          `, uuidv4(), orderUuid, String(tr.userId));
+        }
+
+        await tx.orderTracking.create({
+          data: {
+            orderId: orderUuid,
+            status: 'DROP_REDIRECTED',
+            remarks: `Delivery leg redirected directly to Buyer Address by SHG.${reason ? ' Reason: ' + reason : ''}`,
+          },
+        });
+
+        return { success: true, message: 'Delivery leg redirected to Buyer address.' };
+      } else {
+        const pickupOrder = await tx.pickupOrder.findUnique({ where: { id: orderId } });
+        if (!pickupOrder) throw new NotFoundException(`Pickup order ${orderId} not found`);
+        const orderUuid = pickupOrder.uuid || String(pickupOrder.id);
+
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order" 
+          SET "isPickupRedirected" = true, 
+              "redirectedPickupAt" = NOW(), 
+              "redirectedPickupShgId" = $1, 
+              "pickupShgStatus" = 'REDIRECTED', 
+              "mainStatus" = 'REDIRECT_PENDING', 
+              "updatedAt" = NOW() 
+          WHERE id = $2;
+        `, shgUuid, orderUuid);
+
+        // Auto-broadcast: create pending OrderAssignment for Transporters
+        const approvedTransporters = await tx.transporterDetail.findMany({
+          where: { isVerified: true },
+          select: { userId: true }
+        });
+
+        for (const tr of approvedTransporters) {
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'TRANSPORTER', 'PICKUP', 'PENDING', NOW(), NOW())
+            ON CONFLICT DO NOTHING;
+          `, uuidv4(), orderUuid, String(tr.userId));
+        }
+
+        await tx.orderTracking.create({
+          data: {
+            orderId: orderUuid,
+            status: 'PICKUP_REDIRECTED',
+            remarks: `Pickup leg redirected directly to Seller Shop Address by SHG.${reason ? ' Reason: ' + reason : ''}`,
+          },
+        });
+
+        return { success: true, message: 'Pickup leg redirected to Seller shop address.' };
+      }
+    });
   }
 
   async rejectPickup(pickupOrderId: number, shgId: number, reason: string = '') {
@@ -776,7 +865,17 @@ export class OrderService {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
     }
 
-    if (pickupOrder.status === 'COMPLETED' || pickupOrder.status === 'RETURNED') {
+    // Check if transporter assignment broadcast has already been triggered for this order
+    const rawAssignmentCheck = await this.prisma.$queryRawUnsafe(`
+      SELECT oa.id FROM public."OrderAssignment" oa
+      JOIN public."Order" o ON oa."orderId" = o.id
+      JOIN public.master_orders mo ON o."orderId" = mo.order_number
+      WHERE mo.id = $1 AND o.phase = 'PICKUP' AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' LIMIT 1;
+    `, pickupOrder.masterOrderId) as any[];
+
+    const alreadyBroadcasted = rawAssignmentCheck.length > 0;
+
+    if ((pickupOrder.status === 'COMPLETED' || pickupOrder.status === 'RETURNED') && alreadyBroadcasted) {
       return pickupOrder;
     }
 
@@ -785,7 +884,9 @@ export class OrderService {
     });
     const orderNumber = masterOrder?.orderNumber || `ORD-${pickupOrder.masterOrderId}`;
 
-    if (legType === 'pickup') {
+    const isPickupLeg = !legType || legType === 'pickup';
+
+    if (isPickupLeg) {
       const items = await this.prisma.pickupOrderItem.findMany({
         where: { pickupOrderId }
       });
@@ -834,7 +935,7 @@ export class OrderService {
         where: { id: pickupOrder.masterOrderId }
       });
 
-      if (legType === 'pickup') {
+      if (isPickupLeg) {
         const nextStatus = pickupOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'COMPLETED';
         const updated = await tx.pickupOrder.update({
           where: { id: pickupOrderId },
@@ -1157,13 +1258,6 @@ export class OrderService {
     const masterOrder = dropOrder.masterOrder;
     const orderNumber = masterOrder.orderNumber;
 
-    // Log the scan event to ScanHistory
-    await this.prisma.$executeRawUnsafe(`
-      INSERT INTO public."ScanHistory" (
-        "orderId", "barcode", "scanType", "scanLocation", "scannedBy", "userRole", "scanResult"
-      ) VALUES ($1, $2, 'Drop', 'SHG Location', $3, 'SHG', 'SUCCESS');
-    `, masterOrder.id.toString(), code, shgId);
-
     return this.prisma.$transaction(async (tx: any) => {
       const nextStatus = dropOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'PICKED_UP';
       const updated = await tx.dropOrder.update({
@@ -1246,13 +1340,6 @@ export class OrderService {
     if (!masterOrder) {
       throw new NotFoundException(`Master order for drop order ${dropOrderId} not found.`);
     }
-
-    // Log the scan event to ScanHistory
-    await this.prisma.$executeRawUnsafe(`
-      INSERT INTO public."ScanHistory" (
-        "orderId", "barcode", "scanType", "scanLocation", "scannedBy", "userRole", "scanResult"
-      ) VALUES ($1, $2, 'Delivery', 'Buyer Location', $3, 'SHG', 'SUCCESS');
-    `, masterOrder.id.toString(), code, shgId);
 
     return this.prisma.$transaction(async (tx: any) => {
       const nextStatus = (dropOrder.status === 'RETURN_ACCEPTED' || dropOrder.status === 'RETURN_PICKED_UP') ? 'RETURNED' : 'DELIVERED';

@@ -66,6 +66,11 @@ export interface Order {
   recommendedVehicle?: VehicleInfo | null;
   recommendedCapacity?: number | null;
   otherSuitableVehicles?: VehicleInfo[];
+  isPickupRedirected?: boolean;
+  isDropRedirected?: boolean;
+  isRedirected?: boolean;
+  pickupShgStatus?: string;
+  dropShgStatus?: string;
 }
 
 interface OrderContextType {
@@ -79,6 +84,7 @@ interface OrderContextType {
   highlightedOrders: Record<string, 'new' | 'updated'>;
   getStockItems: () => Order[];
   acceptOrder: (order: Order, selectedVehicle?: VehicleInfo) => Promise<void>;
+  redirectOrder: (order: Order, reason?: string) => Promise<void>;
   acceptOrders: (orders: Order[]) => Promise<void>;
   acceptAllOrders: () => Promise<void>;
   rejectOrder: (order: Order) => Promise<void>;
@@ -250,6 +256,11 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       transporterAddress: dbOrder.transporter?.transporterAddress || '',
       transporterRoute: dbOrder.transporter?.transporterRoute || '',
       handoverCode: dbOrder.handoverCode || '',
+      isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
+      isDropRedirected: !!(dbOrder.isDropRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.dropShgStatus === 'REDIRECTED'),
+      isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
+      pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
+      dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
     };
 };
 
@@ -609,6 +620,22 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const redirectOrder = async (order: Order, reason: string = '') => {
+    try {
+      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+      const endpoint = `/orders/${rawId}/redirect`;
+      await axiosInstance.post(endpoint, {
+        legType: order.legType || 'pickup',
+        reason
+      });
+      await clearLocalStateForOrders([order.id]);
+      await refreshOrdersList();
+    } catch (error) {
+      console.error(`Error redirecting order ${order.id}:`, error);
+      throw error;
+    }
+  };
+
   const acceptOrders = async (ordersToAccept: Order[]) => {
     try {
       await Promise.all(ordersToAccept.map(order => {
@@ -960,6 +987,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       highlightedOrders,
       getStockItems,
       acceptOrder,
+      redirectOrder,
       acceptOrders,
       acceptAllOrders,
       rejectOrder,

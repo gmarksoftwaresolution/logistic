@@ -53,6 +53,14 @@ model Order {
   rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
   rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
   
+  // Redirect indicators
+  isPickupRedirected      Boolean?          @default(false)
+  isDropRedirected        Boolean?          @default(false)
+  redirectedPickupAt      DateTime?
+  redirectedDropAt        DateTime?
+  redirectedPickupShgId   String?
+  redirectedDropShgId     String?
+  
   // Timestamps
   warehouseReceivedAt     DateTime?
   barcodeGeneratedAt      DateTime?
@@ -396,7 +404,6 @@ model DrivingDetail {
   expiryDate            DateTime
 
   drivingExperience     Int?
-  drivingLicenseNo      String?
   drivingLicenseUrl     String?
 
   createdAt             DateTime @default(now())
@@ -600,11 +607,14 @@ model WarehouseInventory {
   product     Product   @relation(fields: [productId], references: [id])
   quantity    Int?
   qcStatus    String?   @map("qc_status")
+  orderId     String?   @map("order_id")
+  status      String?   @default("STORED")
+  dispatchedAt DateTime? @map("dispatched_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  @@unique([warehouseId, productId])
   @@index([warehouseId])
   @@index([productId])
+  @@index([orderId])
   @@map("warehouse_inventory")
 }
 
@@ -680,7 +690,7 @@ model DropTracking {
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
   village        String
-  postOffice     String
+  postOffice     String   @map("post_office")
   pincode        String
   taluka         String
   district       String
@@ -765,21 +775,6 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
-}
-
-model ScanHistory {
-  id           Int       @id @default(autoincrement())
-  orderId      String
-  barcode      String
-  scanType     String
-  scanLocation String?
-  scannedBy    Int?
-  userRole     String?
-  scanResult   String
-  device       String?
-  timestamp    DateTime  @default(now())
-
-  @@map("ScanHistory")
 }
 
 model Parcel {

@@ -74,6 +74,17 @@ export class OrderController {
     return this.orderService.rejectAcceptedPickup(id, user.id, reason);
   }
 
+  @Post(':id/redirect')
+  @ApiOperation({ summary: 'Redirect an accepted order to Transporter (supports legType: pickup | drop)' })
+  async redirectOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser() user: User,
+    @Body('legType') legType?: 'pickup' | 'drop',
+    @Body('reason') reason?: string,
+  ) {
+    return this.orderService.redirectOrder(id, user.id, legType, reason);
+  }
+
 
   @Get('returns/assigned')
   @ApiOperation({ summary: 'Get all active return assignments (pickup/delivery) for the SHG' })

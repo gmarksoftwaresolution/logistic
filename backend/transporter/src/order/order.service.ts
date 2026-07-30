@@ -132,35 +132,20 @@ export class OrderService {
     for (const pickup of pickups) {
       if (pickup.transporterId === transporterId) {
         filteredPickups.push(pickup);
-      } else if (pickup.transporterId === null) {
-        // Must be completed (picked up by SHG) and match transporter's operating area
-        if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED') {
-          // Check gmu.Order mainStatus
-          const gmuOrders = await this.prisma.$queryRawUnsafe(`
-            SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
-          `, pickup.masterOrder.orderNumber) as any[];
-          if (gmuOrders.length > 0) {
-            const orderUuid = gmuOrders[0].id;
-            const mainStatus = gmuOrders[0].mainStatus;
-            const pickupTransporterStatus = gmuOrders[0].pickupTransporterStatus;
+      } else {
+        const gmuOrders = await this.prisma.$queryRawUnsafe(`
+          SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        `, pickup.masterOrder.orderNumber) as any[];
 
-            if (pickupTransporterStatus === 'ACCEPTED' || pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || pickupTransporterStatus === 'PICKED') {
-              continue;
-            }
+        if (gmuOrders.length > 0) {
+          const orderUuid = gmuOrders[0].id;
+          const assignments = await this.prisma.$queryRawUnsafe(`
+            SELECT id, status FROM public."OrderAssignment"
+            WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status IN ('PENDING', 'ACCEPTED') LIMIT 1;
+          `, orderUuid, transporterUuid) as any[];
 
-            // Check if there is a PENDING assignment for this transporter
-            const assignments = await this.prisma.$queryRawUnsafe(`
-              SELECT id FROM public."OrderAssignment"
-              WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
-            `, orderUuid, transporterUuid) as any[];
-
-            if (assignments.length > 0) {
-              if (mainStatus === 'PARCEL_AT_SHG' || mainStatus === 'RETURN_PARCEL_AT_SHG') {
-                if (matchesRoute(pickup.seller.pincode, pickup.seller.village)) {
-                  filteredPickups.push(pickup);
-                }
-              }
-            }
+          if (assignments.length > 0) {
+            filteredPickups.push(pickup);
           }
         }
       }
@@ -967,12 +952,6 @@ export class OrderService {
       const masterOrder = await this.prisma.masterOrder.findUnique({
         where: { id: dropOrder.masterOrderId }
       });
-
-      await this.prisma.$executeRawUnsafe(`
-        INSERT INTO public."ScanHistory" (
-          "orderId", "barcode", "scanType", "scanLocation", "scannedBy", "userRole", "scanResult"
-        ) VALUES ($1, $2, 'Drop', 'SHG Location', $3, 'TRANSPORTER', 'SUCCESS');
-      `, masterOrder.id.toString(), code, transporterId);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -1118,12 +1097,6 @@ export class OrderService {
           remarks: 'Parcel picked up from GMU Hub by transporter.',
         },
       });
-
-      await tx.$executeRawUnsafe(`
-        INSERT INTO public."ScanHistory" (
-          "orderId", "barcode", "scanType", "scanLocation", "scannedBy", "userRole", "scanResult"
-        ) VALUES ($1, $2, 'Pickup', 'GMU Hub Dispatch Area', $3, 'TRANSPORTER', 'SUCCESS');
-      `, masterOrder.id.toString(), code, transporterId);
 
       return updated;
     }, {

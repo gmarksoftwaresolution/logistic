@@ -5,14 +5,15 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
-    console.error('API Error Captured by Filter:', exception);
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
@@ -23,6 +24,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? (exception.getResponse() as any).message || exception.message
         : 'Internal server error';
 
+    if (status >= 500) {
+      console.error(`[Server Error ${status}] ${request?.method} ${request?.url}:`, exception);
+    } else if (status === 401) {
+      console.warn(`[Auth 401] ${request?.method} ${request?.url} - Unauthorized request`);
+    } else {
+      console.warn(`[Client Error ${status}] ${request?.method} ${request?.url} - ${message}`);
+    }
+
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
@@ -31,3 +40,4 @@ export class AllExceptionsFilter implements ExceptionFilter {
     });
   }
 }
+

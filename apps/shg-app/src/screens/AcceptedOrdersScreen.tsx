@@ -41,7 +41,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder, highlightedOrders } = useOrders();
+  const { acceptedOrders, receiveOrder, highlightedOrders, redirectOrder } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
@@ -121,6 +121,34 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleEyeDetails = (order: Order) => {
     navigation.navigate('OrderDetails', { order });
+  };
+
+  const handleRedirectOrder = (item: Order) => {
+    const isDelivery = item.legType === 'drop';
+    setModalConfig({
+      visible: true,
+      title: isDelivery ? 'Redirect Delivery to Buyer?' : 'Redirect Pickup to Transporter?',
+      message: isDelivery 
+        ? 'Are you sure you want to redirect this delivery directly to Buyer Address via Transporter?' 
+        : 'Are you sure you want to redirect this pickup directly from Seller Shop to Transporter?',
+      confirmText: 'Confirm Redirect',
+      onConfirm: async () => {
+        try {
+          await redirectOrder(item);
+          Toast.show({
+            type: 'success',
+            text1: 'Order Redirected',
+            text2: 'Order has been redirected to Transporters successfully.'
+          });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to redirect order.'
+          });
+        }
+      }
+    });
   };
 
   return (
@@ -260,6 +288,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
+            const isRedirected = !!item.isPickupRedirected || item.pickupShgStatus === 'REDIRECTED';
 
             return (
               <OrderCard
@@ -270,12 +299,14 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 date={info.date}
                 time={info.time}
                 distance={item.distance}
-                showScanner={true}
+                showScanner={!isRedirected}
                 onScan={() => handleQRScan(item)}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
+                isRedirected={isRedirected}
+                onRedirect={() => handleRedirectOrder(item)}
               />
             );
           }}
@@ -325,6 +356,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
+            const isRedirected = !!item.isDropRedirected || item.dropShgStatus === 'REDIRECTED';
 
             return (
               <OrderCard
@@ -341,6 +373,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRejectedDelivery={item.isRejectedDelivery}
                 isRescheduled={!!item.rescheduledDate}
+                isRedirected={isRedirected}
+                onRedirect={() => handleRedirectOrder(item)}
                 transporterName={item.transporterName}
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}

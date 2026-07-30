@@ -69,6 +69,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
       case 'auto': return 'bus-outline';
       case 'pickup': return 'car-outline';
       case 'minivan': return 'bus-outline';
+
       case 'truck': return 'car-outline';
       case 'tractor': return 'car-outline';
       default: return 'car-outline';

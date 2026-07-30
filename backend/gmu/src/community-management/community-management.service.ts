@@ -53,9 +53,9 @@ export class CommunityManagementService {
         addr.pincode,
         doc."aadhaarNumber",
         doc."panNumber",
-        doc."aadhaarFrontUrl" as "aadhaarFrontPhoto",
-        doc."aadhaarBackUrl" as "aadhaarBackPhoto",
-        doc."panCardUrl" as "panCardPhoto",
+        COALESCE(doc."aadhaarFrontUrl", st5.data->>'aadhaarFrontUrl', st5.data->>'aadhaarFront') as "aadhaarFrontPhoto",
+        COALESCE(doc."aadhaarBackUrl", st5.data->>'aadhaarBackUrl', st5.data->>'aadhaarBack') as "aadhaarBackPhoto",
+        COALESCE(doc."panCardUrl", st5.data->>'panCardUrl', st5.data->>'panImage') as "panCardPhoto",
         bank."accountHolderName",
         bank."accountNumber",
         bank."ifscCode",
@@ -105,6 +105,7 @@ export class CommunityManagementService {
       LEFT JOIN public."StepTracking" st1 ON u.id = st1."userId" AND st1.step = 1
       LEFT JOIN public."StepTracking" st2 ON u.id = st2."userId" AND st2.step = 2
       LEFT JOIN public."StepTracking" st3 ON u.id = st3."userId" AND st3.step = 3
+      LEFT JOIN public."StepTracking" st5 ON u.id = st5."userId" AND st5.step = 5
       LEFT JOIN public."StepTracking" st7 ON u.id = st7."userId" AND st7.step = 7
       WHERE u.role = '${role}'
       AND u."currentStep" = 7
@@ -143,11 +144,27 @@ export class CommunityManagementService {
     return this.getCommunityMembers('INDIVIDUAL', 'REJECTED');
   }
 
-  async getMemberById(id: string) {
-    const userId = parseInt(id, 10);
-    if (isNaN(userId)) {
-      throw new NotFoundException(`Invalid member ID: ${id}`);
+  private async resolveUserId(id: string): Promise<number> {
+    if (/^[0-9]+$/.test(id)) {
+      const u = await this.prisma.user.findUnique({ where: { id: parseInt(id, 10) } });
+      if (u) return u.id;
     }
+    const userRows = await this.prisma.$queryRawUnsafe<any[]>(
+      `SELECT u.id 
+       FROM public."User" u
+       LEFT JOIN public."ShgDetail" sd ON u.id = sd."userId"
+       WHERE u."uniqueCode" = $1 OR sd."memberCode" = $1 OR u."phoneNumber" = $1
+       LIMIT 1`,
+      id
+    );
+    if (userRows && userRows.length > 0) {
+      return userRows[0].id;
+    }
+    throw new NotFoundException(`Invalid member ID: ${id}`);
+  }
+
+  async getMemberById(id: string) {
+    const userId = await this.resolveUserId(id);
 
     const query = `
       SELECT 
@@ -182,9 +199,9 @@ export class CommunityManagementService {
         addr.pincode,
         doc."aadhaarNumber",
         doc."panNumber",
-        doc."aadhaarFrontUrl" as "aadhaarFrontPhoto",
-        doc."aadhaarBackUrl" as "aadhaarBackPhoto",
-        doc."panCardUrl" as "panCardPhoto",
+        COALESCE(doc."aadhaarFrontUrl", st5.data->>'aadhaarFrontUrl', st5.data->>'aadhaarFront') as "aadhaarFrontPhoto",
+        COALESCE(doc."aadhaarBackUrl", st5.data->>'aadhaarBackUrl', st5.data->>'aadhaarBack') as "aadhaarBackPhoto",
+        COALESCE(doc."panCardUrl", st5.data->>'panCardUrl', st5.data->>'panImage') as "panCardPhoto",
         bank."accountHolderName",
         bank."accountNumber",
         bank."ifscCode",
@@ -234,6 +251,7 @@ export class CommunityManagementService {
       LEFT JOIN public."StepTracking" st1 ON u.id = st1."userId" AND st1.step = 1
       LEFT JOIN public."StepTracking" st2 ON u.id = st2."userId" AND st2.step = 2
       LEFT JOIN public."StepTracking" st3 ON u.id = st3."userId" AND st3.step = 3
+      LEFT JOIN public."StepTracking" st5 ON u.id = st5."userId" AND st5.step = 5
       LEFT JOIN public."StepTracking" st7 ON u.id = st7."userId" AND st7.step = 7
       WHERE u.id = ${userId}
       AND u."currentStep" = 7
@@ -252,10 +270,7 @@ export class CommunityManagementService {
   }
 
   async approveMember(id: string) {
-    const userId = parseInt(id, 10);
-    if (isNaN(userId)) {
-      throw new NotFoundException(`Invalid member ID: ${id}`);
-    }
+    const userId = await this.resolveUserId(id);
 
     await this.prisma.$executeRaw`
       UPDATE public."User"
@@ -289,10 +304,7 @@ export class CommunityManagementService {
   }
 
   async rejectMember(id: string) {
-    const userId = parseInt(id, 10);
-    if (isNaN(userId)) {
-      throw new NotFoundException(`Invalid member ID: ${id}`);
-    }
+    const userId = await this.resolveUserId(id);
 
     await this.prisma.$executeRaw`
       UPDATE public."User"

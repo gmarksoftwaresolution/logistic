@@ -171,11 +171,16 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
           {/* Section: Pickup Location & Contact Details */}
           <View style={styles.contactCardContainer}>
             <View style={styles.contactCardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                 <MapPin size={scale(18)} color="#3B82F6" strokeWidth={2.5} />
                 <Text style={styles.contactCardTitle}>
                   {t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
                 </Text>
+                {(batch?.isPickupRedirected || batch?.isRedirected) && (
+                  <View style={{ backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
+                    <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT SELLER PICKUP (REDIRECTED)</Text>
+                  </View>
+                )}
               </View>
               {pickupContact?.phone && (
                 <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${pickupContact.phone}`)} activeOpacity={0.7}>
@@ -261,11 +266,16 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
           {/* Section: Drop-off Location & Contact Details */}
           <View style={styles.contactCardContainer}>
             <View style={styles.contactCardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                 <MapPin size={scale(18)} color="#10B981" strokeWidth={2.5} />
                 <Text style={styles.contactCardTitle}>
                   {t('orders.drop_details_title', { defaultValue: 'Drop-off Location & Contact' })}
                 </Text>
+                {batch?.isDropRedirected && (
+                  <View style={{ backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
+                    <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT BUYER DELIVERY (REDIRECTED)</Text>
+                  </View>
+                )}
               </View>
               {dropContact?.phone && (
                 <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${dropContact.phone}`)} activeOpacity={0.7}>

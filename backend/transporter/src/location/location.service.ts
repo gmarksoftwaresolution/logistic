@@ -154,4 +154,83 @@ export class LocationService {
     });
     return !!record;
   }
+
+  // Backward compatibility methods
+  async getAddressFromPincode(pincode: string) {
+    if (!pincode || pincode.trim().length !== 6) {
+      throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
+    }
+    const cleanPincode = pincode.trim();
+
+    try {
+      const records = await this.prisma.pincodeDirectory.findMany({
+        where: { pincode: cleanPincode },
+      });
+
+      if (records && records.length > 0) {
+        const first = records[0];
+        const villages = [...new Set(records.map((r: any) => r.village))].sort();
+        return {
+          state: first.state,
+          district: first.district,
+          taluka: first.taluka || first.district || 'N/A',
+          villages: villages,
+          postOffices: villages,
+          source: 'local_db',
+        };
+      }
+    } catch (dbErr: any) {
+      console.warn(`Local DB pincode query notice for ${cleanPincode}:`, dbErr.message);
+    }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
+        const postOffices = response.data[0].PostOffice;
+        const first = postOffices[0];
+        const villages = [...new Set(postOffices.map((po: any) => po.Name))].sort();
+        return {
+          state: first.State,
+          district: first.District,
+          taluka: first.Block || first.Taluka || first.District || 'N/A',
+          villages: villages,
+          postOffices: villages,
+          source: 'postal_api',
+        };
+      }
+    } catch (apiErr: any) {
+      console.warn(`External postal pincode fallback failed for ${cleanPincode}:`, apiErr.message);
+    }
+
+    throw new HttpException('Pincode details not found in directory', HttpStatus.NOT_FOUND);
+  }
+
+  async getBankFromIfsc(ifsc: string) {
+    try {
+      if (ifsc.length !== 11) {
+        throw new HttpException('Invalid IFSC length', HttpStatus.BAD_REQUEST);
+      }
+
+      const response = await axios.get(`https://ifsc.razorpay.com/${ifsc}`, { timeout: 5000 });
+      const data = response.data;
+
+      return {
+        bankName: data.BANK,
+        branchName: data.BRANCH,
+        city: data.CITY,
+        state: data.STATE,
+      };
+    } catch (error) {
+      console.error('IFSC Fetch Error:', error.message);
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        throw new HttpException('IFSC code not found', HttpStatus.NOT_FOUND);
+      }
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        `Error fetching bank details: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
+

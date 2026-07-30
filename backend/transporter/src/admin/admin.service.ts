@@ -120,7 +120,6 @@ export class AdminService {
           licenseNumber: s2.licenseNumber,
           expiryDate: new Date(s2.expiryDate),
           drivingExperience: s2.experienceYears,
-          drivingLicenseNo: s2.licenseNumber,
           drivingLicenseUrl: s2.licensePhoto,
         },
         create: {
@@ -128,7 +127,6 @@ export class AdminService {
           licenseNumber: s2.licenseNumber,
           expiryDate: new Date(s2.expiryDate),
           drivingExperience: s2.experienceYears,
-          drivingLicenseNo: s2.licenseNumber,
           drivingLicenseUrl: s2.licensePhoto,
         },
       });

@@ -1535,6 +1535,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const nextStep = async () => {
+    if (isLoading) return;
     let fieldsToValidate: (keyof FormData)[] = [];
     if (currentStep === 1) {
       if (!isOtpVerified) {
@@ -1601,9 +1602,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       const dataSnapshot = { ...formData };
       const timingsSnapshot = { ...dayTimings };
 
+      const prevPromise = activeSavePromise.current;
       activeSavePromise.current = (async () => {
-        // Wait for any previous background saving to complete
-        await activeSavePromise.current;
+        try {
+          if (prevPromise) await prevPromise;
+        } catch (e) {
+          // Ignore previous background save error so chain doesn't lock
+        }
         try {
           await performSave(stepToSave, dataSnapshot, timingsSnapshot);
         } catch (error: any) {
@@ -1624,7 +1629,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       setIsLoading(true);
       setApiError(null);
       try {
-        await activeSavePromise.current;
+        if (activeSavePromise.current) {
+          try {
+            await activeSavePromise.current;
+          } catch (e) {
+            // Ignore previous error from background save so final submit can proceed cleanly
+          }
+        }
         const finalRes = await performSave(currentStep, formData, dayTimings);
 
         const uniqueId = finalRes?.data?.transporterUniqueId;
@@ -3089,18 +3100,25 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <TouchableOpacity
-          style={styles.primaryButton}
+          style={[styles.primaryButton, isLoading && { opacity: 0.7 }]}
           onPress={nextStep}
+          disabled={isLoading}
         >
-          <Text style={styles.primaryButtonText}>
-            {(formData.vehicleTypeSelection === "Milk" && currentStep === 7)
-              ? t("signup.complete_signup")
-              : t("signup.next_step")}
-          </Text>
-          {(formData.vehicleTypeSelection === "Milk" && currentStep === 7) ? (
-            <CheckCircle2 size={20} color="#FFFFFF" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <ChevronRight size={20} color="#FFFFFF" />
+            <>
+              <Text style={styles.primaryButtonText}>
+                {(formData.vehicleTypeSelection === "Milk" && currentStep === 7)
+                  ? t("signup.complete_signup")
+                  : t("signup.next_step")}
+              </Text>
+              {(formData.vehicleTypeSelection === "Milk" && currentStep === 7) ? (
+                <CheckCircle2 size={20} color="#FFFFFF" />
+              ) : (
+                <ChevronRight size={20} color="#FFFFFF" />
+              )}
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -3438,11 +3456,18 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         {renderDayTimingEditor()}
 
         <TouchableOpacity
-          style={styles.primaryButton}
+          style={[styles.primaryButton, isLoading && { opacity: 0.7 }]}
           onPress={nextStep}
+          disabled={isLoading}
         >
-          <Text style={styles.primaryButtonText}>{t('signup.complete_signup')}</Text>
-          <CheckCircle2 size={20} color="#FFFFFF" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Text style={styles.primaryButtonText}>{t('signup.complete_signup')}</Text>
+              <CheckCircle2 size={20} color="#FFFFFF" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     );

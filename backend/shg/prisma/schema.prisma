@@ -41,6 +41,12 @@ model Order {
   returnType              String?
   rescheduleType          String?
   rescheduleDuration      String?
+  isPickupRedirected      Boolean?          @default(false)
+  isDropRedirected        Boolean?          @default(false)
+  redirectedPickupAt      DateTime?
+  redirectedDropAt        DateTime?
+  redirectedPickupShgId   String?
+  redirectedDropShgId     String?
   warehouseReceivedAt     DateTime?
   barcodeGeneratedAt      DateTime?
   storedAt                DateTime?
@@ -269,7 +275,6 @@ model DrivingDetail {
   licenseNumber     String
   expiryDate        DateTime
   drivingExperience Int?
-  drivingLicenseNo  String?
   drivingLicenseUrl String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -527,7 +532,7 @@ model DropTracking {
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
   village        String
-  postOffice     String
+  postOffice     String   @map("post_office")
   pincode        String
   taluka         String
   district       String
@@ -610,21 +615,6 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
-}
-
-model ScanHistory {
-  id           Int      @id @default(autoincrement())
-  orderId      String
-  barcode      String
-  scanType     String
-  scanLocation String?
-  scannedBy    Int?
-  userRole     String?
-  scanResult   String
-  device       String?
-  timestamp    DateTime @default(now())
-
-  @@map("ScanHistory")
 }
 
 model Parcel {
@@ -741,3 +731,4 @@ enum ShgRole {
   LEADER
   MEMBER
 }
+

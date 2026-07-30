@@ -62,6 +62,9 @@ export interface BatchOrder {
   masterOrderId?: number;
   handoverCode?: string;
   isRTO?: boolean;
+  isPickupRedirected?: boolean;
+  isDropRedirected?: boolean;
+  isRedirected?: boolean;
   shgContact: {
     name: string;
     shgName?: string;
@@ -210,23 +213,23 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedPickups = rawPickups.map((o: any) => ({
         id: `pickup-${o.id}`,
         displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.address?.taluka || 'Nesari',
+        areaName: o.seller?.taluka || o.seller?.address?.taluka || 'Gadhinglaj',
         flowType: 'shg_to_gmu' as FlowType,
         shgName: o.shg?.shgDetail?.shgName || 'Local SHG',
-        pickupPointName: o.seller?.address?.village || 'Nesari Stand',
+        pickupPointName: o.seller?.village || o.seller?.address?.village || 'Inchanal',
         dropPointName: 'Gadhinglaj Hub',
         pickupCount: 1,
         dropCount: 0,
         totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
         totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-        status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || ((o.status === 'COMPLETED' || o.status === 'RETURNED') && !o.transporterId))
+        status: (!o.transporterId && o.pickupTransporterStatus !== 'ACCEPTED' && o.pickupTransporterStatus !== 'TRANSPORTER_ACCEPTED' && o.mainStatus !== 'TRANSPORTER_ACCEPTED')
           ? 'NEW_ORDER'
           : (o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED' || ['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || ''))
             ? 'DROP_COMPLETED'
-            : (o.pickupTransporterStatus === 'ACCEPTED')
-              ? 'ACCEPTED_PICKUP'
-              : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB')
-                ? 'PICKUP_COMPLETED'
+            : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB')
+              ? 'PICKUP_COMPLETED'
+              : (o.transporterId || o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+                ? 'ACCEPTED_PICKUP'
                 : 'rejected',
         rejectReason: (() => {
           const rawReason = o.tracking?.[0]?.remarks;

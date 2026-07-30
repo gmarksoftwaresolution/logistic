@@ -122,7 +122,14 @@ export function determineTransition(
       };
     }
     if (currentStatus === 'PARCEL_PICKED') {
-      if (!order.pickupTransporterId || order.pickupTransporterStatus !== 'ACCEPTED') {
+      const isAccepted = Boolean(
+        order.pickupTransporterId ||
+        order.pickupTransporterStatus === 'ACCEPTED' ||
+        order.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' ||
+        order.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' ||
+        order.mainStatus === 'TRANSPORTER_ACCEPTED'
+      );
+      if (!isAccepted) {
         throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
       }
       // SHG Handover to Transporter
@@ -249,6 +256,208 @@ export class QrVerificationEngine {
   constructor(private readonly prisma: any) {}
 
   /**
+   * Automatically broadcasts pickup requests to route-matched transporters
+   * when SHG confirms pickup from Seller.
+   */
+  async broadcastTransporterPickup(tx: any, orderId: string) {
+    try {
+      const fullOrder = await tx.order.findFirst({
+        where: {
+          OR: [
+            { id: orderId },
+            { orderId: orderId }
+          ]
+        },
+        include: { seller: true }
+      });
+
+      if (!fullOrder) {
+        console.warn(`[auto-broadcast] Order not found for id: ${orderId}`);
+        return;
+      }
+
+      const normalizeStr = (s: string) => s ? s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase() : '';
+
+      let sellerVillage = '';
+      let sellerPincode = '';
+
+      if (fullOrder.seller?.village) sellerVillage = normalizeStr(fullOrder.seller.village);
+      if (fullOrder.seller?.pincode) sellerPincode = fullOrder.seller.pincode.trim().toLowerCase();
+
+      const ordAny = fullOrder as any;
+      if (!sellerVillage && ordAny?.sellerVillage) sellerVillage = normalizeStr(ordAny.sellerVillage);
+      if (!sellerPincode && ordAny?.sellerPincode) sellerPincode = String(ordAny.sellerPincode).trim().toLowerCase();
+
+      if ((!sellerVillage || !sellerPincode) && fullOrder.sellerId) {
+        const sellerAddressRows: any[] = await tx.$queryRawUnsafe(`
+          SELECT a.village, a.pincode
+          FROM public."User" u
+          LEFT JOIN public."Address" a ON u.id = a."userId"
+          WHERE u.id = $1 LIMIT 1;
+        `, fullOrder.sellerId);
+
+        if (sellerAddressRows.length > 0) {
+          if (!sellerVillage && sellerAddressRows[0].village) sellerVillage = normalizeStr(sellerAddressRows[0].village);
+          if (!sellerPincode && sellerAddressRows[0].pincode) sellerPincode = String(sellerAddressRows[0].pincode).trim().toLowerCase();
+        }
+      }
+
+      console.log(`[auto-broadcast] Triggered for order ${fullOrder.orderId} (${fullOrder.id}). Seller village: "${sellerVillage}", pincode: "${sellerPincode}"`);
+
+      if (!sellerVillage && !sellerPincode) {
+        console.warn(`[auto-broadcast] Missing seller village and pincode for order ${fullOrder.id}. Skipping broadcast.`);
+        return;
+      }
+
+      const totalWeight = Number(fullOrder.totalWeight || 0);
+
+      const approvedTransporters = await tx.$queryRawUnsafe(`
+        SELECT 
+          u.id, 
+          u."fullName", 
+          rd."operatingArea", 
+          rd."pickupLocations", 
+          mv."assignedVillages", 
+          od."minWeight",
+          od."maxWeight",
+          od."ratePerKm"
+        FROM public."User" u
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+        LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
+        WHERE u.role = 'TRANSPORTER' 
+          AND u."applicationStatus" = 'APPROVED' 
+          AND u."deletedAt" IS NULL;
+      `) as any[];
+
+      const parseJsonArray = (val: any): string[] => {
+        if (Array.isArray(val)) return val.map(x => String(x));
+        if (typeof val === 'string') {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed)) return parsed.map(x => String(x));
+          } catch (e) {}
+        }
+        return [];
+      };
+
+      // 1. ROUTE MATCHING (Strictly ROUTE operatingArea, pickupLocations, and assignedVillages — NOT personal address)
+      const locationMatchedTransporters = approvedTransporters.filter((tr: any) => {
+        const areas = tr.operatingArea
+          ? tr.operatingArea.split(',').map((s: string) => normalizeStr(s))
+          : [];
+        const pickupLocs = parseJsonArray(tr.pickupLocations).map(s => String(s).split(' (')[0].trim().toLowerCase());
+        const mvVillages = parseJsonArray(tr.assignedVillages).map(s => String(s).split(' (')[0].trim().toLowerCase());
+
+        const pincodeMatches = sellerPincode && (
+          pickupLocs.some(pin => pin === sellerPincode) ||
+          areas.some(a => a === sellerPincode)
+        );
+
+        const villageMatches = sellerVillage && (
+          areas.some(a => a === sellerVillage || a.includes(sellerVillage) || sellerVillage.includes(a)) ||
+          mvVillages.some(v => v === sellerVillage || v.includes(sellerVillage) || sellerVillage.includes(v))
+        );
+
+        return Boolean(pincodeMatches || villageMatches);
+      });
+
+      // 2. WEIGHT CAPACITY MATCHING (minWeight <= totalWeight <= maxWeight + buffer)
+      const getEffectiveMaxWeight = (maxW: number | null): number | null => {
+        if (maxW === null || isNaN(maxW)) return null;
+        let bufferPercent = 0.02; // Default 2%
+        if (maxW <= 50) bufferPercent = 0.05; // 5% for small vehicles
+        else if (maxW <= 500) bufferPercent = 0.03; // 3% for medium vehicles
+        return maxW * (1 + bufferPercent);
+      };
+
+      let weightEligibleTransporters = locationMatchedTransporters;
+      if (totalWeight > 0) {
+        weightEligibleTransporters = locationMatchedTransporters.filter((tr: any) => {
+          const maxW = tr.maxWeight !== null && tr.maxWeight !== undefined ? Number(tr.maxWeight) : null;
+          const effectiveMaxW = getEffectiveMaxWeight(maxW);
+          if (effectiveMaxW !== null && totalWeight > effectiveMaxW) {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      console.log(`[auto-broadcast] Found ${approvedTransporters.length} approved transporters, ${locationMatchedTransporters.length} route-matched, ${weightEligibleTransporters.length} weight-eligible for ${totalWeight} kg.`);
+
+      // 3. LOWEST RATE SELECTION (ratePerKm)
+      let lowestTransporters = weightEligibleTransporters;
+      const validRates = weightEligibleTransporters
+        .map((tr: any) => (tr.ratePerKm !== null && tr.ratePerKm !== undefined ? Number(tr.ratePerKm) : null))
+        .filter((r: any): r is number => r !== null && !isNaN(r));
+
+      if (validRates.length > 0) {
+        const minRate = Math.min(...validRates);
+        lowestTransporters = weightEligibleTransporters.filter((tr: any) => Number(tr.ratePerKm) === minRate);
+      }
+
+      console.log(`[auto-broadcast] Selected ${lowestTransporters.length} lowest-rate transporters for assignment insertion.`);
+
+      let insertedCount = 0;
+      for (const tr of lowestTransporters) {
+        const trIdStr = String(tr.id);
+        const existing = await tx.orderAssignment.findFirst({
+          where: {
+            orderId: fullOrder.id,
+            assigneeId: trIdStr,
+            role: 'PICKUP',
+            assigneeType: 'TRANSPORTER',
+          }
+        });
+
+        if (!existing) {
+          await tx.orderAssignment.create({
+            data: {
+              orderId: fullOrder.id,
+              assigneeId: trIdStr,
+              assigneeType: 'TRANSPORTER',
+              role: 'PICKUP',
+              status: 'PENDING'
+            }
+          });
+          insertedCount++;
+        } else if (existing.status !== 'PENDING' && existing.status !== 'ACCEPTED') {
+          await tx.orderAssignment.update({
+            where: { id: existing.id },
+            data: { status: 'PENDING' }
+          });
+          insertedCount++;
+        }
+      }
+
+      if (lowestTransporters.length > 0) {
+        await tx.order.update({
+          where: { id: fullOrder.id },
+          data: {
+            mainStatus: 'PARCEL_AT_SHG',
+            pickupShgStatus: 'PICKED',
+            pickupTransporterStatus: 'PENDING'
+          }
+        });
+
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET 
+            "mainStatus" = 'PARCEL_AT_SHG',
+            "pickupShgStatus" = 'PICKED',
+            "pickupTransporterStatus" = 'PENDING',
+            "updatedAt" = NOW()
+          WHERE id = $1;
+        `, fullOrder.id);
+      }
+
+      console.log(`[auto-broadcast] Broadcast completed successfully for order ${fullOrder.orderId}. Assignments created/updated: ${insertedCount}.`);
+    } catch (trErr: any) {
+      console.warn(`[auto-broadcast] Transporter broadcast error for order ${orderId}:`, trErr.message);
+    }
+  }
+
+  /**
    * Retrieves active session details containing expected, scanned, and remaining parcels.
    */
   async getSessionDetails(sessionType: SessionType, userId: string, userRole: string, sessionId: string) {
@@ -278,7 +487,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: { in: orderIdsList },
-        flowType: { in: ['PICKUP', 'DROP'] },
+        flowType: sessionType,
       },
     });
 
@@ -349,8 +558,10 @@ export class QrVerificationEngine {
     }
 
     const orderIdsStr = orderIds.join(',');
+    const newSessionId = `SES-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const session = await this.prisma.scanSession.create({
       data: {
+        sessionId: newSessionId,
         userId,
         userRole: userRole.toUpperCase(),
         sessionType,
@@ -395,14 +606,15 @@ export class QrVerificationEngine {
     // Validate verificationToken
     validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
 
-    // Find the order for the parcel (try DROP phase first, then PICKUP phase)
+    // Find the order for the parcel (match sessionType / parcel flowType phase first)
+    const targetPhase = parcel.flowType || sessionType;
     let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
         ],
-        phase: 'DROP',
+        phase: targetPhase,
       }
     });
     if (!order) {
@@ -411,8 +623,7 @@ export class QrVerificationEngine {
           OR: [
             { id: parcel.orderId },
             { orderId: parcel.orderId }
-          ],
-          phase: 'PICKUP',
+          ]
         }
       });
     }
@@ -478,8 +689,10 @@ export class QrVerificationEngine {
     }
 
     // Register scanned item in transient session
+    const scanItemId = `SSI-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     await this.prisma.scanSessionItem.create({
       data: {
+        id: scanItemId,
         sessionId,
         parcelId: parcel.parcelId,
       },
@@ -554,7 +767,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: { in: orderIdsList },
-        flowType: { in: ['PICKUP', 'DROP'] },
+        flowType: sessionType,
       },
     });
 
@@ -575,7 +788,7 @@ export class QrVerificationEngine {
               { id: parcel.orderId },
               { orderId: parcel.orderId }
             ],
-            phase: 'DROP',
+            phase: sessionType,
           }
         });
         if (!order) {
@@ -584,8 +797,7 @@ export class QrVerificationEngine {
               OR: [
                 { id: parcel.orderId },
                 { orderId: parcel.orderId }
-              ],
-              phase: 'PICKUP',
+              ]
             }
           });
         }
@@ -729,7 +941,7 @@ export class QrVerificationEngine {
           }
         }
 
-        if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
+        if (sessionType === 'PICKUP' && (normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG')) {
           await tx.orderAssignment.updateMany({
             where: {
               orderId: order.id,
@@ -740,6 +952,9 @@ export class QrVerificationEngine {
               status: 'COMPLETED',
             },
           });
+
+          // Automatically broadcast to all route-matched transporters when SHG completes pickup
+          await this.broadcastTransporterPickup(tx, order.id);
         }
       }
 
@@ -791,7 +1006,7 @@ export class QrVerificationEngine {
           { id: orderId },
           { orderId: orderId }
         ],
-        phase: 'DROP',
+        phase: sessionType,
       }
     });
     if (!order) {
@@ -800,8 +1015,7 @@ export class QrVerificationEngine {
           OR: [
             { id: orderId },
             { orderId: orderId }
-          ],
-          phase: 'PICKUP',
+          ]
         }
       });
     }
@@ -813,7 +1027,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: order.orderId,
-        flowType: { in: ['PICKUP', 'DROP'] },
+        flowType: sessionType,
       },
     });
 
@@ -972,6 +1186,8 @@ export class QrVerificationEngine {
               status: 'COMPLETED',
             },
           });
+
+          await this.broadcastTransporterPickup(tx, order.id);
         }
       }
 

@@ -1,1 +1,0 @@
-import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); async function main() { const order = await prisma.order.findFirst({where: {orderId: 'ORD-PICK-1007'}}); console.log('ORDER', order); const drop = await prisma.dropOrder.findFirst({where: {masterOrderId: order?.id}}); console.log('DROP ORDER', drop); } main();

@@ -109,10 +109,26 @@ export class QrService {
         });
       }
 
-      // Simplified QR JSON payload containing ONLY parcelId, verificationToken, and version
+      // Comprehensive QR JSON payload containing parcelId, order details, seller info, buyer info, product info, and security token
+      const ordAny = order as any;
       const qrContent = {
         parcelId: parcel.parcelId,
+        orderId: resolvedOrderId,
+        orderNo: order.orderId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        weight: weightStr,
+        token: verificationToken,
         verificationToken,
+        sellerName: ordAny.sellerName || ordAny.seller?.fullName || '',
+        sellerMobileNumber: ordAny.sellerPhone || ordAny.seller?.phoneNumber || '',
+        sellerVillage: ordAny.sellerVillage || ordAny.seller?.village || '',
+        sellerPincode: ordAny.sellerPincode || ordAny.seller?.pincode || '',
+        buyerName: ordAny.buyerName || ordAny.buyer?.fullName || '',
+        buyerMobileNumber: ordAny.buyerPhone || ordAny.buyer?.phoneNumber || '',
+        buyerVillage: ordAny.buyerVillage || ordAny.buyer?.village || '',
+        buyerPincode: ordAny.buyerPincode || ordAny.buyer?.pincode || '',
         version: 1,
       };
 
@@ -325,6 +341,60 @@ export class QrService {
 
       return updated;
     });
+
+    // If GMU verified the parcel (INTAKE / STORE / DISPATCH), ensure Phase 2 Drop Order exists and broadcast to Buyer SHG
+    if (finalUserRole === 'GMU' || finalUserRole === 'ADMIN') {
+      try {
+        const existingDropOrder = await this.prisma.order.findFirst({
+          where: { orderId: order.orderId, phase: 'DROP' }
+        });
+
+        let dropOrder = existingDropOrder;
+
+        if (!dropOrder) {
+          const dropId = '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          dropOrder = await this.prisma.order.create({
+            data: {
+              id: dropId,
+              orderId: order.orderId,
+              barcode: order.barcode,
+              sellerId: order.sellerId,
+              buyerId: order.buyerId,
+              productCount: order.productCount,
+              totalQty: order.totalQty,
+              totalWeight: order.totalWeight,
+              mainStatus: 'DROP_PENDING',
+              dropShgStatus: 'PENDING',
+              phase: 'DROP',
+            }
+          });
+        }
+
+        const buyer = await this.prisma.buyer.findUnique({ where: { id: order.buyerId } });
+        if (buyer && buyer.village) {
+          const matchingShgs = await this.prisma.user.findMany({
+            where: {
+              role: 'SHG',
+              applicationStatus: 'APPROVED',
+              deletedAt: null,
+              address: { village: { equals: buyer.village, mode: 'insensitive' } }
+            },
+            include: { address: true }
+          });
+
+          for (const shg of matchingShgs) {
+            const assignUuid = '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+            await this.prisma.$executeRawUnsafe(`
+              INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+              VALUES ($1, $2, $3, 'SHG', 'DROP', 'PENDING', NOW(), NOW())
+              ON CONFLICT DO NOTHING;
+            `, assignUuid, dropOrder.id, String(shg.id));
+          }
+        }
+      } catch (err: any) {
+        console.error(`[verifyQr GMU] Error creating/broadcasting Phase 2 Drop Order:`, err.message);
+      }
+    }
 
     return {
       success: true,

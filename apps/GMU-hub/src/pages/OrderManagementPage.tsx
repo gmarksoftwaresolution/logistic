@@ -305,18 +305,28 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const fetchAddressDetails = async (pincode: string, isSeller: boolean) => {
     if (pincode.length !== 6) return;
     try {
-      const MOCK: Record<string, any> = {
-        "416504": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Nesari", "Dundage", "Harali"] },
-        "416501": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Dundage", "Nesari", "Harali"] },
-        "416502": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Gadhinglaj", "Mahagaon", "Kadgaon", "Harali"] },
-        "416509": { state: "Maharashtra", district: "Kolhapur", taluka: "Chandgad", villages: ["Halkarni", "Naganwadi", "Patne", "Shinoli", "Tudye"] },
-        "416507": { state: "Maharashtra", district: "Kolhapur", taluka: "Ajara", villages: ["Ajara", "Uttur", "Nesari", "Gavase"] },
-      };
-
       let result: any = null;
-      if (MOCK[pincode]) {
-        result = MOCK[pincode];
-      } else {
+
+      // 1. Try local DB API (pincode_directory table)
+      try {
+        const localRes = await fetch(`http://localhost:3001/api/location/pincode/${pincode}`);
+        if (localRes.ok) {
+          const localData = await localRes.json();
+          if (localData && localData.villages && localData.villages.length > 0) {
+            result = {
+              state: localData.state,
+              district: localData.district,
+              taluka: localData.taluka,
+              villages: localData.villages,
+            };
+          }
+        }
+      } catch (e) {
+        console.warn("Local location lookup failed, falling back:", e);
+      }
+
+      // 2. Fallback to Postal API if local DB does not have the pincode yet
+      if (!result) {
         const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
         const data = await res.json();
         if (data && data[0] && data[0].Status === 'Success') {
@@ -669,33 +679,33 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;
       const df = dateFilter || undefined;
-      await loadCounts();
 
-      if (activeTopTab === 'new') {
-        await Promise.all([
-          loadPickupNew(sf, df),
-          loadDropNew(sf, df),
-        ]);
-      } else if (activeTopTab === 'in_transit') {
-        await Promise.all([
-          loadPickupAssigned(sf, df),
-          loadPickupWarehouse(sf, df),
-          loadPickupRescheduled(sf, df),
-          loadDropAssigned(sf, df),
-          loadDropRescheduled(sf, df),
-          loadReturnsTransporter(sf, df),
-        ]);
-      } else if (activeTopTab === 'completed') {
-        await Promise.all([
-          loadDropCompleted(sf, df),
-          loadReturnsBuyer(sf, df),
-        ]);
-      } else if (activeTopTab === 'rejected') {
-        await Promise.all([
-          loadPickupRejected(sf, df),
-          loadDropRejected(sf, df),
-        ]);
-      }
+      const tabFetches = activeTopTab === 'new'
+        ? Promise.all([
+            loadPickupNew(sf, df),
+            loadDropNew(sf, df),
+          ])
+        : activeTopTab === 'in_transit'
+        ? Promise.all([
+            loadPickupAssigned(sf, df),
+            loadPickupWarehouse(sf, df),
+            loadPickupRescheduled(sf, df),
+            loadDropNew(sf, df),
+            loadDropAssigned(sf, df),
+            loadDropRescheduled(sf, df),
+            loadReturnsTransporter(sf, df),
+          ])
+        : activeTopTab === 'completed'
+        ? Promise.all([
+            loadDropCompleted(sf, df),
+            loadReturnsBuyer(sf, df),
+          ])
+        : Promise.all([
+            loadPickupRejected(sf, df),
+            loadDropRejected(sf, df),
+          ]);
+
+      await Promise.all([loadCounts(), tabFetches]);
     } catch (e: any) {
       setErrorMsg(e.message || 'Failed to load data from server.');
     } finally {
@@ -933,7 +943,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           const isAtGmu = ['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'RETURN_PARCEL_AT_GMU'].includes(order.mainStatus);
           if (!isAtGmu) return false;
         } else if (loc === 'seller') {
-          const isAtSeller = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED'].includes(order.mainStatus);
+          const isAtSeller = ['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED'].includes(order.mainStatus);
           if (!isAtSeller) return false;
         } else if (loc === 'buyer') {
           const isAtBuyer = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'].includes(order.mainStatus);
@@ -982,7 +992,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
     if (isShgPicked) {
       pickupShgState = 'completed';
-    } else if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
+    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
       pickupShgState = 'active';
     }
 
@@ -1134,7 +1144,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     allMergedOrders.filter(
       (o: any) =>
         !isOrderRejected(o) &&
-        (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
           (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
     )
   );
@@ -1142,7 +1152,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const inTransitOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => {
       if (isOrderRejected(o)) return false;
-      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+      const isNew = ['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
         (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
       if (isNew) return false;
 
@@ -1280,7 +1290,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
     { header: 'Start Date', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
     { header: 'Expected Delivery Date', accessor: (row: any) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: any) => <StatusBadge status={row.pickupShgStatus || 'pending'} /> },
+    { 
+      header: 'SHG Status', 
+      accessor: (row: any) => (
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={row.pickupShgStatus || 'pending'} />
+          {(row.isPickupRedirected || row.pickupShgStatus === 'REDIRECTED') && (
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
+              Redirected
+            </span>
+          )}
+        </div>
+      ) 
+    },
     {
       header: 'Action', accessor: (row: any) => (
         <button
