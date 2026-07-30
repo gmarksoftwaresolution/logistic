@@ -21,6 +21,7 @@ interface OrderCardProps {
   
   isRescheduled?: boolean;
   isRedirected?: boolean;
+  isRejectedDelivery?: boolean;
   onRedirect?: () => void;
   transporterName?: string;
   transporterMobile?: string;
@@ -43,6 +44,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   isHighlighted,
   isRescheduled,
   isRedirected = false,
+  isRejectedDelivery = false,
   onRedirect,
   transporterName,
   transporterMobile,
