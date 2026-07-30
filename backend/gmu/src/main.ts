@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
+// GMU Hub Backend Entry Point - Main Public Schema Connected
 const envPaths = [
   path.join(process.cwd(), '.env'),
   path.join(__dirname, '..', '.env'),

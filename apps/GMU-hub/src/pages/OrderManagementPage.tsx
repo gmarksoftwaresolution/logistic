@@ -223,6 +223,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [scanMessage, setScanMessage] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [actionProcessing, setActionProcessing] = useState(false);
 
@@ -662,8 +663,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     (activeTopTab === 'completed' && (dropCompletedOrders.length > 0 || returnPickupCompletedOrders.length > 0)) ||
                     (activeTopTab === 'rejected' && (pickupRejectedOrders.length > 0 || dropRejectedOrders.length > 0));
 
-    if (!hasData || isManualRefresh) {
+    if (!hasData) {
       setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
     }
     setErrorMsg('');
     try {
@@ -700,6 +703,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       setErrorMsg(e.message || 'Failed to load data from server.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -1549,10 +1553,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
             <button
               onClick={() => loadData(true)}
-              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+              disabled={isRefreshing}
+              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 disabled:opacity-75 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
           </div>
         </div>

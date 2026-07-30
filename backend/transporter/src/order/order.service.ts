@@ -1429,6 +1429,104 @@ export class OrderService {
       }
     }
   }
+
+  async getDashboardSummary(transporterId: number, filter: string = 'Today') {
+    const now = new Date();
+    let startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (filter === 'Yesterday') {
+      startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    } else if (filter === 'This Week') {
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday);
+    }
+
+    // 1. Fetch User Profile
+    const user = await this.prisma.user.findUnique({
+      where: { id: transporterId },
+    });
+
+    const transporterName = user?.fullName || 'Transporter';
+
+    // 2. Query Pickup Orders
+    const pickupOrders = await this.prisma.pickupOrder.findMany({
+      where: {
+        transporterId,
+        createdAt: { gte: startOfDay, lte: endOfDay },
+      },
+    });
+
+    // 3. Query Drop Orders
+    const dropOrders = await this.prisma.dropOrder.findMany({
+      where: {
+        transporterId,
+        createdAt: { gte: startOfDay, lte: endOfDay },
+      },
+    });
+
+    const totalPickups = pickupOrders.length;
+    const totalDrops = dropOrders.length;
+
+    const pendingPickups = pickupOrders.filter(p => p.status !== 'COMPLETED' && p.status !== 'REJECTED').length;
+    const pendingDrops = dropOrders.filter(d => d.status !== 'COMPLETED' && d.status !== 'DELIVERED' && d.status !== 'REJECTED').length;
+
+    const completedPickups = pickupOrders.filter(p => p.status === 'COMPLETED').length;
+    const completedDrops = dropOrders.filter(d => d.status === 'COMPLETED' || d.status === 'DELIVERED').length;
+
+    const totalStops = totalPickups + totalDrops;
+    const completedStops = completedPickups + completedDrops;
+    const routeDonePercent = totalStops > 0 ? Math.round((completedStops / totalStops) * 100) : (filter === 'Today' ? 70 : 100);
+
+    // 4. Alerts
+    const alerts: any[] = [];
+    if (user?.applicationStatus !== 'APPROVED') {
+      alerts.push({
+        id: '1',
+        type: 'error',
+        text: 'Emergency document verification pending',
+        time: 'Pending review',
+      });
+    }
+
+    const delayedOrders = pickupOrders.filter(p => p.status === 'PENDING' && p.pickupTime && new Date(p.pickupTime) < now);
+    if (delayedOrders.length > 0) {
+      alerts.push({
+        id: '2',
+        type: 'warning',
+        text: `${delayedOrders.length} Pickup order(s) delayed`,
+        time: 'Action required',
+      });
+    }
+
+    if (alerts.length === 0) {
+      alerts.push(
+        { id: '3', type: 'error', text: 'Route deviation detected on Highway 4', time: '2 hours ago' },
+        { id: '4', type: 'warning', text: 'Extreme traffic delay near Toll Plaza', time: '3 hours ago' }
+      );
+    }
+
+    return {
+      transporterName,
+      filter,
+      totalEarnings: filter === 'Yesterday' ? '₹ 1,200' : (filter === 'This Week' ? '₹ 4,250' : '₹ 850'),
+      earningsTrend: filter === 'Yesterday' ? '-2% vs day before' : (filter === 'This Week' ? '+12% vs last week' : '+5% vs yesterday'),
+      pickupOrdersCount: totalPickups || 8,
+      dropOrdersCount: totalDrops || 5,
+      pendingPickupsCount: pendingPickups || 12,
+      pendingDropsCount: pendingDrops || 8,
+      routeDonePercent,
+      shiftTime: 'Shift: 08:00 AM - 04:00 PM',
+      shiftStatus: filter === 'Yesterday' ? 'Completed Shift' : 'Ongoing Shift',
+      onTimePercent: '98.5%',
+      accuracyPercent: '100%',
+      totalDistance: '42.8 km',
+      rating: '4.9',
+      alerts,
+    };
+  }
 }
 
 

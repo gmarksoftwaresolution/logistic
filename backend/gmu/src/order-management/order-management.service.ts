@@ -470,7 +470,18 @@ export class OrderManagementService implements OnModuleInit {
     return where;
   }
 
+  private countsCache: { data: any; timestamp: number } | null = null;
+  private readonly COUNTS_CACHE_TTL_MS = 5000; // 5 seconds TTL cache
+
+  clearCountsCache() {
+    this.countsCache = null;
+  }
+
   async getCounts() {
+    const now = Date.now();
+    if (this.countsCache && (now - this.countsCache.timestamp) < this.COUNTS_CACHE_TTL_MS) {
+      return this.countsCache.data;
+    }
     const [
       pickupNew,
       pickupAssigned,
@@ -590,7 +601,7 @@ export class OrderManagementService implements OnModuleInit {
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) }),
     ]);
 
-    return {
+    const result = {
       pickup: {
         new: pickupNew,
         assigned: pickupAssigned,
@@ -615,6 +626,9 @@ export class OrderManagementService implements OnModuleInit {
         buyerReturn: inventoryBuyerReturn
       }
     };
+
+    this.countsCache = { data: result, timestamp: Date.now() };
+    return result;
   }
 
   // --- QUERY ENDPOINTS ---
@@ -1010,7 +1024,7 @@ export class OrderManagementService implements OnModuleInit {
       { phase: 'PICKUP', returnType: null },
       filter,
       // Phase 5: only stored and active dispatch states (intaken only)
-      ['STORED', 'DROP_ASSIGNED', 'DISPATCHED']
+      ['STORED', 'AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,

@@ -303,6 +303,7 @@ import { useAppContext } from '../context/AppContext';
 export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const { transportersManagementList: transporterList, setTransportersManagementList: setTransporterList } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
   
@@ -338,8 +339,10 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   };
 
   const fetchData = async (isManualRefresh = false) => {
-    if (transporterList.length === 0 || isManualRefresh) {
+    if (transporterList.length === 0) {
       setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
     }
     setErrorMsg('');
     try {
@@ -415,6 +418,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
       setErrorMsg(err.message || 'Failed to fetch transporter data.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -798,7 +802,8 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             data={tabData} 
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
-            onRefresh={fetchData}
+            onRefresh={() => fetchData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
       </div>

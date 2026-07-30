@@ -407,6 +407,7 @@ import { useAppContext } from '../context/AppContext';
 export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const { communityMembersList: shgList, setCommunityMembersList: setShgList } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
 
@@ -432,8 +433,10 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
   } | null>(null);
 
   const fetchData = async (isManualRefresh = false) => {
-    if (shgList.length === 0 || isManualRefresh) {
+    if (shgList.length === 0) {
       setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
     }
     setErrorMsg('');
     try {
@@ -527,6 +530,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       setErrorMsg(err.message || 'Failed to fetch community data.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -916,7 +920,8 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             data={tabData}
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
-            onRefresh={fetchData}
+            onRefresh={() => fetchData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
       </div>
