@@ -9,13 +9,11 @@ export class LocationService {
   async findByPincode(pincode: string) {
     if (!pincode) return [];
     const cleanPin = String(pincode).trim();
+
     try {
       const dbResults = await this.prisma.pincodeDirectory.findMany({
         where: {
-          OR: [
-            { pincode: cleanPin },
-            { pincode: { contains: cleanPin } },
-          ],
+          pincode: cleanPin,
         },
         orderBy: { village: 'asc' },
       });
@@ -23,30 +21,51 @@ export class LocationService {
       if (dbResults && dbResults.length > 0) {
         return dbResults;
       }
-
-      try {
-        const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPin}`, { timeout: 4000 });
-        if (response.data && response.data[0] && response.data[0].Status === 'Success') {
-          const postOffices = response.data[0].PostOffice || [];
-          return postOffices.map((po: any, index: number) => ({
-            id: index + 1,
-            village: po.Name || po.Block || '',
-            postOffice: po.Name || '',
-            pincode: cleanPin,
-            taluka: (po.Block && po.Block !== 'NA') ? po.Block : ((po.District && po.District !== 'NA') ? po.District : ''),
-            district: (po.District && po.District !== 'NA') ? po.District : '',
-            state: (po.State && po.State !== 'NA') ? po.State : '',
-          }));
-        }
-      } catch (apiErr: any) {
-        console.log('Postal API fallback note:', apiErr?.message);
-      }
-
-      return [];
-    } catch (e) {
-      console.error('findByPincode DB error:', e);
-      return [];
+    } catch (e: any) {
+      console.warn('findByPincode ORM query note, attempting raw query:', e.message);
     }
+
+    try {
+      const rawResults: any[] = await this.prisma.$queryRaw`
+        SELECT 
+          id,
+          pincode,
+          COALESCE(village, name, '') as village,
+          COALESCE(post_office, village, name, '') as "postOffice",
+          COALESCE(taluka, block, district, '') as taluka,
+          district,
+          state
+        FROM pincode_directory
+        WHERE pincode = ${cleanPin}
+        ORDER BY village ASC
+      `;
+
+      if (rawResults && rawResults.length > 0) {
+        return rawResults;
+      }
+    } catch (rawErr: any) {
+      console.warn('findByPincode raw query fallback note:', rawErr.message);
+    }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPin}`, { timeout: 4000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success') {
+        const postOffices = response.data[0].PostOffice || [];
+        return postOffices.map((po: any, index: number) => ({
+          id: index + 1,
+          village: po.Name || po.Block || '',
+          postOffice: po.Name || '',
+          pincode: cleanPin,
+          taluka: (po.Block && po.Block !== 'NA') ? po.Block : ((po.District && po.District !== 'NA') ? po.District : ''),
+          district: (po.District && po.District !== 'NA') ? po.District : '',
+          state: (po.State && po.State !== 'NA') ? po.State : '',
+        }));
+      }
+    } catch (apiErr: any) {
+      console.log('Postal API fallback note:', apiErr?.message);
+    }
+
+    return [];
   }
 
   async findByVillage(village: string) {
