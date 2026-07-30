@@ -298,6 +298,22 @@ const initialTransporters: TransporterProfileExt[] = [
   }
 ];
 
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const uploadsIdx = url.indexOf('/uploads/');
+  if (uploadsIdx !== -1) {
+    const relPath = url.substring(uploadsIdx);
+    return `http://localhost:3003${relPath}`;
+  }
+  if (url.startsWith('uploads/')) {
+    return `http://localhost:3003/${url}`;
+  }
+  if (url.startsWith('/')) {
+    return `http://localhost:3003${url}`;
+  }
+  return url;
+};
+
 import { useAppContext } from '../context/AppContext';
 
 export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
@@ -371,7 +387,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
         name: `${item.firstName} ${item.lastName}`,
         mobile: item.mobileNumber,
         email: item.email || '',
-        photo: item.profilePhoto || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+        photo: normalizeUrl(item.profilePhoto) || '',
         status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
         registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
         assignedOrders: 0,
@@ -383,7 +399,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
         state: item.state || '',
         pincode: item.pincode || '',
         licenseNumber: item.licenseNumber || '',
-        licensePhoto: item.licensePhoto || '',
+        licensePhoto: normalizeUrl(item.licensePhoto) || '',
         licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
         experienceYears: item.experienceYears || 0,
         accountHolderName: item.accountHolderName || '',
@@ -396,8 +412,8 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
         vehicleType: item.vehicleType || '',
         vehicleMake: item.vehicleMake || '',
         vehicleNumber: item.vehicleNumber || '',
-        rcBookPhoto: item.vehicleRcPhoto || '',
-        insurancePhoto: item.vehicleInsurancePhoto || '',
+        rcBookPhoto: normalizeUrl(item.vehicleRcPhoto) || '',
+        insurancePhoto: normalizeUrl(item.vehicleInsurancePhoto) || '',
         milkSangathanName: item.milkOrganizationName || 'N/A',
         collectionCenterName: item.milkCenterName || 'N/A',
         route: safeParseArray(item.assignedVillages).join(' - ') || 'N/A',
@@ -467,7 +483,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             name: `${item.firstName} ${item.lastName}`,
             mobile: item.mobileNumber,
             email: item.email || '',
-            photo: item.profilePhoto || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+            photo: normalizeUrl(item.profilePhoto) || '',
             status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
             registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
             assignedOrders: 0,
@@ -479,7 +495,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             state: item.state || '',
             pincode: item.pincode || '',
             licenseNumber: item.licenseNumber || '',
-            licensePhoto: item.licensePhoto || '',
+            licensePhoto: normalizeUrl(item.licensePhoto) || '',
             licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
             experienceYears: item.experienceYears || 0,
             accountHolderName: item.accountHolderName || '',
@@ -492,8 +508,8 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             vehicleType: item.vehicleType || '',
             vehicleMake: item.vehicleMake || '',
             vehicleNumber: item.vehicleNumber || '',
-            rcBookPhoto: item.vehicleRcPhoto || '',
-            insurancePhoto: item.vehicleInsurancePhoto || '',
+            rcBookPhoto: normalizeUrl(item.vehicleRcPhoto) || '',
+            insurancePhoto: normalizeUrl(item.vehicleInsurancePhoto) || '',
             milkSangathanName: item.milkOrganizationName || 'N/A',
             collectionCenterName: item.milkCenterName || 'N/A',
             route: safeParseArray(item.assignedVillages).join(' - ') || 'N/A',
@@ -915,11 +931,17 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-4.5 items-center md:items-start pt-1">
-                    <img 
-                      src={selectedProfile.photo} 
-                      alt={selectedProfile.name} 
-                      className="w-20 h-20 rounded-2xl object-cover border-2 border-[#073318]/10 shadow-sm shrink-0"
-                    />
+                    {selectedProfile.photo ? (
+                      <img 
+                        src={selectedProfile.photo} 
+                        alt={selectedProfile.name} 
+                        className="w-20 h-20 rounded-2xl object-cover border-2 border-[#073318]/10 shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[10px] text-slate-400 font-bold shrink-0">
+                        No Photo
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-y-2.5 gap-x-5 text-xs flex-1 w-full">
                       <div>
                         <p className="text-slate-400 font-extrabold uppercase text-[9px] mb-0.5">Mobile Contact</p>
@@ -1282,103 +1304,15 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
           size="md"
         >
           <div className="flex flex-col items-center p-4">
-            {viewingDoc.type === 'license' && (
-              <div className="w-full max-w-sm bg-gradient-to-r from-blue-50 via-white to-blue-50 border-2 border-blue-400 rounded-2xl shadow-xl overflow-hidden text-xs">
-                <div className="bg-blue-700 text-white font-extrabold text-[10px] tracking-wider text-center py-2 px-3">
-                  MAHARASHTRA STATE MOTOR VEHICLES DEPARTMENT / UNION OF INDIA
-                  <div className="text-[8px] text-blue-200 font-bold uppercase mt-0.5">Driving License</div>
-                </div>
-                <div className="p-4 flex gap-4 text-left">
-                  <div className="h-24 w-20 bg-slate-100 border border-slate-200 rounded-lg overflow-hidden shrink-0">
-                    <img 
-                      src={selectedProfile?.photo || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'} 
-                      alt="DL Photo" 
-                      className="h-full w-full object-cover" 
-                    />
-                  </div>
-                  <div className="space-y-1.5 flex-1">
-                    <div>
-                      <p className="text-[9px] text-slate-450 font-bold uppercase">Lic No.</p>
-                      <p className="font-extrabold text-blue-700 font-mono">{viewingDoc.documentNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-slate-450 font-bold uppercase">Name</p>
-                      <p className="font-extrabold text-slate-800">{viewingDoc.profileName}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-[9px] text-slate-450 font-bold uppercase">Valid Till</p>
-                        <p className="font-bold text-slate-800 font-mono">2035-12-15</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-slate-450 font-bold uppercase">COV</p>
-                        <p className="font-bold text-slate-800">LMV-GV</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {viewingDoc.type === 'rc' && (
-              <div className="w-full max-w-sm bg-slate-50 border-2 border-slate-350 rounded-2xl shadow-xl overflow-hidden text-xs p-4 space-y-3">
-                <div className="text-center border-b border-slate-200 pb-2">
-                  <h5 className="font-black text-slate-800 text-[11px] uppercase tracking-wider">FORM 23 - CERTIFICATE OF REGISTRATION</h5>
-                  <p className="text-[9px] text-slate-450 uppercase font-bold tracking-wider">Government of Maharashtra</p>
-                </div>
-                <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 text-[10px] text-left">
-                  <div>
-                    <span className="text-slate-450 block uppercase text-[8px] font-bold">Regd No</span>
-                    <span className="font-bold text-slate-800 font-mono">{viewingDoc.documentNumber}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-455 block uppercase text-[8px] font-bold">Owner Name</span>
-                    <span className="font-bold text-slate-800">{viewingDoc.profileName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-455 block uppercase text-[8px] font-bold">Chassis Number</span>
-                    <span className="font-bold text-slate-700 font-mono">MA3FND2G6C8XXXXXX</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-455 block uppercase text-[8px] font-bold">Engine Number</span>
-                    <span className="font-bold text-slate-700 font-mono">4B12CXXXXXX</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-455 block uppercase text-[8px] font-bold">Maker Class</span>
-                    <span className="font-bold text-slate-800">{selectedProfile?.vehicleMake} / {selectedProfile?.vehicleType}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-455 block uppercase text-[8px] font-bold">Tax Paid Upto</span>
-                    <span className="font-bold text-emerald-600">LIFETIME</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {viewingDoc.type === 'insurance' && (
-              <div className="w-full max-w-sm bg-white border-2 border-slate-300 rounded-2xl shadow-xl overflow-hidden text-xs p-4 space-y-3">
-                <div className="text-center border-b border-slate-200 pb-2">
-                  <h5 className="font-black text-slate-850 text-xs tracking-wider uppercase">COMMERCIAL VEHICLE PACKAGE POLICY</h5>
-                  <p className="text-[9px] text-slate-450 uppercase font-bold tracking-wider">The United India Insurance Co. Ltd</p>
-                </div>
-                <div className="space-y-1.5 text-[10px] text-left">
-                  <div className="flex justify-between">
-                    <span className="text-slate-450">Policy Number:</span>
-                    <span className="font-bold font-mono">0329003115P109283746</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-450">Insured Name:</span>
-                    <span className="font-bold">{viewingDoc.profileName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-450">Period of Insurance:</span>
-                    <span className="font-bold font-mono">2025-06-12 to 2026-06-11</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-slate-100 pt-2 mt-2 text-[#073318]">
-                    <span>STATUS:</span>
-                    <span>ACTIVE & FULLY PAID</span>
-                  </div>
-                </div>
+            {viewingDoc.filename && viewingDoc.filename !== 'N/A' && viewingDoc.filename !== '' ? (
+              <img 
+                src={normalizeUrl(viewingDoc.filename)} 
+                alt={viewingDoc.title}
+                className="max-h-[65vh] w-auto max-w-full object-contain rounded-xl shadow-md border border-slate-200"
+              />
+            ) : (
+              <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl text-slate-500 font-medium">
+                Document photo not uploaded or unavailable
               </div>
             )}
 

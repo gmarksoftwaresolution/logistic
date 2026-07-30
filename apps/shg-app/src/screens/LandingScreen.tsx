@@ -46,9 +46,19 @@ export default function LandingScreen({ navigation }: Props) {
                 });
                 return;
               } else {
-                // Clear navigation state but keep data for potential verified restoration
-                await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_SHG);
-                await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL);
+                if (progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
+                  const role = progressRes.signupData?.selectedRole?.toLowerCase();
+                  const stepKey = role === 'individual' ? STORAGE_KEYS.CURRENT_STEP_INDIVIDUAL : STORAGE_KEYS.CURRENT_STEP_SHG;
+                  const dataKey = role === 'individual' ? STORAGE_KEYS.SIGNUP_DATA_INDIVIDUAL : STORAGE_KEYS.SIGNUP_DATA_SHG;
+                  await AsyncStorage.setItem(stepKey, progressRes.frontendStep.toString());
+                  await AsyncStorage.setItem(dataKey, JSON.stringify(progressRes.signupData));
+                  await SplashScreen.hideAsync();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Signup' }],
+                  });
+                  return;
+                }
               }
             }
           } catch (err: any) {

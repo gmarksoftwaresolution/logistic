@@ -1147,13 +1147,19 @@ export default function SignupScreen({
       try {
         const progressRes = await signupService.getProgress();
         if (progressRes.success && progressRes.frontendStep && progressRes.frontendStep >= 3 && progressRes.frontendStep <= 9) {
-          if (progressRes.signupData.selectedRole === selectedRole) {
+          const backendRole = progressRes.signupData?.selectedRole?.toLowerCase();
+          const currentRole = selectedRole?.toLowerCase();
+          if (!currentRole || !backendRole || backendRole === currentRole) {
+            if (backendRole) {
+              setSelectedRole(backendRole === 'shg' ? 'shg' : 'individual');
+            }
             populateSignupState(progressRes.signupData);
             setStep(progressRes.frontendStep);
+            const activeRole = backendRole || currentRole || 'shg';
             const {
               dataKey,
               stepKey
-            } = getStorageKeys(selectedRole);
+            } = getStorageKeys(activeRole as any);
             await AsyncStorage.setItem(stepKey, progressRes.frontendStep.toString());
             await AsyncStorage.setItem(dataKey, JSON.stringify({
               ...progressRes.signupData,
@@ -1546,6 +1552,9 @@ export default function SignupScreen({
       };
       if (shgRole === 'crp') {
         shgDetails.shgName = shgName;
+        shgDetails.crpName = fullName || crpName;
+        shgDetails.crpMobile = mobile || crpMobile;
+        shgDetails.crpEmail = crpEmail || null;
         shgDetails.shgExperience = experienceMap[shgExperience] || 'LESS_THAN_1_YEAR';
         shgDetails.shgGroupSize = parseInt(shgGroupSize, 10);
         shgDetails.shgLeaderName = leaderName;

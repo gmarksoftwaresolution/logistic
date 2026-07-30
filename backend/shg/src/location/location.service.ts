@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Centralized, reusable lookup methods
+  // Centralized lookup methods
   async findByPincode(pincode: string) {
     return this.prisma.pincodeDirectory.findMany({
       where: { pincode: pincode.trim() },
@@ -155,27 +155,52 @@ export class LocationService {
     return !!record;
   }
 
-  // Backward compatibility methods
   async getAddressFromPincode(pincode: string) {
-    if (pincode.length !== 6) {
+    if (!pincode || pincode.trim().length !== 6) {
       throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
     }
-    const records = await this.prisma.pincodeDirectory.findMany({
-      where: { pincode: pincode.trim() },
-    });
+    const cleanPincode = pincode.trim();
 
-    if (records && records.length > 0) {
-      const first = records[0];
-      const villages = [...new Set(records.map((r: any) => r.village))].sort();
-      return {
-        state: first.state,
-        district: first.district,
-        taluka: first.taluka || first.district || 'N/A',
-        villages: villages,
-        postOffices: villages,
-        source: 'local_db',
-      };
+    try {
+      const records = await this.prisma.pincodeDirectory.findMany({
+        where: { pincode: cleanPincode },
+      });
+
+      if (records && records.length > 0) {
+        const first = records[0];
+        const villages = [...new Set(records.map((r: any) => r.village))].sort();
+        return {
+          state: first.state,
+          district: first.district,
+          taluka: first.taluka || first.district || 'N/A',
+          villages: villages,
+          postOffices: villages,
+          source: 'local_db',
+        };
+      }
+    } catch (dbErr: any) {
+      console.warn(`Local DB pincode query notice for ${cleanPincode}:`, dbErr.message);
     }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
+        const postOffices = response.data[0].PostOffice;
+        const first = postOffices[0];
+        const villages = [...new Set(postOffices.map((po: any) => po.Name))].sort();
+        return {
+          state: first.State,
+          district: first.District,
+          taluka: first.Block || first.Taluka || first.District || 'N/A',
+          villages: villages,
+          postOffices: villages,
+          source: 'postal_api',
+        };
+      }
+    } catch (apiErr: any) {
+      console.warn(`External postal pincode fallback failed for ${cleanPincode}:`, apiErr.message);
+    }
+
     throw new HttpException('Pincode details not found in directory', HttpStatus.NOT_FOUND);
   }
 

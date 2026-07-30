@@ -370,20 +370,13 @@ const initialSHGs: SHGProfileExt[] = [
 const normalizeUrl = (url?: string) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    try {
-      const parsed = new URL(url);
-      parsed.hostname = 'localhost';
-      parsed.port = '3000';
-      return parsed.toString();
-    } catch (e) {
-      return url;
-    }
+    return url;
   }
   if (url.startsWith('/uploads')) {
-    return `http://localhost:3001${url}`;
+    return `http://localhost:3000${url}`;
   }
   if (url.startsWith('uploads/')) {
-    return `http://localhost:3001/${url}`;
+    return `http://localhost:3000/${url}`;
   }
   return url;
 };
@@ -461,7 +454,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       const mapItem = (item: any) => {
         const dims = parseDimensions(item.storageSpace);
         return {
-          id: item.memberCode || String(item.id),
+          id: String(item.id),
           memberCode: item.memberCode || String(item.id),
           type: (activeTopSection === 'shg' ? 'SHG Group' : 'Individual') as any,
           fullName: item.fullName || '',
@@ -476,7 +469,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
           activeOrders: 0,
           completedOrders: 0,
-          photo: item.profilePhoto || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+          photo: normalizeUrl(item.profilePhoto) || '',
           age: item.age || 0,
           occupation: 'N/A',
           crpName: item.crpName || 'N/A',

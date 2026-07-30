@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { LanguageContext } from '../context/LanguageContext';
 import { View, Text, TouchableOpacity, ScrollView, Image, Switch } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -20,6 +21,13 @@ export default function ProfileScreen({
   } = useUser();
 
   const [isOnline, setIsOnline] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  };
 
   const handleLogout = async () => {
     try {
@@ -55,7 +63,11 @@ export default function ProfileScreen({
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       <SharedHeader title={t("profile")} subtitle={t("su_manage_your_account__302")} navigation={navigation} />
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        className="flex-1" 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Subtle curved background decoration behind the card */}
         <View 
           className="absolute top-0 left-0 right-0 h-48 bg-[#EEF5F0] rounded-b-[120px]" 

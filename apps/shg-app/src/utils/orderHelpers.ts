@@ -13,15 +13,7 @@ export const getRouteForOrder = (item: any) => {
     }
   }
 
-  if (item.isRejectedDelivery) {
-    if (item.legType === 'pickup') {
-      // Returned back to Seller: Transporter -> Seller
-      return `Transporter > ${item.sourceAddress || item.address}`;
-    } else {
-      // Returned back to Transporter: Buyer -> Transporter
-      return `${item.address} > Transporter`;
-    }
-  }
+
 
   if (item.legType === 'pickup') {
     // Seller Address -> Transporter

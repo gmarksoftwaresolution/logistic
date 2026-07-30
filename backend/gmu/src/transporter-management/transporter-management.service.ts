@@ -36,7 +36,7 @@ export class TransporterManagementService {
         u."fullName",
         u."phoneNumber" as "mobileNumber",
         u.email,
-        u."profilePhoto",
+        COALESCE(u."profilePhoto", st1.data->>'profilePhoto') as "profilePhoto",
         u."createdAt",
         CASE 
           WHEN u."applicationStatus"::text IN ('PENDING', 'COMPLETED', 'UNDER_REVIEW') THEN 'PENDING'
@@ -46,7 +46,7 @@ export class TransporterManagementService {
         COALESCE(td."experienceYears", (st2.data->>'experienceYears')::int, (st2.data->>'drivingExperience')::int) as "experienceYears",
         COALESCE(dd."licenseNumber", st2.data->>'licenseNumber') as "licenseNumber",
         COALESCE(dd."expiryDate", (st2.data->>'expiryDate')::timestamp) as "licenseExpiryDate",
-        COALESCE(dd."drivingLicenseUrl", st2.data->>'licensePhoto') as "licensePhoto",
+        COALESCE(dd."drivingLicenseUrl", st2.data->>'licensePhoto', st2.data->>'drivingLicenseUrl') as "licensePhoto",
         bank."accountHolderName",
         bank."accountNumber",
         bank."ifscCode",
@@ -57,8 +57,8 @@ export class TransporterManagementService {
         COALESCE(v."wheeler", st5.data->>'wheeler', st7.data->>'wheeler') as "wheeler",
         COALESCE(v."vehicleName", st5.data->>'make', st7.data->>'make') as "vehicleMake",
         COALESCE(v."registrationNumber", st5.data->>'number', st7.data->>'number') as "vehicleNumber",
-        COALESCE(v."rcUrl", st5.data->>'rcUpload', st7.data->>'rcUpload') as "vehicleRcPhoto",
-        COALESCE(v."insuranceUrl", st5.data->>'insuranceUpload', st7.data->>'insuranceUpload') as "vehicleInsurancePhoto",
+        COALESCE(v."rcUrl", st5.data->>'rcUpload', st5.data->>'rcPhoto', st7.data->>'rcUpload', st7.data->>'rcPhoto') as "vehicleRcPhoto",
+        COALESCE(v."insuranceUrl", st5.data->>'insuranceUpload', st5.data->>'insurancePhoto', st7.data->>'insuranceUpload', st7.data->>'insurancePhoto') as "vehicleInsurancePhoto",
         COALESCE(mv."sangathanName", st5.data->>'sangathanName') as "milkOrganizationName",
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
@@ -236,7 +236,7 @@ export class TransporterManagementService {
         u."fullName",
         u."phoneNumber" as "mobileNumber",
         u.email,
-        u."profilePhoto",
+        COALESCE(u."profilePhoto", st1.data->>'profilePhoto') as "profilePhoto",
         u."createdAt",
         CASE 
           WHEN u."applicationStatus"::text IN ('PENDING', 'COMPLETED', 'UNDER_REVIEW') THEN 'PENDING'
@@ -246,7 +246,7 @@ export class TransporterManagementService {
         COALESCE(td."experienceYears", (st2.data->>'experienceYears')::int, (st2.data->>'drivingExperience')::int) as "experienceYears",
         COALESCE(dd."licenseNumber", st2.data->>'licenseNumber') as "licenseNumber",
         COALESCE(dd."expiryDate", (st2.data->>'expiryDate')::timestamp) as "licenseExpiryDate",
-        COALESCE(dd."drivingLicenseUrl", st2.data->>'licensePhoto') as "licensePhoto",
+        COALESCE(dd."drivingLicenseUrl", st2.data->>'licensePhoto', st2.data->>'drivingLicenseUrl') as "licensePhoto",
         bank."accountHolderName",
         bank."accountNumber",
         bank."ifscCode",
@@ -257,8 +257,8 @@ export class TransporterManagementService {
         COALESCE(v."wheeler", st5.data->>'wheeler', st7.data->>'wheeler') as "wheeler",
         COALESCE(v."vehicleName", st5.data->>'make', st7.data->>'make') as "vehicleMake",
         COALESCE(v."registrationNumber", st5.data->>'number', st7.data->>'number') as "vehicleNumber",
-        COALESCE(v."rcUrl", st5.data->>'rcUpload', st7.data->>'rcUpload') as "vehicleRcPhoto",
-        COALESCE(v."insuranceUrl", st5.data->>'insuranceUpload', st7.data->>'insuranceUpload') as "vehicleInsurancePhoto",
+        COALESCE(v."rcUrl", st5.data->>'rcUpload', st5.data->>'rcPhoto', st7.data->>'rcUpload', st7.data->>'rcPhoto') as "vehicleRcPhoto",
+        COALESCE(v."insuranceUrl", st5.data->>'insuranceUpload', st5.data->>'insurancePhoto', st7.data->>'insuranceUpload', st7.data->>'insurancePhoto') as "vehicleInsurancePhoto",
         COALESCE(mv."sangathanName", st5.data->>'sangathanName') as "milkOrganizationName",
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
         COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
@@ -413,14 +413,12 @@ export class TransporterManagementService {
              SET "licenseNumber" = $1,
                  "expiryDate" = $2::timestamp,
                  "drivingExperience" = $3,
-                 "drivingLicenseNo" = $4,
-                 "drivingLicenseUrl" = $5,
+                 "drivingLicenseUrl" = $4,
                  "updatedAt" = NOW()
-             WHERE "userId" = $6`,
+             WHERE "userId" = $5`,
             s2.licenseNumber,
             new Date(s2.expiryDate).toISOString(),
             s2.experienceYears,
-            s2.licenseNumber,
             s2.licensePhoto,
             userId
           )
@@ -429,13 +427,12 @@ export class TransporterManagementService {
         writePromises.push(
           this.prisma.$executeRawUnsafe(
             `INSERT INTO public."DrivingDetail" (
-               "userId", "licenseNumber", "expiryDate", "drivingExperience", "drivingLicenseNo", "drivingLicenseUrl", "createdAt", "updatedAt"
-             ) VALUES ($1, $2, $3::timestamp, $4, $5, $6, NOW(), NOW())`,
+               "userId", "licenseNumber", "expiryDate", "drivingExperience", "drivingLicenseUrl", "createdAt", "updatedAt"
+             ) VALUES ($1, $2, $3::timestamp, $4, $5, NOW(), NOW())`,
             userId,
             s2.licenseNumber,
             new Date(s2.expiryDate).toISOString(),
             s2.experienceYears,
-            s2.licenseNumber,
             s2.licensePhoto
           )
         );

@@ -4,11 +4,7 @@ export const HISTORY_STATUS_COLORS = {
     bg: '#F0FDF4',
     border: '#22C55E',
   },
-  REJECTED: {
-    color: '#DC2626',
-    bg: '#FEF2F2',
-    border: '#EF4444',
-  },
+
   CANCELLED: {
     color: '#EF4444',
     bg: '#FEF2F2',
