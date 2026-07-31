@@ -123,7 +123,7 @@
     "village_pincode": "गावाचा पिनकोड",
     "enter_pincode_first": "गावे लोड करण्यासाठी ६-अंकी पिनकोड प्रविष्ट करा",
     "no_villages_found": "या पिनकोडसाठी कोणतीही गावे आढळली नाहीत",
-    "select_village_dropdown": "गाव निवडा ({{count}} उपलब्ध)",
+    "select_village_dropdown": "गाव निवडा",
     "no_villages_assigned_placeholder": "निवडलेली गावे येथे दिसतील",
     "approval_pending": "मंजुरी प्रलंबित",
     "approval_title": "नोंदणी सादर केली आहे!",

@@ -470,7 +470,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (error.response?.status === 401) {
         console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
       } else {
-        console.error('Error fetching live transporter batches:', error);
+        console.warn('[Transporter Batches] Note on fetching live transporter batches:', error?.message || error);
       }
     }
   };

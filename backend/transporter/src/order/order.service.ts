@@ -14,170 +14,175 @@ export class OrderService {
   }
 
   async getAssignedPickups(transporterId: number) {
-    await this.ensureAssignments(transporterId);
+    try {
+      await this.ensureAssignments(transporterId);
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: transporterId }
-    });
-    if (!user || user.role !== 'TRANSPORTER' || user.applicationStatus !== 'APPROVED') {
-      return [];
-    }
-
-    const routeDetail = await this.prisma.routeDetail.findUnique({
-      where: { userId: transporterId }
-    });
-
-    const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
-      where: { userId: transporterId }
-    });
-
-    const transporterUuid = String(transporterId);
-
-    const parseJsonArray = (val: any) => {
-      if (Array.isArray(val)) return val;
-      if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch (e) { }
+      const user = await this.prisma.user.findUnique({
+        where: { id: transporterId }
+      });
+      if (!user || user.role !== 'TRANSPORTER' || user.applicationStatus !== 'APPROVED') {
+        return [];
       }
-      return [];
-    };
 
-    const areas = routeDetail?.operatingArea
-      ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
-      : [];
+      const routeDetail = await this.prisma.routeDetail.findUnique({
+        where: { userId: transporterId }
+      });
 
-    const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
-    const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+      const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
+        where: { userId: transporterId }
+      });
 
-    const assignedPincodes = [
-      ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
-    ].map((s: string) => s.toLowerCase());
+      const transporterUuid = String(transporterId);
 
-    const matchesRoute = (pincode: string, village: string) => {
-      const p = pincode?.trim()?.toLowerCase();
-      const v = village?.trim()?.toLowerCase();
-      const villageMatched = v && (
-        assignedVillages.some(av => av.split(' (')[0] === v) || 
-        areas.some(a => a.split(' (')[0] === v)
-      );
-      const pincodeMatched = p && (
-        assignedPincodes.some(ap => ap.split(' (')[0] === p) || 
-        areas.some(a => a.split(' (')[0] === p)
-      );
-      return !!(villageMatched || pincodeMatched);
-    };
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch (e) { }
+        }
+        return [];
+      };
 
-    let assignedPickupOrderIds: string[] = [];
-    if (transporterUuid) {
-      const transporterAssignments = await this.prisma.$queryRawUnsafe(`
-        SELECT o."orderId" 
-        FROM public."OrderAssignment" oa
-        JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') AND o.phase = 'PICKUP';
-      `, transporterUuid) as any[];
-      assignedPickupOrderIds = transporterAssignments.map(a => a.orderId);
-    }
+      const areas = routeDetail?.operatingArea
+        ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+        : [];
 
-    const pickups = await this.prisma.pickupOrder.findMany({
-      where: {
-        masterOrder: {
-          orderNumber: { in: assignedPickupOrderIds }
-        },
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
-      },
-      include: {
-        seller: {
-          select: {
-            sellerName: true,
-            mobileNumber: true,
-            addressLine1: true,
-            addressLine2: true,
-            village: true,
-            taluka: true,
-            district: true,
-            pincode: true,
+      const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
+      const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+
+      const assignedPincodes = [
+        ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
+      ].map((s: string) => s.toLowerCase());
+
+      const matchesRoute = (pincode: string, village: string) => {
+        const p = pincode?.trim()?.toLowerCase();
+        const v = village?.trim()?.toLowerCase();
+        const villageMatched = v && (
+          assignedVillages.some(av => av.split(' (')[0] === v) || 
+          areas.some(a => a.split(' (')[0] === v)
+        );
+        const pincodeMatched = p && (
+          assignedPincodes.some(ap => ap.split(' (')[0] === p) || 
+          areas.some(a => a.split(' (')[0] === p)
+        );
+        return !!(villageMatched || pincodeMatched);
+      };
+
+      let assignedPickupOrderIds: string[] = [];
+      if (transporterUuid) {
+        const transporterAssignments = await this.prisma.$queryRawUnsafe(`
+          SELECT o."orderId" 
+          FROM public."OrderAssignment" oa
+          JOIN public."Order" o ON oa."orderId" = o.id
+          WHERE oa."assigneeId" = $1 AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED') AND o.phase = 'PICKUP';
+        `, transporterUuid) as any[];
+        assignedPickupOrderIds = transporterAssignments.map(a => a.orderId);
+      }
+
+      const pickups = await this.prisma.pickupOrder.findMany({
+        where: {
+          masterOrder: {
+            orderNumber: { in: assignedPickupOrderIds }
           },
+          status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
         },
-        shg: {
-          include: {
-            shgDetail: true,
+        include: {
+          seller: {
+            select: {
+              sellerName: true,
+              mobileNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              village: true,
+              taluka: true,
+              district: true,
+              pincode: true,
+            },
           },
-        },
-        items: {
-          include: {
-            product: true,
+          shg: {
+            include: {
+              shgDetail: true,
+            },
           },
-        },
-        masterOrder: {
-          include: {
-            dropOrders: {
-              include: {
-                tracking: {
-                  orderBy: { updatedAt: 'desc' },
-                  take: 1,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          masterOrder: {
+            include: {
+              dropOrders: {
+                include: {
+                  tracking: {
+                    orderBy: { updatedAt: 'desc' },
+                    take: 1,
+                  },
                 },
               },
             },
           },
+          tracking: {
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+          },
         },
-        tracking: {
-          orderBy: { updatedAt: 'desc' },
-          take: 1,
+        orderBy: {
+          createdAt: 'desc',
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-    const filteredPickups = [];
-    for (const pickup of pickups) {
-      if (pickup.transporterId === transporterId) {
-        filteredPickups.push(pickup);
-      } else {
-        const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
-        `, pickup.masterOrder.orderNumber) as any[];
+      });
+      const filteredPickups = [];
+      for (const pickup of pickups) {
+        if (pickup.transporterId === transporterId) {
+          filteredPickups.push(pickup);
+        } else {
+          const gmuOrders = await this.prisma.$queryRawUnsafe(`
+            SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+          `, pickup.masterOrder.orderNumber) as any[];
 
-        if (gmuOrders.length > 0) {
-          const orderUuid = gmuOrders[0].id;
-          const assignments = await this.prisma.$queryRawUnsafe(`
-            SELECT id, status FROM public."OrderAssignment"
-            WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status IN ('PENDING', 'ACCEPTED') LIMIT 1;
-          `, orderUuid, transporterUuid) as any[];
+          if (gmuOrders.length > 0) {
+            const orderUuid = gmuOrders[0].id;
+            const assignments = await this.prisma.$queryRawUnsafe(`
+              SELECT id, status FROM public."OrderAssignment"
+              WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER' AND status IN ('PENDING', 'ACCEPTED') LIMIT 1;
+            `, orderUuid, transporterUuid) as any[];
 
-          if (assignments.length > 0) {
-            filteredPickups.push(pickup);
+            if (assignments.length > 0) {
+              filteredPickups.push(pickup);
+            }
           }
         }
       }
+
+      const updatedPickups = [];
+      for (const p of filteredPickups) {
+        const gmuOrders = await this.prisma.$queryRawUnsafe(`
+          SELECT "pickupTransporterStatus", "mainStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
+        `, p.masterOrder.orderNumber) as any[];
+        const pickupTransporterStatus = gmuOrders?.[0]?.pickupTransporterStatus || null;
+        const mainStatus = gmuOrders?.[0]?.mainStatus || null;
+
+        updatedPickups.push({
+          ...p,
+          pickupTransporterStatus,
+          mainStatus,
+          seller: p.seller ? {
+            fullName: p.seller.sellerName,
+            phoneNumber: p.seller.mobileNumber,
+            address: {
+              houseNo: p.seller.addressLine1 || '',
+              village: p.seller.village,
+              taluka: p.seller.taluka,
+              district: p.seller.district,
+              pincode: p.seller.pincode,
+            }
+          } : null
+        });
+      }
+
+      return updatedPickups;
+    } catch (error) {
+      console.error(`Error in getAssignedPickups for transporter ${transporterId}:`, error);
+      return [];
     }
-
-    const updatedPickups = [];
-    for (const p of filteredPickups) {
-      const gmuOrders = await this.prisma.$queryRawUnsafe(`
-        SELECT "pickupTransporterStatus", "mainStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
-      `, p.masterOrder.orderNumber) as any[];
-      const pickupTransporterStatus = gmuOrders?.[0]?.pickupTransporterStatus || null;
-      const mainStatus = gmuOrders?.[0]?.mainStatus || null;
-
-      updatedPickups.push({
-        ...p,
-        pickupTransporterStatus,
-        mainStatus,
-        seller: p.seller ? {
-          fullName: p.seller.sellerName,
-          phoneNumber: p.seller.mobileNumber,
-          address: {
-            houseNo: p.seller.addressLine1 || '',
-            village: p.seller.village,
-            taluka: p.seller.taluka,
-            district: p.seller.district,
-            pincode: p.seller.pincode,
-          }
-        } : null
-      });
-    }
-
-    return updatedPickups;
   }
 
   async acceptPickup(pickupOrderId: number, transporterId: number) {
@@ -613,264 +618,269 @@ export class OrderService {
   }
 
   async getAssignedDrops(transporterId: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: transporterId }
-    });
-    if (!user || user.role !== 'TRANSPORTER' || user.applicationStatus !== 'APPROVED') {
-      return [];
-    }
-
-    const routeDetail = await this.prisma.routeDetail.findUnique({
-      where: { userId: transporterId }
-    });
-
-    const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
-      where: { userId: transporterId }
-    });
-
-    const transporterUuid = String(transporterId);
-
-    const parseJsonArray = (val: any) => {
-      if (Array.isArray(val)) return val;
-      if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch (e) { }
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: transporterId }
+      });
+      if (!user || user.role !== 'TRANSPORTER' || user.applicationStatus !== 'APPROVED') {
+        return [];
       }
-      return [];
-    };
 
-    const areas = routeDetail?.operatingArea
-      ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
-      : [];
+      const routeDetail = await this.prisma.routeDetail.findUnique({
+        where: { userId: transporterId }
+      });
 
-    const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
-    const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+      const milkVanDetail = await this.prisma.milkVanDetail.findUnique({
+        where: { userId: transporterId }
+      });
 
-    const assignedPincodes = [
-      ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
-    ].map((s: string) => s.toLowerCase());
+      const transporterUuid = String(transporterId);
 
-    const matchesRoute = (pincode: string, village: string, taluka: string, district: string) => {
-      if (pincode && (assignedPincodes.some(ap => ap.split(' (')[0] === pincode.toLowerCase()) || areas.some(a => a.split(' (')[0] === pincode.toLowerCase()))) return true;
-      if (village && (assignedVillages.some(av => av.split(' (')[0] === village.toLowerCase()) || areas.some(a => a.split(' (')[0] === village.toLowerCase()))) return true;
-      if (taluka && areas.some(a => a.split(' (')[0] === taluka.toLowerCase())) return true;
-      if (district && areas.some(a => a.split(' (')[0] === district.toLowerCase())) return true;
-      return false;
-    };
-    const pendingCodesDrops = await this.prisma.dropOrder.findMany({
-      where: {
-        OR: [
-          { transporterId },
-          { transporterId: null },
-        ],
-        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP'] },
-        items: {
-          some: {
-            verificationCode: null
-          }
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch (e) { }
         }
-      },
-      select: { id: true }
-    });
+        return [];
+      };
 
-    for (const d of pendingCodesDrops) {
-      await this.ensureDropOrderCodes(d.id);
-    }
+      const areas = routeDetail?.operatingArea
+        ? routeDetail.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+        : [];
 
-    const drops = await this.prisma.dropOrder.findMany({
-      where: {
-        OR: [
-          { transporterId },
-          { transporterId: null },
-        ],
-        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED', 'DELIVERED'] },
-      },
-      select: {
-        id: true,
-        dropOrderNumber: true,
-        masterOrderId: true,
-        buyerId: true,
-        shgId: true,
-        transporterId: true,
-        status: true,
-        deliveryAddress: true,
-        createdAt: true,
-        handoverCode: true,
-        buyer: true,
-        shg: {
-          select: {
-            fullName: true,
-            phoneNumber: true,
-            address: true,
-            shgDetail: {
-              select: {
-                shgName: true,
-              }
+      const mvVillages = milkVanDetail ? parseJsonArray(milkVanDetail.assignedVillages) : [];
+      const assignedVillages = (mvVillages.length > 0 ? mvVillages : areas).map((s: string) => s.toLowerCase());
+
+      const assignedPincodes = [
+        ...(routeDetail ? parseJsonArray(routeDetail.pickupLocations) : [])
+      ].map((s: string) => s.toLowerCase());
+
+      const matchesRoute = (pincode: string, village: string, taluka: string, district: string) => {
+        if (pincode && (assignedPincodes.some(ap => ap.split(' (')[0] === pincode.toLowerCase()) || areas.some(a => a.split(' (')[0] === pincode.toLowerCase()))) return true;
+        if (village && (assignedVillages.some(av => av.split(' (')[0] === village.toLowerCase()) || areas.some(a => a.split(' (')[0] === village.toLowerCase()))) return true;
+        if (taluka && areas.some(a => a.split(' (')[0] === taluka.toLowerCase())) return true;
+        if (district && areas.some(a => a.split(' (')[0] === district.toLowerCase())) return true;
+        return false;
+      };
+      const pendingCodesDrops = await this.prisma.dropOrder.findMany({
+        where: {
+          OR: [
+            { transporterId },
+            { transporterId: null },
+          ],
+          status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP'] },
+          items: {
+            some: {
+              verificationCode: null
             }
           }
         },
-        items: {
-          include: {
-            product: true,
-          },
+        select: { id: true }
+      });
+
+      for (const d of pendingCodesDrops) {
+        await this.ensureDropOrderCodes(d.id);
+      }
+
+      const drops = await this.prisma.dropOrder.findMany({
+        where: {
+          OR: [
+            { transporterId },
+            { transporterId: null },
+          ],
+          status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED', 'DELIVERED'] },
         },
-        masterOrder: {
-          include: {
-            pickupOrders: {
-              include: {
-                seller: true,
-                tracking: {
-                  orderBy: { updatedAt: 'desc' },
-                  take: 1
+        select: {
+          id: true,
+          dropOrderNumber: true,
+          masterOrderId: true,
+          buyerId: true,
+          shgId: true,
+          transporterId: true,
+          status: true,
+          deliveryAddress: true,
+          createdAt: true,
+          handoverCode: true,
+          buyer: true,
+          shg: {
+            select: {
+              fullName: true,
+              phoneNumber: true,
+              address: true,
+              shgDetail: {
+                select: {
+                  shgName: true,
                 }
               }
             }
-          }
+          },
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          masterOrder: {
+            include: {
+              pickupOrders: {
+                include: {
+                  seller: true,
+                  tracking: {
+                    orderBy: { updatedAt: 'desc' },
+                    take: 1
+                  }
+                }
+              }
+            }
+          },
+          tracking: {
+            orderBy: { updatedAt: 'desc' },
+            take: 1
+          },
         },
-        tracking: {
-          orderBy: { updatedAt: 'desc' },
-          take: 1
+        orderBy: {
+          createdAt: 'desc',
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+      });
 
-    const filteredDrops = [];
-    for (const drop of drops) {
-      if (drop.transporterId === transporterId) {
-        filteredDrops.push(drop);
-      } else if (drop.transporterId === null) {
-        // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
-        const gmuOrders = await this.prisma.$queryRawUnsafe(`
-          SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
-        `, drop.masterOrder.orderNumber) as any[];
-        if (gmuOrders.length > 0) {
-          const orderUuid = gmuOrders[0].id;
-          const dropTransporterStatus = gmuOrders[0].dropTransporterStatus;
+      const filteredDrops = [];
+      for (const drop of drops) {
+        if (drop.transporterId === transporterId) {
+          filteredDrops.push(drop);
+        } else if (drop.transporterId === null) {
+          // Must check if there is a pending drop/return assignment in OrderAssignment for this transporter
+          const gmuOrders = await this.prisma.$queryRawUnsafe(`
+            SELECT id, "dropTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND (phase = 'DROP' OR (phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = $1 AND phase = 'DROP'))) LIMIT 1;
+          `, drop.masterOrder.orderNumber) as any[];
+          if (gmuOrders.length > 0) {
+            const orderUuid = gmuOrders[0].id;
+            const dropTransporterStatus = gmuOrders[0].dropTransporterStatus;
 
-          if (dropTransporterStatus === 'ACCEPTED' || dropTransporterStatus === 'DROP_TRANSPORTER_ACCEPTED' || dropTransporterStatus === 'COMPLETED' || dropTransporterStatus === 'DELIVERED_TO_GMU' || dropTransporterStatus === 'RETURNED') {
-            continue;
-          }
+            if (dropTransporterStatus === 'ACCEPTED' || dropTransporterStatus === 'DROP_TRANSPORTER_ACCEPTED' || dropTransporterStatus === 'COMPLETED' || dropTransporterStatus === 'DELIVERED_TO_GMU' || dropTransporterStatus === 'RETURNED') {
+              continue;
+            }
 
-          const isReturn = drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED';
-          const role = isReturn ? 'RETURN' : 'DROP';
+            const isReturn = drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED';
+            const role = isReturn ? 'RETURN' : 'DROP';
 
-          const assignments = await this.prisma.$queryRawUnsafe(`
-            SELECT id FROM public."OrderAssignment"
-            WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = $3 AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
-          `, orderUuid, transporterUuid, role) as any[];
+            const assignments = await this.prisma.$queryRawUnsafe(`
+              SELECT id FROM public."OrderAssignment"
+              WHERE "orderId" = $1 AND "assigneeId" = $2 AND role = $3 AND "assigneeType" = 'TRANSPORTER' AND status = 'PENDING' LIMIT 1;
+            `, orderUuid, transporterUuid, role) as any[];
 
-          if (assignments.length > 0) {
-            // Must match transporter's operating routes
-            if (drop.buyer && matchesRoute(drop.buyer.pincode, drop.buyer.village, drop.buyer.taluka, drop.buyer.district)) {
-              filteredDrops.push(drop);
+            if (assignments.length > 0) {
+              // Must match transporter's operating routes
+              if (drop.buyer && matchesRoute(drop.buyer.pincode, drop.buyer.village, drop.buyer.taluka, drop.buyer.district)) {
+                filteredDrops.push(drop);
+              }
             }
           }
         }
       }
+
+      const updatedDrops = filteredDrops;
+
+      const mappedDrops = updatedDrops.map((drop) => {
+        const mappedBuyer = drop.buyer ? {
+          fullName: drop.buyer.buyerName,
+          phoneNumber: drop.buyer.mobileNumber,
+          address: {
+            houseNo: drop.buyer.addressLine1 || '',
+            village: drop.buyer.village,
+            taluka: drop.buyer.taluka,
+            district: drop.buyer.district,
+            pincode: drop.buyer.pincode,
+          }
+        } : null;
+
+        const mappedShg = drop.shg ? {
+          fullName: drop.shg.fullName,
+          phoneNumber: drop.shg.phoneNumber,
+          address: drop.shg.address ? {
+            addressLine1: drop.shg.address.houseNo || drop.shg.address.deliveryAddress || '',
+            village: drop.shg.address.village || '',
+            taluka: drop.shg.address.taluka || '',
+            district: drop.shg.address.district || '',
+            pincode: drop.shg.address.pincode || '',
+          } : null
+        } : null;
+
+        let finalDrop: any = {
+          ...drop,
+          buyer: mappedBuyer,
+          shg: mappedShg,
+        };
+
+        if (drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
+          const nextStatus = drop.status === 'RETURNED' ? 'COMPLETED' : 'ACCEPTED';
+
+          const associatedPickup = drop.masterOrder?.pickupOrders?.[0];
+          const pickupSeller = associatedPickup?.seller;
+
+          let dynamicAddress = 'Gadhinglaj Hub';
+          let dynamicFullName = 'Gadhinglaj Hub Contact';
+          let dynamicPhoneNumber = '+91 99999 88888';
+          let dynamicVillage = 'Gadhinglaj';
+          let dynamicPincode = '416502';
+
+          const sellerName = (pickupSeller as any)?.sellerName || '';
+          const sellerPhone = (pickupSeller as any)?.mobileNumber || '';
+
+          const isPickupFromHub = sellerName.toLowerCase().includes('gmu') ||
+            sellerName.toLowerCase().includes('hub') ||
+            sellerPhone === '9999999992';
+
+          if (pickupSeller && isPickupFromHub) {
+            dynamicFullName = (pickupSeller as any).sellerName || dynamicFullName;
+            dynamicPhoneNumber = (pickupSeller as any).mobileNumber || dynamicPhoneNumber;
+
+            dynamicAddress = (pickupSeller as any).addressLine1 || dynamicAddress;
+            dynamicVillage = (pickupSeller as any).village || dynamicVillage;
+            dynamicPincode = (pickupSeller as any).pincode || dynamicPincode;
+          } else {
+            const isDropToHub = drop.deliveryAddress?.toLowerCase().includes('gmu') ||
+              drop.deliveryAddress?.toLowerCase().includes('hub') ||
+              mappedBuyer?.fullName?.toLowerCase().includes('gmu') ||
+              mappedBuyer?.fullName?.toLowerCase().includes('hub') ||
+              mappedBuyer?.phoneNumber === '9999999992';
+
+            if (isDropToHub && mappedBuyer) {
+              dynamicFullName = mappedBuyer.fullName || dynamicFullName;
+              dynamicPhoneNumber = mappedBuyer.phoneNumber || dynamicPhoneNumber;
+              dynamicAddress = drop.deliveryAddress || dynamicAddress;
+              dynamicVillage = mappedBuyer.address?.village || dynamicVillage;
+              dynamicPincode = mappedBuyer.address?.pincode || dynamicPincode;
+            }
+          }
+
+          finalDrop = {
+            ...finalDrop,
+            status: nextStatus,
+            isRTO: true,
+            deliveryAddress: dynamicAddress,
+            buyer: {
+              fullName: dynamicFullName,
+              phoneNumber: dynamicPhoneNumber,
+              address: {
+                village: dynamicVillage,
+                pincode: dynamicPincode,
+              } as any
+            }
+          };
+        } else if (drop.status === 'PICKED_UP') {
+          finalDrop = {
+            ...finalDrop,
+            status: 'ACCEPTED',
+          };
+        }
+
+        return finalDrop;
+      });
+
+      return mappedDrops;
+    } catch (error) {
+      console.error(`Error in getAssignedDrops for transporter ${transporterId}:`, error);
+      return [];
     }
-
-    const updatedDrops = filteredDrops;
-
-    const mappedDrops = updatedDrops.map((drop) => {
-      const mappedBuyer = drop.buyer ? {
-        fullName: drop.buyer.buyerName,
-        phoneNumber: drop.buyer.mobileNumber,
-        address: {
-          houseNo: drop.buyer.addressLine1 || '',
-          village: drop.buyer.village,
-          taluka: drop.buyer.taluka,
-          district: drop.buyer.district,
-          pincode: drop.buyer.pincode,
-        }
-      } : null;
-
-      const mappedShg = drop.shg ? {
-        fullName: drop.shg.fullName,
-        phoneNumber: drop.shg.phoneNumber,
-        address: drop.shg.address ? {
-          addressLine1: drop.shg.address.houseNo || drop.shg.address.deliveryAddress || '',
-          village: drop.shg.address.village || '',
-          taluka: drop.shg.address.taluka || '',
-          district: drop.shg.address.district || '',
-          pincode: drop.shg.address.pincode || '',
-        } : null
-      } : null;
-
-      let finalDrop: any = {
-        ...drop,
-        buyer: mappedBuyer,
-        shg: mappedShg,
-      };
-
-      if (drop.status === 'RETURN_PENDING' || drop.status === 'RETURN_ACCEPTED' || drop.status === 'RETURN_PICKED_UP' || drop.status === 'RETURNED') {
-        const nextStatus = drop.status === 'RETURNED' ? 'COMPLETED' : 'ACCEPTED';
-
-        const associatedPickup = drop.masterOrder?.pickupOrders?.[0];
-        const pickupSeller = associatedPickup?.seller;
-
-        let dynamicAddress = 'Gadhinglaj Hub';
-        let dynamicFullName = 'Gadhinglaj Hub Contact';
-        let dynamicPhoneNumber = '+91 99999 88888';
-        let dynamicVillage = 'Gadhinglaj';
-        let dynamicPincode = '416502';
-
-        const sellerName = (pickupSeller as any)?.sellerName || '';
-        const sellerPhone = (pickupSeller as any)?.mobileNumber || '';
-
-        const isPickupFromHub = sellerName.toLowerCase().includes('gmu') ||
-          sellerName.toLowerCase().includes('hub') ||
-          sellerPhone === '9999999992';
-
-        if (pickupSeller && isPickupFromHub) {
-          dynamicFullName = (pickupSeller as any).sellerName || dynamicFullName;
-          dynamicPhoneNumber = (pickupSeller as any).mobileNumber || dynamicPhoneNumber;
-
-          dynamicAddress = (pickupSeller as any).addressLine1 || dynamicAddress;
-          dynamicVillage = (pickupSeller as any).village || dynamicVillage;
-          dynamicPincode = (pickupSeller as any).pincode || dynamicPincode;
-        } else {
-          const isDropToHub = drop.deliveryAddress?.toLowerCase().includes('gmu') ||
-            drop.deliveryAddress?.toLowerCase().includes('hub') ||
-            mappedBuyer?.fullName?.toLowerCase().includes('gmu') ||
-            mappedBuyer?.fullName?.toLowerCase().includes('hub') ||
-            mappedBuyer?.phoneNumber === '9999999992';
-
-          if (isDropToHub && mappedBuyer) {
-            dynamicFullName = mappedBuyer.fullName || dynamicFullName;
-            dynamicPhoneNumber = mappedBuyer.phoneNumber || dynamicPhoneNumber;
-            dynamicAddress = drop.deliveryAddress || dynamicAddress;
-            dynamicVillage = mappedBuyer.address?.village || dynamicVillage;
-            dynamicPincode = mappedBuyer.address?.pincode || dynamicPincode;
-          }
-        }
-
-        finalDrop = {
-          ...finalDrop,
-          status: nextStatus,
-          isRTO: true,
-          deliveryAddress: dynamicAddress,
-          buyer: {
-            fullName: dynamicFullName,
-            phoneNumber: dynamicPhoneNumber,
-            address: {
-              village: dynamicVillage,
-              pincode: dynamicPincode,
-            } as any
-          }
-        };
-      } else if (drop.status === 'PICKED_UP') {
-        finalDrop = {
-          ...finalDrop,
-          status: 'ACCEPTED',
-        };
-      }
-
-      return finalDrop;
-    });
-
-    return mappedDrops;
   }
 
 
