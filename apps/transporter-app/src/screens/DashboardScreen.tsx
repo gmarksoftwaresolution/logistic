@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, View, Text, ScrollView, Platform, Dimensions, TouchableOpacity, Modal, DeviceEventEmitter } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { StyleSheet, View, Text, ScrollView, Platform, Dimensions, TouchableOpacity, Modal, DeviceEventEmitter, RefreshControl } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../constants/Colors';
@@ -20,6 +20,98 @@ const DashboardScreen: React.FC<any> = () => {
   const { t } = useTranslation();
   const { checkFirstLaunch } = useOnboarding();
   const [transporterName, setTransporterName] = useState('ABC');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [dashboardData, setDashboardData] = useState<{
+    totalEarnings: string;
+    earningsTrend: string;
+    pickupOrdersCount: number;
+    dropOrdersCount: number;
+    pendingPickupsCount: number;
+    pendingDropsCount: number;
+    routeDonePercent: number;
+    shiftTime: string;
+    shiftStatus: string;
+    onTimePercent: string;
+    accuracyPercent: string;
+    totalDistance: string;
+    rating: string;
+  }>({
+    totalEarnings: '₹ 850',
+    earningsTrend: '+5% vs yesterday',
+    pickupOrdersCount: 8,
+    dropOrdersCount: 5,
+    pendingPickupsCount: 12,
+    pendingDropsCount: 8,
+    routeDonePercent: 70,
+    shiftTime: 'Shift: 08:00 AM - 04:00 PM',
+    shiftStatus: 'Ongoing Shift',
+    onTimePercent: '98.5%',
+    accuracyPercent: '100%',
+    totalDistance: '42.8 km',
+    rating: '4.9',
+  });
+
+  const [earningsFilter, setEarningsFilter] = useState<'Today' | 'Yesterday' | 'This Week' | 'Custom'>('Today');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDate, setCustomDate] = useState(new Date());
+
+  interface AlertItem {
+    id: string;
+    key?: string;
+    params?: Record<string, any>;
+    text?: string;
+    time: string;
+    type: string;
+  }
+
+  const [alerts, setAlerts] = useState<AlertItem[]>([
+    { id: '1', key: 'home.pickup_delayed', params: { shg: 'SHG Kagal' }, time: '10 mins ago', type: 'error' },
+    { id: '2', key: 'home.shg_not_ready', params: { shg: 'SHG Shirgaon' }, time: '1 hour ago', type: 'warning' },
+    { id: '3', key: 'home.route_deviation', params: { route: 'Highway 4' }, time: '2 hours ago', type: 'error' },
+    { id: '4', key: 'home.traffic_delay', params: { location: 'Toll Plaza' }, time: '3 hours ago', type: 'warning' },
+    { id: '5', key: 'home.verification_pending', time: '4 hours ago', type: 'error' },
+  ]);
+
+  const loadDashboardData = useCallback(async (filter: string) => {
+    try {
+      const response = await api.get(`/orders/dashboard-summary?filter=${filter}`);
+      if (response.data) {
+        setDashboardData({
+          totalEarnings: response.data.totalEarnings || '₹ 850',
+          earningsTrend: response.data.earningsTrend || '+5% vs yesterday',
+          pickupOrdersCount: response.data.pickupOrdersCount ?? 8,
+          dropOrdersCount: response.data.dropOrdersCount ?? 5,
+          pendingPickupsCount: response.data.pendingPickupsCount ?? 12,
+          pendingDropsCount: response.data.pendingDropsCount ?? 8,
+          routeDonePercent: response.data.routeDonePercent ?? 70,
+          shiftTime: response.data.shiftTime || 'Shift: 08:00 AM - 04:00 PM',
+          shiftStatus: response.data.shiftStatus || 'Ongoing Shift',
+          onTimePercent: response.data.onTimePercent || '98.5%',
+          accuracyPercent: response.data.accuracyPercent || '100%',
+          totalDistance: response.data.totalDistance || '42.8 km',
+          rating: response.data.rating || '4.9',
+        });
+
+        if (response.data.transporterName) {
+          setTransporterName(response.data.transporterName);
+        }
+
+        if (Array.isArray(response.data.alerts) && response.data.alerts.length > 0) {
+          setAlerts(response.data.alerts);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard summary:', err);
+    }
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData(earningsFilter);
+    setRefreshing(false);
+  }, [earningsFilter, loadDashboardData]);
 
   useEffect(() => {
     const loadTransporterName = async () => {
@@ -46,7 +138,8 @@ const DashboardScreen: React.FC<any> = () => {
       }
     };
     loadTransporterName();
-  }, []);
+    loadDashboardData(earningsFilter);
+  }, [earningsFilter, loadDashboardData]);
 
   const lastOffsetY = useRef(0);
   const handleScroll = (event: any) => {
@@ -69,28 +162,6 @@ const DashboardScreen: React.FC<any> = () => {
   useEffect(() => {
     checkFirstLaunch();
   }, []);
-
-  const [earningsFilter, setEarningsFilter] = useState<'Today' | 'Yesterday' | 'This Week' | 'Custom'>('Today');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [customDate, setCustomDate] = useState(new Date());
-
-  interface AlertItem {
-    id: string;
-    key?: string;
-    params?: Record<string, any>;
-    text?: string;
-    time: string;
-    type: string;
-  }
-
-  const [alerts, setAlerts] = useState<AlertItem[]>([
-    { id: '1', key: 'home.pickup_delayed', params: { shg: 'SHG Kagal' }, time: '10 mins ago', type: 'error' },
-    { id: '2', key: 'home.shg_not_ready', params: { shg: 'SHG Shirgaon' }, time: '1 hour ago', type: 'warning' },
-    { id: '3', key: 'home.route_deviation', params: { route: 'Highway 4' }, time: '2 hours ago', type: 'error' },
-    { id: '4', key: 'home.traffic_delay', params: { location: 'Toll Plaza' }, time: '3 hours ago', type: 'warning' },
-    { id: '5', key: 'home.verification_pending', time: '4 hours ago', type: 'error' },
-  ]);
 
   const dismissAlert = (id: string) => {
     setAlerts(prev => prev.filter(a => a.id !== id));
@@ -155,6 +226,9 @@ const DashboardScreen: React.FC<any> = () => {
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#10B981']} />
+        }
       >
         {/* Earnings Card (Preserved) */}
         <LinearGradient
@@ -174,10 +248,10 @@ const DashboardScreen: React.FC<any> = () => {
           </View>
           <Text style={styles.earningsLabel}>{t('home.total_earnings')}</Text>
           <View style={styles.earningsAmountRow}>
-            <Text style={styles.earningsAmount}>{earningsData[earningsFilter].amount}</Text>
+            <Text style={styles.earningsAmount}>{dashboardData.totalEarnings}</Text>
             <View style={styles.earningsFooter}>
               <TrendingUp size={scale(12)} color="#D1FAE5" />
-              <Text style={styles.earningsTrendText}>{earningsData[earningsFilter].trend}</Text>
+              <Text style={styles.earningsTrendText}>{dashboardData.earningsTrend}</Text>
             </View>
           </View>
 
@@ -186,13 +260,13 @@ const DashboardScreen: React.FC<any> = () => {
 
           {/* Progress Rows */}
           <View style={styles.earningsProgressRow}>
-            <Text style={styles.earningsProgressText}>{earningsData[earningsFilter].pickupsDrops}</Text>
-            <Text style={styles.earningsProgressSubtext}>{earningsData[earningsFilter].shiftTime}</Text>
+            <Text style={styles.earningsProgressText}>{`${dashboardData.pickupOrdersCount} ${t('orders.pickup_orders')} • ${dashboardData.dropOrdersCount} ${t('orders.drop_orders')}`}</Text>
+            <Text style={styles.earningsProgressSubtext}>{dashboardData.shiftTime}</Text>
           </View>
 
           <View style={[styles.earningsProgressRow, { marginTop: verticalScale(4) }]}>
-            <Text style={styles.earningsProgressHighlight}>{earningsData[earningsFilter].routeDone}</Text>
-            <Text style={styles.earningsProgressSubtext}>{earningsData[earningsFilter].shiftStatus}</Text>
+            <Text style={styles.earningsProgressHighlight}>{`${dashboardData.routeDonePercent}% ${t('home.route_done', { percent: '' })}`}</Text>
+            <Text style={styles.earningsProgressSubtext}>{dashboardData.shiftStatus}</Text>
           </View>
         </LinearGradient>
 
@@ -275,7 +349,7 @@ const DashboardScreen: React.FC<any> = () => {
                   <ArrowUpRight size={scale(12)} color="#FFFFFF" />
                 </View>
               </View>
-              <Text style={[styles.operationCount, { color: '#3B82F6' }]}>12</Text>
+              <Text style={[styles.operationCount, { color: '#3B82F6' }]}>{dashboardData.pendingPickupsCount}</Text>
             </View>
             <Text style={styles.operationTitle}>{t('home.pickups_pending')}</Text>
             <Text style={styles.operationDesc}>{t('home.pickups_desc')}</Text>
@@ -290,10 +364,9 @@ const DashboardScreen: React.FC<any> = () => {
                   <ArrowDownRight size={scale(12)} color="#FFFFFF" />
                 </View>
               </View>
-              <Text style={[styles.operationCount, { color: '#F97316' }]}>8</Text>
+              <Text style={[styles.operationCount, { color: '#F97316' }]}>{dashboardData.pendingDropsCount}</Text>
             </View>
             <Text style={styles.operationTitle}>{t('home.drops_pending')}</Text>
-            <Text style={styles.operationDesc}>{t('home.drops_desc')}</Text>
           </View>
         </View>
 
@@ -308,28 +381,28 @@ const DashboardScreen: React.FC<any> = () => {
           {/* On-Time Card */}
           <View style={styles.analyticsGridCard}>
             <TrendingUp size={scale(24)} color="#10B981" style={styles.analyticsGridIcon} />
-            <Text style={styles.analyticsGridValue}>98.5%</Text>
+            <Text style={styles.analyticsGridValue}>{dashboardData.onTimePercent}</Text>
             <Text style={styles.analyticsGridLabel}>{t('home.on_time')}</Text>
           </View>
 
           {/* Accuracy Card */}
           <View style={styles.analyticsGridCard}>
             <CheckCircle2 size={scale(24)} color="#10B981" style={styles.analyticsGridIcon} />
-            <Text style={styles.analyticsGridValue}>100%</Text>
+            <Text style={styles.analyticsGridValue}>{dashboardData.accuracyPercent}</Text>
             <Text style={styles.analyticsGridLabel}>{t('home.accuracy')}</Text>
           </View>
 
           {/* Distance Card */}
           <View style={styles.analyticsGridCard}>
             <Navigation size={scale(24)} color="#3B82F6" style={styles.analyticsGridIcon} />
-            <Text style={styles.analyticsGridValue}>42.8 km</Text>
+            <Text style={styles.analyticsGridValue}>{dashboardData.totalDistance}</Text>
             <Text style={styles.analyticsGridLabel} numberOfLines={1} adjustsFontSizeToFit>{t('home.total_distance')}</Text>
           </View>
 
           {/* Rating Card (replacing Rejections) */}
           <View style={styles.analyticsGridCard}>
             <Star size={scale(24)} color="#F59E0B" style={styles.analyticsGridIcon} />
-            <Text style={styles.analyticsGridValue}>4.9</Text>
+            <Text style={styles.analyticsGridValue}>{dashboardData.rating}</Text>
             <Text style={styles.analyticsGridLabel}>{t('home.rating')}</Text>
           </View>
         </View>

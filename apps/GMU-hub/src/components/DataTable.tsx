@@ -20,6 +20,7 @@ interface DataTableProps<T> {
   selectedDate?: string;
   onDateChange?: (date: string) => void;
   onRefresh?: () => void;
+  isRefreshing?: boolean;
   extraControls?: React.ReactNode;
   hideDateAndRefresh?: boolean;
   hideSearchAndFilters?: boolean;
@@ -207,6 +208,7 @@ export function DataTable<T extends Record<string, any>>({
   selectedDate: propSelectedDate,
   onDateChange,
   onRefresh,
+  isRefreshing = false,
   extraControls,
   hideDateAndRefresh = false,
   hideSearchAndFilters = false,
@@ -487,10 +489,11 @@ export function DataTable<T extends Record<string, any>>({
             {!hideDateAndRefresh && onRefresh && (
               <button
                 onClick={onRefresh}
-                className="px-4 py-2.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                disabled={isRefreshing}
+                className="px-4 py-2.5 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/90 disabled:opacity-75 rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
               >
-                <RefreshCcw className="h-3.5 w-3.5" />
-                <span>Refresh</span>
+                <RefreshCcw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
             )}
 

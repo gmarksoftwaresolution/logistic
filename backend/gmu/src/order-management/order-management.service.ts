@@ -482,7 +482,18 @@ export class OrderManagementService implements OnModuleInit {
     return where;
   }
 
+  private countsCache: { data: any; timestamp: number } | null = null;
+  private readonly COUNTS_CACHE_TTL_MS = 5000; // 5 seconds TTL cache
+
+  clearCountsCache() {
+    this.countsCache = null;
+  }
+
   async getCounts() {
+    const now = Date.now();
+    if (this.countsCache && (now - this.countsCache.timestamp) < this.COUNTS_CACHE_TTL_MS) {
+      return this.countsCache.data;
+    }
     const [
       pickupNew,
       pickupAssigned,
@@ -602,7 +613,7 @@ export class OrderManagementService implements OnModuleInit {
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) }),
     ]);
 
-    return {
+    const result = {
       pickup: {
         new: pickupNew,
         assigned: pickupAssigned,
@@ -627,6 +638,9 @@ export class OrderManagementService implements OnModuleInit {
         buyerReturn: inventoryBuyerReturn
       }
     };
+
+    this.countsCache = { data: result, timestamp: Date.now() };
+    return result;
   }
 
   // --- QUERY ENDPOINTS ---
@@ -2118,6 +2132,12 @@ export class OrderManagementService implements OnModuleInit {
           });
         }
 
+        await tx.$executeRawUnsafe(`
+          ALTER TABLE public.warehouse_inventory ADD COLUMN IF NOT EXISTS order_id TEXT;
+          ALTER TABLE public.warehouse_inventory ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'STORED';
+          ALTER TABLE public.warehouse_inventory ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMP(3);
+        `);
+
         // Synchronize products and seller users from public schema to gmu schema
         for (const item of items) {
           const rawPubProducts = await tx.$queryRawUnsafe(`
@@ -2180,33 +2200,24 @@ export class OrderManagementService implements OnModuleInit {
             }
           }
 
-          const existingInv = await (tx as any).warehouseInventory.findFirst({
-            where: {
-              warehouseId: warehouse.id,
-              productId: item.product_id,
-            }
-          });
+          const existingInvs = await tx.$queryRawUnsafe(`
+            SELECT id, quantity FROM public.warehouse_inventory 
+            WHERE warehouse_id = $1 AND product_id = $2 
+            LIMIT 1;
+          `, warehouse.id, item.product_id) as any[];
+          const existingInv = existingInvs?.[0];
 
           if (existingInv) {
-            await (tx as any).warehouseInventory.update({
-              where: { id: existingInv.id },
-              data: {
-                orderId: order.orderId,
-                status: 'STORED',
-                quantity: (existingInv.quantity || 0) + (item.quantity || 1),
-              }
-            });
+            await tx.$executeRawUnsafe(`
+              UPDATE public.warehouse_inventory 
+              SET order_id = $1, status = 'STORED', quantity = $2 
+              WHERE id = $3;
+            `, order.orderId, (existingInv.quantity || 0) + (item.quantity || 1), existingInv.id);
           } else {
-            await (tx as any).warehouseInventory.create({
-              data: {
-                warehouseId: warehouse.id,
-                productId: item.product_id,
-                orderId: order.orderId,
-                status: 'STORED',
-                quantity: item.quantity || 1,
-                qcStatus: 'PASSED',
-              }
-            });
+            await tx.$executeRawUnsafe(`
+              INSERT INTO public.warehouse_inventory (warehouse_id, product_id, order_id, status, quantity, qc_status) 
+              VALUES ($1, $2, $3, 'STORED', $4, 'PASSED');
+            `, warehouse.id, item.product_id, order.orderId, item.quantity || 1);
           }
         }
       }
