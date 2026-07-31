@@ -51,7 +51,6 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderHeader = () => (
     <View>
-      <HistoryHeader />
       <HistoryStats stats={stats} />
       <HistorySearch 
         value={searchQuery}
@@ -67,6 +66,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+      <HistoryHeader />
       {loading && !refreshing && groupedOrders.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#073318" />

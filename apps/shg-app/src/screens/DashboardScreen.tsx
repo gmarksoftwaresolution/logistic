@@ -64,6 +64,48 @@ export default function DashboardScreen({
   return (
     <LinearGradient colors={['#F9FAFB', '#F3F4F6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="flex-1">
       <SafeAreaView className="flex-1">
+        {/* Header Box */}
+        <LinearGradient 
+          colors={['#FFFFFF', '#E8F5EC']} 
+          start={{ x: 0, y: 0 }} 
+          end={{ x: 1, y: 0 }} 
+          className="mx-4 mt-4 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
+          style={{
+            borderRadius: 34,
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3
+          }}
+        >
+          <View className="flex-1 justify-center pr-2">
+            <Text className="text-[18px] font-extrabold text-[#111827]" numberOfLines={1} ellipsizeMode="tail">
+              {t("su_hello_421") || 'Hello, '}{user.name?.replace(/\s*\(.*\)\s*/g, '').trim() || 'Pooja Patil'}
+            </Text>
+            <Text className="text-[12px] font-semibold text-[#297C11] mt-0.5">
+              {t("su_activity_for_today_422") || 'Activity for today'}
+            </Text>
+          </View>
+          
+          <View className="flex-row items-center">
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Profile')} 
+              activeOpacity={0.7} 
+              className="w-10 h-10 rounded-full bg-white items-center justify-center border border-[#E2F0E7]"
+              style={{ 
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+                elevation: 2
+              }}
+            >
+              <Ionicons name="person-outline" size={20} color="#073318" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
         <ScrollView 
           className="flex-1 relative"
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 }}
@@ -72,52 +114,6 @@ export default function DashboardScreen({
             <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          
-          {/* Header Box */}
-          <LinearGradient 
-            colors={['#FFFFFF', '#E8F5EC']} 
-            start={{ x: 0, y: 0 }} 
-            end={{ x: 1, y: 0 }} 
-            className="mx-4 mt-4 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
-            style={{
-              borderRadius: 34,
-              elevation: 2,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.05,
-              shadowRadius: 3
-            }}
-          >
-            <View className="flex-1 justify-center pr-2">
-              <Text className="text-[18px] font-extrabold text-[#111827]" numberOfLines={1} ellipsizeMode="tail">
-                {t("su_hello_421") || 'Hello, '}{user.name?.replace(/\s*\(.*\)\s*/g, '').trim() || 'Pooja Patil'}
-              </Text>
-              <Text className="text-[12px] font-semibold text-[#297C11] mt-0.5">
-                {t("su_activity_for_today_422") || 'Activity for today'}
-              </Text>
-            </View>
-            
-            <View className="flex-row items-center">
-              <TouchableOpacity 
-                onPress={() => setShowNotifications(true)} 
-                activeOpacity={0.7} 
-                className="w-10 h-10 rounded-full bg-white items-center justify-center border border-[#E2F0E7]"
-                style={{ 
-                  opacity: showNotifications ? 0 : 1,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 2,
-                  elevation: 2
-                }}
-              >
-                <Ionicons name="notifications-outline" size={20} color="#073318" />
-                {notifications.some(n => n.unread) && (
-                  <View className="absolute top-2 right-2.5 w-2 h-2 bg-[#B42318] rounded-full border border-white" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
 
           {/* Earnings Card */}
           <LinearGradient 

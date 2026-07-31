@@ -9,10 +9,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-//////////////////////////////////////////////////////
-// ENUMS
-//////////////////////////////////////////////////////
-
 enum UserRole {
   SHG
   INDIVIDUAL
@@ -139,10 +135,6 @@ model OrderAssignment {
   updatedAt    DateTime @updatedAt
 }
 
-//////////////////////////////////////////////////////
-// USERS
-//////////////////////////////////////////////////////
-
 model User {
   id                  Int       @id @default(autoincrement())
 
@@ -206,11 +198,11 @@ model User {
 
   @@index([phoneNumber])
   @@index([role])
+  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
+  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
+  return_order_assignments  return_order_assignments[]
+  return_order_scan_history return_order_scan_history[]
 }
-
-//////////////////////////////////////////////////////
-// COMMON TABLES
-//////////////////////////////////////////////////////
 
 model Address {
   id            Int      @id @default(autoincrement())
@@ -353,10 +345,6 @@ model StepTracking {
   @@index([userId, step])
 }
 
-//////////////////////////////////////////////////////
-// SHG MODULE
-//////////////////////////////////////////////////////
-
 model ShgDetail {
   id                  Int         @id @default(autoincrement())
 
@@ -395,10 +383,6 @@ model BusinessDetail {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
-
-//////////////////////////////////////////////////////
-// TRANSPORTER MODULE
-//////////////////////////////////////////////////////
 
 model TransporterDetail {
   id                    Int         @id @default(autoincrement())
@@ -470,10 +454,6 @@ model MilkVanDetail {
   updatedAt             DateTime @updatedAt
 }
 
-//////////////////////////////////////////////////////
-// AUDIT LOGS
-//////////////////////////////////////////////////////
-
 model AuditLog {
   id              Int      @id @default(autoincrement())
 
@@ -493,10 +473,6 @@ model AuditLog {
   @@index([userId])
 }
 
-//////////////////////////////////////////////////////
-// OTP
-//////////////////////////////////////////////////////
-
 model OTPVerification {
   id              Int      @id @default(autoincrement())
 
@@ -513,10 +489,6 @@ model OTPVerification {
 
   @@index([phoneNumber])
 }
-
-//////////////////////////////////////////////////////
-// NEW CLEAN ARCHITECTURE MODELS
-//////////////////////////////////////////////////////
 
 model Product {
   id          Int      @id @default(autoincrement())
@@ -541,6 +513,7 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@map("products")
+  returnOrderItems   ReturnOrderItem[]
 }
 
 model MasterOrder {
@@ -679,6 +652,7 @@ model DropOrder {
   @@index([transporterId])
   @@index([status])
   @@map("drop_orders")
+  returnOrders    ReturnOrder[]
 }
 
 model DropOrderItem {
@@ -788,9 +762,8 @@ model Buyer {
   orders           Order[]
 
   @@map("buyers")
+  returnOrders ReturnOrder[]
 }
-
-
 
 model VerificationRecord {
   id               Int       @id @default(autoincrement())
@@ -920,3 +893,222 @@ model Earning {
   @@unique([shgId, orderId])
   @@map("earnings")
 }
+
+model ReturnOrder {
+  id                        Int                         @id @default(autoincrement())
+  returnOrderNumber         String?                     @unique @map("return_order_number")
+  originalOrderId           Int                         @map("original_order_id")
+  buyerId                   Int                         @map("buyer_id")
+  shgId                     Int?                        @map("shg_id")
+  transporterId             Int?                        @map("transporter_id")
+  status                    String                      @default("RETURN_REQUESTED")
+  returnReason              String?                     @map("return_reason")
+  barcode                   String?                     @unique
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
+  return_order_assignments  return_order_assignments[]
+  items                     ReturnOrderItem[]
+  return_order_scan_history return_order_scan_history[]
+  return_order_timeline     return_order_timeline[]
+  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
+  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
+  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
+  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
+
+  @@index([originalOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("return_orders")
+}
+
+model ReturnOrderItem {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  productId     Int         @map("product_id")
+  quantity      Int?
+  product       Product     @relation(fields: [productId], references: [id])
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@map("return_order_items")
+}
+
+model return_order_assignments {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  assignee_id     Int
+  assigneeType    String
+  status          String      @default("PENDING")
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @default(now())
+  User            User        @relation(fields: [assignee_id], references: [id])
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([assignee_id])
+  @@index([return_order_id])
+}
+
+model return_order_scan_history {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  scanned_by      Int
+  userRole        String
+  scanResult      String
+  barcode         String
+  scanLocation    String?
+  timestamp       DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+  User            User        @relation(fields: [scanned_by], references: [id])
+
+  @@index([return_order_id])
+  @@index([scanned_by])
+}
+
+model return_order_timeline {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  status          String
+  remarks         String?
+  updated_at      DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([return_order_id])
+}
+
+model CommunityMember {
+  id            String   @id @default(uuid())
+  memberCode    String?  @unique
+  type          String   // SHG, INDIVIDUAL
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt     DateTime @default(now())
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+
+  // Personal Details
+  profilePhoto      String?
+  fullName          String
+  mobileNumber      String
+  age               Int?
+  occupation        String?
+
+  // SHG Details
+  roleInShg         String?
+  shgName           String?
+  crpName           String?
+  crpMobile         String?
+  crpEmail          String?
+  leaderName        String?
+  leaderMobile      String?
+  groupSize         Int?
+  activeSince       String?
+
+  // Business Details
+  producesProducts  Boolean? @default(false)
+  businessTeamSize  Int?
+  productName       String?
+  productCategory   String?
+  dailyProduction   Float?
+  weeklyProduction  Float?
+  productionUnit    String?
+  pricePerUnit      Float?
+
+  // Address Details
+  houseNo           String?
+  deliveryAddress   String?
+  village           String?
+  taluka            String?
+  district          String?
+  state             String?
+  pincode           String?
+
+  // Document Details
+  aadhaarNumber     String?
+  panNumber         String?
+  aadhaarFrontPhoto String?
+  aadhaarBackPhoto  String?
+  panCardPhoto      String?
+
+  // Bank Details
+  accountHolderName String?
+  accountNumber     String?
+  ifscCode          String?
+  bankName          String?
+  branchName        String?
+  upiId             String?
+
+  // Storage Details
+  storageSpace      String?
+  storageWidth      Float?
+  storageHeight     Float?
+  storageDescription String?
+
+  // Vehicle Details
+  vehicleAvailable          Boolean? @default(false)
+  vehicleType               String?
+  vehicleRegistrationNumber String?
+  drivingLicenseNumber      String?
+  drivingLicensePhoto       String?
+  vehiclePhoto              String?
+}
+
+model TransporterMember {
+  id              String   @id @default(uuid())
+  transporterCode String?  @unique
+  type            String   // ROUTE_PARTNER, PERSONAL
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+
+  // Personal Details
+  profilePhoto    String?
+  firstName       String
+  lastName        String
+  mobileNumber    String
+  email           String?
+
+  // Address Details
+  residentialAddress String?
+  village            String?
+  taluka             String?
+  district           String?
+  state              String?
+  pincode            String?
+
+  // Driving Details
+  licenseNumber      String?
+  licensePhoto       String?
+  licenseExpiryDate  DateTime?
+  experienceYears    Int?
+
+  // Bank Details
+  accountHolderName  String?
+  accountNumber      String?
+  ifscCode           String?
+  bankName           String?
+  branchName         String?
+  upiId              String?
+
+  // Vehicle Details
+  vehicleCategory       String?
+  vehicleType           String?
+  vehicleMake           String?
+  vehicleNumber         String?
+  vehicleRcPhoto        String?
+  vehicleInsurancePhoto String?
+
+  // Route Details
+  assignedPincodes   Json?
+  assignedVillages   Json?
+  morningShift       String?
+  eveningShift       String?
+  workingDays        Json?
+
+  // Milk Organization Details
+  milkOrganizationName String?
+  milkCenterName       String?
+}
+

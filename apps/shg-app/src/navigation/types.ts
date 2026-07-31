@@ -15,7 +15,7 @@ export type MainTabParamList = {
   Orders: { filter?: string } | undefined;
   Earnings: undefined;
   OrderHistory: undefined;
-  Profile: undefined;
+  Inventory: undefined;
 };
 
 export type RootStackParamList = {

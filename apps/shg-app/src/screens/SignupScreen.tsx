@@ -394,6 +394,7 @@ export default function SignupScreen({
   const vehicleRegNoRef = useRef<TextInput>(null);
   const dlNumberRef = useRef<TextInput>(null);
   const otherOccupationRef = useRef<TextInput>(null);
+  const postOfficeRef = useRef<TextInput>(null);
 
   // Step 3: Personal Details States
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -469,6 +470,11 @@ export default function SignupScreen({
   const [village, setVillage] = useState('');
   const [villageError, setVillageError] = useState('');
   const [villageList, setVillageList] = useState<string[]>([]);
+  const [postOffice, setPostOffice] = useState('');
+  const [postOfficeError, setPostOfficeError] = useState('');
+  const [postOfficeList, setPostOfficeList] = useState<string[]>([]);
+  const [showPostOfficeMenu, setShowPostOfficeMenu] = useState(false);
+  const [postOfficeMap, setPostOfficeMap] = useState<Record<string, string[]>>({});
   const [streetArea, setStreetArea] = useState('');
   const [streetAreaError, setStreetAreaError] = useState('');
   const [houseNo, setHouseNo] = useState('');
@@ -688,6 +694,7 @@ export default function SignupScreen({
     if (data.weeklyProduction) setWeeklyProduction(data.weeklyProduction?.toString());
     if (data.productPrice) setProductPrice(data.productPrice?.toString());
     if (data.pincode) setPincode(data.pincode);
+    if (data.postOffice) setPostOffice(data.postOffice);
     if (data.stateName) setStateName(data.stateName);
     if (data.district) setDistrict(data.district);
     if (data.taluka) setTaluka(data.taluka);
@@ -950,26 +957,53 @@ export default function SignupScreen({
   // Pincode selectedData sync effect (crucial for resuming progress)
   useEffect(() => {
     if (pincode && pincode.length === 6) {
-      const localData = PINCODE_DATA.find(p => p.pincode === pincode);
-      if (localData) {
-        setSelectedData(localData);
-        setVillageList(localData.villages || []);
-      } else {
-        const fetchPincodeData = async () => {
-          try {
-            const data = await signupService.getPincodeDetails(pincode);
-            if (data) {
-              setSelectedData(data);
-              setVillageList(data.villages || []);
+      const fetchPincodeData = async () => {
+        try {
+          const data = await signupService.getPincodeDetails(pincode);
+          if (data) {
+            setSelectedData(data);
+            if (data.postOffices && data.postOffices.length > 0) {
+              setPostOfficeList(data.postOffices);
+              setPostOfficeMap(data.postOfficeMap || {});
+              if (data.postOffices.length === 1) {
+                setPostOffice(data.postOffices[0]);
+              }
+            } else {
+              setPostOfficeList([]);
+              setPostOfficeMap({});
+              setVillageList([]);
             }
-          } catch (err) {
-            console.error('Failed to sync pincode details in effect:', err);
           }
-        };
-        fetchPincodeData();
-      }
+        } catch (err) {
+          console.error('Failed to sync pincode details in effect:', err);
+          const localData = PINCODE_DATA.find(p => p.pincode === pincode);
+          if (localData) {
+            setSelectedData(localData);
+            setVillageList(localData.villages || []);
+          }
+        }
+      };
+      fetchPincodeData();
+    } else {
+      setPostOfficeList([]);
+      setPostOfficeMap({});
+      setPostOffice('');
+      setVillageList([]);
+      setVillage('');
     }
   }, [pincode]);
+
+  // Sync villages when postOffice or postOfficeMap updates
+  useEffect(() => {
+    if (postOffice && postOfficeMap[postOffice]) {
+      const vils = postOfficeMap[postOffice] || [];
+      setVillageList(vils);
+      if (vils.length === 1) {
+        setVillage(vils[0]);
+        setVillageError('');
+      }
+    }
+  }, [postOffice, postOfficeMap]);
 
   // IFSC Auto-fetch Effect
   useEffect(() => {
@@ -1718,6 +1752,11 @@ export default function SignupScreen({
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = houseNoRef;
     }
+    if (locationOption === 'pincode' && !postOffice) {
+      setPostOfficeError('Post office is required');
+      isValid = false;
+      if (!firstInvalidRef) firstInvalidRef = postOfficeRef;
+    }
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
@@ -1728,6 +1767,7 @@ export default function SignupScreen({
     try {
       await signupService.submitAddress({
         pincode,
+        postOffice,
         village,
         taluka,
         district,
@@ -2585,144 +2625,102 @@ export default function SignupScreen({
               <FormSection iconName="location-outline" title={t("address_details")} subtitle={t("su_enter_your_location__181")} />
 
               <View className="w-full">
-                {/* Segmented Selector for Option 1 and Option 2 */}
-                <View className="flex-row justify-between mb-6 border border-gray-200 rounded-[20px] p-1 bg-gray-50">
-                  <TouchableOpacity 
-                    className={`flex-1 py-3 rounded-[16px] items-center ${locationOption === 'pincode' ? 'bg-[#073318]' : ''}`}
-                    onPress={() => {
-                      setLocationOption('pincode');
-                      setPincode('');
-                      setVillage('');
-                      setTaluka('');
-                      setDistrict('');
-                      setStateName('');
-                      setVillageList([]);
-                    }}
-                  >
-                    <Text className={`font-bold ${locationOption === 'pincode' ? 'text-white' : 'text-gray-500'}`}>
-                      Pincode Search
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    className={`flex-1 py-3 rounded-[16px] items-center ${locationOption === 'state' ? 'bg-[#073318]' : ''}`}
-                    onPress={() => {
-                      setLocationOption('state');
-                      setPincode('');
-                      setVillage('');
-                      setTaluka('');
-                      setDistrict('');
-                      setStateName('');
-                      setVillageList([]);
-                    }}
-                  >
-                    <Text className={`font-bold ${locationOption === 'state' ? 'text-white' : 'text-gray-500'}`}>
-                      State Selection
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {locationOption === 'pincode' ? (
-                  <>
-                    <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
-                      const cleaned = val.replace(/[^0-9]/g, '');
-                      setPincode(cleaned);
-                      if (!validateRequired(cleaned)) {
-                        setPincodeError(t("val_pincode_required"));
-                      } else if (!validatePincode(cleaned)) {
-                        setPincodeError(t("su_enter_valid_6_digit__185"));
-                      } else {
-                        setPincodeError('');
-                      }
-                      if (cleaned.length === 6) {
-                        const fetchPincode = async () => {
-                          try {
-                            const data = await signupService.getPincodeDetails(cleaned);
-                            if (data) {
-                              setStateName(data.state);
-                              setDistrict(data.district);
-                              setTaluka(data.taluka);
-                              if (data.villages && data.villages.length > 0) {
-                                setVillageList(data.villages);
-                                if (data.villages.length === 1) {
-                                  setVillage(data.villages[0]);
-                                } else {
-                                  setVillage('');
-                                }
+                <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
+                  const cleaned = val.replace(/[^0-9]/g, '');
+                  setPincode(cleaned);
+                  if (!validateRequired(cleaned)) {
+                    setPincodeError(t("val_pincode_required"));
+                  } else if (!validatePincode(cleaned)) {
+                    setPincodeError(t("su_enter_valid_6_digit__185"));
+                  } else {
+                    setPincodeError('');
+                  }
+                  if (cleaned.length === 6) {
+                    const fetchPincode = async () => {
+                      try {
+                        const data = await signupService.getPincodeDetails(cleaned);
+                        if (data) {
+                          setStateName(data.state);
+                          setDistrict(data.district);
+                          setTaluka(data.taluka);
+                          if (data.postOffices && data.postOffices.length > 0) {
+                            setPostOfficeList(data.postOffices);
+                            setPostOfficeMap(data.postOfficeMap || {});
+                            if (data.postOffices.length === 1) {
+                              const po = data.postOffices[0];
+                              setPostOffice(po);
+                              const vils = data.postOfficeMap?.[po] || [];
+                              setVillageList(vils);
+                              if (vils.length === 1) {
+                                setVillage(vils[0]);
                               } else {
-                                setVillageList([]);
                                 setVillage('');
                               }
-                              setStateNameError('');
-                              setDistrictError('');
-                              setTalukaError('');
+                            } else {
+                              setPostOffice('');
+                              setVillageList([]);
+                              setVillage('');
                             }
-                          } catch (error) {
-                            console.error('Pincode fetch error:', error);
-                            setPincodeError(t("su_invalid_pincode_186"));
+                          } else {
+                            setPostOfficeList([]);
+                            setPostOfficeMap({});
+                            setPostOffice('');
+                            setVillageList([]);
+                            setVillage('');
                           }
-                        };
-                        fetchPincode();
-                      }
-                    }} onBlur={() => {
-                      if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
-                    }} returnKeyType="next" />
-
-                    {/* Village Dropdown */}
-                    <View className="mt-4">
-                      <DropdownField label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
-                        if (villageList.length > 0) {
-                          setShowVillageMenu(true);
-                        } else if (villageList.length === 0 && pincode.length === 6) {
-                          setVillageError('No villages found for this pincode');
+                          setStateNameError('');
+                          setDistrictError('');
+                          setTalukaError('');
                         }
-                      }} />
-                    </View>
+                      } catch (error) {
+                        console.error('Pincode fetch error:', error);
+                        setPincodeError(t("su_invalid_pincode_186"));
+                      }
+                    };
+                    fetchPincode();
+                  } else {
+                    setPostOfficeList([]);
+                    setPostOfficeMap({});
+                    setPostOffice('');
+                    setVillageList([]);
+                    setVillage('');
+                  }
+                }} onBlur={() => {
+                  if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
+                }} returnKeyType="next" />
 
-                    {/* Auto-populated details */}
-                    <View className="flex-row w-full mt-4">
-                      <View className="flex-1 mr-2">
-                        <InputField label={t("taluka")} icon="flag-outline" value={taluka} editable={false} error={talukaError} required={true} />
-                      </View>
-                      <View className="flex-1 ml-2">
-                        <InputField label={t("district")} icon="flag-outline" value={district} editable={false} error={districtError} required={true} />
-                      </View>
-                    </View>
-                    <View className="mt-4">
-                      <InputField label={t("state")} icon="flag-outline" value={stateName} editable={false} error={stateNameError} required={true} />
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {/* Option 2 Dropdowns */}
-                    <DropdownField label="State" placeholder="Select State" icon="flag-outline" value={stateName} error={stateNameError} required={true} onPress={() => setShowStateMenu(true)} />
-                    
-                    <View className="mt-4">
-                      <DropdownField label="District" placeholder="Select District" icon="flag-outline" value={district} error={districtError} required={true} onPress={() => {
-                        if (!stateName) setDistrictError('Please select state first');
-                        else setShowDistrictMenu(true);
-                      }} />
-                    </View>
+                {/* Post Office Dropdown */}
+                <View className="mt-4">
+                  <DropdownField label="Post Office" placeholder="Select Post Office" icon="mail-outline" value={postOffice} error={postOfficeError} required={true} onPress={() => {
+                    if (postOfficeList.length > 0) {
+                      setShowPostOfficeMenu(true);
+                    } else if (postOfficeList.length === 0 && pincode.length === 6) {
+                      setPostOfficeError('No post offices found for this pincode');
+                    }
+                  }} />
+                </View>
 
-                    <View className="mt-4">
-                      <DropdownField label="Taluka" placeholder="Select Taluka" icon="flag-outline" value={taluka} error={talukaError} required={true} onPress={() => {
-                        if (!district) setTalukaError('Please select district first');
-                        else setShowBlockMenu(true);
-                      }} />
-                    </View>
+                {/* Village Dropdown */}
+                <View className="mt-4">
+                  <DropdownField label={t("su_village_city_196")} placeholder={t("su_village_city_197")} icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
+                    if (villageList.length > 0) {
+                      setShowVillageMenu(true);
+                    } else if (villageList.length === 0 && pincode.length === 6) {
+                      setVillageError('No villages found for this pincode');
+                    }
+                  }} />
+                </View>
 
-                    <View className="mt-4">
-                      <DropdownField label={t("su_village_city_196")} placeholder="Select Village" icon="flag-outline" value={village} error={villageError} required={true} onPress={() => {
-                        if (!taluka) setVillageError('Please select taluka first');
-                        else setShowVillageMenu(true);
-                      }} />
-                    </View>
-
-                    <View className="mt-4">
-                      <InputField label={t("pincode")} icon="location-outline" value={pincode} editable={false} error={pincodeError} required={true} placeholder="Auto-filled from village selection" />
-                    </View>
-                  </>
-                )}
-
+                {/* Auto-populated details */}
+                <View className="mt-4">
+                  <InputField label={t("taluka")} icon="flag-outline" value={taluka} editable={false} error={talukaError} required={true} />
+                </View>
+                <View className="mt-4">
+                  <InputField label={t("district")} icon="flag-outline" value={district} editable={false} error={districtError} required={true} />
+                </View>
+                <View className="mt-4">
+                  <InputField label={t("state")} icon="flag-outline" value={stateName} editable={false} error={stateNameError} required={true} />
+                </View>
                 {/* Common fields (houseNo & landmark) */}
                 <InputField ref={houseNoRef} label={t("su_house_no_189")} placeholder={t("su_enter_house_number_190")} icon="home-outline" error={houseNoError} required={true} value={houseNo} onChangeText={val => {
                   const cleaned = val.replace(/[^a-zA-Z0-9\s]/g, '');
@@ -3612,6 +3610,44 @@ export default function SignupScreen({
                       setVillageError('');
                     }
                     setShowVillageMenu(false);
+                  }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                        {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                      </TouchableOpacity>;
+                })}
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Post Office Menu */}
+      <Modal visible={showPostOfficeMenu} transparent={true} animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowPostOfficeMenu(false)}>
+          <View className="flex-1 justify-end" style={{
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
+            <TouchableWithoutFeedback>
+              <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
+                <Text className="text-xl font-extrabold text-[#111827] mb-5">Select Post Office</Text>
+                <ScrollView style={{
+                maxHeight: 400
+              }} showsVerticalScrollIndicator={false}>
+                  {postOfficeList.map(opt => {
+                  const isSelected = postOffice === opt;
+                  return <TouchableOpacity key={opt} onPress={() => {
+                    setPostOffice(opt);
+                    setPostOfficeError('');
+                    const vils = postOfficeMap[opt] || [];
+                    setVillageList(vils);
+                    if (vils.length === 1) {
+                      setVillage(vils[0]);
+                      setVillageError('');
+                    } else {
+                      setVillage('');
+                    }
+                    setShowPostOfficeMenu(false);
                   }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                         <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
                         {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}

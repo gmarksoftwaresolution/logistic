@@ -95,6 +95,13 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1">
+        {/* Custom Navbar */}
+        <SharedHeader 
+          title={t("title_order_management")} 
+          subtitle={t("subtitle_order_management")} 
+          navigation={navigation} 
+        />
+
         <ScrollView 
           contentContainerStyle={{ paddingBottom: 90 }} 
           showsVerticalScrollIndicator={false}
@@ -102,13 +109,6 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          
-          {/* Custom Navbar */}
-          <SharedHeader 
-            title={t("title_order_management")} 
-            subtitle={t("subtitle_order_management")} 
-            navigation={navigation} 
-          />
 
           {/* Dashboard Gradient Cards */}
           <View className="px-4 mt-4 flex-row flex-wrap justify-between">

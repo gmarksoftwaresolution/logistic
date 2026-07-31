@@ -9,6 +9,52 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum UserRole {
+  SHG
+  INDIVIDUAL
+  TRANSPORTER
+  ADMIN
+  SUPER_ADMIN
+  BUYER
+  SELLER
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UNDER_REVIEW
+  COMPLETED
+}
+
+enum VehicleType {
+  TWO_WHEELER
+  THREE_WHEELER
+  FOUR_WHEELER
+  MILK_VAN
+  OTHER
+}
+
+enum ProductCategory {
+  FOOD
+  HANDMADE
+  AGRICULTURE
+  TEXTILE
+  DAIRY
+  OTHER
+}
+
+enum StepStatus {
+  PENDING
+  COMPLETED
+}
+
+enum ShgRole {
+  CRP
+  LEADER
+  MEMBER
+}
+
 model AdminUser {
   id            String   @id @default(uuid())
   mobileNumber  String   @unique
@@ -89,52 +135,6 @@ model OrderAssignment {
   updatedAt    DateTime @updatedAt
 }
 
-enum UserRole {
-  SHG
-  INDIVIDUAL
-  TRANSPORTER
-  ADMIN
-  SUPER_ADMIN
-  BUYER
-  SELLER
-}
-
-enum ApplicationStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  UNDER_REVIEW
-  COMPLETED
-}
-
-enum VehicleType {
-  TWO_WHEELER
-  THREE_WHEELER
-  FOUR_WHEELER
-  MILK_VAN
-  OTHER
-}
-
-enum ProductCategory {
-  FOOD
-  HANDMADE
-  AGRICULTURE
-  TEXTILE
-  DAIRY
-  OTHER
-}
-
-enum StepStatus {
-  PENDING
-  COMPLETED
-}
-
-enum ShgRole {
-  CRP
-  LEADER
-  MEMBER
-}
-
 model User {
   id                  Int       @id @default(autoincrement())
 
@@ -167,6 +167,10 @@ model User {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+
   address             Address?
   bankDetails         BankDetail[]
   documents           Document[]
@@ -194,6 +198,10 @@ model User {
 
   @@index([phoneNumber])
   @@index([role])
+  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
+  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
+  return_order_assignments  return_order_assignments[]
+  return_order_scan_history return_order_scan_history[]
 }
 
 model Address {
@@ -208,7 +216,7 @@ model Address {
   village       String?
   taluka        String?
   district      String
-  state         String   @default("Maharashtra")
+  state         String
   pincode       String
   postOffice    String?
 
@@ -505,6 +513,7 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@map("products")
+  returnOrderItems   ReturnOrderItem[]
 }
 
 model MasterOrder {
@@ -643,6 +652,7 @@ model DropOrder {
   @@index([transporterId])
   @@index([status])
   @@map("drop_orders")
+  returnOrders    ReturnOrder[]
 }
 
 model DropOrderItem {
@@ -681,7 +691,7 @@ model DropTracking {
   dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
   status      String?
   remarks     String?
-  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([dropOrderId])
   @@map("drop_tracking")
@@ -717,7 +727,7 @@ model Seller {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -741,7 +751,7 @@ model Buyer {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -752,6 +762,7 @@ model Buyer {
   orders           Order[]
 
   @@map("buyers")
+  returnOrders ReturnOrder[]
 }
 
 model VerificationRecord {
@@ -848,6 +859,123 @@ model ScanSessionItem {
 
   @@unique([sessionId, parcelId])
   @@map("ScanSessionItem")
+}
+
+model ShgServiceArea {
+  id          String   @id @default(uuid())
+  shgUserId   String
+  village     String
+  pincode     String
+  isPrimary   Boolean  @default(true)
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE, ON_LEAVE
+  maxCapacity Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([village, pincode, status])
+  @@map("ShgServiceArea")
+}
+
+model Earning {
+  id              Int       @id @default(autoincrement())
+  
+  shgId           Int       @map("shg_id")
+  orderId         String    @map("order_id")
+  orderNumber     String    @map("order_number")
+  
+  amount          Decimal   @db.Decimal(10,2)
+  completedAt     DateTime  @map("completed_at")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([shgId, completedAt])
+  @@unique([shgId, orderId])
+  @@map("earnings")
+}
+
+model ReturnOrder {
+  id                        Int                         @id @default(autoincrement())
+  returnOrderNumber         String?                     @unique @map("return_order_number")
+  originalOrderId           Int                         @map("original_order_id")
+  buyerId                   Int                         @map("buyer_id")
+  shgId                     Int?                        @map("shg_id")
+  transporterId             Int?                        @map("transporter_id")
+  status                    String                      @default("RETURN_REQUESTED")
+  returnReason              String?                     @map("return_reason")
+  barcode                   String?                     @unique
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
+  return_order_assignments  return_order_assignments[]
+  items                     ReturnOrderItem[]
+  return_order_scan_history return_order_scan_history[]
+  return_order_timeline     return_order_timeline[]
+  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
+  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
+  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
+  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
+
+  @@index([originalOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("return_orders")
+}
+
+model ReturnOrderItem {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  productId     Int         @map("product_id")
+  quantity      Int?
+  product       Product     @relation(fields: [productId], references: [id])
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@map("return_order_items")
+}
+
+model return_order_assignments {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  assignee_id     Int
+  assigneeType    String
+  status          String      @default("PENDING")
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @default(now())
+  User            User        @relation(fields: [assignee_id], references: [id])
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([assignee_id])
+  @@index([return_order_id])
+}
+
+model return_order_scan_history {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  scanned_by      Int
+  userRole        String
+  scanResult      String
+  barcode         String
+  scanLocation    String?
+  timestamp       DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+  User            User        @relation(fields: [scanned_by], references: [id])
+
+  @@index([return_order_id])
+  @@index([scanned_by])
+}
+
+model return_order_timeline {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  status          String
+  remarks         String?
+  updated_at      DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([return_order_id])
 }
 
 model CommunityMember {
@@ -983,3 +1111,4 @@ model TransporterMember {
   milkOrganizationName String?
   milkCenterName       String?
 }
+

@@ -135,9 +135,10 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
           displayLabel = t('earning') || 'Earnings';
           stepId = 'earning_tab';
         } else {
-          iconName = isFocused ? 'person' : 'person-outline';
-          displayLabel = t('profile') || 'Profile';
-          stepId = 'profile_tab';
+          IconComponent = Ionicons;
+          iconName = isFocused ? 'cube' : 'cube-outline';
+          displayLabel = t('inventory') || 'Inventory';
+          stepId = 'dashboard_tab';
         }
 
         return (
@@ -209,7 +210,7 @@ export default function MainTabNavigator() {
         <Tab.Screen name="Orders" component={OrdersStackNavigator} />
         <Tab.Screen name="OrderHistory" component={OrderHistoryScreen} />
         <Tab.Screen name="Earnings" component={EarningsScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
+        <Tab.Screen name="Inventory" component={StockManagementScreen} />
       </Tab.Navigator>
     </View>
   );

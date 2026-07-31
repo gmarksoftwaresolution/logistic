@@ -306,7 +306,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: null,
+        postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
       },
       update: {
@@ -316,7 +316,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: null,
+        postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
       },
     });
@@ -715,6 +715,7 @@ export class SignupService {
           }
         } else if (tracking.step === 4) {
           signupData.pincode = stepData.pincode;
+          signupData.postOffice = stepData.postOffice;
           signupData.village = stepData.village;
           signupData.taluka = stepData.taluka;
           signupData.district = stepData.district;

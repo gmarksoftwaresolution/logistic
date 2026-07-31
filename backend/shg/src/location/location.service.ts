@@ -168,13 +168,33 @@ export class LocationService {
 
       if (records && records.length > 0) {
         const first = records[0];
-        const villages = [...new Set(records.map((r: any) => r.village))].sort();
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        records.forEach((r: any) => {
+          const po = r.postOffice || 'N/A';
+          postOfficesSet.add(po);
+          if (!postOfficeMap[po]) {
+            postOfficeMap[po] = [];
+          }
+          if (r.village && !postOfficeMap[po].includes(r.village)) {
+            postOfficeMap[po].push(r.village);
+          }
+        });
+
+        // Sort villages in map
+        Object.keys(postOfficeMap).forEach((po) => {
+          postOfficeMap[po].sort();
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
         return {
           state: first.state,
           district: first.district,
           taluka: first.taluka || first.district || 'N/A',
-          villages: villages,
-          postOffices: villages,
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
           source: 'local_db',
         };
       }
@@ -185,15 +205,28 @@ export class LocationService {
     try {
       const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
       if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
-        const postOffices = response.data[0].PostOffice;
-        const first = postOffices[0];
-        const villages = [...new Set(postOffices.map((po: any) => po.Name))].sort();
+        const postOfficesData = response.data[0].PostOffice;
+        const first = postOfficesData[0];
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        postOfficesData.forEach((po: any) => {
+          const poName = po.Name;
+          postOfficesSet.add(poName);
+          if (!postOfficeMap[poName]) {
+            postOfficeMap[poName] = [];
+          }
+          postOfficeMap[poName].push(poName);
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
         return {
           state: first.State,
           district: first.District,
           taluka: first.Block || first.Taluka || first.District || 'N/A',
-          villages: villages,
-          postOffices: villages,
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
           source: 'postal_api',
         };
       }
