@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { BASE_URL } from '../services/api';
+import api, { BASE_URL, IMAGE_BASE_URL } from '../services/api';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -164,7 +164,13 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
                   <View style={[styles.avatarWrapper, { overflow: 'hidden' }]}>
                     {profilePhoto ? (
                       <Image
-                        source={{ uri: profilePhoto.startsWith('http') ? profilePhoto : `${BASE_URL}${profilePhoto}` }}
+                        source={{ 
+                          uri: profilePhoto.startsWith('http') 
+                            ? profilePhoto 
+                            : profilePhoto.startsWith('/') 
+                              ? `${IMAGE_BASE_URL}${profilePhoto}` 
+                              : `${IMAGE_BASE_URL}/${profilePhoto}` 
+                        }}
                         style={{ width: '100%', height: '100%' }}
                         resizeMode="cover"
                       />

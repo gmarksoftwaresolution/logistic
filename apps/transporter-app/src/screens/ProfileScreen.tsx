@@ -45,7 +45,7 @@ import {
 import { Colors, Fonts } from '../constants/Colors';
 import ScreenHeader from '../components/ScreenHeader';
 import { scale, verticalScale, moderateScale, SCREEN_WIDTH } from '../utils/responsive';
-import api, { BASE_URL } from '../services/api';
+import api, { BASE_URL, IMAGE_BASE_URL } from '../services/api';
 import { useOnboarding } from '../context/OnboardingContext';
 
 const { width } = Dimensions.get('window');
@@ -91,7 +91,7 @@ const renderConnectingDots = (locations: string[], themeColor: string = Colors.p
               </View>
               {!isLast && <View style={[styles.timelineLine, { backgroundColor: themeColor + '30' }]} />}
             </View>
-            
+
             {/* Right Column: Content */}
             <View style={styles.timelineRightCol}>
               <Text style={styles.timelineText}>{loc}</Text>
@@ -145,23 +145,23 @@ const ProfileScreen: React.FC = () => {
         await i18n.changeLanguage(lng);
         await AsyncStorage.setItem('user-language', lng);
       }
-      
+
       const languageMap: Record<string, string> = {
         'en': 'English',
         'hi': 'Hindi',
         'mr': 'Marathi'
       };
-      
+
       // Synchronize selection with backend in the background
       api.post('/registration/select-language', {
         language: languageMap[lng] || 'English'
       })
-      .then(response => {
-        console.log('Language selection synchronized with backend:', response.data);
-      })
-      .catch(error => {
-        console.error('Failed to send language selection to backend:', error);
-      });
+        .then(response => {
+          console.log('Language selection synchronized with backend:', response.data);
+        })
+        .catch(error => {
+          console.error('Failed to send language selection to backend:', error);
+        });
     } catch (err) {
       console.error('Error changing language:', err);
     } finally {
@@ -238,10 +238,13 @@ const ProfileScreen: React.FC = () => {
 
   const getFullPhotoUrl = (path: string | null): string | undefined => {
     if (!path) return undefined;
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://')) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://') || path.startsWith('content://')) {
       return path;
     }
-    return `${BASE_URL}${path}`;
+    if (path.startsWith('/')) {
+      return `${IMAGE_BASE_URL}${path}`;
+    }
+    return `${IMAGE_BASE_URL}/${path}`;
   };
 
   const toggleSection = (section: string) => {
@@ -340,7 +343,7 @@ const ProfileScreen: React.FC = () => {
               <Text style={styles.profileEmail} numberOfLines={1}>
                 {personalDetails?.email || t('profile.email')}
               </Text>
-              
+
               <View style={styles.statusBadgeRow}>
                 <View style={[styles.statusBadge, isStatusVerified ? styles.statusBadgeVerified : styles.statusBadgePending]}>
                   {isStatusVerified ? (
@@ -437,7 +440,7 @@ const ProfileScreen: React.FC = () => {
                   {drivingDetails?.experienceYears ? `${drivingDetails.experienceYears} ${t('common.years') || 'Years'}` : '-'}
                 </Text>
               </View>
-              
+
               {drivingDetails?.licensePhoto && (
                 <View style={styles.documentPreviewContainer}>
                   <Text style={styles.detailLabel}>{t('signup.license_photo')}</Text>
@@ -580,7 +583,7 @@ const ProfileScreen: React.FC = () => {
           )}
           {activeSection === 'route' && (() => {
             const isMilkVan = profileData.vehicleCategory === 'MILK_VAN';
-            
+
             // Format working days array/string
             const days = routeDetails?.workingDays;
             let formattedDays = '-';
@@ -712,7 +715,7 @@ const ProfileScreen: React.FC = () => {
           {/* Call Support */}
           <TouchableOpacity
             style={styles.settingsItem}
-            onPress={() => 
+            onPress={() =>
               triggerCustomAlert(
                 t('profile.call_support_modal_title'),
                 t('profile.call_support_modal_desc'),
@@ -744,7 +747,7 @@ const ProfileScreen: React.FC = () => {
           {/* Email Support */}
           <TouchableOpacity
             style={styles.settingsItem}
-            onPress={() => 
+            onPress={() =>
               triggerCustomAlert(
                 t('profile.email_support_modal_title'),
                 t('profile.email_support_modal_desc'),
@@ -776,7 +779,7 @@ const ProfileScreen: React.FC = () => {
           {/* WhatsApp Support */}
           <TouchableOpacity
             style={styles.settingsItem}
-            onPress={() => 
+            onPress={() =>
               triggerCustomAlert(
                 t('profile.whatsapp_modal_title'),
                 t('profile.whatsapp_modal_desc'),
@@ -829,9 +832,9 @@ const ProfileScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowLanguageModal(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setShowLanguageModal(false)}
         >
           <View style={styles.languageModalContainer}>
@@ -885,8 +888,8 @@ const ProfileScreen: React.FC = () => {
               );
             })}
 
-            <TouchableOpacity 
-              style={styles.cancelBtn} 
+            <TouchableOpacity
+              style={styles.cancelBtn}
               onPress={() => setShowLanguageModal(false)}
               activeOpacity={0.8}
             >
@@ -903,9 +906,9 @@ const ProfileScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setAlertVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setAlertVisible(false)}
         >
           <View style={styles.customAlertContainer}>
@@ -931,19 +934,19 @@ const ProfileScreen: React.FC = () => {
             </View>
 
             <View style={styles.customAlertActions}>
-              <TouchableOpacity 
-                style={styles.customAlertCancelBtn} 
+              <TouchableOpacity
+                style={styles.customAlertCancelBtn}
                 onPress={() => setAlertVisible(false)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.customAlertCancelBtnText}>{t('common.cancel') || 'Cancel'}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.customAlertActionBtn,
                   alertIcon === 'logout' && { backgroundColor: '#EF4444' }
-                ]} 
+                ]}
                 onPress={() => {
                   setAlertVisible(false);
                   if (onAlertAction) onAlertAction();

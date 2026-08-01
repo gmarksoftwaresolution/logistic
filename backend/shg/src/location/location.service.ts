@@ -6,17 +6,17 @@ import { PrismaService } from '../prisma/prisma.service';
 export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Centralized, reusable lookup methods
+  // Centralized lookup methods
   async findByPincode(pincode: string) {
     return this.prisma.pincodeDirectory.findMany({
       where: { pincode: pincode.trim() },
-      orderBy: { name: 'asc' },
+      orderBy: { village: 'asc' },
     });
   }
 
   async findByVillage(village: string) {
     return this.prisma.pincodeDirectory.findMany({
-      where: { name: { equals: village.trim(), mode: 'insensitive' } },
+      where: { village: { equals: village.trim(), mode: 'insensitive' } },
       orderBy: { pincode: 'asc' },
     });
   }
@@ -24,7 +24,7 @@ export class LocationService {
   async findVillageAndPincode(village: string, pincode: string) {
     return this.prisma.pincodeDirectory.findFirst({
       where: {
-        name: { equals: village.trim(), mode: 'insensitive' },
+        village: { equals: village.trim(), mode: 'insensitive' },
         pincode: pincode.trim(),
       },
     });
@@ -34,16 +34,16 @@ export class LocationService {
     const skip = (page - 1) * limit;
     const items = await this.prisma.pincodeDirectory.findMany({
       where: {
-        name: { contains: query.trim(), mode: 'insensitive' },
+        village: { contains: query.trim(), mode: 'insensitive' },
       },
-      distinct: ['name'],
+      distinct: ['village'],
       take: limit,
       skip: skip,
-      orderBy: { name: 'asc' },
+      orderBy: { village: 'asc' },
     });
     const total = await this.prisma.pincodeDirectory.count({
       where: {
-        name: { contains: query.trim(), mode: 'insensitive' },
+        village: { contains: query.trim(), mode: 'insensitive' },
       },
     });
     return { items, total, page, limit };
@@ -77,9 +77,9 @@ export class LocationService {
       ? { pincode: { startsWith: trimmed } }
       : {
           OR: [
-            { name: { contains: trimmed, mode: 'insensitive' as const } },
+            { village: { contains: trimmed, mode: 'insensitive' as const } },
             { district: { contains: trimmed, mode: 'insensitive' as const } },
-            { block: { contains: trimmed, mode: 'insensitive' as const } },
+            { taluka: { contains: trimmed, mode: 'insensitive' as const } },
             { state: { contains: trimmed, mode: 'insensitive' as const } },
           ],
         };
@@ -88,7 +88,7 @@ export class LocationService {
       where,
       take: limit,
       skip: skip,
-      orderBy: [{ pincode: 'asc' }, { name: 'asc' }],
+      orderBy: [{ pincode: 'asc' }, { village: 'asc' }],
     });
 
     const total = await this.prisma.pincodeDirectory.count({ where });
@@ -121,11 +121,11 @@ export class LocationService {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
       },
-      select: { block: true },
-      distinct: ['block'],
-      orderBy: { block: 'asc' },
+      select: { taluka: true },
+      distinct: ['taluka'],
+      orderBy: { taluka: 'asc' },
     });
-    return records.map(r => r.block).filter(Boolean);
+    return records.map(r => r.taluka).filter(Boolean);
   }
 
   async getVillages(state: string, district: string, block: string) {
@@ -133,21 +133,21 @@ export class LocationService {
       where: {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
-        block: block ? { equals: block.trim(), mode: 'insensitive' } : null,
+        taluka: block ? { equals: block.trim(), mode: 'insensitive' } : undefined,
       },
-      select: { name: true },
-      distinct: ['name'],
-      orderBy: { name: 'asc' },
+      select: { village: true },
+      distinct: ['village'],
+      orderBy: { village: 'asc' },
     });
-    return records.map(r => r.name);
+    return records.map(r => r.village);
   }
 
   async validateLocation(pincode: string, village: string, taluka: string, district: string, state: string) {
     const record = await this.prisma.pincodeDirectory.findFirst({
       where: {
         pincode: pincode.trim(),
-        name: { equals: village.trim(), mode: 'insensitive' },
-        block: taluka ? { equals: taluka.trim(), mode: 'insensitive' } : undefined,
+        village: { equals: village.trim(), mode: 'insensitive' },
+        taluka: taluka ? { equals: taluka.trim(), mode: 'insensitive' } : undefined,
         district: { equals: district.trim(), mode: 'insensitive' },
         state: { equals: state.trim(), mode: 'insensitive' },
       },
@@ -155,27 +155,85 @@ export class LocationService {
     return !!record;
   }
 
-  // Backward compatibility methods
   async getAddressFromPincode(pincode: string) {
-    if (pincode.length !== 6) {
+    if (!pincode || pincode.trim().length !== 6) {
       throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
     }
-    const records = await this.prisma.pincodeDirectory.findMany({
-      where: { pincode: pincode.trim() },
-    });
+    const cleanPincode = pincode.trim();
 
-    if (records && records.length > 0) {
-      const first = records[0];
-      const villages = [...new Set(records.map((r: any) => r.name))].sort();
-      return {
-        state: first.state,
-        district: first.district,
-        taluka: first.block || first.district || 'N/A',
-        villages: villages,
-        postOffices: villages,
-        source: 'local_db',
-      };
+    try {
+      const records = await this.prisma.pincodeDirectory.findMany({
+        where: { pincode: cleanPincode },
+      });
+
+      if (records && records.length > 0) {
+        const first = records[0];
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        records.forEach((r: any) => {
+          const po = r.postOffice || 'N/A';
+          postOfficesSet.add(po);
+          if (!postOfficeMap[po]) {
+            postOfficeMap[po] = [];
+          }
+          if (r.village && !postOfficeMap[po].includes(r.village)) {
+            postOfficeMap[po].push(r.village);
+          }
+        });
+
+        // Sort villages in map
+        Object.keys(postOfficeMap).forEach((po) => {
+          postOfficeMap[po].sort();
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
+        return {
+          state: first.state,
+          district: first.district,
+          taluka: first.taluka || first.district || 'N/A',
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
+          source: 'local_db',
+        };
+      }
+    } catch (dbErr: any) {
+      console.warn(`Local DB pincode query notice for ${cleanPincode}:`, dbErr.message);
     }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
+        const postOfficesData = response.data[0].PostOffice;
+        const first = postOfficesData[0];
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        postOfficesData.forEach((po: any) => {
+          const poName = po.Name;
+          postOfficesSet.add(poName);
+          if (!postOfficeMap[poName]) {
+            postOfficeMap[poName] = [];
+          }
+          postOfficeMap[poName].push(poName);
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
+        return {
+          state: first.State,
+          district: first.District,
+          taluka: first.Block || first.Taluka || first.District || 'N/A',
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
+          source: 'postal_api',
+        };
+      }
+    } catch (apiErr: any) {
+      console.warn(`External postal pincode fallback failed for ${cleanPincode}:`, apiErr.message);
+    }
+
     throw new HttpException('Pincode details not found in directory', HttpStatus.NOT_FOUND);
   }
 

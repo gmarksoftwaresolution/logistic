@@ -15,6 +15,13 @@ export const VEHICLE_MASTER: VehicleConfig[] = [
     icon: 'bike'
   },
   {
+    id: 'auto',
+    name: 'Auto Rickshaw',
+    capacity: 250,
+    description: 'Suitable for medium deliveries',
+    icon: 'auto'
+  },
+  {
     id: 'car',
     name: 'Car',
     capacity: 150,
@@ -22,25 +29,18 @@ export const VEHICLE_MASTER: VehicleConfig[] = [
     icon: 'car'
   },
   {
-    id: 'auto',
-    name: 'Auto Rickshaw (Cargo)',
-    capacity: 250,
-    description: 'Suitable for medium deliveries',
-    icon: 'auto'
-  },
-  {
-    id: 'pickup',
-    name: 'Pickup (Tata Ace / Bolero Pickup)',
-    capacity: 750,
-    description: 'Good for heavy & bulk deliveries',
-    icon: 'pickup'
-  },
-  {
     id: 'minivan',
     name: 'Mini Van',
     capacity: 1000,
     description: 'Great for bulkier deliveries',
     icon: 'minivan'
+  },
+  {
+    id: 'pickup',
+    name: 'Pickup',
+    capacity: 750,
+    description: 'Good for heavy & bulk deliveries',
+    icon: 'pickup'
   },
   {
     id: 'small_truck',

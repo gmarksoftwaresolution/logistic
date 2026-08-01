@@ -16,7 +16,6 @@ export const HistoryTabs: React.FC<Props> = ({ selectedStatus, onSelect }) => {
   const tabs: { value: HistoryStatus, label: string, icon: any }[] = [
     { value: 'All Orders', label: 'All Orders', icon: 'list-outline' },
     { value: 'Completed', label: 'Completed', icon: 'checkmark-circle-outline' },
-    { value: 'Rejected', label: 'Rejected', icon: 'close-circle-outline' },
   ];
 
   return (

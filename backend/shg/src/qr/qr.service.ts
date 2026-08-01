@@ -110,10 +110,26 @@ export class QrService {
         });
       }
 
-      // Simplified QR JSON payload containing ONLY parcelId, verificationToken, and version
+      // Comprehensive QR JSON payload containing parcelId, order details, seller info, buyer info, product info, and security token
+      const ordAny = order as any;
       const qrContent = {
         parcelId: parcel.parcelId,
+        orderId: resolvedOrderId,
+        orderNo: order.orderId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        weight: weightStr,
+        token: verificationToken,
         verificationToken,
+        sellerName: ordAny.sellerName || ordAny.seller?.fullName || '',
+        sellerMobileNumber: ordAny.sellerPhone || ordAny.seller?.phoneNumber || '',
+        sellerVillage: ordAny.sellerVillage || ordAny.seller?.village || '',
+        sellerPincode: ordAny.sellerPincode || ordAny.seller?.pincode || '',
+        buyerName: ordAny.buyerName || ordAny.buyer?.fullName || '',
+        buyerMobileNumber: ordAny.buyerPhone || ordAny.buyer?.phoneNumber || '',
+        buyerVillage: ordAny.buyerVillage || ordAny.buyer?.village || '',
+        buyerPincode: ordAny.buyerPincode || ordAny.buyer?.pincode || '',
         version: 1,
       };
 
@@ -229,14 +245,26 @@ export class QrService {
       throw new NotFoundException(`Wrong Parcel: ${parcelId} not found`);
     }
 
-    const order = await this.prisma.order.findFirst({
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
-        ]
+        ],
+        phase: parcel.flowType || 'PICKUP',
       }
     });
+
+    if (!order) {
+      order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: parcel.orderId },
+            { orderId: parcel.orderId }
+          ]
+        }
+      });
+    }
 
     if (!order) {
       throw new NotFoundException(`Associated order not found: ${parcel.orderId}`);
@@ -323,6 +351,10 @@ export class QrService {
           "updatedAt" = NOW()
         WHERE id = $6;
       `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
+
+      if (mainStatus === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG') {
+        await this.engine.broadcastTransporterPickup(tx, order.id);
+      }
 
       return updated;
     });

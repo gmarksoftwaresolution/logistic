@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, SectionList, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, SectionList, ActivityIndicator } from 'react-native';
+import { SharedRefreshControl } from '../../../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -50,7 +51,6 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderHeader = () => (
     <View>
-      <HistoryHeader />
       <HistoryStats stats={stats} />
       <HistorySearch 
         value={searchQuery}
@@ -66,6 +66,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+      <HistoryHeader />
       {loading && !refreshing && groupedOrders.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#073318" />
@@ -103,7 +104,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={true}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#073318']} />
+            <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}

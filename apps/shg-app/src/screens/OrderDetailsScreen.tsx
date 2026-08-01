@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Linking, Alert, Modal, Image, Animated, ActivityIndicator, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,8 +9,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
+import { useUser } from '../context/UserContext';
 import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
-import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
@@ -28,6 +28,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const context = useContext(LanguageContext);
   const { t } = context!;
   const { isActive, currentStep, nextStep } = useOnboarding();
+  const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -49,7 +51,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   } = route.params;
   const {
     receiveOrder,
-    rejectOrder,
     deliverOrder,
     orders,
     rescheduleOrder,
@@ -88,13 +89,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     } else {
       activeType = 'seller';
     }
-  }
-
-  if (order.isRejectedDelivery) {
-    activeType = 'transporter';
-  }
-
-  // 3. Set details values dynamically
+  }  // 3. Set details values dynamically
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
   let nameLabel = t('su_person_name') || "Person Name";
@@ -105,11 +100,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "N/A";
 
-  if (order.isRejectedDelivery && activeType === 'transporter') {
-    addressOrVehicleLabel = "Return Hub Address";
-    addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = "Kolhapur Transporter Hub, Main Road, Kolhapur";
-  } else if (isDeliveryPhase && activeType === 'transporter') {
+  if (isDeliveryPhase && activeType === 'transporter') {
     nameLabel = "Transporter Name";
     mobileLabel = "Transporter Mobile Number";
     addressOrVehicleLabel = "Transporter Address";
@@ -219,6 +210,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [activeScanningParcel, setActiveScanningParcel] = useState<any>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [showRedirectModal, setShowRedirectModal] = useState<boolean>(false);
 
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
@@ -272,7 +264,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
   const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
   const isScanningRef = useRef(false);
-  const [rejectModalVisible, setRejectModalVisible] = useState(false);
 
   // Reschedule state hooks
   const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
@@ -637,40 +628,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
         }
       }
     } catch (error) {
       Alert.alert("Error", "Failed to submit order. Please try again.");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-  const handleRejectOrder = () => {
-    setRejectModalVisible(true);
-  };
-  const handleRejectModalSubmit = async (ord: Order, reason: string) => {
-    try {
-      await rejectOrder({
-        ...ord,
-        rejectReason: reason
-      });
-      setRejectModalVisible(false);
-      if (isDeliveryPhase) {
-        Toast.show({
-          type: 'success',
-          text1: t("su_address_updated") || "Return Address Updated",
-          text2: t("su_please_return_to_source") || "Please deliver the order back to the pickup point."
-        });
-      } else {
-        if (navigation.canGoBack()) {
-          navigation.goBack();
-        } else {
-          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to reject order. Please try again.");
     }
   };
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
@@ -680,7 +644,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
         }
       }} className="w-11 h-11 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" style={{
         elevation: 2
@@ -725,9 +689,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </Text>
             </View>
           </View>
-          <View className={order.isRejectedDelivery ? "bg-[#7F1D1D] border border-red-500/20 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0" : "bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0"}>
-            <Text className={`text-[10px] font-black uppercase tracking-wider ${order.isRejectedDelivery ? 'text-[#FECACA]' : 'text-[#6EE7B7]'}`}>
-              {order.isRejectedDelivery ? "RETURNING" : (order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status)}
+          <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0">
+            <Text className="text-[10px] font-black uppercase tracking-wider text-[#6EE7B7]">
+              {(order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status)}
             </Text>
           </View>
         </View>
@@ -912,20 +876,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
               <Text className="text-[14px] font-black text-[#111827] pr-2">
                 {addressOrVehicleValue}
               </Text>
-
-              {order.isRejectedDelivery && (
-                <View className="mt-3 bg-[#FEF2F2] border border-[#FECACA] p-3 rounded-[16px] flex-row items-start">
-                  <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
-                  <View className="flex-1">
-                    <Text className="text-[12px] font-extrabold text-[#991B1B] uppercase tracking-wider mb-1">
-                      Return Address Updated
-                    </Text>
-                    <Text className="text-[12px] font-medium text-[#7F1D1D] leading-tight">
-                      This order was rejected during delivery. The address has been updated to the original pickup point from where the order was collected. Please return the products to this location.
-                    </Text>
-                  </View>
-                </View>
-              )}
             </View>
           </View>
         )}
@@ -1084,59 +1034,74 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
 
 
-      {/* Action Buttons Row */}
-        {(!order.isRejectedDelivery && order.status !== 'REJECTED') && (
-          <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
-            {/* Reschedule Button Area */}
-            <View className="flex-1 justify-end" pointerEvents={(showRescheduleTimer && rescheduleExpired) ? 'none' : 'auto'}>
-              {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
-                <View className="mb-2">
-                  {rescheduleExpired ? (
-                    <Text className="text-[12px] font-bold text-red-500 text-center mb-1">
-                      Reschedule Window Expired
-                    </Text>
-                  ) : (
-                    <>
-                      <Text className="text-[10px] font-bold text-slate-500 text-center">
-                        Reschedule Available
-                      </Text>
-                      <Text className="text-[13px] font-black text-[#073318] text-center mb-1.5 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
-                        {rescheduleTimeLeft !== null ? formatTimeLeft(rescheduleTimeLeft) : '02:00:00'}
-                      </Text>
-                      <View className="h-1 bg-slate-100 rounded-full w-full overflow-hidden mx-auto max-w-[120px]">
-                        <View className="h-full bg-[#059669] rounded-full" style={{ width: `${rescheduleProgress}%` }} />
-                      </View>
-                    </>
-                  )}
-                </View>
-              )}
-              <TouchableOpacity
-                onPress={() => setRescheduleReasonModalVisible(true)}
-                disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)}
-                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
-                style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.5 : 1 }}
-              >
-                <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
-                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
-                  {t("su_reschedule_401") || "Reschedule"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+      {/* Redirect Button */}
+      {(() => {
+        let uCarrying: string | null | undefined = undefined;
+        if (Array.isArray(user?.otherDetails)) {
+          uCarrying = user?.otherDetails[0]?.carryingCapacity;
+        } else if (user?.otherDetails) {
+          uCarrying = (user.otherDetails as any).carryingCapacity;
+        }
 
-            {/* Reject Order Button Area */}
-            <View className="flex-1 justify-end" pointerEvents={isDeliveryPhase ? 'none' : 'auto'}>
-              <TouchableOpacity
-                onPress={handleRejectOrder}
-                disabled={isSubmitting || isDeliveryPhase}
-                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
-                style={isDeliveryPhase ? { opacity: 0.5 } : {}}
-              >
-                <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
-                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
-              </TouchableOpacity>
-            </View>
+        const uVehicle = user?.vehicleCapacity;
+        const oWeight = order.parcelWeight;
+        const parsedWeight = Number(oWeight);
+        // Default to 30 if carrying capacity is missing, since we updated all DB users to 30
+        const parsedCap = Number(uCarrying ?? uVehicle ?? 30);
+        
+        const isHeavy = parsedWeight > parsedCap;
+        const showRedirect = !isDeliveryPhase && order.status?.toUpperCase() === 'ACCEPTED' && order.recommendedVehicle && oWeight !== undefined && isHeavy;
+
+        return showRedirect ? (
+          <View className="px-2 mt-3.5">
+            <TouchableOpacity
+              onPress={() => setShowRedirectModal(true)}
+              className="bg-[#9333EA] h-12 rounded-[16px] flex-row items-center justify-center w-full shadow-sm active:bg-[#7E22CE]"
+            >
+              <Text className="text-[14px] font-bold text-white">Redirect Order</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        ) : null;
+      })()}
+
+      {/* Action Buttons Row */}
+      <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
+        {/* Reschedule Button Area */}
+        <View className="flex-1 justify-end" pointerEvents={(showRescheduleTimer && rescheduleExpired) ? 'none' : 'auto'}>
+          {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
+            <View className="mb-2">
+              {rescheduleExpired ? (
+                <Text className="text-[12px] font-bold text-red-500 text-center mb-1">
+                  Reschedule Window Expired
+                </Text>
+              ) : (
+                <>
+                  <Text className="text-[10px] font-bold text-slate-500 text-center">
+                    Reschedule Available
+                  </Text>
+                  <Text className="text-[13px] font-black text-[#073318] text-center mb-1.5 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
+                    {rescheduleTimeLeft !== null ? formatTimeLeft(rescheduleTimeLeft) : '02:00:00'}
+                  </Text>
+                  <View className="h-1 bg-slate-100 rounded-full w-full overflow-hidden mx-auto max-w-[120px]">
+                    <View className="h-full bg-[#059669] rounded-full" style={{ width: `${rescheduleProgress}%` }} />
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+          <TouchableOpacity
+            onPress={() => setRescheduleReasonModalVisible(true)}
+            disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)}
+            className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
+            style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.5 : 1 }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
+            <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
+              {t("su_reschedule_401") || "Reschedule"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
           <View className="h-32" />
         </ScrollView>
@@ -1263,9 +1228,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </SafeAreaView>
         </Modal>
 
-        {/* Reject Reason Modal */}
-        <RejectReasonModal visible={rejectModalVisible} order={order} onClose={() => setRejectModalVisible(false)} onSubmit={handleRejectModalSubmit} />
-
         {/* Reschedule Modals */}
         <RescheduleModals
           showBottomSheet={showRescheduleBottomSheet}
@@ -1285,7 +1247,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
               if (navigation.canGoBack()) {
                 navigation.goBack();
               } else {
-                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'drop' : 'pickup' });
               }
             } catch (error: any) {
               const errMsg = error.response?.data?.message || error.message || "Failed to reschedule order.";
@@ -1297,6 +1259,49 @@ const OrderDetailsScreen: React.FC<Props> = ({
             }
           }}
         />
+
+        {/* Redirect Confirmation Modal */}
+        <Modal
+          visible={showRedirectModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowRedirectModal(false)}
+        >
+          <View 
+            className="flex-1 bg-black/50 justify-center px-6"
+            style={{ paddingBottom: insets.bottom + 24 }}
+          >
+            <View className="bg-white rounded-[24px] p-6 shadow-lg">
+              <View className="items-center mb-4">
+                <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-3">
+                  <Ionicons name="alert-circle-outline" size={28} color="#F59E0B" />
+                </View>
+                <Text className="text-[18px] font-black text-[#111827] text-center mb-2">Redirect Order</Text>
+                <Text className="text-[14px] font-medium text-[#4B5563] text-center px-2">
+                  Are you sure you want to redirect this order to the transporter?
+                </Text>
+              </View>
+
+              <View className="flex-row gap-3 mt-4">
+                <TouchableOpacity
+                  onPress={() => setShowRedirectModal(false)}
+                  className="flex-1 bg-white border border-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+                >
+                  <Text className="text-[14px] font-bold text-[#9333EA]">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log("Redirect confirmed");
+                    setShowRedirectModal(false);
+                  }}
+                  className="flex-1 bg-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+                >
+                  <Text className="text-[14px] font-bold text-white">Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         {((isPickupAccepted || isDeliveryPhase) && order.status !== 'Delivered') && (
           <FloatingScannerButton
             module={isDeliveryPhase ? 'DROP' : 'PICKUP'}

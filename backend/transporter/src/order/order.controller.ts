@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
@@ -9,6 +9,12 @@ import { OrderService } from './order.service';
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
+
+  @Get('dashboard-summary')
+  @ApiOperation({ summary: 'Get dashboard summary metrics for logged-in transporter' })
+  async getDashboardSummary(@Request() req: any, @Query('filter') filter?: string) {
+    return this.orderService.getDashboardSummary(req.user.id, filter || 'Today');
+  }
 
   @Get('pickup/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in transporter' })

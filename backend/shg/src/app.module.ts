@@ -17,6 +17,8 @@ import { LocationModule } from './location/location.module';
 import { OrderModule } from './order/order.module';
 import { OrderHistoryModule } from './modules/order-history/order-history.module';
 import { QrModule } from './qr/qr.module';
+import { EarningsModule } from './earnings/earnings.module';
+
 
 // Reload trigger: 2026-07-19
 @Module({
@@ -42,6 +44,7 @@ import { QrModule } from './qr/qr.module';
     OrderModule,
     OrderHistoryModule,
     QrModule,
+    EarningsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

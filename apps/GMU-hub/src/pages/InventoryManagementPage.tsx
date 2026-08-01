@@ -460,10 +460,16 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isManualRefresh = false) => {
+    const hasData = incomingInventory.length > 0 || returnDropInventory.length > 0 || returnPickupInventory.length > 0;
+    if (!hasData) {
+      setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
+    }
     setErrorMsg('');
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;
@@ -480,6 +486,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
       setErrorMsg(e.message || 'Failed to load inventory data.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -772,7 +779,8 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
-            onRefresh={loadData}
+            onRefresh={() => loadData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
         {activeSubTab === 'returnPickup' && (
@@ -782,7 +790,8 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
-            onRefresh={loadData}
+            onRefresh={() => loadData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
         {activeSubTab === 'returnDrop' && (
@@ -796,7 +805,8 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             selectedDate={dateFilter}
             onDateChange={setDateFilter}
             onRowDoubleClick={handleViewItem}
-            onRefresh={loadData}
+            onRefresh={() => loadData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
 

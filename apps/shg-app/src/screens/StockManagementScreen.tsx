@@ -8,10 +8,9 @@ import { CompositeScreenProps } from '@react-navigation/native';
 import { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
+import { SharedHeader } from '../components/SharedHeader';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
-
-export default function StockManagementScreen({ navigation }: Props) {
+export default function StockManagementScreen({ navigation }: { navigation?: any }) {
   const context = useContext(LanguageContext);
   const { user } = useUser();
   if (!context || !user) return null;
@@ -20,26 +19,11 @@ export default function StockManagementScreen({ navigation }: Props) {
   return (
     <SafeAreaView className="flex-1 bg-background">
       {/* Header (Navbar Top) */}
-      <View className="px-6 py-4 bg-white border-b border-gray-50 flex-row justify-between items-center mt-2">
-        <View className="flex-1">
-          <Text className="text-3xl font-extrabold text-textPrimary tracking-tight">{t('home_inventory') || 'Home Inventory'}</Text>
-          <Text className="text-textSecondary text-sm font-semibold mt-0.5">{t('inventory_subtitle') || 'Items currently at your home'}</Text>
-        </View>
-        <View className="flex-row items-center">
-          <TouchableOpacity className="w-10 h-10 bg-gray-50 rounded-full items-center justify-center mr-3 border border-gray-100">
-            <Ionicons name="globe-outline" size={20} color="#073318" />
-          </TouchableOpacity>
-          <TouchableOpacity className="shadow-sm">
-             {user?.profileImage ? (
-               <Image source={{ uri: user.profileImage }} className="w-10 h-10 rounded-full border-2 border-white" />
-             ) : (
-                <View className="w-10 h-10 bg-primary rounded-full items-center justify-center border-2 border-white">
-                  <Text className="text-white font-bold">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'U'}</Text>
-                </View>
-             )}
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SharedHeader 
+        title={t('home_inventory') || 'Home Inventory'} 
+        subtitle={t('inventory_subtitle') || 'Items currently at your home'} 
+        navigation={navigation} 
+      />
 
       {/* Main Content Area (Cleared) */}
       <View className="flex-1 items-center justify-center px-6">

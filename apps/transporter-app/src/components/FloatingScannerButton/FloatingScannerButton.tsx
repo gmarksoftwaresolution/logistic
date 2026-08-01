@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { TouchableOpacity, Animated, Text, View, Alert } from 'react-native';
 import { QrCode } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScanSession } from '../../context/ScanSessionContext';
 import { FloatingScannerButtonProps } from './FloatingScannerButton.types';
 import { styles } from './FloatingScannerButton.styles';
+import { verticalScale } from '../../utils/responsive';
 
 export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
   module,
@@ -12,7 +14,12 @@ export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
 }) => {
   const { activePickupSession, activeDropSession } = useScanSession();
   const activeSession = module === 'PICKUP' ? activePickupSession : activeDropSession;
-  
+  const insets = useSafeAreaInsets();
+
+  // Tab Bar height = verticalScale(76) + Math.max(insets.bottom, verticalScale(16)) + verticalScale(14)
+  const tabBarHeight = verticalScale(76) + Math.max(insets.bottom, verticalScale(16)) + verticalScale(14);
+  const fabBottomOffset = tabBarHeight + verticalScale(18);
+
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -75,6 +82,7 @@ export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
       style={[
         styles.container,
         {
+          bottom: fabBottomOffset,
           opacity: opacityAnim,
           transform: [{ scale: scaleAnim }],
         },

@@ -20,18 +20,18 @@ async function getVillageLocation(prisma: any, villageName: string) {
     // 2. Check PincodeDirectory table in public schema
     const pd = await prisma.pincodeDirectory.findFirst({
       where: { 
-        name: { equals: name, mode: 'insensitive' },
+        village: { equals: name, mode: 'insensitive' },
         district: { equals: 'Kolhapur', mode: 'insensitive' }
       }
     });
     if (pd) {
       return {
-        village: pd.name,
+        village: pd.village,
         pincode: pd.pincode,
-        taluka: pd.block || pd.district || 'N/A',
+        taluka: pd.taluka || pd.district || 'N/A',
         district: pd.district,
         state: pd.state,
-        postOffice: pd.name
+        postOffice: pd.postOffice || pd.village
       };
     }
   }

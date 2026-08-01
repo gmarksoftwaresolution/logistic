@@ -3,6 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/storage';
 import { userService } from '../services/userService';
 
+export interface OtherDetails {
+  id?: number;
+  userId?: number;
+  vehicleType?: string;
+  vehicleName?: string | null;
+  carryingCapacity?: string | null;
+  [key: string]: any;
+}
+
 export interface UserProfile {
   id?: number;
   name: string;
@@ -23,6 +32,7 @@ export interface UserProfile {
   shgUniqueId?: string;
   applicationStatus?: string;
   vehicleCapacity?: number;
+  otherDetails?: OtherDetails[] | OtherDetails | null;
 }
 
 export type ApplicationStatus = 'Pending' | 'Under Review' | 'Approved' | 'Rejected' | null;

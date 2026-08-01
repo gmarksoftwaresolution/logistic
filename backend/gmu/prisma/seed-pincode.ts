@@ -22,14 +22,12 @@ if (fs.existsSync(dotenvPath)) {
   });
 }
 
-// Override connection for stable seeding if DIRECT_URL is present
 if (process.env.DIRECT_URL) {
   process.env.DATABASE_URL = process.env.DIRECT_URL;
 }
 
 const prisma = new PrismaClient();
 
-// Helper to parse CSV line correctly handling quotes and commas
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
@@ -50,16 +48,47 @@ function parseCSVLine(line: string): string[] {
 }
 
 async function main() {
-  const csvPath = path.join(__dirname, '../India_pincodes.csv');
+  const csvPath = path.join(__dirname, '../Locality_village_pincode_final_mar-2017.csv');
   if (!fs.existsSync(csvPath)) {
     console.error(`CSV file not found at: ${csvPath}`);
     process.exit(1);
   }
 
-  console.log('Starting seed process for PincodeDirectory...');
+  console.log('Starting seed process for pincode_directory...');
   console.log(`Reading CSV from: ${csvPath}`);
 
-  // Safe to execute multiple times: truncate existing table first
+  // Re-create / Ensure table structure with required columns
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.pincode_directory (
+      id SERIAL PRIMARY KEY,
+      village TEXT,
+      name TEXT,
+      post_office TEXT,
+      pincode TEXT,
+      taluka TEXT,
+      district TEXT,
+      state TEXT,
+      country TEXT DEFAULT 'India',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`ALTER TABLE public.pincode_directory ADD COLUMN IF NOT EXISTS "village" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE public.pincode_directory ADD COLUMN IF NOT EXISTS "post_office" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE public.pincode_directory ADD COLUMN IF NOT EXISTS "taluka" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE public.pincode_directory ADD COLUMN IF NOT EXISTS "name" TEXT;`);
+  
+  // Drop NOT NULL constraints on optional legacy columns if any exist
+  const legacyCols = ['block', 'branchType', 'circle', 'country', 'deliveryStatus', 'description', 'division', 'region', 'created_at', 'updated_at'];
+  for (const col of legacyCols) {
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.pincode_directory ALTER COLUMN "${col}" DROP NOT NULL;`);
+    } catch (e) {
+      // Ignore if column doesn't exist
+    }
+  }
+
   console.log('Truncating existing pincode_directory table...');
   await prisma.$executeRawUnsafe('TRUNCATE TABLE public.pincode_directory RESTART IDENTITY CASCADE;');
 
@@ -71,9 +100,8 @@ async function main() {
 
   let isHeader = true;
   let batch: any[] = [];
-  const BATCH_SIZE = 5000;
+  const BATCH_SIZE = 2000;
 
-  // In-memory unique verification key: Pincode + Name (Village)
   const seenUniqueKeys = new Set<string>();
 
   let totalProcessed = 0;
@@ -81,38 +109,25 @@ async function main() {
   let totalDuplicates = 0;
   let totalSkipped = 0;
 
-  // Headers structure: Name,Description,BranchType,DeliveryStatus,Circle,District,Division,Region,Block,State,Country,Pincode
-  let nameIdx = 0;
-  let descIdx = 1;
-  let branchTypeIdx = 2;
-  let deliveryStatusIdx = 3;
-  let circleIdx = 4;
-  let districtIdx = 5;
-  let divisionIdx = 6;
-  let regionIdx = 7;
-  let blockIdx = 8;
-  let stateIdx = 9;
-  let countryIdx = 10;
-  let pincodeIdx = 11;
+  let villageIdx = 0;
+  let officenameIdx = 1;
+  let pincodeIdx = 2;
+  let subdistIdx = 3;
+  let districtIdx = 4;
+  let stateIdx = 5;
 
   for await (const line of rl) {
     if (!line.trim()) continue;
 
     if (isHeader) {
       isHeader = false;
-      const headers = parseCSVLine(line);
-      nameIdx = headers.indexOf('Name');
-      descIdx = headers.indexOf('Description');
-      branchTypeIdx = headers.indexOf('BranchType');
-      deliveryStatusIdx = headers.indexOf('DeliveryStatus');
-      circleIdx = headers.indexOf('Circle');
-      districtIdx = headers.indexOf('District');
-      divisionIdx = headers.indexOf('Division');
-      regionIdx = headers.indexOf('Region');
-      blockIdx = headers.indexOf('Block');
-      stateIdx = headers.indexOf('State');
-      countryIdx = headers.indexOf('Country');
-      pincodeIdx = headers.indexOf('Pincode');
+      const headers = parseCSVLine(line).map(h => h.trim());
+      villageIdx = headers.findIndex(h => h.toLowerCase() === 'village/locality name');
+      officenameIdx = headers.findIndex(h => h.toLowerCase().startsWith('officename'));
+      pincodeIdx = headers.findIndex(h => h.toLowerCase() === 'pincode');
+      subdistIdx = headers.findIndex(h => h.toLowerCase() === 'sub-distname');
+      districtIdx = headers.findIndex(h => h.toLowerCase() === 'districtname');
+      stateIdx = headers.findIndex(h => h.toLowerCase() === 'statename');
       
       console.log('Detected CSV Column Headers Mapping successfully.');
       continue;
@@ -120,71 +135,43 @@ async function main() {
 
     totalProcessed++;
     const columns = parseCSVLine(line);
-    if (columns.length < 12) {
+    if (columns.length < 6) {
       totalSkipped++;
       continue;
     }
 
-    const name = columns[nameIdx];
-    const description = columns[descIdx] || null;
-    const branchType = columns[branchTypeIdx] || null;
-    const deliveryStatus = columns[deliveryStatusIdx] || null;
-    const circle = columns[circleIdx] || null;
-    const district = columns[districtIdx];
-    const division = columns[divisionIdx] || null;
-    const region = columns[regionIdx] || null;
-    const block = columns[blockIdx] || null;
-    const state = columns[stateIdx];
-    const country = columns[countryIdx] || 'India';
+    const village = columns[villageIdx];
+    const postOffice = columns[officenameIdx];
     const pincode = columns[pincodeIdx];
+    const taluka = columns[subdistIdx];
+    const district = columns[districtIdx];
+    const state = columns[stateIdx];
 
-    // Validations: Required fields and pincode length
-    if (!pincode || pincode.length !== 6 || !/^\d{6}$/.test(pincode) || !name || !district || !state) {
+    if (!pincode || pincode.length !== 6 || !/^\d{6}$/.test(pincode) || !village || !district || !state) {
       totalSkipped++;
       continue;
     }
 
-    // Ignore duplicates (pincode + name combination)
-    const uniqueKey = `${pincode}_${name.toLowerCase().trim()}`;
+    const uniqueKey = `${pincode}_${village.toLowerCase().trim()}`;
     if (seenUniqueKeys.has(uniqueKey)) {
       totalDuplicates++;
       continue;
     }
     seenUniqueKeys.add(uniqueKey);
 
-    batch.push({
-      name,
-      description,
-      branchType,
-      deliveryStatus,
-      circle,
-      district,
-      division,
-      region,
-      block,
-      state,
-      country,
-      pincode,
-    });
+    batch.push({ village, postOffice, pincode, taluka, district, state });
 
     if (batch.length >= BATCH_SIZE) {
-      const result = await prisma.pincodeDirectory.createMany({
-        data: batch,
-        skipDuplicates: true
-      });
-      totalInserted += result.count;
+      await insertBatch(batch);
+      totalInserted += batch.length;
       console.log(`Processed ${totalProcessed} rows. Inserted ${totalInserted} records so far...`);
       batch = [];
     }
   }
 
-  // Insert any remaining items in the last batch
   if (batch.length > 0) {
-    const result = await prisma.pincodeDirectory.createMany({
-      data: batch,
-      skipDuplicates: true
-    });
-    totalInserted += result.count;
+    await insertBatch(batch);
+    totalInserted += batch.length;
   }
 
   console.log('\n--- Seeding Completed Successfully ---');
@@ -193,6 +180,24 @@ async function main() {
   console.log(`Duplicate records:       ${totalDuplicates}`);
   console.log(`Skipped (invalid rows):  ${totalSkipped}`);
   console.log('-------------------------------------\n');
+}
+
+async function insertBatch(items: any[]) {
+  const valueStrings: string[] = [];
+  const params: any[] = [];
+
+  items.forEach((item, index) => {
+    const offset = index * 7;
+    valueStrings.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, 'India', NOW(), NOW())`);
+    params.push(item.village, item.village, item.postOffice, item.pincode, item.taluka, item.district, item.state);
+  });
+
+  const query = `
+    INSERT INTO public.pincode_directory (village, name, post_office, pincode, taluka, district, state, country, created_at, updated_at)
+    VALUES ${valueStrings.join(', ')}
+  `;
+
+  await prisma.$executeRawUnsafe(query, ...params);
 }
 
 main()

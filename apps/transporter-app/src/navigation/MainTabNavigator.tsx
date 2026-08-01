@@ -27,23 +27,23 @@ const MainTabNavigator = () => {
           headerShown: false,
         }}
       >
-        <Tab.Screen 
-          name="Home" 
+        <Tab.Screen
+          name="Home"
           component={DashboardScreen}
           options={{
             tabBarLabel: t('tabs.home')
           }}
         />
 
-        <Tab.Screen 
-          name="Order Management" 
+        <Tab.Screen
+          name="Order Management"
           component={OrderManagementStackNavigator}
           options={{
             tabBarLabel: t('tabs.orderMgmt')
           }}
         />
-        <Tab.Screen 
-          name="Order History" 
+        <Tab.Screen
+          name="Order History"
           component={OrderHistoryScreen}
           options={{
             tabBarLabel: t('tabs.history')

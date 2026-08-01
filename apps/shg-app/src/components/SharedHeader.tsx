@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 
 interface SharedHeaderProps {
   title: string;
@@ -9,7 +10,9 @@ interface SharedHeaderProps {
   navigation?: any;
 }
 
-export const SharedHeader: React.FC<SharedHeaderProps> = ({ title, subtitle, navigation }) => {
+export const SharedHeader: React.FC<SharedHeaderProps> = ({ title, subtitle, navigation: propNavigation }) => {
+  const navigation = propNavigation || useNavigation<any>();
+
   return (
     <View className="flex-row items-center px-4 mt-4 mb-2 bg-transparent">
       {/* Back Button */}
@@ -33,7 +36,7 @@ export const SharedHeader: React.FC<SharedHeaderProps> = ({ title, subtitle, nav
         colors={['#FFFFFF', '#E8F5EC']} 
         start={{ x: 0, y: 0 }} 
         end={{ x: 1, y: 0 }}
-        className="flex-1 h-[76px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
+        className="flex-1 h-[68px] border border-[#D5EFE0] flex-row justify-between items-center px-5" 
         style={{ 
           borderRadius: 30,
           overflow: 'hidden',
@@ -54,9 +57,10 @@ export const SharedHeader: React.FC<SharedHeaderProps> = ({ title, subtitle, nav
         </View>
         <TouchableOpacity 
           activeOpacity={0.7}
+          onPress={() => navigation?.navigate('Profile')}
           className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm border border-[#E2F0E7]"
         >
-          <Ionicons name="help-circle-outline" size={22} color="#073318" />
+          <Ionicons name="person-outline" size={20} color="#073318" />
         </TouchableOpacity>
       </LinearGradient>
     </View>

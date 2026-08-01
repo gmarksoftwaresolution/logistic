@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { VehicleSuggestionService } from './vehicle-suggestion.service';
+import { EarningsService } from '../earnings/earnings.service';
 import axios from 'axios';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private vehicleSuggestionService: VehicleSuggestionService,
+    private earningsService: EarningsService,
   ) { }
 
   //////////////////////////////////////////////////////
@@ -96,7 +98,7 @@ export class OrderService {
           orderNumber: { in: assignedPickupOrderIds }
         },
         OR: [
-          { status: { in: ['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'] } }
+          { status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED'] } }
         ]
       },
       include: {
@@ -137,8 +139,7 @@ export class OrderService {
             }
           }
         ],
-        buyerId: shgId, // Buyer is the SHG
-        status: { in: ['PENDING', 'ACCEPTED', 'REJECTED', 'DELIVERED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'DELIVERED'] },
         NOT: {
           dropOrderNumber: { startsWith: 'RET-' }
         }
@@ -175,7 +176,7 @@ export class OrderService {
 
     // Filter inbound drops to only show when the transporter has finished picking it up
     const filteredInboundDrops = updatedInboundDrops.filter((drop) => {
-      if (drop.status === 'REJECTED') return true;
+      // removed rejected check
       const pickup = drop.masterOrder?.pickupOrders?.[0];
       if (!pickup) return true;
       return ['COMPLETED', 'RETURNED'].includes(pickup.status);
@@ -198,7 +199,7 @@ export class OrderService {
             ]
           },
           { buyerId: { not: shgId } },
-          { status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'REJECTED', 'DELIVERED'] } },
+          { status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'DELIVERED'] } },
           {
             NOT: {
               dropOrderNumber: { startsWith: 'RET-' }
@@ -245,10 +246,12 @@ export class OrderService {
     const formattedInboundDrops = await this.formatInboundDrops(filteredInboundDrops);
     const formattedRegularDrops = await this.formatRegularDrops(updatedRegularDrops);
 
-    return [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
+    const allFormatted = [...formattedPickups, ...formattedInboundDrops, ...formattedRegularDrops];
+    const uniqueOrders = Array.from(new Map(allFormatted.map((o: any) => [o.orderId || o.orderNumber || o.id, o])).values());
+    return uniqueOrders;
   }
 
-  async acceptPickup(pickupOrderId: number, shgId: number) {
+  async acceptPickup(pickupOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: {
         id: pickupOrderId,
@@ -270,7 +273,7 @@ export class OrderService {
         },
       });
       if (dropOrder) {
-        return this.acceptDrop(pickupOrderId, shgId);
+        return this.acceptDrop(pickupOrderId, shgId, selectedVehicleName, selectedVehicleCapacity, selectedVehicleType);
       }
       throw new NotFoundException(`Pickup/Drop order with ID ${pickupOrderId} not available.`);
     }
@@ -325,7 +328,7 @@ export class OrderService {
         data: {
           pickupOrderId,
           status: nextStatus,
-          remarks: 'Pickup leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Pickup leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Pickup leg accepted by SHG.',
         },
       });
 
@@ -391,7 +394,7 @@ export class OrderService {
     }, { timeout: 30000 });
   }
 
-  async acceptDrop(dropOrderId: number, shgId: number) {
+  async acceptDrop(dropOrderId: number, shgId: number, selectedVehicleName?: string, selectedVehicleCapacity?: number, selectedVehicleType?: string) {
     const dropOrder = await this.prisma.dropOrder.findFirst({
       where: {
         id: dropOrderId,
@@ -462,7 +465,7 @@ export class OrderService {
         data: {
           dropOrderId,
           status: nextStatus,
-          remarks: 'Delivery leg accepted by SHG.',
+          remarks: selectedVehicleName ? `Delivery leg accepted by SHG. Vehicle: ${selectedVehicleName} (Capacity: ${selectedVehicleCapacity}kg)` : 'Delivery leg accepted by SHG.',
         },
       });
 
@@ -685,175 +688,99 @@ export class OrderService {
     }, { timeout: 30000 });
   }
 
-  async rejectPickup(pickupOrderId: number, shgId: number, reason: string = '') {
-    const pickupOrder = await this.prisma.pickupOrder.findFirst({
-      where: { id: pickupOrderId, shgId },
-    });
-
-    if (!pickupOrder) {
-      const dropOrder = await this.prisma.dropOrder.findFirst({
-        where: { id: pickupOrderId, shgId },
-      });
-      if (dropOrder) {
-        return this.rejectDrop(pickupOrderId, shgId, reason);
-      }
-      throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
-    }
-
+  async redirectOrder(orderId: number, shgId: number, legType: 'pickup' | 'drop' = 'pickup', reason: string = '') {
     return this.prisma.$transaction(async (tx: any) => {
-      const updated = await tx.pickupOrder.update({
-        where: { id: pickupOrderId },
-        data: { status: 'REJECTED' },
-      });
+      const shgUuid = String(shgId);
 
-      await tx.pickupTracking.create({
-        data: {
-          pickupOrderId,
-          status: 'REJECTED',
-          remarks: `Pickup leg rejected by SHG. Reason: ${reason}`,
-        },
-      });
+      if (legType === 'drop') {
+        const dropOrder = await tx.dropOrder.findUnique({ where: { id: orderId } });
+        if (!dropOrder) throw new NotFoundException(`Drop order ${orderId} not found`);
+        const orderUuid = dropOrder.uuid || String(dropOrder.id);
 
-      const activeDrops = await tx.dropOrder.findMany({
-        where: {
-          masterOrderId: updated.masterOrderId,
-          status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] },
-          OR: [
-            { shgId: null },
-            { shgId }
-          ]
-        }
-      });
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order" 
+          SET "isDropRedirected" = true, 
+              "redirectedDropAt" = NOW(), 
+              "redirectedDropShgId" = $1, 
+              "dropShgStatus" = 'REDIRECTED', 
+              "mainStatus" = 'DROP_REDIRECT_PENDING', 
+              "updatedAt" = NOW() 
+          WHERE id = $2;
+        `, shgUuid, orderUuid);
 
-      if (activeDrops.length > 0) {
-        await tx.dropOrder.updateMany({
-          where: {
-            masterOrderId: updated.masterOrderId,
-            status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] },
-            OR: [
-              { shgId: null },
-              { shgId }
-            ]
-          },
-          data: {
-            status: 'REJECTED',
-            shgId
-          }
+        // Auto-broadcast: create pending OrderAssignment for Transporters
+        const approvedTransporters = await tx.transporterDetail.findMany({
+          where: { isVerified: true },
+          select: { userId: true }
         });
 
-        for (const drop of activeDrops) {
-          await tx.dropTracking.create({
-            data: {
-              dropOrderId: drop.id,
-              status: 'REJECTED',
-              remarks: `Delivery leg rejected due to pickup rejection. Reason: ${reason}`
-            }
-          });
+        for (const tr of approvedTransporters) {
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'TRANSPORTER', 'DROP', 'PENDING', NOW(), NOW())
+            ON CONFLICT DO NOTHING;
+          `, uuidv4(), orderUuid, String(tr.userId));
         }
-      }
 
-      return updated;
-    });
-  }
-
-  async rejectAcceptedPickup(pickupOrderId: number, shgId: number, reason: string = '') {
-    const pickupOrder = await this.prisma.pickupOrder.findFirst({
-      where: { id: pickupOrderId, shgId },
-    });
-
-    if (!pickupOrder) {
-      const dropOrder = await this.prisma.dropOrder.findFirst({
-        where: { id: pickupOrderId, shgId },
-      });
-      if (dropOrder) {
-        return this.rejectDrop(pickupOrderId, shgId, reason);
-      }
-      throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
-    }
-
-    return this.prisma.$transaction(async (tx: any) => {
-      const updated = await tx.pickupOrder.update({
-        where: { id: pickupOrderId },
-        data: { status: 'REJECTED' },
-      });
-
-      await tx.pickupTracking.create({
-        data: {
-          pickupOrderId,
-          status: 'REJECTED',
-          remarks: `Accepted pickup order rejected by SHG from pickup tab. Reason: ${reason}`,
-        },
-      });
-
-      const activeDrops = await tx.dropOrder.findMany({
-        where: {
-          masterOrderId: updated.masterOrderId,
-          status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] },
-          OR: [
-            { shgId: null },
-            { shgId }
-          ]
-        }
-      });
-
-      if (activeDrops.length > 0) {
-        await tx.dropOrder.updateMany({
-          where: {
-            masterOrderId: updated.masterOrderId,
-            status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP'] },
-            OR: [
-              { shgId: null },
-              { shgId }
-            ]
-          },
+        await tx.orderTracking.create({
           data: {
-            status: 'REJECTED',
-            shgId
-          }
+            orderId: orderUuid,
+            status: 'DROP_REDIRECTED',
+            remarks: `Delivery leg redirected directly to Buyer Address by SHG.${reason ? ' Reason: ' + reason : ''}`,
+          },
         });
 
-        for (const drop of activeDrops) {
-          await tx.dropTracking.create({
-            data: {
-              dropOrderId: drop.id,
-              status: 'REJECTED',
-              remarks: `Delivery leg rejected due to pickup rejection. Reason: ${reason}`
-            }
-          });
+        return { success: true, message: 'Delivery leg redirected to Buyer address.' };
+      } else {
+        const pickupOrder = await tx.pickupOrder.findUnique({ where: { id: orderId } });
+        if (!pickupOrder) throw new NotFoundException(`Pickup order ${orderId} not found`);
+        const orderUuid = pickupOrder.uuid || String(pickupOrder.id);
+
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order" 
+          SET "isPickupRedirected" = true, 
+              "redirectedPickupAt" = NOW(), 
+              "redirectedPickupShgId" = $1, 
+              "pickupShgStatus" = 'REDIRECTED', 
+              "mainStatus" = 'REDIRECT_PENDING', 
+              "updatedAt" = NOW() 
+          WHERE id = $2;
+        `, shgUuid, orderUuid);
+
+        // Auto-broadcast: create pending OrderAssignment for Transporters
+        const approvedTransporters = await tx.transporterDetail.findMany({
+          where: { isVerified: true },
+          select: { userId: true }
+        });
+
+        for (const tr of approvedTransporters) {
+          const uuidv4 = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          await tx.$executeRawUnsafe(`
+            INSERT INTO public."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'TRANSPORTER', 'PICKUP', 'PENDING', NOW(), NOW())
+            ON CONFLICT DO NOTHING;
+          `, uuidv4(), orderUuid, String(tr.userId));
         }
+
+        await tx.orderTracking.create({
+          data: {
+            orderId: orderUuid,
+            status: 'PICKUP_REDIRECTED',
+            remarks: `Pickup leg redirected directly to Seller Shop Address by SHG.${reason ? ' Reason: ' + reason : ''}`,
+          },
+        });
+
+        return { success: true, message: 'Pickup leg redirected to Seller shop address.' };
       }
-
-      return updated;
     });
   }
 
-  async rejectReturnPickup(dropOrderId: number, shgId: number, reason: string = '') {
-    const dropOrder = await this.prisma.dropOrder.findFirst({
-      where: { id: dropOrderId, shgId },
-    });
 
-    if (!dropOrder) {
-      throw new NotFoundException(`Drop order with ID ${dropOrderId} not assigned to this SHG.`);
-    }
 
-    return this.prisma.$transaction(async (tx: any) => {
-      const updated = await tx.dropOrder.update({
-        where: { id: dropOrderId },
-        data: { status: 'REJECTED' },
-      });
 
-      await tx.dropTracking.create({
-        data: {
-          dropOrderId,
-          status: 'REJECTED',
-          remarks: `Return pickup rejected by SHG. Reason: ${reason}`,
-        },
-      });
 
-      return updated;
-    });
-  }
-async completePickup(pickupOrderId: number, shgId: number, code?: string, legType?: string) {
+  async completePickup(pickupOrderId: number, shgId: number, code?: string, legType?: string) {
     let pickupOrder = await this.prisma.pickupOrder.findFirst({
       where: { id: pickupOrderId, shgId },
     });
@@ -879,7 +806,17 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not assigned to this SHG.`);
     }
 
-    if (pickupOrder.status === 'COMPLETED' || pickupOrder.status === 'RETURNED') {
+    // Check if transporter assignment broadcast has already been triggered for this order
+    const rawAssignmentCheck = await this.prisma.$queryRawUnsafe(`
+      SELECT oa.id FROM public."OrderAssignment" oa
+      JOIN public."Order" o ON oa."orderId" = o.id
+      JOIN public.master_orders mo ON o."orderId" = mo.order_number
+      WHERE mo.id = $1 AND o.phase = 'PICKUP' AND oa.role = 'PICKUP' AND oa."assigneeType" = 'TRANSPORTER' LIMIT 1;
+    `, pickupOrder.masterOrderId) as any[];
+
+    const alreadyBroadcasted = rawAssignmentCheck.length > 0;
+
+    if ((pickupOrder.status === 'COMPLETED' || pickupOrder.status === 'RETURNED') && alreadyBroadcasted) {
       return pickupOrder;
     }
 
@@ -888,7 +825,9 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
     });
     const orderNumber = masterOrder?.orderNumber || `ORD-${pickupOrder.masterOrderId}`;
 
-    if (legType === 'pickup') {
+    const isPickupLeg = !legType || legType === 'pickup';
+
+    if (isPickupLeg) {
       const items = await this.prisma.pickupOrderItem.findMany({
         where: { pickupOrderId }
       });
@@ -956,7 +895,7 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
         where: { id: pickupOrder.masterOrderId }
       });
 
-      if (legType === 'pickup') {
+      if (isPickupLeg) {
         const nextStatus = pickupOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'COMPLETED';
         const updated = await tx.pickupOrder.update({
           where: { id: pickupOrderId },
@@ -1013,6 +952,15 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
           where: { id: pickupOrder.masterOrderId },
           data: { status: nextGmuStatus },
         });
+
+        if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+          await this.earningsService.createForCompletedOrder(
+            tx,
+            shgId,
+            masterOrder.orderNumber,
+            new Date()
+          );
+        }
 
         return updated;
       } else {
@@ -1072,6 +1020,15 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
             },
           });
 
+          if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+            await this.earningsService.createForCompletedOrder(
+              tx,
+              shgId,
+              masterOrder.orderNumber,
+              new Date()
+            );
+          }
+
           const associatedDrop = await tx.dropOrder.findFirst({
             where: { masterOrderId: pickupOrder.masterOrderId }
           });
@@ -1116,6 +1073,15 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
               remarks: 'Package dropped to transporter by SHG. Awaiting transporter confirmation.',
             },
           });
+
+          if (nextStatus === 'COMPLETED' || nextStatus === 'RETURNED') {
+            await this.earningsService.createForCompletedOrder(
+              tx,
+              shgId,
+              masterOrder.orderNumber,
+              new Date()
+            );
+          }
 
           const associatedDrop = await tx.dropOrder.findFirst({
             where: { masterOrderId: pickupOrder.masterOrderId }
@@ -1164,7 +1130,7 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
         buyerId: shgId,
         OR: [
           { status: { in: ['RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] } },
-          { AND: [{ status: 'REJECTED' }, { dropOrderNumber: { startsWith: 'RET-' } }] }
+          { status: 'NEVER_MATCH' }
         ]
       },
       include: {
@@ -1207,7 +1173,7 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
         buyerId: { not: shgId },
         OR: [
           { status: { in: ['RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURN_PICKED_UP', 'RETURNED'] } },
-          { AND: [{ status: 'REJECTED' }, { dropOrderNumber: { startsWith: 'RET-' } }] }
+          { status: 'NEVER_MATCH' }
         ]
       },
       include: {
@@ -1591,13 +1557,6 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
       throw new NotFoundException(`Master order for drop order ${dropOrderId} not found.`);
     }
 
-    // Log the scan event to ScanHistory
-    await this.prisma.$executeRawUnsafe(`
-      INSERT INTO public."ScanHistory" (
-        "orderId", "barcode", "scanType", "scanLocation", "scannedBy", "userRole", "scanResult"
-      ) VALUES ($1, $2, 'Delivery', 'Buyer Location', $3, 'SHG', 'SUCCESS');
-    `, masterOrder.id.toString(), code, shgId);
-
     return this.prisma.$transaction(async (tx: any) => {
       const nextStatus = (dropOrder.status === 'RETURN_ACCEPTED' || dropOrder.status === 'RETURN_PICKED_UP') ? 'RETURNED' : 'DELIVERED';
       const updated = await tx.dropOrder.update({
@@ -1631,80 +1590,20 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
         data: { status: nextGmuStatus },
       });
 
-      return updated;
-    });
-  }
-
-  async rejectDrop(dropOrderId: number, shgId: number, reason: string = '') {
-    const dropOrder = await this.prisma.dropOrder.findFirst({
-      where: { id: dropOrderId, shgId },
-    });
-
-    if (!dropOrder) {
-      throw new NotFoundException(`Drop order with ID ${dropOrderId} not assigned to this SHG.`);
-    }
-
-    return this.prisma.$transaction(async (tx: any) => {
-      const associatedPickup = await tx.pickupOrder.findFirst({
-        where: { masterOrderId: dropOrder.masterOrderId }
-      });
-      const isPickupCompleted = associatedPickup?.status === 'COMPLETED';
-
-      // Check if rejection window (24 hours) has expired for picked-up/received drop orders
-      if (['PICKED_UP', 'RETURN_PICKED_UP'].includes(dropOrder.status)) {
-        const tracking = await tx.dropTracking.findFirst({
-          where: {
-            dropOrderId,
-            status: { in: ['PICKED_UP', 'RETURN_PICKED_UP'] }
-          },
-          orderBy: { updatedAt: 'desc' }
-        });
-        if (tracking) {
-          const now = new Date();
-          const diffMs = now.getTime() - tracking.updatedAt.getTime();
-          const limitMs = 24 * 60 * 60 * 1000; // 24 hours
-          if (diffMs > limitMs) {
-            throw new BadRequestException('Rejection window of 24 hours has expired. You must deliver this order.');
-          }
-        }
-      }
-
-      let nextStatus = 'REJECTED';
-      if (['PICKED_UP', 'RETURN_PICKED_UP'].includes(dropOrder.status)) {
-        nextStatus = 'RETURN_PENDING';
-      }
-
-      const updated = await tx.dropOrder.update({
-        where: { id: dropOrderId },
-        data: { status: nextStatus },
-      });
-
-      await tx.dropTracking.create({
-        data: {
-          dropOrderId,
-          status: nextStatus,
-          remarks: `Delivery leg rejected by SHG. Reason: ${reason}`,
-        },
-      });
-
-      // Synchronize associated pickup if not completed yet and we are rejecting the drop
-      if (associatedPickup && associatedPickup.status !== 'COMPLETED' && nextStatus === 'REJECTED') {
-        await tx.pickupOrder.update({
-          where: { id: associatedPickup.id },
-          data: { status: 'REJECTED' },
-        });
-        await tx.pickupTracking.create({
-          data: {
-            pickupOrderId: associatedPickup.id,
-            status: 'REJECTED',
-            remarks: `Pickup leg rejected due to delivery leg rejection. Reason: ${reason}`,
-          },
-        });
+      if (nextStatus === 'DELIVERED' || nextStatus === 'RETURNED') {
+        await this.earningsService.createForCompletedOrder(
+          tx,
+          shgId,
+          masterOrder.orderNumber,
+          new Date()
+        );
       }
 
       return updated;
     });
   }
+
+
 
   private parseRescheduleDate(date: string, time: string): Date | null {
     try {
@@ -1752,8 +1651,8 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
       // Check if it's a PickupOrder
       const pickup = await tx.pickupOrder.findUnique({ where: { id } });
       if (pickup) {
-        if (['COMPLETED', 'RETURNED', 'REJECTED'].includes(pickup.status)) {
-          throw new BadRequestException(`Order ${pickup.pickupOrderNumber} is already completed/rejected and cannot be rescheduled.`);
+        if (['COMPLETED', 'RETURNED'].includes(pickup.status)) {
+          throw new BadRequestException(`Order ${pickup.pickupOrderNumber} is already completed/cancelled and cannot be rescheduled.`);
         }
 
         if (['ACCEPTED', 'RETURN_ACCEPTED'].includes(pickup.status)) {
@@ -1801,8 +1700,8 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
       // Check if it's a DropOrder
       const drop = await tx.dropOrder.findUnique({ where: { id } });
       if (drop) {
-        if (['COMPLETED', 'RETURNED', 'REJECTED'].includes(drop.status)) {
-          throw new BadRequestException(`Order ${drop.dropOrderNumber} is already completed/rejected and cannot be rescheduled.`);
+        if (['COMPLETED', 'RETURNED'].includes(drop.status)) {
+          throw new BadRequestException(`Order ${drop.dropOrderNumber} is already completed/cancelled and cannot be rescheduled.`);
         }
 
         if (['PICKED_UP', 'RETURN_PICKED_UP'].includes(drop.status)) {
@@ -1871,8 +1770,8 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
       // Check if it's a DropOrder
       const drop = await tx.dropOrder.findUnique({ where: { id } });
       if (drop) {
-        if (['COMPLETED', 'RETURNED', 'REJECTED'].includes(drop.status)) {
-          throw new BadRequestException(`Order ${drop.dropOrderNumber} is already completed/rejected and cannot be rescheduled.`);
+        if (['COMPLETED', 'RETURNED'].includes(drop.status)) {
+          throw new BadRequestException(`Order ${drop.dropOrderNumber} is already completed/cancelled and cannot be rescheduled.`);
         }
 
         if (['PENDING', 'ACCEPTED', 'RETURN_PENDING', 'RETURN_ACCEPTED'].includes(drop.status)) {
@@ -2651,78 +2550,7 @@ async completePickup(pickupOrderId: number, shgId: number, code?: string, legTyp
     };
   }
 
-  async getRejectedOrders(shgId: number, mobileNumber?: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: shgId }
-    });
-    if (!user || user.role !== 'SHG') return { newOrders: [], returnOrders: [] };
 
-    const pickups = await this.prisma.pickupOrder.findMany({
-      where: { shgId, status: { in: ['REJECTED', 'CANCELLED'] } },
-      include: {
-        seller: true,
-        items: { include: { product: true } },
-        masterOrder: true,
-        tracking: true,
-        transporter: {
-          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const drops = await this.prisma.dropOrder.findMany({
-      where: {
-        shgId,
-        buyerId: { not: shgId },
-        status: { in: ['REJECTED', 'CANCELLED'] },
-        NOT: { dropOrderNumber: { startsWith: 'RET-' } }
-      },
-      include: {
-        buyer: true,
-        items: { include: { product: true } },
-        masterOrder: {
-          include: { items: { include: { seller: true } } },
-        },
-        tracking: true,
-        transporter: {
-          include: { transporterDetail: true, address: true, routeDetail: true, otherDetails: true }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const returnDrops = await this.prisma.dropOrder.findMany({
-      where: {
-        shgId,
-        buyerId: { not: shgId },
-        status: { in: ['REJECTED', 'CANCELLED'] },
-        dropOrderNumber: { startsWith: 'RET-' }
-      },
-      include: {
-        buyer: true,
-        shg: { select: { fullName: true, phoneNumber: true, address: true } },
-        items: { include: { product: true } },
-        masterOrder: {
-          include: {
-            pickupOrders: true,
-            items: { include: { seller: true } },
-          },
-        },
-        tracking: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const formattedPickups = await this.formatPickups(pickups);
-    const formattedDrops = await this.formatRegularDrops(drops);
-    const formattedReturnDrops = this.formatReturnDrops(returnDrops);
-
-    return {
-      newOrders: [...formattedPickups, ...formattedDrops],
-      returnOrders: formattedReturnDrops,
-    };
-  }
 }
 
 

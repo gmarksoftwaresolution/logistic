@@ -109,13 +109,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     mapOrder,
   } = useAppContext();
 
-  // Top level sections: new | in_transit | completed | rejected | returned
-  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'rejected' | 'returned'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
+  // Top level sections: new | in_transit | completed | returned
+  const [activeTopTab, setActiveTopTab] = useState<'new' | 'in_transit' | 'completed' | 'returned'>((localStorage.getItem('gmu_active_tab') as any) || 'new');
 
   useEffect(() => {
     const syncActiveTab = () => {
       const val = localStorage.getItem('gmu_active_tab');
-      if (val && ['new', 'in_transit', 'completed', 'rejected', 'returned'].includes(val)) {
+      if (val && ['new', 'in_transit', 'completed', 'returned'].includes(val)) {
         setActiveTopTab(val as any);
       }
     };
@@ -127,7 +127,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   }, []);
 
-  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'rejected' | 'returned') => {
+  const handleTabChange = (tab: 'new' | 'in_transit' | 'completed' | 'returned') => {
     localStorage.setItem('gmu_active_tab', tab);
     setActiveTopTab(tab);
   };
@@ -227,6 +227,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [scanMessage, setScanMessage] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [actionProcessing, setActionProcessing] = useState(false);
 
@@ -309,18 +310,28 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const fetchAddressDetails = async (pincode: string, isSeller: boolean) => {
     if (pincode.length !== 6) return;
     try {
-      const MOCK: Record<string, any> = {
-        "416504": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Nesari", "Dundage", "Harali"] },
-        "416501": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Dundage", "Nesari", "Harali"] },
-        "416502": { state: "Maharashtra", district: "Kolhapur", taluka: "Gadhinglaj", villages: ["Gadhinglaj", "Mahagaon", "Kadgaon", "Harali"] },
-        "416509": { state: "Maharashtra", district: "Kolhapur", taluka: "Chandgad", villages: ["Halkarni", "Naganwadi", "Patne", "Shinoli", "Tudye"] },
-        "416507": { state: "Maharashtra", district: "Kolhapur", taluka: "Ajara", villages: ["Ajara", "Uttur", "Nesari", "Gavase"] },
-      };
-
       let result: any = null;
-      if (MOCK[pincode]) {
-        result = MOCK[pincode];
-      } else {
+
+      // 1. Try local DB API (pincode_directory table)
+      try {
+        const localRes = await fetch(`http://localhost:3001/api/location/pincode/${pincode}`);
+        if (localRes.ok) {
+          const localData = await localRes.json();
+          if (localData && localData.villages && localData.villages.length > 0) {
+            result = {
+              state: localData.state,
+              district: localData.district,
+              taluka: localData.taluka,
+              villages: localData.villages,
+            };
+          }
+        }
+      } catch (e) {
+        console.warn("Local location lookup failed, falling back:", e);
+      }
+
+      // 2. Fallback to Postal API if local DB does not have the pincode yet
+      if (!result) {
         const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
         const data = await res.json();
         if (data && data[0] && data[0].Status === 'Success') {
@@ -660,38 +671,60 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   };
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isManualRefresh = false) => {
+    const hasData = (activeTopTab === 'new' && (pickupNewOrders.length > 0 || dropNewOrders.length > 0)) ||
+                    (activeTopTab === 'in_transit' && (pickupAssignedOrders.length > 0 || pickupWarehouseOrders.length > 0 || dropAssignedOrders.length > 0 || returnDropNewOrders.length > 0)) ||
+                    (activeTopTab === 'completed' && (dropCompletedOrders.length > 0 || returnPickupCompletedOrders.length > 0)) ||
+                    (activeTopTab === 'rejected' && (pickupRejectedOrders.length > 0 || dropRejectedOrders.length > 0));
+
+    if (!hasData) {
+      setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
+    }
     setErrorMsg('');
     try {
       const sf = statusFilter === 'all' ? undefined : statusFilter;
       const df = dateFilter || undefined;
-      await loadCounts();
 
-      await Promise.all([
-        loadPickupNew(sf, df),
-        loadPickupAssigned(sf, df),
-        loadPickupWarehouse(sf, df),
-        loadPickupRejected(sf, df),
-        loadPickupRescheduled(sf, df),
-        loadDropNew(sf, df),
-        loadDropAssigned(sf, df),
-        loadDropRejected(sf, df),
-        loadDropRescheduled(sf, df),
-        loadDropCompleted(sf, df),
-        loadReturnsTransporter(sf, df),
-        loadReturnsBuyer(sf, df),
-      ]);
+      const tabFetches = activeTopTab === 'new'
+        ? Promise.all([
+            loadPickupNew(sf, df),
+            loadDropNew(sf, df),
+          ])
+        : activeTopTab === 'in_transit'
+        ? Promise.all([
+            loadPickupAssigned(sf, df),
+            loadPickupWarehouse(sf, df),
+            loadPickupRescheduled(sf, df),
+            loadDropNew(sf, df),
+            loadDropAssigned(sf, df),
+            loadDropRescheduled(sf, df),
+            loadReturnsTransporter(sf, df),
+          ])
+        : activeTopTab === 'completed'
+        ? Promise.all([
+            loadDropCompleted(sf, df),
+            loadReturnsBuyer(sf, df),
+          ])
+        : Promise.all([
+            loadPickupRejected(sf, df),
+            loadDropRejected(sf, df),
+          ]);
+
+      await Promise.all([loadCounts(), tabFetches]);
     } catch (e: any) {
       setErrorMsg(e.message || 'Failed to load data from server.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     loadData();
   }, [
+    activeTopTab,
     statusFilter,
     dateFilter
   ]);
@@ -707,51 +740,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setTransitPage(1);
   }, [activeTopTab]);
 
-  // Poll in background every 5 seconds
-  useEffect(() => {
-    const timer = setInterval(async () => {
-      try {
-        const sf = statusFilter === 'all' ? undefined : statusFilter;
-        const df = dateFilter || undefined;
-        await loadCounts();
-        await Promise.all([
-          loadPickupNew(sf, df),
-          loadPickupAssigned(sf, df),
-          loadPickupWarehouse(sf, df),
-          loadPickupRejected(sf, df),
-          loadPickupRescheduled(sf, df),
-          loadDropNew(sf, df),
-          loadDropAssigned(sf, df),
-          loadDropRejected(sf, df),
-          loadDropRescheduled(sf, df),
-          loadDropCompleted(sf, df),
-          loadReturnsTransporter(sf, df),
-          loadReturnsBuyer(sf, df),
-        ]);
-      } catch (err) {
-        console.warn("Background poll failed to refresh lists:", err);
-      }
 
-      if (isViewModalOpen && selectedOrderDetails) {
-        try {
-          const fresh = await api.orders.getDetails(selectedOrderDetails.uuid || selectedOrderDetails.id);
-          if (fresh) {
-            const mapped = mapOrder(fresh, 'pickup');
-            setSelectedOrderDetails(mapped);
-          }
-        } catch (err) {
-          console.warn("Background poll failed to refresh viewed order:", err);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [
-    statusFilter,
-    dateFilter,
-    isViewModalOpen,
-    selectedOrderDetails
-  ]);
 
   // Handle View Action
   const handleViewOrder = async (order: any) => {
@@ -962,7 +951,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           const isAtGmu = ['PARCEL_AT_GMU', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'RETURN_PARCEL_AT_GMU'].includes(order.mainStatus);
           if (!isAtGmu) return false;
         } else if (loc === 'seller') {
-          const isAtSeller = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED'].includes(order.mainStatus);
+          const isAtSeller = ['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED'].includes(order.mainStatus);
           if (!isAtSeller) return false;
         } else if (loc === 'buyer') {
           const isAtBuyer = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'].includes(order.mainStatus);
@@ -1104,7 +1093,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
     if (isShgPicked) {
       pickupShgState = 'completed';
-    } else if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
+    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
       pickupShgState = 'active';
     }
 
@@ -1264,9 +1253,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const newOrdersList = filterAndSearchOrders(
     allMergedOrders.filter(
       (o: any) =>
-        !isOrderRejected(o) &&
         !isOrderReturn(o) &&
-        (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+        (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
           (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
     )
   );
@@ -1275,7 +1263,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     allMergedOrders.filter((o: any) => {
       if (isOrderRejected(o)) return false;
       if (isOrderReturn(o)) return false;
-      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
+      const isNew = ['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
         (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
       if (isNew) return false;
 
@@ -1301,9 +1289,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     )
   );
 
-  const rejectedOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => isOrderRejected(o) && !isOrderReturn(o))
-  );
+
 
   const returnOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => isOrderReturn(o))
@@ -1449,7 +1435,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
     { header: 'Start Date', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
     { header: 'Expected Delivery Date', accessor: (row: any) => getExpectedDeliveryDate(row.orderDate || (row.created_at ? row.created_at.split(' ')[0] : undefined)) },
-    { header: 'SHG Status', accessor: (row: any) => <StatusBadge status={row.pickupShgStatus || 'pending'} /> },
+    { 
+      header: 'SHG Status', 
+      accessor: (row: any) => (
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={row.pickupShgStatus || 'pending'} />
+          {(row.isPickupRedirected || row.pickupShgStatus === 'REDIRECTED') && (
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
+              Redirected
+            </span>
+          )}
+        </div>
+      ) 
+    },
     {
       header: 'Action', accessor: (row: any) => (
         <button
@@ -1546,38 +1544,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     },
   ];
 
-  const rejectedColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
-    {
-      header: 'Status', accessor: (row: any) => (
-        <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider font-sans">
-          {row.mainStatus || 'Rejected'}
-        </span>
-      )
-    },
-    { header: 'Seller Name', accessor: 'sellerName' as keyof PickupOrder },
-    { header: 'Seller Village/City', accessor: 'sellerVillage' as keyof PickupOrder },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof PickupOrder },
-    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof PickupOrder },
-    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
-    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
-    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Date Placed', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
-    {
-      header: 'Action', accessor: (row: any) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleViewOrder(row);
-          }}
-          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
-        >
-          <Eye className="h-3.5 w-3.5" />
-          <span>View</span>
-        </button>
-      )
-    },
-  ];
+
 
   const returnColumns = [
     { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
@@ -1690,18 +1657,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               </span>
             </button>
 
-            <button
-              onClick={() => handleTabChange('rejected')}
-              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'rejected'
-                ? 'bg-[#073318] text-white shadow-md'
-                : 'text-slate-500 hover:text-slate-800'
-                }`}
-            >
-              <span>Rejected</span>
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
-                {rejectedOrdersList.length}
-              </span>
-            </button>
+
 
             <button
               onClick={() => handleTabChange('returned')}
@@ -1761,11 +1717,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             )}
 
             <button
-              onClick={loadData}
-              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+              onClick={() => loadData(true)}
+              disabled={isRefreshing}
+              className="px-4 py-2 text-xs font-extrabold text-white bg-[#073318] hover:bg-[#073318]/95 disabled:opacity-75 border border-[#073318] rounded-xl transition-all duration-200 cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
           </div>
         </div>
@@ -1785,7 +1742,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
               />
@@ -2160,7 +2117,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 selectedDate={dateFilter}
                 onDateChange={setDateFilter}
                 onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
+                onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
               />
@@ -2168,28 +2125,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           </div>
         )}
 
-        {/* ---------------- SECTION 4: REJECTED ORDERS ---------------- */}
-        {activeTopTab === 'rejected' && (
-          <div className="space-y-4">
-            {rejectedOrdersList.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
-                <span className="text-4xl block">✕</span>
-                <p className="text-sm">No rejected orders found matching the filter criteria.</p>
-              </div>
-            ) : (
-              <DataTable
-                columns={rejectedColumns}
-                data={rejectedOrdersList}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={loadData}
-                hideDateAndRefresh={true}
-                hideSearchAndFilters={true}
-              />
-            )}
-          </div>
-        )}
+
 
         {/* ---------------- SECTION 5: RETURN ORDERS ---------------- */}
         {activeTopTab === 'returned' && (
