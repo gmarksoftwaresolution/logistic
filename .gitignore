@@ -64,3 +64,8 @@ dummy.prisma
 local_schema.sql
 Untracked files:
 backend/shg/validate_orders.ts
+
+
+# Prisma generated clients
+backend/shg/src/generated/
+packages/db/src/generated/
