@@ -1,3 +1,3 @@
 export * from './prisma.service';
-export * from '@prisma/client';
+export * from './generated/client';
 export * from './qr-engine';

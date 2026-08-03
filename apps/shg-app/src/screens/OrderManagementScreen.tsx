@@ -75,7 +75,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
   ].sort((a, b) => b._sortKey.localeCompare(a._sortKey));
 
   const getStatusStyle = (status: string) => {
-    switch(status) {
+    switch (status) {
       case 'Picked':
         return { bg: 'bg-[#EEF4FF]', text: 'text-[#2D73D5]' };
       case 'Dropped':
@@ -96,14 +96,14 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
     <View className="flex-1 bg-white">
       <SafeAreaView className="flex-1">
         {/* Custom Navbar */}
-        <SharedHeader 
-          title={t("title_order_management")} 
-          subtitle={t("subtitle_order_management")} 
-          navigation={navigation} 
+        <SharedHeader
+          title={t("title_order_management")}
+          subtitle={t("subtitle_order_management")}
+          navigation={navigation}
         />
 
-        <ScrollView 
-          contentContainerStyle={{ paddingBottom: 90 }} 
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 90 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -112,48 +112,18 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
 
           {/* Dashboard Gradient Cards */}
           <View className="px-4 mt-4 flex-row flex-wrap justify-between">
-            
-            {/* New Orders */}
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('IncomingOrders')}
-              className="w-full rounded-2xl mb-2.5 shadow-sm"
-              style={{ 
-                shadowColor: '#004797', 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 6, 
-                elevation: 2 
-              }}
-            >
-              <View className="rounded-2xl overflow-hidden flex-1">
-                <LinearGradient colors={['#004797', '#0071D5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="py-3.5 px-4 flex-1 relative">
 
-                  {/* Content */}
-                  <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>Incoming Orders</Text>
-                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
-                      <Feather name="package" size={14} color="#FFFFFF" />
-                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
-                    </View>
-                  </View>
-                  <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{(incomingOrders?.length || 0) + (incomingReturnOrders?.length || 0)}</Text>
-                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>New orders received and awaiting review</Text>
-                  </View>
-                </LinearGradient>
-              </View>
-            </TouchableOpacity>
 
             {/* Accepted */}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate('AcceptedOrders')}
               className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
-              style={{ 
-                shadowColor: '#3F1E9A', 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 6, 
-                elevation: 2 
+              style={{
+                shadowColor: '#3F1E9A',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 2
               }}
             >
               <View className="rounded-2xl overflow-hidden flex-1">
@@ -176,15 +146,15 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* Return Orders */}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate('ReturnedOrders' as never)}
               className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
-              style={{ 
-                shadowColor: '#D34800', 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 6, 
-                elevation: 2 
+              style={{
+                shadowColor: '#D34800',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 2
               }}
             >
               <View className="rounded-2xl overflow-hidden flex-1">
@@ -207,15 +177,15 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* Completed */}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate('CompletedOrders')}
               className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
-              style={{ 
-                shadowColor: '#005A12', 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 6, 
-                elevation: 2 
+              style={{
+                shadowColor: '#005A12',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 2
               }}
             >
               <View className="rounded-2xl overflow-hidden flex-1">
@@ -250,7 +220,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
           {/* Glassy Recent Activity List */}
           <View className="px-4">
             {recentActivities.length === 0 ? (
-              <View 
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-[#F8FAFC]/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -307,10 +277,10 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                               <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{activity.route.split(' > ')[1]}</Text>
                             </View>
                           </View>
-                          
+
                           {/* View Address Button */}
-                          <TouchableOpacity 
-                            onPress={() => setSelectedAddressOrder(activity.originalOrder)} 
+                          <TouchableOpacity
+                            onPress={() => setSelectedAddressOrder(activity.originalOrder)}
                             activeOpacity={0.7}
                             className="mt-1.5 mb-3 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
                           >

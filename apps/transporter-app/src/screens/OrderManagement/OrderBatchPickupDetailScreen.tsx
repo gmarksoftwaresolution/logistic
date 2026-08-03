@@ -1479,9 +1479,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         message={failureMessage}
         onClose={() => setShowFailureDialog(false)}
       />
-      {canConfirm && (
+      {(canConfirm && type === 'pickup') && (
         <FloatingScannerButton
-          module={type === 'pickup' ? 'PICKUP' : 'DROP'}
+          module="PICKUP"
           orderIds={Array.from(new Set(orderParcels.map((p: any) => p.orderId)))}
           navigation={navigation}
         />
