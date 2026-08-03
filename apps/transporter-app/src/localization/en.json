@@ -276,6 +276,9 @@
     "no_history_records": "No history records",
     "history_empty_subtitle_with_filters": "Try adjusting your filters, search terms or selected date",
     "history_empty_subtitle_default": "Your completed activities will appear here",
+    "orderMgmt": "Orders",
+    "liveMap": "Live Map",
+    "history": "History",
     "order_id": "Order ID",
     "items": "items",
     "filter_by_date": "Filter by Date",
@@ -513,8 +516,9 @@
   },
   "tabs": {
     "home": "Home",
-    "orderMgmt": "Order Management",
-    "history": "Order History",
+    "orderMgmt": "Orders",
+    "liveMap": "Live Map",
+    "history": "History",
     "tasks": "Tasks",
     "earnings": "Earnings",
     "profile": "Profile"

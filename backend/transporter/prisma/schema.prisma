@@ -644,14 +644,11 @@ model WarehouseInventory {
   product     Product   @relation(fields: [productId], references: [id])
   quantity    Int?
   qcStatus    String?   @map("qc_status")
-  orderId     String?   @map("order_id")
-  status      String?   @default("STORED")
-  dispatchedAt DateTime? @map("dispatched_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
+  @@unique([warehouseId, productId])
   @@index([warehouseId])
   @@index([productId])
-  @@index([orderId])
   @@map("warehouse_inventory")
 }
 

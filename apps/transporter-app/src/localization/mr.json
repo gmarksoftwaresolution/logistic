@@ -513,8 +513,9 @@
   },
   "tabs": {
     "home": "होम",
-    "orderMgmt": "ऑर्डर व्यवस्थापन",
-    "history": "ऑर्डर इतिहास",
+    "orderMgmt": "ऑर्डर",
+    "liveMap": "लाइव्ह मॅप",
+    "history": "इतिहास",
     "tasks": "कार्ये",
     "earnings": "कमाई",
     "profile": "प्रोफाइल"

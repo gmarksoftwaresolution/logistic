@@ -149,5 +149,24 @@ export class OrderController {
   async bulkAccept(@Request() req: any, @Body('orders') orders: { id: number; type: 'pickup' | 'drop' }[]) {
     return this.orderService.bulkAccept(orders, req.user.id);
   }
+
+  @Post('location/update')
+  @ApiOperation({ summary: 'Update live GPS coordinates for the logged-in transporter' })
+  async updateLiveLocation(
+    @Request() req: any,
+    @Body('latitude') latitude: number,
+    @Body('longitude') longitude: number,
+    @Body('heading') heading?: number,
+    @Body('speed') speed?: number,
+  ) {
+    return this.orderService.updateLiveLocation(req.user.id, latitude, longitude, heading, speed);
+  }
+
+  @Get('location/live')
+  @ApiOperation({ summary: 'Get current live location of the transporter' })
+  async getLiveLocation(@Request() req: any, @Query('transporterId') queryTransporterId?: number) {
+    const targetId = queryTransporterId ? Number(queryTransporterId) : req.user.id;
+    return this.orderService.getLiveLocation(targetId);
+  }
 }
 

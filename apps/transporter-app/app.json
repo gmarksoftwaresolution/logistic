@@ -23,7 +23,12 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.gmarksoft.transporter",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAjwtqaMd6kTFSnik3kYd0uYm2r0LIhdJs"
+        }
+      }
     },
     "web": {
       "favicon": "./src/assets/app_icon.png"

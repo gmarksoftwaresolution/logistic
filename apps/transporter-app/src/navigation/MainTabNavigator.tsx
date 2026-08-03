@@ -14,6 +14,8 @@ import { useOrderManagement } from '../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { Fonts } from '../constants/Colors';
 
+import LiveRouteMapScreen from '../screens/LiveRouteMapScreen';
+
 const Tab = createBottomTabNavigator();
 
 const MainTabNavigator = () => {
@@ -40,6 +42,13 @@ const MainTabNavigator = () => {
           component={OrderManagementStackNavigator}
           options={{
             tabBarLabel: t('tabs.orderMgmt')
+          }}
+        />
+        <Tab.Screen
+          name="Live Map"
+          component={LiveRouteMapScreen}
+          options={{
+            tabBarLabel: t('tabs.liveMap', { defaultValue: 'Live Map' })
           }}
         />
         <Tab.Screen

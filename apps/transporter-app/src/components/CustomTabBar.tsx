@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Animated, DeviceEventEmitter } from 'react-native';
-import { LayoutDashboard, Briefcase, Truck, History, LucideIcon } from 'lucide-react-native';
+import { LayoutDashboard, Briefcase, Truck, History, MapPin, LucideIcon } from 'lucide-react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../constants/Colors';
@@ -108,8 +108,8 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
             
             switch (route.name) {
               case 'Home': Icon = LayoutDashboard; labelKey = 'tabs.home'; break;
-
               case 'Order Management': Icon = Truck; labelKey = 'tabs.orderMgmt'; break;
+              case 'Live Map': Icon = MapPin; labelKey = 'tabs.liveMap'; break;
               case 'Order History': Icon = History; labelKey = 'tabs.history'; break;
               default: Icon = LayoutDashboard; labelKey = route.name;
             }
@@ -141,7 +141,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
                         fontWeight: isFocused ? '700' : '600'
                       }
                     ]}>
-                      {t(labelKey)}
+                      {t(labelKey, { defaultValue: route.name })}
                     </Text>
                   </WalkthroughElement>
                 ) : route.name === 'Order History' ? (
@@ -164,7 +164,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
                         fontWeight: isFocused ? '700' : '600'
                       }
                     ]}>
-                      {t(labelKey)}
+                      {t(labelKey, { defaultValue: route.name })}
                     </Text>
                   </WalkthroughElement>
                 ) : (
@@ -187,7 +187,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
                         fontWeight: isFocused ? '700' : '600'
                       }
                     ]}>
-                      {t(labelKey)}
+                      {t(labelKey, { defaultValue: route.name })}
                     </Text>
                   </>
                 )}
@@ -252,9 +252,7 @@ const styles = StyleSheet.create({
   labelText: {
     fontFamily: Fonts.bold,
     fontSize: moderateScale(11),
-    marginTop: verticalScale(2),
-    letterSpacing: moderateScale(0.2),
-    textAlign: 'center',
+    marginTop: verticalScale(3),
   },
 });
 
