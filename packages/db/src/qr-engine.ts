@@ -25,7 +25,11 @@ export type ParcelStatus =
   | 'DROP_TRANSPORTER_ASSIGNED'
   | 'OUT_FOR_DELIVERY'
   | 'AT_BUYER_SHG'
-  | 'DELIVERED';
+  | 'DELIVERED'
+  | 'RETURN_PARCEL_AT_SHG'
+  | 'RETURN_PARCEL_AT_TRANSPORTER'
+  | 'RETURN_IN_TRANSIT_TO_HUB'
+  | 'RETURN_PARCEL_AT_HUB';
 
 /**
  * Normalizes legacy status names to the standard 11-status state machine.
@@ -43,6 +47,10 @@ export function normalizeStatus(status: string): ParcelStatus {
     'PARCEL_AT_DROP_SHG': 'AT_BUYER_SHG',
     'PARCEL_WITH_DROP_SHG': 'AT_BUYER_SHG',
     'DELIVERED': 'DELIVERED',
+    'RETURN_PARCEL_AT_SHG': 'PARCEL_PICKED',
+    'RETURN_PARCEL_AT_TRANSPORTER': 'TRANSPORTER_ACCEPTED',
+    'RETURN_IN_TRANSIT_TO_HUB': 'IN_TRANSIT',
+    'RETURN_PARCEL_AT_HUB': 'AT_GMU',
   };
   return map[status] || (status as ParcelStatus);
 }
@@ -109,6 +117,63 @@ export function determineTransition(
 ): TransitionResult {
   const currentStatus = normalizeStatus(parcel.parcelStatus);
   const finalRole = userRole.toUpperCase();
+
+  // --- BUYER RETURN FLOW TRANSITIONS ---
+  if (order.returnType === 'BUYER_RETURN') {
+    if (finalRole === 'SHG') {
+      if (currentStatus === 'DELIVERED') {
+        return {
+          nextParcelStatus: 'RETURN_PARCEL_AT_SHG',
+          nextHolderId: userId,
+          nextHolderType: 'SHG',
+          action: 'SHG_RETURN_PICKUP',
+          message: 'Parcel returned by Buyer and picked up by SHG',
+        };
+      }
+      if (currentStatus === 'RETURN_PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED') {
+        const transporterId = order.returnTransporterId || order.pickupTransporterId || order.dropTransporterId;
+        const isAccepted = order.pickupTransporterStatus === 'ACCEPTED' || order.dropTransporterStatus === 'ACCEPTED';
+        if (!transporterId || !isAccepted) {
+          throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
+        }
+        const nextHolder = String(transporterId);
+        return {
+          nextParcelStatus: 'RETURN_PARCEL_AT_TRANSPORTER',
+          nextHolderId: nextHolder,
+          nextHolderType: 'TRANSPORTER',
+          action: 'SHG_TRANSPORTER_RETURN_DELIVER',
+          message: 'Parcel handed over to Transporter by SHG for return',
+        };
+      }
+    }
+
+    if (finalRole === 'TRANSPORTER') {
+      if (currentStatus === 'RETURN_PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED') {
+        throw new QrValidationError('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
+      }
+      if (currentStatus === 'RETURN_PARCEL_AT_TRANSPORTER' || currentStatus === 'TRANSPORTER_ACCEPTED') {
+        return {
+          nextParcelStatus: 'RETURN_IN_TRANSIT_TO_HUB',
+          nextHolderId: userId,
+          nextHolderType: 'TRANSPORTER',
+          action: 'TRANSPORTER_RETURN_PICKUP',
+          message: 'Parcel loaded by Transporter from SHG for return',
+        };
+      }
+    }
+
+    if (finalRole === 'GMU' || finalRole === 'ADMIN' || finalRole === 'SUPER_ADMIN') {
+      if (currentStatus === 'RETURN_IN_TRANSIT_TO_HUB' || currentStatus === 'IN_TRANSIT') {
+        return {
+          nextParcelStatus: 'RETURN_PARCEL_AT_HUB',
+          nextHolderId: 'HUB',
+          nextHolderType: 'WAREHOUSE',
+          action: 'WAREHOUSE_RETURN_INTAKE',
+          message: 'Return parcel intake complete at GMU Hub',
+        };
+      }
+    }
+  }
 
   // Validate state machine transitions based on current status and user role
   if (finalRole === 'SHG') {
@@ -608,7 +673,7 @@ export class QrVerificationEngine {
 
     // Find the order for the parcel (match sessionType / parcel flowType phase first)
     const targetPhase = parcel.flowType || sessionType;
-    let order = await this.prisma.order.findFirst({
+    const dropOrders = await this.prisma.order.findMany({
       where: {
         OR: [
           { id: parcel.orderId },
@@ -617,8 +682,12 @@ export class QrVerificationEngine {
         phase: targetPhase,
       }
     });
+    let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+                 dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+                 dropOrders[0];
+
     if (!order) {
-      order = await this.prisma.order.findFirst({
+      const pickupOrders = await this.prisma.order.findMany({
         where: {
           OR: [
             { id: parcel.orderId },
@@ -626,6 +695,9 @@ export class QrVerificationEngine {
           ]
         }
       });
+      order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+              pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+              pickupOrders[0];
     }
 
     if (!order) {
@@ -782,7 +854,7 @@ export class QrVerificationEngine {
       for (const item of session.items) {
         const parcel = item.parcel;
         
-        let order = await tx.order.findFirst({
+        const dropOrders = await tx.order.findMany({
           where: {
             OR: [
               { id: parcel.orderId },
@@ -791,8 +863,12 @@ export class QrVerificationEngine {
             phase: sessionType,
           }
         });
+        let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+                     dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+                     dropOrders[0];
+
         if (!order) {
-          order = await tx.order.findFirst({
+          const pickupOrders = await tx.order.findMany({
             where: {
               OR: [
                 { id: parcel.orderId },
@@ -800,6 +876,9 @@ export class QrVerificationEngine {
               ]
             }
           });
+          order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+                  pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+                  pickupOrders[0];
         }
 
         if (!order) {
@@ -1000,7 +1079,7 @@ export class QrVerificationEngine {
       throw new QrValidationError('Session cannot be confirmed');
     }
 
-    let order = await this.prisma.order.findFirst({
+    const dropOrders = await this.prisma.order.findMany({
       where: {
         OR: [
           { id: orderId },
@@ -1009,8 +1088,12 @@ export class QrVerificationEngine {
         phase: sessionType,
       }
     });
+    let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+                 dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+                 dropOrders[0];
+
     if (!order) {
-      order = await this.prisma.order.findFirst({
+      const pickupOrders = await this.prisma.order.findMany({
         where: {
           OR: [
             { id: orderId },
@@ -1018,6 +1101,9 @@ export class QrVerificationEngine {
           ]
         }
       });
+      order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
+              pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
+              pickupOrders[0];
     }
 
     if (!order) {
@@ -1158,6 +1244,12 @@ export class QrVerificationEngine {
               where: { masterOrderId: masterOrder.id },
               data: { status: 'COMPLETED', pickupTime: new Date() }
             });
+            if (order.returnType === 'BUYER_RETURN') {
+              await tx.dropOrder.updateMany({
+                where: { masterOrderId: masterOrder.id, dropOrderNumber: { startsWith: 'RET-' } },
+                data: { status: 'RETURN_PICKED_UP' }
+              });
+            }
           }
 
           if (normalizedMainStatus === 'AT_BUYER_SHG') {

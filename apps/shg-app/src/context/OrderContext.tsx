@@ -63,6 +63,7 @@ export interface Order {
   recommendedVehicle?: VehicleInfo | null;
   recommendedCapacity?: number | null;
   otherSuitableVehicles?: VehicleInfo[];
+  barcode?: string;
   isPickupRedirected?: boolean;
   isDropRedirected?: boolean;
   isRedirected?: boolean;
@@ -191,6 +192,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
                 (dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') ? 'PickedUp' : 'COMPLETED'
               ),
       isReturn: isReturnFlag,
+      barcode: dbOrder.barcode || dbOrder.masterOrder?.barcode || '',
       image: items[0]?.product?.image || '',
       currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
       remainingQty: qty,
@@ -420,7 +422,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return bNum - aNum;
       });
       const uniqueIncomingMap = new Map<string, Order>();
-      sortedIncoming.forEach(o => uniqueIncomingMap.set(o.id, o));
+      sortedIncoming.forEach(o => {
+        if (!uniqueIncomingMap.has(o.orderId)) {
+          uniqueIncomingMap.set(o.orderId, o);
+        }
+      });
       setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
       const sortedAccepted = finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').sort((a, b) => {
@@ -429,7 +435,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return bNum - aNum;
       });
       const uniqueAcceptedMap = new Map<string, Order>();
-      sortedAccepted.forEach(o => uniqueAcceptedMap.set(o.id, o));
+      sortedAccepted.forEach(o => {
+        if (!uniqueAcceptedMap.has(o.orderId)) {
+          uniqueAcceptedMap.set(o.orderId, o);
+        }
+      });
       setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
 
       const mappedReturns = rawReturns.map((o: any) => {
@@ -659,9 +669,16 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const receiveOrder = async (order: Order, code?: string, activeType?: string) => {
+    if (order.id.startsWith('RTO-') && order.status === 'COMPLETED') {
+      const updatedOrder = { ...order, isRejectedDelivery: true };
+      setReturnedOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+      applyHighlight(order.id);
+      return;
+    }
+
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      if (order.isReturn) {
+      if (order.isReturn && order.status === 'Accepted') {
         const endpoint = `/orders/returns/pickup/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
@@ -671,7 +688,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (order.legType === 'pickup') {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
-        const paramLegType = activeType === 'transporter' ? 'handover' : 'pickup';
+        const paramLegType = (activeType === 'transporter' || order.isReturn) ? 'handover' : 'pickup';
         await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });
         await refreshOrdersList();
       } else {

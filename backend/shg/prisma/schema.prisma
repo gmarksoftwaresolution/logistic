@@ -116,8 +116,7 @@ model Order {
   rescheduledAt           DateTime?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
-  buyer                   Buyer             @relation(fields: [buyerId], references: [id])
-  seller                  Seller            @relation(fields: [sellerId], references: [id])
+
   assignments             OrderAssignment[]
 
   @@index([orderId])

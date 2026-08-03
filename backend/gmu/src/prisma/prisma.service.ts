@@ -39,6 +39,72 @@ async function mapOrderToLegacy(prisma: any, order: any) {
   // 2. Fetch tracking events from public.pickup_tracking / public.drop_tracking
   const getTracking = async () => {
     try {
+      if (order.returnType === 'BUYER_RETURN') {
+        const trackingList: any[] = [];
+        trackingList.push({
+          status: 'RETURN_SHG_PENDING',
+          remarks: 'Return request initiated by buyer',
+          updatedAt: order.createdAt
+        });
+
+        const assignments = await prisma.orderAssignment.findMany({
+          where: { orderId: order.id, role: 'RETURN' }
+        });
+
+        const shgAssignment = assignments.find((a: any) => a.assigneeType === 'SHG');
+        const transporterAssignment = assignments.find((a: any) => a.assigneeType === 'TRANSPORTER');
+
+        if (shgAssignment && ['ACCEPTED', 'PICKED'].includes(shgAssignment.status)) {
+          trackingList.push({
+            status: 'RETURN_SHG_ACCEPTED',
+            remarks: 'Return request accepted by SHG',
+            updatedAt: shgAssignment.updatedAt
+          });
+        }
+
+        if (shgAssignment && shgAssignment.status === 'PICKED') {
+          trackingList.push({
+            status: 'RETURN_PARCEL_AT_SHG',
+            remarks: 'Return parcel picked up by SHG',
+            updatedAt: shgAssignment.updatedAt
+          });
+        }
+
+        if (transporterAssignment && ['ACCEPTED', 'PICKED'].includes(transporterAssignment.status)) {
+          trackingList.push({
+            status: 'RETURN_TRANSPORTER_ACCEPTED',
+            remarks: 'Return request accepted by Transporter',
+            updatedAt: transporterAssignment.updatedAt
+          });
+        }
+
+        if (order.mainStatus === 'RETURN_IN_TRANSIT_TO_HUB' || ['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+          trackingList.push({
+            status: 'RETURN_IN_TRANSIT_TO_HUB',
+            remarks: 'Return parcel in transit to Hub',
+            updatedAt: order.updatedAt
+          });
+        }
+
+        if (order.mainStatus === 'BUYER_RETURN_COMPLETED' || ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+          trackingList.push({
+            status: 'BUYER_RETURN_COMPLETED',
+            remarks: 'Return parcel received at GMU Hub',
+            updatedAt: order.updatedAt
+          });
+        }
+
+        if (['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+          trackingList.push({
+            status: 'INVENTORY_BUYER_RETURN',
+            remarks: 'Return parcel stored at GMU Hub',
+            updatedAt: order.storedAt || order.updatedAt
+          });
+        }
+
+        return trackingList;
+      }
+
       if (order.phase === 'DROP') {
         const rawDropTracking: any[] = await prisma.$queryRawUnsafe(`
           SELECT 

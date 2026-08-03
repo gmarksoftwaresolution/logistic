@@ -333,6 +333,86 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
   const [openUpwards, setOpenUpwards] = useState(false);
 
+  // Section-by-section approval checklist state
+  const [approvedSections, setApprovedSections] = useState<Record<string, boolean>>({});
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+
+  useEffect(() => {
+    if (!isViewModalOpen) {
+      setApprovedSections({});
+      setShowValidationErrors(false);
+    }
+  }, [isViewModalOpen]);
+
+  const areAllSectionsApproved = useMemo(() => {
+    if (!selectedProfile) return false;
+    const required = ['personal', 'vehicle', 'license', 'bank', 'route', 'documents'];
+    if (selectedProfile.type === 'Milk Van') {
+      required.push('association');
+    }
+    return required.every((key) => approvedSections[key]);
+  }, [selectedProfile, approvedSections]);
+
+  const getCardBorderClass = (sectionId: string, baseBorder = 'border-emerald-500/20') => {
+    const isPending = selectedProfile?.status === 'PENDING_APPROVAL';
+    if (isPending && showValidationErrors && !approvedSections[sectionId]) {
+      return `border border-red-500 ring-4 ring-red-500/20 shadow-lg shadow-red-100/50 transition-all duration-300`;
+    }
+    return `border ${baseBorder} transition-all duration-300`;
+  };
+
+  const handleFinalApproveClick = () => {
+    if (!selectedProfile) return;
+    if (!areAllSectionsApproved) {
+      setShowValidationErrors(true);
+      setErrorMsg('Please review and verify all registration sections highlighted in red.');
+
+      // Find first unapproved section card and scroll to it
+      const required = ['personal', 'vehicle', 'license', 'bank', 'route', 'documents'];
+      if (selectedProfile.type === 'Milk Van') {
+        required.push('association');
+      }
+      const firstUnapproved = required.find((key) => !approvedSections[key]);
+      if (firstUnapproved) {
+        const element = document.getElementById(`section-card-${firstUnapproved}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+
+      setTimeout(() => {
+        setShowValidationErrors(false);
+      }, 2000);
+      return;
+    }
+    setErrorMsg('');
+    setModalAction({ type: 'approve', id: selectedProfile.id });
+  };
+
+  const SectionApprovalButton = ({ sectionId }: { sectionId: string }) => {
+    const isApproved = approvedSections[sectionId];
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          setApprovedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+        }}
+        className="flex items-center gap-2.5 cursor-pointer select-none group"
+      >
+        <span className="text-xs font-black text-slate-700 group-hover:text-[#073318] transition-colors uppercase tracking-wider">
+          Verify Section
+        </span>
+        <div className={`w-5.5 h-5.5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+          isApproved
+            ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100'
+            : 'bg-white border-slate-400 group-hover:border-slate-500'
+        }`}>
+          {isApproved && <Check className="h-3.5 w-3.5 stroke-[3.5]" />}
+        </div>
+      </div>
+    );
+  };
+
   // Document Viewer State
   const [viewingDoc, setViewingDoc] = useState<{ 
     title: string; 
@@ -879,7 +959,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
               {(selectedProfile.status === 'PENDING_APPROVAL' || selectedProfile.status === 'REJECTED') && (
                 <>
                   <button 
-                    onClick={() => setModalAction({ type: 'approve', id: selectedProfile.id })}
+                    onClick={handleFinalApproveClick}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                   >
                     Approve Request
@@ -917,7 +997,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
               {/* Left Section (Summary, Vehicle, Routes) */}
               <div className="lg:col-span-2 space-y-4">
                 {/* Transporter Summary */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left">
+                <div id="section-card-personal" className={`${getCardBorderClass('personal')} bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left`}>
                   <div className="flex items-center justify-between border-b border-[#073318]/10 pb-2">
                     <div className="flex items-center gap-2">
                       <div className="bg-[#073318] p-1.5 rounded-lg text-white">
@@ -985,10 +1065,16 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                       </div>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="personal" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Vehicle & Transportation Details */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left">
+                <div id="section-card-vehicle" className={`${getCardBorderClass('vehicle')} bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left`}>
                   <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-2">
                     <div className="bg-[#073318] p-1.5 rounded-lg text-white">
                       <Truck className="h-4 w-4" />
@@ -1014,10 +1100,16 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                       <p className="font-bold text-slate-800 font-mono">{selectedProfile.vehicleNumber}</p>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="vehicle" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Driving Details */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left">
+                <div id="section-card-license" className={`${getCardBorderClass('license')} bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left`}>
                   <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-2">
                     <div className="bg-[#073318] p-1.5 rounded-lg text-white">
                       <FileText className="h-4 w-4" />
@@ -1035,11 +1127,17 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                       <p className="font-bold text-slate-800 font-mono">{selectedProfile.licenseExpiry}</p>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="license" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Milk Sangathan Association details */}
                 {selectedProfile.type === 'Milk Van' && (
-                  <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left">
+                  <div id="section-card-association" className={`${getCardBorderClass('association')} bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3 shadow-sm text-left`}>
                     <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-2">
                       <div className="bg-[#073318] p-1.5 rounded-lg text-white">
                         <Building2 className="h-4 w-4" />
@@ -1057,6 +1155,12 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                         <p className="font-bold text-slate-855">{selectedProfile.collectionCenterName}</p>
                       </div>
                     </div>
+
+                    {selectedProfile.status === 'PENDING_APPROVAL' && (
+                      <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                        <SectionApprovalButton sectionId="association" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1064,7 +1168,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
               {/* Right Section (Bank, Route & Registration timeline) */}
               <div className="space-y-4">
                 {/* Bank Card */}
-                <div className="bg-white border border-slate-200 rounded-3xl p-4.5 shadow-sm text-left space-y-3">
+                <div id="section-card-bank" className={`${getCardBorderClass('bank', 'border-slate-200')} bg-white rounded-3xl p-4.5 shadow-sm text-left space-y-3`}>
                   <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-[#073318]" />
                     Settlement Bank Details
@@ -1086,49 +1190,57 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                       <span className="text-slate-400">Branch Name:</span>
                       <span className="font-bold text-slate-700">{selectedProfile.branchName}</span>
                     </div>
-                  <div className="flex justify-between">
+                    <div className="flex justify-between">
                       <span className="text-slate-400">UPI ID:</span>
                       <span className="font-bold text-slate-700 font-mono">{selectedProfile.upiId}</span>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-slate-100">
+                      <SectionApprovalButton sectionId="bank" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Route Assignment details */}
-                <div className="bg-[#073318] rounded-3xl p-4.5 text-white text-left space-y-3.5 shadow-lg">
-                  <h4 className="text-sm font-extrabold tracking-widest uppercase flex items-center gap-2">
-                    <Navigation className="h-4.5 w-4.5 text-[#B2D534]" />
-                    Route Details
-                  </h4>
+                <div id="section-card-route" className={`${getCardBorderClass('route', 'border-emerald-500/20')} bg-[#F4F9F6] rounded-3xl p-4.5 space-y-3.5 shadow-lg`}>
+                  <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-2">
+                    <div className="bg-[#073318] p-1.5 rounded-lg text-white">
+                      <Navigation className="h-4.5 w-4.5" />
+                    </div>
+                    <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Route Details</span>
+                  </div>
                   <div className="space-y-2.5 text-xs">
                     
-                    <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
-                      <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1.5">List of Assigned Villages with Pincode</p>
+                    <div className="bg-white p-2.5 rounded-xl border border-[#073318]/10 shadow-sm">
+                      <p className="text-slate-450 font-bold text-[9px] uppercase tracking-wider mb-1.5">List of Assigned Villages with Pincode</p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {selectedProfile.assignedVillages.map((v, idx) => {
                           const pin = selectedProfile.assignedPincodes[idx] || '';
                           return (
-                            <span key={v} className="bg-white/10 px-2 py-0.5 rounded text-[10px] font-bold inline-block border border-white/5">
+                            <span key={v} className="bg-slate-100/80 text-[#073318] px-2 py-0.5 rounded text-[10px] font-bold inline-block border border-slate-200/60 shadow-sm">
                               {v} ({pin})
                             </span>
                           );
                         })}
                       </div>
                     </div>
-                    <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
-                      <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1">Morning Shift Time</p>
-                      <p className="font-bold text-sm text-[#B2D534]">{selectedProfile.morningShift || '06:00 AM - 10:00 AM'}</p>
+                    <div className="bg-white p-2.5 rounded-xl border border-[#073318]/10 shadow-sm">
+                      <p className="text-slate-450 font-bold text-[9px] uppercase tracking-wider mb-1">Morning Shift Time</p>
+                      <p className="font-bold text-sm text-[#073318]">{selectedProfile.morningShift || '06:00 AM - 10:00 AM'}</p>
                     </div>
-                    <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
-                      <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1">Evening Shift Time</p>
-                      <p className="font-bold text-sm text-[#B2D534]">{selectedProfile.eveningShift || '02:00 PM - 06:00 PM'}</p>
+                    <div className="bg-white p-2.5 rounded-xl border border-[#073318]/10 shadow-sm">
+                      <p className="text-slate-450 font-bold text-[9px] uppercase tracking-wider mb-1">Evening Shift Time</p>
+                      <p className="font-bold text-sm text-[#073318]">{selectedProfile.eveningShift || '02:00 PM - 06:00 PM'}</p>
                     </div>
-                    <div className="bg-white/10 p-2.5 rounded-xl border border-white/5">
-                      <p className="text-slate-300 font-semibold text-[9px] uppercase tracking-wider mb-1">Working Days Available</p>
+                    <div className="bg-white p-2.5 rounded-xl border border-[#073318]/10 shadow-sm">
+                      <p className="text-slate-450 font-bold text-[9px] uppercase tracking-wider mb-1">Working Days Available</p>
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => {
                           const isW = selectedProfile.workingDays.includes(d);
                           return (
-                            <span key={d} className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isW ? 'bg-[#B2D534] text-[#073318]' : 'bg-white/5 text-white/40'}`}>
+                            <span key={d} className={`px-2 py-0.5 rounded text-[9px] font-bold ${isW ? 'bg-[#073318] text-white shadow-sm' : 'bg-slate-100 text-slate-400'}`}>
                               {d}
                             </span>
                           );
@@ -1136,6 +1248,12 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                       </div>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="route" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Registration History Timeline Card */}
@@ -1174,7 +1292,7 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
             </div>
 
             {/* Bottom Documents Verification Section */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 text-left">
+            <div id="section-card-documents" className={`${getCardBorderClass('documents', 'border-slate-200')} bg-white rounded-3xl p-6 space-y-4 text-left`}>
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <div className="bg-slate-100 p-1.5 rounded-lg text-slate-700">
                   <FileText className="h-4 w-4" />
@@ -1242,6 +1360,12 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                   </span>
                 </div>
               </div>
+
+              {selectedProfile.status === 'PENDING_APPROVAL' && (
+                <div className="flex justify-center pt-4 mt-3 border-t border-slate-100">
+                  <SectionApprovalButton sectionId="documents" />
+                </div>
+              )}
             </div>
           </div>
         )}

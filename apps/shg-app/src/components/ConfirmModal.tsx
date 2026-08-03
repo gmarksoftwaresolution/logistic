@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, TouchableOpacity, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ActivityIndicator, StyleSheet, TextInput } from 'react-native';
 import { LanguageContext } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import WalkthroughElement from './WalkthroughElement';
@@ -17,6 +17,10 @@ interface ConfirmModalProps {
   isLoading?: boolean;
   loadingText?: string;
   isInfoOnly?: boolean;
+  showInput?: boolean;
+  inputValue?: string;
+  onInputChange?: (val: string) => void;
+  inputPlaceholder?: string;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -27,6 +31,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   cancelText,
   onConfirm,
   onCancel,
+  showInput = false,
+  inputValue = '',
+  onInputChange,
+  inputPlaceholder = 'Scan or enter code',
   isDestructive = false,
   isLoading = false,
   loadingText,
@@ -77,6 +85,26 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <Text className="text-[14px] text-[#4B5563] font-medium leading-5 mb-6">
           {message}
         </Text>
+
+        {showInput && (
+          <TextInput
+            value={inputValue}
+            onChangeText={onInputChange}
+            placeholder={inputPlaceholder}
+            autoFocus
+            autoCapitalize="none"
+            style={{
+              borderWidth: 1,
+              borderColor: '#CBD5E1',
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 12,
+              fontSize: 14,
+              color: '#334155',
+              marginBottom: 16,
+            }}
+          />
+        )}
 
           {/* Actions */}
           <View className="flex-row items-center justify-end gap-3">
