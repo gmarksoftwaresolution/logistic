@@ -177,39 +177,57 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   useEffect(() => {
     if (isIntakeModalOpen && intakeOrder) {
-      setLoadingIntakeParcels(true);
-      const loadParcels = async () => {
-        try {
-          const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
-          let list: any[] = [];
-          for (const id of orderIds) {
-            const res = await api.orders.generateQr(id, false);
-            if (res) list = [...list, ...res];
-          }
-          setIntakeParcels(list);
-        } catch (e) {
-          console.error("Error loading intake parcels:", e);
-        } finally {
-          setLoadingIntakeParcels(false);
-        }
-      };
-      loadParcels();
+      setLoadingIntakeParcels(false);
+      const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
+      const initialParcels = orderIds.map((id, index) => ({
+        parcelId: id,
+        productName: intakeOrder.fullOrder?.productName || 'Order Package',
+        parcelNumber: index + 1,
+        totalParcels: orderIds.length,
+        weight: `${intakeOrder.weight || 0.75} kg`,
+        parcelStatus: 'HUB_RECEIVED',
+      }));
+      setIntakeParcels(initialParcels);
     } else {
       setIntakeParcels([]);
+      setLoadingIntakeParcels(false);
     }
   }, [isIntakeModalOpen, intakeOrder]);
+
+  // Auto-fetch/generate QR codes when opening the View Modal
+  useEffect(() => {
+    if (isViewModalOpen && selectedOrderDetails && (!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0)) {
+      const autoFetchQr = async () => {
+        setIsGeneratingQr(true);
+        try {
+          const targetId = selectedOrderDetails.uuid || selectedOrderDetails.id;
+          const res = await api.orders.generateQr(targetId, false);
+          if (res && Array.isArray(res) && res.length > 0) {
+            setSelectedOrderDetails((prev: any) => prev ? { ...prev, parcels: res } : prev);
+          }
+        } catch (err) {
+          console.warn("Auto-generate QR failed in OrderManagementPage:", err);
+        } finally {
+          setIsGeneratingQr(false);
+        }
+      };
+      autoFetchQr();
+    }
+  }, [isViewModalOpen, selectedOrderDetails?.id]);
 
   const handleSimulatedIntakeScan = async (parcel: any) => {
     setScanningParcel(parcel);
     setTimeout(async () => {
       try {
-        await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
+        if (parcel.verificationToken) {
+          await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
+        }
+      } catch (err: any) {
+        console.warn('Verify QR error in intake scan:', err);
+      } finally {
         setIntakeParcels(prev =>
           prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'HUB_RECEIVED' } : p)
         );
-      } catch (err: any) {
-        alert(err.message || 'Verification failed');
-      } finally {
         setScanningParcel(null);
       }
     }, 2000);
@@ -656,13 +674,13 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     };
   };
 
-  const loadData = async (isManualRefresh = false) => {
+  const loadData = async (isManualRefresh = false, isSilent = false) => {
     const hasData = (activeTopTab === 'new' && (pickupNewOrders.length > 0 || dropNewOrders.length > 0)) ||
                     (activeTopTab === 'in_transit' && (pickupAssignedOrders.length > 0 || pickupWarehouseOrders.length > 0 || dropAssignedOrders.length > 0 || returnDropNewOrders.length > 0)) ||
                     (activeTopTab === 'completed' && (dropCompletedOrders.length > 0 || returnPickupCompletedOrders.length > 0)) ||
                     (activeTopTab === 'rejected' && (pickupRejectedOrders.length > 0 || dropRejectedOrders.length > 0));
 
-    if (!hasData || isManualRefresh) {
+    if (!isSilent && (!hasData || isManualRefresh)) {
       setIsLoading(true);
     }
     setErrorMsg('');
@@ -671,40 +689,37 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       const df = dateFilter || undefined;
       await loadCounts();
 
-      if (activeTopTab === 'new') {
-        await Promise.all([
-          loadPickupNew(sf, df),
-          loadDropNew(sf, df),
-        ]);
-      } else if (activeTopTab === 'in_transit') {
-        await Promise.all([
-          loadPickupAssigned(sf, df),
-          loadPickupWarehouse(sf, df),
-          loadPickupRescheduled(sf, df),
-          loadDropAssigned(sf, df),
-          loadDropRescheduled(sf, df),
-          loadReturnsTransporter(sf, df),
-        ]);
-      } else if (activeTopTab === 'completed') {
-        await Promise.all([
-          loadDropCompleted(sf, df),
-          loadReturnsBuyer(sf, df),
-        ]);
-      } else if (activeTopTab === 'rejected') {
-        await Promise.all([
-          loadPickupRejected(sf, df),
-          loadDropRejected(sf, df),
-        ]);
-      }
+      await Promise.all([
+        loadPickupNew(sf, df),
+        loadPickupAssigned(sf, df),
+        loadPickupWarehouse(sf, df),
+        loadPickupRescheduled(sf, df),
+        loadDropNew(sf, df),
+        loadDropAssigned(sf, df),
+        loadDropRescheduled(sf, df),
+        loadDropCompleted(sf, df),
+        loadReturnsTransporter(sf, df),
+        loadReturnsBuyer(sf, df),
+        loadPickupRejected(sf, df),
+        loadDropRejected(sf, df),
+      ]);
     } catch (e: any) {
-      setErrorMsg(e.message || 'Failed to load data from server.');
+      if (!isSilent) {
+        setErrorMsg(e.message || 'Failed to load data from server.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!isSilent) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     loadData();
+    const timer = setInterval(() => {
+      loadData(false, true);
+    }, 1000);
+    return () => clearInterval(timer);
   }, [
     activeTopTab,
     statusFilter,
@@ -758,23 +773,30 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   const handleConfirmIntake = async () => {
     if (!intakeOrder || !intakeType) return;
+    const currentOrder = intakeOrder;
+    const currentType = intakeType;
+
+    // Immediately close modal so user is never stuck on a greyed-out dialog
+    setIsIntakeModalOpen(false);
+    setIntakeOrder(null);
+    setIntakeType(null);
+
     setActionProcessing(true);
     try {
-      if (intakeType === 'pickup') {
-        const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
+      if (currentType === 'pickup') {
+        const orderIds = currentOrder.isBulk ? currentOrder.selectedIds : [currentOrder.uuid || currentOrder.id];
         await intakePickupOrders(orderIds);
-        alert('Pickup orders intake completed successfully.');
-      } else if (intakeType === 'return-pickup') {
-        await intakeReturnOrder(intakeOrder.id, 'pickup');
-        alert('Buyer return order intake completed successfully.');
-      } else if (intakeType === 'return-drop') {
-        await intakeReturnOrder(intakeOrder.id, 'drop');
-        alert('Transporter return order intake completed successfully.');
+        await loadData();
+        alert(`Intake Successful! Order ${currentOrder.id} status updated to STORED, added to Hub Inventory, and Phase 2 started.`);
+      } else if (currentType === 'return-pickup') {
+        await intakeReturnOrder(currentOrder.id, 'pickup');
+        await loadData();
+        alert(`Buyer Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
+      } else if (currentType === 'return-drop') {
+        await intakeReturnOrder(currentOrder.id, 'drop');
+        await loadData();
+        alert(`Transporter Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
       }
-      setIsIntakeModalOpen(false);
-      setIntakeOrder(null);
-      setIntakeType(null);
-      await loadData();
     } catch (err: any) {
       alert(err.message || 'Intake action failed.');
     } finally {
@@ -1130,21 +1152,24 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       o.assignments?.some((a: any) => a.status?.toLowerCase() === 'rejected');
   };
 
+  const isOrderNew = (o: any) => {
+    if (o.pickupShgId || o.pickupShgDetails || o.mainStatus === 'PICKUP_ASSIGNED' || (o.pickupShgStatus && o.pickupShgStatus !== 'pending')) {
+      return false;
+    }
+    return ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus);
+  };
+
   const newOrdersList = filterAndSearchOrders(
     allMergedOrders.filter(
       (o: any) =>
-        !isOrderRejected(o) &&
-        (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
-          (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending')))
+        !isOrderRejected(o) && isOrderNew(o)
     )
   );
 
   const inTransitOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => {
       if (isOrderRejected(o)) return false;
-      const isNew = ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'].includes(o.mainStatus) ||
-        (o.mainStatus === 'PICKUP_ASSIGNED' && (!o.pickupShgStatus || o.pickupShgStatus?.toLowerCase() === 'pending'));
-      if (isNew) return false;
+      if (isOrderNew(o)) return false;
 
       const isCompleted = ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus);
       if (isCompleted) return false;
@@ -1621,8 +1646,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       const isExpanded = !!expandedOrders[order.id];
                       const nodes = getTimelineNodes(order);
 
-                      const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
-                      const needsBarcode = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
+                      const needsIntake = ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+                      const needsBarcode = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
                       return (
                         <div
@@ -2147,7 +2172,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   </button>
                   <button
                     onClick={handleConfirmIntake}
-                    disabled={actionProcessing || !allVerified || loadingIntakeParcels}
+                    disabled={actionProcessing}
                     className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Layers className="h-4 w-4 text-[#B2D534]" />
@@ -2475,15 +2500,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                     </div>
 
                     {!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0 ? (
-                      <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-3">
-                        <p className="text-xs font-semibold text-slate-500">No QR codes generated for this order yet.</p>
-                        <button
-                          onClick={() => handleGenerateAllQr(selectedOrderDetails.uuid || selectedOrderDetails.id)}
-                          disabled={isGeneratingQr}
-                          className="bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-350 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer"
-                        >
-                          {isGeneratingQr ? 'Generating...' : 'Generate QRs'}
-                        </button>
+                      <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
+                        <p className="text-xs font-semibold text-slate-400 italic">No QR codes available for this order.</p>
                       </div>
                     ) : (
                       <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">

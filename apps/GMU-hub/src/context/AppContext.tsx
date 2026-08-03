@@ -769,9 +769,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const intakePickupOrders = async (orderIds: string[]) => {
     for (const id of orderIds) {
-      const order = pickupAssignedOrders.find((o) => o.id === id) || 
-                    pickupWarehouseOrders.find((o) => o.id === id) ||
-                    pickupNewOrders.find((o) => o.id === id) as any;
+      const order = pickupAssignedOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id) || 
+                    pickupWarehouseOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id) ||
+                    pickupNewOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id) as any;
       await api.orders.warehouseIntake(order?.uuid || id);
     }
     await loadCounts();
@@ -805,9 +805,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const uuid = order?.uuid || orderId;
     const res = await api.orders.generateQr(uuid, regenerate);
-    await loadCounts();
-    await loadPickupWarehouse();
-    await loadInventoryStored();
+    Promise.all([
+      loadCounts(),
+      loadPickupWarehouse(),
+      loadInventoryStored()
+    ]).catch((err) => console.warn('Background sync after generateQr failed:', err));
     return res;
   };
 

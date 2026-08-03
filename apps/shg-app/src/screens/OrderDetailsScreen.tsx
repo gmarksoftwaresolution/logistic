@@ -564,36 +564,20 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
 
 
-      // Delivery Code Verification Rule (for transporter delivery)
+      // Seller Pickup Parcel Verification Rule (Phase 1 pickup from seller)
+      if (!isDeliveryPhase && (order.legType === 'pickup' || !order.legType)) {
+        if (!allParcelsVerified && !pickupCodeVerified) {
+          Alert.alert("Verification Required", "Please scan and verify the seller parcel QR code before confirming pickup.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // Transporter Delivery Verification Rule
       if (activeType === 'transporter' && isDeliveryPhase && !deliveryCodeVerified) {
         Alert.alert("Verification Required", "Please verify delivery code before submitting.");
         setIsSubmitting(false);
         return;
-      }
-
-      // Pickup Code Verification Rule (for transporter pickup)
-      if (activeType === 'transporter' && !isDeliveryPhase) {
-        if (order.legType === 'pickup' && !pickupCodeVerified) {
-          Alert.alert("Verification Required", "Please verify pickup code before submitting.");
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Delivery Code Verification Rule (for transporter delivery)
-        if (activeType === 'transporter' && isDeliveryPhase && !deliveryCodeVerified) {
-          Alert.alert("Verification Required", "Please verify delivery code before submitting.");
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Pickup Code Verification Rule (for transporter pickup)
-        if (activeType === 'transporter' && !isDeliveryPhase) {
-          if (order.legType === 'pickup' && !pickupCodeVerified) {
-            Alert.alert("Verification Required", "Please verify pickup code before submitting.");
-            setIsSubmitting(false);
-            return;
-          }
-        }
       }
 
       if (order.id.startsWith('RTO-') && !isDeliveryPhase) {
@@ -641,7 +625,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: 'delivery' });
         }
       }
     } catch (error) {
@@ -1374,9 +1358,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
           </View>
         </Modal>
-        {((isPickupAccepted || isDeliveryPhase) && order.status !== 'Delivered') && (
+        {(isPickupAccepted && !isDeliveryPhase && order.status !== 'Delivered') && (
           <FloatingScannerButton
-            module={isDeliveryPhase ? 'DROP' : 'PICKUP'}
+            module="PICKUP"
             orderIds={[order.orderId]}
             navigation={navigation}
           />

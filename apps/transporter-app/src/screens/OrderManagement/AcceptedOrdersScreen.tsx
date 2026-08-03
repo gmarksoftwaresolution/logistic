@@ -381,13 +381,6 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
           navigation={navigation}
         />
       )}
-      {activeTab === 'drop' && (
-        <FloatingScannerButton
-          module="DROP"
-          orderIds={dropOrderIds}
-          navigation={navigation}
-        />
-      )}
     </SafeAreaView>
   );
 };

@@ -24,6 +24,7 @@ interface OrderCardProps {
   transporterMobile?: string;
   vehicleNumber?: string;
   transporterId?: string;
+  verificationPending?: boolean;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -44,7 +45,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   transporterName,
   transporterMobile,
   vehicleNumber,
-  transporterId
+  transporterId,
+  verificationPending
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -112,6 +114,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                   <Ionicons name="information-circle" size={10} color="#DC2626" style={{ marginRight: 4 }} />
                   <Text className="text-[9px] font-black text-[#DC2626] tracking-wide">
                     Return Address Updated
+                  </Text>
+                </View>
+              )}
+
+              {verificationPending && (
+                <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#F59E0B]/40 bg-[#FFFBEB]">
+                  <Ionicons name="time-outline" size={10} color="#D97706" style={{ marginRight: 4 }} />
+                  <Text className="text-[9px] font-black text-[#D97706] tracking-wide">
+                    Verification Pending
                   </Text>
                 </View>
               )}

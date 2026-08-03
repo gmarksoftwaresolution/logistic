@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { QrService } from '../qr/qr.service';
 import { OrderFilterDto } from './dto/order-filter.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrderManagementService implements OnModuleInit {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private qrService: QrService
+  ) { }
 
   onModuleInit() {
     // Start background auto-broadcast polling loop
@@ -67,7 +71,7 @@ export class OrderManagementService implements OnModuleInit {
     const ordersAtShg = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
-        mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'] },
+        mainStatus: { in: ['PARCEL_AT_SHG', 'PARCEL_PICKED'] },
         pickupTransporterId: null,
       },
       include: {
@@ -488,19 +492,16 @@ export class OrderManagementService implements OnModuleInit {
       inventoryTransporterReturn,
       inventoryBuyerReturn,
     ] = await Promise.all([
-      // pickup.new — Phase 1
+      // pickup.new — Phase 1 unassigned
       this.prisma.order.count({
         where: this.applyFilters(
           {
             phase: 'PICKUP',
             returnType: null,
-            OR: [
-              { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
-              { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
-            ]
+            mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] }
           },
           undefined,
-          ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
+          ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']
         )
       }),
       // pickup.assigned — Phase 2-4
@@ -509,13 +510,10 @@ export class OrderManagementService implements OnModuleInit {
           {
             phase: 'PICKUP',
             returnType: null,
-            OR: [
-              { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED'] } },
-              { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
-            ]
+            mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] }
           },
           undefined,
-          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED']
+          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP']
         )
       }),
       // pickup.warehouse — Phase 5
@@ -656,8 +654,26 @@ export class OrderManagementService implements OnModuleInit {
       }
     }
 
+    let parcels: any[] = [];
+    try {
+      parcels = await this.prisma.parcel.findMany({
+        where: {
+          OR: [
+            { orderId: order.orderId },
+            { orderId: order.id }
+          ]
+        }
+      });
+      if (!parcels || parcels.length === 0) {
+        parcels = await this.qrService.generateQr(order.id, false, 'SYSTEM');
+      }
+    } catch (e) {
+      console.warn(`[getOrderDetails] generateQr failed for ${order.id}:`, e);
+    }
+
     return {
       ...order,
+      parcels,
       assignments: [...order.assignments, ...extraAssignments],
       sellerPincode: order.seller?.pincode || null,
       sellerVillage: order.seller?.village || null,
@@ -673,13 +689,10 @@ export class OrderManagementService implements OnModuleInit {
       {
         phase: 'PICKUP',
         returnType: null,
-        OR: [
-          { mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] } },
-          { mainStatus: 'PICKUP_ASSIGNED', OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] }
-        ]
+        mainStatus: { in: ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING'] }
       },
       filter,
-      ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED']
+      ['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']
     );
     const defaultInclude = {
       assignments: true,
@@ -698,17 +711,14 @@ export class OrderManagementService implements OnModuleInit {
       {
         phase: 'PICKUP',
         returnType: null,
-        OR: [
-          { mainStatus: { in: ['PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING'] } },
-          { mainStatus: 'PICKUP_ASSIGNED', NOT: { OR: [{ pickupShgStatus: 'PENDING' }, { pickupShgStatus: 'pending' }, { pickupShgStatus: null }] } }
-        ]
+        mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP'] }
       },
       filter,
       [
         'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED',
         'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED',
         'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED',
-        'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING',
+        'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP'
       ]
     );
     return this.prisma.order.findMany({
@@ -726,8 +736,8 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       { phase: 'PICKUP', returnType: null },
       filter,
-      // Phase 5: hub received (AT_HUB new canonical + legacy HUB_RECEIVED, BARCODE_GENERATED)
-      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']
+      // Phase 5: hub received (AT_HUB new canonical + legacy HUB_RECEIVED, BARCODE_GENERATED, STORED, DROP_PENDING)
+      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED']
     );
     return this.prisma.order.findMany({
       where,
@@ -842,9 +852,6 @@ export class OrderManagementService implements OnModuleInit {
     );
     const defaultInclude = {
       assignments: true,
-      items: true,
-      tracking: { orderBy: { timestamp: 'desc' as const } },
-      parcels: true,
       seller: true,
       buyer: true,
     };
@@ -870,15 +877,14 @@ export class OrderManagementService implements OnModuleInit {
           },
           {
             OR: [
-              { mainStatus: { in: ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } },
-              { mainStatus: 'DROP_ASSIGNED', NOT: { OR: [{ dropShgStatus: 'PENDING' }, { dropShgStatus: 'pending' }, { dropShgStatus: null }] } }
+              { mainStatus: { in: ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } }
             ]
           }
         ]
       },
       filter,
       [
-        'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
+        'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
         'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT_TO_SHG',
         'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
         'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER',
@@ -1331,11 +1337,7 @@ export class OrderManagementService implements OnModuleInit {
       console.warn(`[broadcastShg auto-run] Failed to broadcast order ${order.id}:`, err.message);
     }
 
-    try {
-      await this.broadcastTransporter(order.id);
-    } catch (err: any) {
-      console.warn(`[broadcastTransporter auto-run] Failed to broadcast order ${order.id}:`, err.message);
-    }
+
 
     return order;
   }
@@ -1598,6 +1600,12 @@ export class OrderManagementService implements OnModuleInit {
       console.warn(`[broadcastDropShg auto-run] Failed to broadcast manual drop order ${order.id}:`, err.message);
     }
 
+    try {
+      await this.broadcastDropTransporter(order.id);
+    } catch (err: any) {
+      console.warn(`[broadcastDropTransporter auto-run] Failed to broadcast manual drop order ${order.id}:`, err.message);
+    }
+
     return order;
   }
 
@@ -1639,45 +1647,50 @@ export class OrderManagementService implements OnModuleInit {
       }
     });
 
-    // Create PENDING assignments with duplicate protection
-    let assignmentsCreatedCount = 0;
-    for (const shg of matchingShgs) {
-      const existing = await this.prisma.orderAssignment.findFirst({
-        where: {
-          orderId: order.id,
-          assigneeId: shg.id,
-          assigneeType: 'SHG',
-          role: 'PICKUP',
-          status: 'PENDING',
-        },
-      });
-      if (!existing) {
-        await this.prisma.orderAssignment.create({
-          data: {
-            orderId: order.id,
-            assigneeId: shg.id,
-            assigneeType: 'SHG',
-            role: 'PICKUP',
-            status: 'PENDING',
-          },
-        });
-        assignmentsCreatedCount++;
-      }
+    const assignedShg = matchingShgs[0];
+    const shgNumericId = parseInt(assignedShg.id, 10);
+
+    if (!isNaN(shgNumericId)) {
+      await this.prisma.$executeRawUnsafe(`
+        UPDATE public.pickup_orders
+        SET status = 'ACCEPTED', shg_id = $1
+        WHERE master_order_id = (
+          SELECT id FROM public.master_orders WHERE order_number = $2 LIMIT 1
+        );
+      `, shgNumericId, order.orderId);
     }
 
-    console.log(`[SHG Broadcast]
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'SHG',
+      }
+    });
+
+    await this.prisma.orderAssignment.create({
+      data: {
+        orderId: order.id,
+        assigneeId: assignedShg.id,
+        assigneeType: 'SHG',
+        role: 'PICKUP',
+        status: 'ACCEPTED',
+      },
+    });
+
+    console.log(`[SHG Broadcast Auto-Accept]
       Order ID: ${order.orderId} (${order.id})
       Seller Village: ${order.sellerVillage}
       Seller Pincode: ${order.sellerPincode}
-      Matching SHG IDs: ${JSON.stringify(matchingShgs.map(s => s.id))}
-      Number of assignments created: ${assignmentsCreatedCount}
+      Auto-Assigned & Accepted SHG ID: ${assignedShg.id}
     `);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'PICKUP_ASSIGNED',
-        pickupShgStatus: 'PENDING',
+        pickupShgId: assignedShg.id,
+        pickupShgStatus: 'ACCEPTED',
+        mainStatus: 'PICKUP_SHG_ACCEPTED',
       },
       include: { assignments: true },
     });
@@ -1765,22 +1778,22 @@ export class OrderManagementService implements OnModuleInit {
         where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'PENDING' },
       });
 
-      // Create new pending assignments
+      // Create new auto-accepted assignments for SHG
       await this.prisma.orderAssignment.createMany({
         data: matchingShgs.map((shg) => ({
           orderId: order.id,
           assigneeId: shg.id,
           assigneeType: 'SHG',
           role: 'PICKUP',
-          status: 'PENDING',
+          status: 'ACCEPTED',
         })),
       });
 
       return this.prisma.order.update({
         where: { id: order.id },
         data: {
-          mainStatus: 'PICKUP_ASSIGNED',
-          pickupShgStatus: 'PENDING',
+          mainStatus: 'PICKUP_SHG_ACCEPTED',
+          pickupShgStatus: 'ACCEPTED',
         },
       });
     } else {
@@ -2033,8 +2046,10 @@ export class OrderManagementService implements OnModuleInit {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        // Phase 5: Parcel arrives at hub → AT_HUB
-        mainStatus: 'AT_HUB',
+        // Phase 5: Parcel arrives at hub → HUB_RECEIVED / AT_HUB
+        mainStatus: 'HUB_RECEIVED',
+        pickupTransporterStatus: 'COMPLETED',
+        pickupShgStatus: 'DROPPED',
         warehouseReceivedAt: new Date(),
       },
     });
@@ -2263,11 +2278,14 @@ export class OrderManagementService implements OnModuleInit {
       timeout: 30000
     });
 
-    try {
-      await this.broadcastDropShg(result.dropId);
-    } catch (err: any) {
+    // Run partner matching and broadcasts asynchronously in background for instant < 200ms intake API response
+    this.broadcastDropShg(result.dropId).catch(err => {
       console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
-    }
+    });
+
+    this.broadcastDropTransporter(result.dropId).catch(err => {
+      console.error(`[storeInventory] Immediate drop Transporter broadcast failed:`, err.message);
+    });
 
     return result.updated;
   }
@@ -2319,45 +2337,65 @@ export class OrderManagementService implements OnModuleInit {
       });
     }
 
-    // Create PENDING assignments with duplicate protection
-    let assignmentsCreatedCount = 0;
-    for (const shg of matchingShgs) {
-      const existing = await this.prisma.orderAssignment.findFirst({
-        where: {
+    // Auto-allocate and auto-accept for matching buyer SHG
+    const allocatedShg = matchingShgs[0];
+    const allocatedShgId = allocatedShg.id;
+
+    // Create ACCEPTED assignment for allocated SHG
+    const existingAssignment = await this.prisma.orderAssignment.findFirst({
+      where: {
+        orderId: order.id,
+        assigneeId: allocatedShgId,
+        assigneeType: 'SHG',
+        role: 'DROP',
+      },
+    });
+
+    if (existingAssignment) {
+      await this.prisma.orderAssignment.update({
+        where: { id: existingAssignment.id },
+        data: { status: 'ACCEPTED' },
+      });
+    } else {
+      await this.prisma.orderAssignment.create({
+        data: {
           orderId: order.id,
-          assigneeId: shg.id,
+          assigneeId: allocatedShgId,
           assigneeType: 'SHG',
           role: 'DROP',
-          status: 'PENDING',
+          status: 'ACCEPTED',
         },
       });
-      if (!existing) {
-        await this.prisma.orderAssignment.create({
-          data: {
-            orderId: order.id,
-            assigneeId: shg.id,
-            assigneeType: 'SHG',
-            role: 'DROP',
-            status: 'PENDING',
-          },
-        });
-        assignmentsCreatedCount++;
-      }
     }
 
-    console.log(`[Drop SHG Broadcast]
+    // Sync public.master_orders and public.drop_orders
+    await this.prisma.$executeRawUnsafe(`
+      UPDATE public.master_orders
+      SET status = 'DROP_SHG_ACCEPTED', updated_at = NOW()
+      WHERE order_number = $1;
+    `, order.orderId);
+
+    const shgUserId = parseInt(allocatedShgId, 10);
+    if (!isNaN(shgUserId)) {
+      await this.prisma.$executeRawUnsafe(`
+        UPDATE public.drop_orders
+        SET status = 'ACCEPTED', shg_id = $1, updated_at = NOW()
+        WHERE drop_order_number = $2 OR master_order_id IN (SELECT id FROM public.master_orders WHERE order_number = $3);
+      `, shgUserId, `DRP-${order.orderId}`, order.orderId);
+    }
+
+    console.log(`[Drop SHG Auto-Accept]
       Order ID: ${order.orderId} (${order.id})
       Buyer Village: ${order.buyerVillage}
-      Buyer Pincode: ${order.buyerPincode}
-      Matching SHG IDs: ${JSON.stringify(matchingShgs.map(s => s.id))}
-      Number of assignments created: ${assignmentsCreatedCount}
+      Allocated SHG ID: ${allocatedShgId} (Auto-Accepted)
     `);
 
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'DROP_PENDING',
-        dropShgStatus: 'PENDING',
+        dropShgId: allocatedShgId,
+        dropShgStatus: 'ACCEPTED',
+        mainStatus: 'DROP_SHG_ACCEPTED',
       },
       include: { assignments: true },
     });
@@ -2557,7 +2595,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'DROP_ASSIGNED',
+        mainStatus: order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED',
         dropTransporterStatus: 'PENDING',
       },
       include: { assignments: true },
@@ -2601,7 +2639,7 @@ export class OrderManagementService implements OnModuleInit {
       const pickupOrders = await this.prisma.order.findMany({
         where: {
           phase: 'PICKUP',
-          mainStatus: { in: ['ORDER_PLACED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'] },
+          mainStatus: { in: ['PARCEL_AT_SHG', 'PARCEL_PICKED'] },
           pickupTransporterId: null,
         }
       });

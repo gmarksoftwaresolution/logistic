@@ -125,41 +125,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
           {/* Dashboard Gradient Cards */}
           <View className="px-4 mt-6 flex-row flex-wrap justify-between">
             
-            {/* New Orders */}
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('IncomingOrders')}
-              className="w-full rounded-[24px] mb-4 shadow-sm"
-              style={{ 
-                shadowColor: '#004797', 
-                shadowOffset: { width: 0, height: 8 }, 
-                shadowOpacity: 0.3, 
-                shadowRadius: 12, 
-                elevation: 8 
-              }}
-            >
-              <View className="rounded-[24px] overflow-hidden flex-1">
-                <LinearGradient colors={['#004797', '#0071D5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-5 flex-1 relative">
-                  {/* Background Decoration */}
-                  <View className="absolute inset-0 overflow-hidden rounded-[24px]">
-                    <Ionicons name="cube-outline" size={140} color="rgba(255,255,255,0.08)" style={{ position: 'absolute', bottom: -30, right: -30, transform: [{ rotate: '-10deg' }] }} />
-                    <View style={{ position: 'absolute', top: '30%', left: '20%', width: 60, height: 2, backgroundColor: 'rgba(255,255,255,0.1)', transform: [{ rotate: '-45deg' }] }} />
-                    <View style={{ position: 'absolute', top: '40%', left: '30%', width: 80, height: 2, backgroundColor: 'rgba(255,255,255,0.15)', transform: [{ rotate: '-45deg' }] }} />
-                  </View>
-                  {/* Content */}
-                  <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide mt-1" adjustsFontSizeToFit numberOfLines={1}>Incoming Orders</Text>
-                    <View className="w-9 h-9 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20">
-                      <Feather name="package" size={16} color="#FFFFFF" />
-                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
-                    </View>
-                  </View>
-                  <View className="mt-6 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[56px]" adjustsFontSizeToFit numberOfLines={1}>{(incomingOrders?.length || 0) + (incomingReturnOrders?.length || 0)}</Text>
-                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>New orders received and awaiting review</Text>
-                  </View>
-                </LinearGradient>
-              </View>
-            </TouchableOpacity>
+
 
             {/* Accepted */}
             <TouchableOpacity 

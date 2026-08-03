@@ -353,12 +353,6 @@ const DeliveryScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         );
       })()}
-
-      <FloatingScannerButton
-        module="DROP"
-        orderIds={deliveryOrders.map(o => o.orderId)}
-        navigation={navigation}
-      />
     </SafeAreaView>
   );
 };

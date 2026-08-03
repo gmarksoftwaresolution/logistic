@@ -53,20 +53,18 @@ async function main() {
     SET status = 'ORDER_PLACED';
   `);
 
-  // 5. Delete all order assignments in both schemas
-  console.log('- Clearing OrderAssignments in both schemas...');
-  await prisma.$executeRawUnsafe(`DELETE FROM gmu."OrderAssignment";`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public."OrderAssignment";`);
+  // 5. Delete all order assignments
+  console.log('- Clearing OrderAssignments...');
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."OrderAssignment";`); } catch (e) {}
 
-  // 6. Delete Drop phase orders in both schemas
-  console.log('- Deleting Drop phase orders in both schemas to prevent duplicates...');
-  await prisma.$executeRawUnsafe(`DELETE FROM gmu."Order" WHERE phase = 'DROP' OR id LIKE '00000000-0000-4000-8000-%';`);
-  await prisma.$executeRawUnsafe(`DELETE FROM public."Order" WHERE phase = 'DROP' OR id LIKE '00000000-0000-4000-8000-%';`);
+  // 6. Delete Drop phase orders
+  console.log('- Deleting Drop phase orders to prevent duplicates...');
+  try { await prisma.$executeRawUnsafe(`DELETE FROM public."Order" WHERE phase = 'DROP' OR id LIKE '00000000-0000-4000-8000-%';`); } catch (e) {}
 
-  // 7. Reset remaining PICKUP Orders to initial pickup state in both schemas
-  console.log('- Resetting remaining PICKUP Orders to ORDER_PLACED in both schemas...');
-  const resetQuery = `
-    UPDATE %SCHEMA%."Order"
+  // 7. Reset remaining PICKUP Orders to initial pickup state
+  console.log('- Resetting remaining PICKUP Orders to ORDER_PLACED...');
+  await prisma.$executeRawUnsafe(`
+    UPDATE public."Order"
     SET 
       "mainStatus" = 'ORDER_PLACED',
       "pickupShgId" = NULL,
@@ -80,9 +78,7 @@ async function main() {
       "barcode" = NULL,
       "updatedAt" = NOW()
     WHERE phase = 'PICKUP';
-  `;
-  await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'gmu'));
-  await prisma.$executeRawUnsafe(resetQuery.replace('%SCHEMA%', 'public'));
+  `);
 
   // Update sellers/buyers villages and pincodes in public schema to match exact database spellings
   console.log('- Aligning seller/buyer villages and pincodes with database PincodeDirectory...');
@@ -173,18 +169,12 @@ async function main() {
 
     // Fetch the correct UUID for public."Order"
     const publicOrderRes = await prisma.$queryRawUnsafe(`
-      SELECT id FROM public."Order" WHERE "orderId" = $1 LIMIT 1;
+      SELECT id FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
     `, order.orderId) as any[];
     const publicOrderId = publicOrderRes[0]?.id;
 
-    // Fetch the correct UUID for gmu."Order"
-    const gmuOrderRes = await prisma.$queryRawUnsafe(`
-      SELECT id FROM gmu."Order" WHERE "orderId" = $1 LIMIT 1;
-    `, order.orderId) as any[];
-    const gmuOrderId = gmuOrderRes[0]?.id;
-
-    if (!publicOrderId || !gmuOrderId) {
-      console.log(`Warning: Order ${order.orderId} not found in public.Order (${publicOrderId}) or gmu.Order (${gmuOrderId}). Skipping.`);
+    if (!publicOrderId) {
+      console.log(`Warning: Order ${order.orderId} not found in public.Order. Skipping.`);
       continue;
     }
 
@@ -195,13 +185,6 @@ async function main() {
         VALUES ($1, $2, $3, 'SHG', 'PICKUP', 'PENDING', NOW(), NOW());
       `;
       await prisma.$executeRawUnsafe(insertAssignmentQueryPub, assignmentIdPub, publicOrderId, String(shg.id));
-
-      const assignmentIdGmu = crypto.randomUUID();
-      const insertAssignmentQueryGmu = `
-        INSERT INTO gmu."OrderAssignment" (id, "orderId", "assigneeId", "assigneeType", role, status, "createdAt", "updatedAt")
-        VALUES ($1, $2, $3, 'SHG', 'PICKUP', 'PENDING', NOW(), NOW());
-      `;
-      await prisma.$executeRawUnsafe(insertAssignmentQueryGmu, assignmentIdGmu, gmuOrderId, String(shg.id));
     }
 
     const assignedQueryPub = `
@@ -210,13 +193,6 @@ async function main() {
       WHERE id = $1;
     `;
     await prisma.$executeRawUnsafe(assignedQueryPub, publicOrderId);
-
-    const assignedQueryGmu = `
-      UPDATE gmu."Order"
-      SET "mainStatus" = 'PICKUP_ASSIGNED', "pickupShgStatus" = 'PENDING'
-      WHERE id = $1;
-    `;
-    await prisma.$executeRawUnsafe(assignedQueryGmu, gmuOrderId);
   }
 
   console.log('Success! All orders have been reset and auto-broadcasted to matching approved SHGs.');

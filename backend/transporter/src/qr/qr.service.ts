@@ -117,7 +117,7 @@ export class QrService {
       };
 
       const qrCodeValue = JSON.stringify(qrContent);
-      const qrImage = await QRCode.toDataURL(qrCodeValue);
+      const qrImage = await QRCode.toDataURL(qrCodeValue, { margin: 1, width: 200, errorCorrectionLevel: 'L' });
 
       parcel = await this.prisma.parcel.update({
         where: { parcelId: parcel.parcelId },

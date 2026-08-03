@@ -112,7 +112,30 @@ export function determineTransition(
 
   // Validate state machine transitions based on current status and user role
   if (finalRole === 'SHG') {
-    if (currentStatus === 'READY_FOR_PICKUP') {
+    // PHASE 2 (DROP): SHG receiving from Transporter or delivering to Buyer
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DROP_TRANSPORTER_ACCEPTED'].includes(order?.mainStatus)) {
+      const isFinalDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG' || parcel.parcelStatus === 'AT_BUYER_SHG';
+      if (isFinalDelivery) {
+        return {
+          nextParcelStatus: 'DELIVERED',
+          nextHolderId: String(order.buyerId),
+          nextHolderType: 'BUYER',
+          action: 'FINAL_DELIVERY',
+          message: 'Parcel delivered to Buyer by SHG',
+        };
+      } else {
+        return {
+          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
+          nextHolderId: userId,
+          nextHolderType: 'SHG',
+          action: 'SHG_DROP_PICKUP',
+          message: 'Parcel received by drop SHG from transporter (Transporter delivery completed)',
+        };
+      }
+    }
+
+    // PHASE 1 (PICKUP): SHG picking up from Seller
+    if (currentStatus === 'READY_FOR_PICKUP' || (currentStatus === 'PARCEL_PICKED' && legType !== 'handover')) {
       return {
         nextParcelStatus: 'PARCEL_AT_SHG',
         nextHolderId: userId,
@@ -121,11 +144,7 @@ export function determineTransition(
         message: 'Parcel picked up from seller by SHG',
       };
     }
-    if (currentStatus === 'PARCEL_PICKED') {
-      if (!order.pickupTransporterId || order.pickupTransporterStatus !== 'ACCEPTED') {
-        throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
-      }
-      // SHG Handover to Transporter
+    if (currentStatus === 'PARCEL_PICKED' && legType === 'handover') {
       const nextHolder = order.pickupTransporterId ? String(order.pickupTransporterId) : 'TRANSPORTER';
       return {
         nextParcelStatus: 'PARCEL_AT_TRANSPORTER',
@@ -135,39 +154,35 @@ export function determineTransition(
         message: 'Parcel delivered to Transporter by SHG',
       };
     }
-    if (currentStatus === 'AT_BUYER_SHG' || currentStatus === 'OUT_FOR_DELIVERY') {
-      const isDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG';
-      if (isDelivery) {
-        // Final delivery to buyer
-        return {
-          nextParcelStatus: 'DELIVERED',
-          nextHolderId: String(order.buyerId),
-          nextHolderType: 'BUYER',
-          action: 'FINAL_DELIVERY',
-          message: 'Parcel delivered to Buyer',
-        };
-      } else {
-        if (currentStatus === 'OUT_FOR_DELIVERY' && userRole === 'SHG') {
-          throw new QrValidationError('The Transporter has not submitted the handover delivery yet. Please wait for the Transporter to submit.');
-        }
-        // SHG receiving from transporter
-        return {
-          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
-          nextHolderId: userId,
-          nextHolderType: 'SHG',
-          action: 'SHG_DROP_PICKUP',
-          message: 'Parcel picked up by drop SHG from transporter',
-        };
-      }
-    }
   }
 
   if (finalRole === 'TRANSPORTER') {
-    if (currentStatus === 'PARCEL_PICKED') {
-      throw new QrValidationError('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
+    // PHASE 2 (DROP): Transporter loading from GMU Hub for delivery to Drop SHG
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU'].includes(order?.mainStatus)) {
+      if (currentStatus === 'OUT_FOR_DELIVERY' || (currentStatus as string) === 'DISPATCHED') {
+        // Transporter dropping off at Buyer SHG
+        const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
+        return {
+          nextParcelStatus: 'PARCEL_AT_DROP_SHG',
+          nextHolderId: nextHolder,
+          nextHolderType: 'SHG',
+          action: 'TRANSPORTER_SHG_DELIVER',
+          message: 'Parcel delivered to Drop SHG by Transporter',
+        };
+      } else {
+        // Transporter loading from Hub for delivery -> DISPATCHED
+        return {
+          nextParcelStatus: 'DISPATCHED',
+          nextHolderId: userId,
+          nextHolderType: 'TRANSPORTER',
+          action: 'TRANSPORTER_DROP_PICKUP',
+          message: 'Parcel loaded for delivery by Transporter from Hub Warehouse (Dispatched)',
+        };
+      }
     }
-    if (currentStatus === 'TRANSPORTER_ACCEPTED') {
-      // Transporter loading parcel for transit to hub
+
+    // PHASE 1 (PICKUP): Transporter loading from Pickup SHG to deliver to GMU Hub
+    if (currentStatus === 'PARCEL_PICKED' || currentStatus === 'TRANSPORTER_ACCEPTED' || currentStatus === 'READY_FOR_PICKUP') {
       return {
         nextParcelStatus: 'IN_TRANSIT_TO_HUB',
         nextHolderId: userId,
@@ -177,34 +192,12 @@ export function determineTransition(
       };
     }
     if (currentStatus === 'IN_TRANSIT') {
-      // Transporter dropping at GMU Hub
       return {
         nextParcelStatus: 'HUB_RECEIVED',
         nextHolderId: 'HUB',
         nextHolderType: 'WAREHOUSE',
         action: 'TRANSPORTER_HUB_DELIVER',
         message: 'Parcel delivered to GMU Hub by Transporter',
-      };
-    }
-    if (currentStatus === 'READY_FOR_DISPATCH' || currentStatus === 'STORED' || currentStatus === 'AT_GMU') {
-      // Transporter loading from Hub for delivery
-      return {
-        nextParcelStatus: 'IN_TRANSIT_TO_BUYER',
-        nextHolderId: userId,
-        nextHolderType: 'TRANSPORTER',
-        action: 'TRANSPORTER_DROP_PICKUP',
-        message: 'Parcel loaded for delivery by Transporter from Warehouse',
-      };
-    }
-    if (currentStatus === 'OUT_FOR_DELIVERY') {
-      // Transporter dropping off at Buyer SHG
-      const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
-      return {
-        nextParcelStatus: 'PARCEL_AT_DROP_SHG',
-        nextHolderId: nextHolder,
-        nextHolderType: 'SHG',
-        action: 'TRANSPORTER_SHG_DELIVER',
-        message: 'Parcel delivered to Drop SHG by Transporter',
       };
     }
   }
@@ -384,12 +377,25 @@ export class QrVerificationEngine {
       throw new QrValidationError(err.message);
     }
 
-    const parcel = await this.prisma.parcel.findUnique({
+    let parcel = await this.prisma.parcel.findUnique({
       where: { parcelId: decoded.parcelId },
     });
 
     if (!parcel) {
-      throw new QrValidationError('Parcel status invalid.'); // Return generic scanner invalid status message
+      parcel = await this.prisma.parcel.findFirst({
+        where: {
+          OR: [
+            { parcelId: decoded.parcelId },
+            { parcelNumber: decoded.parcelId },
+            { verificationToken: decoded.parcelId },
+            { verificationToken: decoded.verificationToken }
+          ]
+        }
+      });
+    }
+
+    if (!parcel) {
+      throw new QrValidationError('Scanned QR parcel not found in database');
     }
 
     // Validate verificationToken
@@ -440,7 +446,7 @@ export class QrVerificationEngine {
         throw new QrValidationError('Parcel not assigned to current user.');
       }
 
-      if (assignment.status === 'PENDING') {
+      if (userRole === 'TRANSPORTER' && assignment.status === 'PENDING') {
         throw new QrValidationError('Please accept the assignment first before scanning');
       }
 
@@ -461,7 +467,7 @@ export class QrVerificationEngine {
     }
 
     // Validate State Machine Transition
-    determineTransition(order.phase as SessionType, userRole, userId, parcel, order);
+    determineTransition(sessionType, userRole, userId, parcel, order);
 
     // Duplicate Scan Protection
     const existingItem = await this.prisma.scanSessionItem.findUnique({
@@ -485,7 +491,19 @@ export class QrVerificationEngine {
       },
     });
 
-    return this.getSessionDetails(sessionType, userId, userRole, sessionId);
+    const sessionDetails = await this.getSessionDetails(sessionType, userId, userRole, sessionId);
+
+    // Auto-Commit on scan: Immediately commit custody transfer when batch scanning completes (1-step verification)
+    if (sessionDetails.remaining.length === 0) {
+      const result = await this.confirmSession(sessionType, sessionId);
+      return {
+        ...sessionDetails,
+        autoCommitted: true,
+        message: result.message || 'Scan verified! Custody transferred and order status updated directly.'
+      };
+    }
+
+    return sessionDetails;
   }
 
   /**
@@ -646,7 +664,7 @@ export class QrVerificationEngine {
           pickupTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_GMU') {
           pickupTransporterStatus = 'COMPLETED';
-        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY') {
+        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER') {
           dropTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
           dropTransporterStatus = 'COMPLETED';
@@ -696,8 +714,8 @@ export class QrVerificationEngine {
             masterOrderStatus = 'IN_TRANSIT_TO_HUB';
           } else if (normalizedMasterOrderStatus === 'AT_GMU') {
             masterOrderStatus = 'HUB_RECEIVED';
-          } else if (normalizedMasterOrderStatus === 'OUT_FOR_DELIVERY') {
-            masterOrderStatus = 'IN_TRANSIT_TO_BUYER';
+          } else if (normalizedMasterOrderStatus === 'OUT_FOR_DELIVERY' || masterOrderStatus === 'DISPATCHED' || masterOrderStatus === 'IN_TRANSIT_TO_BUYER') {
+            masterOrderStatus = 'DISPATCHED';
           } else if (normalizedMasterOrderStatus === 'AT_BUYER_SHG') {
             masterOrderStatus = 'PARCEL_WITH_DROP_SHG';
           }
@@ -707,10 +725,15 @@ export class QrVerificationEngine {
             data: { status: masterOrderStatus }
           });
 
-          if (normalizedMainStatus === 'PARCEL_PICKED' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
+          if (normalizedMainStatus === 'PARCEL_PICKED' || (mainStatus as string) === 'PARCEL_AT_SHG') {
             await tx.pickupOrder.updateMany({
               where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED', pickupTime: new Date() }
+              data: { status: 'PICKED_UP', pickupTime: new Date() }
+            });
+          } else if (normalizedMainStatus === 'IN_TRANSIT' || normalizedMainStatus === 'AT_GMU' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED' || (mainStatus as string) === 'PARCEL_AT_TRANSPORTER') {
+            await tx.pickupOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: { status: 'COMPLETED' }
             });
           }
 
@@ -718,6 +741,11 @@ export class QrVerificationEngine {
             await tx.dropOrder.updateMany({
               where: { masterOrderId: masterOrder.id },
               data: { status: session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED' }
+            });
+          } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER') {
+            await tx.dropOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: { status: 'DISPATCHED' }
             });
           }
 
@@ -939,10 +967,15 @@ export class QrVerificationEngine {
             data: { status: masterOrderStatus }
           });
 
-          if (normalizedMainStatus === 'PARCEL_PICKED' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
+          if (normalizedMainStatus === 'PARCEL_PICKED' || (mainStatus as string) === 'PARCEL_AT_SHG') {
             await tx.pickupOrder.updateMany({
               where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED', pickupTime: new Date() }
+              data: { status: 'PICKED_UP', pickupTime: new Date() }
+            });
+          } else if (normalizedMainStatus === 'IN_TRANSIT' || normalizedMainStatus === 'AT_GMU' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED' || (mainStatus as string) === 'PARCEL_AT_TRANSPORTER') {
+            await tx.pickupOrder.updateMany({
+              where: { masterOrderId: masterOrder.id },
+              data: { status: 'COMPLETED' }
             });
           }
 
@@ -969,7 +1002,7 @@ export class QrVerificationEngine {
               role: 'PICKUP',
             },
             data: {
-              status: 'COMPLETED',
+              status: 'ACCEPTED',
             },
           });
         }

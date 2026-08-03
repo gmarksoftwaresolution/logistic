@@ -117,7 +117,7 @@ export class QrService {
       };
 
       const qrCodeValue = JSON.stringify(qrContent);
-      const qrImage = await QRCode.toDataURL(qrCodeValue);
+      const qrImage = await QRCode.toDataURL(qrCodeValue, { margin: 1, width: 200, errorCorrectionLevel: 'L' });
 
       parcel = await this.prisma.parcel.update({
         where: { parcelId: parcel.parcelId },
@@ -281,12 +281,13 @@ export class QrService {
       let dropShgStatus = order.dropShgStatus;
       let dropTransporterStatus = order.dropTransporterStatus;
 
-      if (mainStatus === 'PARCEL_PICKED') {
+      if (mainStatus === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG') {
         pickupShgStatus = 'PICKED';
       } else if (mainStatus === 'TRANSPORTER_ACCEPTED') {
-        pickupShgStatus = 'COMPLETED';
+        pickupShgStatus = 'PICKED';
         pickupTransporterStatus = 'ACCEPTED';
-      } else if (mainStatus === 'IN_TRANSIT') {
+      } else if (mainStatus === 'IN_TRANSIT' || mainStatus === 'PARCEL_AT_TRANSPORTER') {
+        pickupShgStatus = 'COMPLETED';
         pickupTransporterStatus = 'PICKED';
       } else if (mainStatus === 'AT_GMU') {
         pickupTransporterStatus = 'COMPLETED';

@@ -56,6 +56,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
   const { refreshOrdersList } = useOrders();
   const isScreenFocused = useIsFocused();
 
+  useEffect(() => {
+    navigation.replace('AcceptedOrders');
+  }, [navigation]);
+
   useFocusEffect(
     useCallback(() => {
       refreshOrdersList();

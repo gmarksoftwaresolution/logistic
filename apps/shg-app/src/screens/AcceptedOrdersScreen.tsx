@@ -103,20 +103,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleQRScan = (order: Order) => {
-    setModalConfig({
-      visible: true,
-      title: t('confirm_pickup') || "Confirm Pickup",
-      message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
-      confirmText: t('su_confirm_358') || 'Confirm',
-      onConfirm: async () => {
-        try {
-          await receiveOrder(order);
-          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
-        } catch (error) {
-          Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to confirm pickup' });
-        }
-      }
-    });
+    navigation.navigate('OrderDetails', { order });
   };
 
   const handleEyeDetails = (order: Order) => {
@@ -345,6 +332,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}
                 transporterId={item.transporterId}
+                verificationPending={item.legType === 'pickup'}
               />
             );
           }}
@@ -394,13 +382,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         <FloatingScannerButton
           module="PICKUP"
           orderIds={pickupOrders.map(o => o.orderId)}
-          navigation={navigation}
-        />
-      )}
-      {activeTab === 'delivery' && (
-        <FloatingScannerButton
-          module="DROP"
-          orderIds={deliveryOrders.map(o => o.orderId)}
           navigation={navigation}
         />
       )}

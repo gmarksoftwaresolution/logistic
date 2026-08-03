@@ -50,7 +50,7 @@ export class OrderService {
         SELECT o."orderId" 
         FROM public."OrderAssignment" oa
         JOIN public."Order" o ON oa."orderId" = o.id
-        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status = 'PENDING'
+        WHERE oa."assigneeId" = $1 AND oa.role = 'DROP' AND oa."assigneeType" = 'SHG' AND oa.status IN ('PENDING', 'ACCEPTED', 'COMPLETED')
           AND (o.phase = 'DROP' OR (o.phase = 'PICKUP' AND NOT EXISTS (SELECT 1 FROM public."Order" WHERE "orderId" = o."orderId" AND phase = 'DROP')));
       `, shgUuid) as any[];
       assignedDropOrderIds = dropAssignments.map(a => a.orderId);
@@ -96,7 +96,7 @@ export class OrderService {
           orderNumber: { in: assignedPickupOrderIds }
         },
         OR: [
-          { status: { in: ['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'] } }
+          { status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'REJECTED'] } }
         ]
       },
       include: {
@@ -763,12 +763,24 @@ export class OrderService {
 
   async completePickup(pickupOrderId: number, shgId: number, code?: string, legType?: string) {
     const pickupOrder = await this.prisma.pickupOrder.findFirst({
-      where: { id: pickupOrderId, shgId },
+      where: {
+        id: pickupOrderId,
+        OR: [
+          { shgId },
+          { shgId: null }
+        ]
+      },
     });
 
     if (!pickupOrder) {
       const dropOrder = await this.prisma.dropOrder.findFirst({
-        where: { id: pickupOrderId, shgId },
+        where: {
+          id: pickupOrderId,
+          OR: [
+            { shgId },
+            { shgId: null }
+          ]
+        },
       });
       if (dropOrder) {
         return this.pickupDrop(pickupOrderId, shgId, code);
@@ -834,184 +846,65 @@ export class OrderService {
         where: { id: pickupOrder.masterOrderId }
       });
 
-      if (legType === 'pickup') {
-        const nextStatus = pickupOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'COMPLETED';
-        const updated = await tx.pickupOrder.update({
-          where: { id: pickupOrderId },
+      const nextStatus = pickupOrder.status === 'RETURN_ACCEPTED' ? 'RETURNED' : 'PICKED_UP';
+      const updated = await tx.pickupOrder.update({
+        where: { id: pickupOrderId },
+        data: {
+          status: nextStatus,
+          pickupTime: new Date(),
+          shgId,
+          transporterId: null,
+        },
+      });
+
+      await tx.pickupTracking.create({
+        data: {
+          pickupOrderId,
+          status: nextStatus,
+          remarks: 'Pickup leg completed by SHG (parcel collected from seller).',
+        },
+      });
+
+      // Reset item verification codes and status to PENDING for the transporter leg
+      const orderItems = await tx.pickupOrderItem.findMany({
+        where: { pickupOrderId }
+      });
+      for (const item of orderItems) {
+        await tx.pickupOrderItem.update({
+          where: { id: item.id },
           data: {
-            status: nextStatus,
-            pickupTime: new Date(),
-            transporterId: null,
-          },
-        });
-
-        await tx.pickupTracking.create({
-          data: {
-            pickupOrderId,
-            status: nextStatus,
-            remarks: 'Pickup leg completed successfully by SHG.',
-          },
-        });
-
-        // Reset item verification codes and status to PENDING for the transporter leg
-        const orderItems = await tx.pickupOrderItem.findMany({
-          where: { pickupOrderId }
-        });
-        for (const item of orderItems) {
-          await tx.pickupOrderItem.update({
-            where: { id: item.id },
-            data: {
-              verificationCode: null,
-              generatedTime: null,
-              verificationStatus: 'PENDING',
-              verifiedTime: null,
-            }
-          });
-        }
-
-        // Update gmu.Order mainStatus and pickupShgStatus, resetting transporter fields
-        const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_AT_SHG';
-        const nextShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED';
-        await tx.$executeRawUnsafe(`
-          UPDATE public."Order"
-          SET "pickupShgStatus" = $1, "mainStatus" = $2, "pickupTransporterId" = NULL, "pickupTransporterStatus" = 'PENDING', "updatedAt" = NOW()
-          WHERE "orderId" = $3 AND phase = 'PICKUP';
-        `, nextShgStatus, nextGmuStatus, masterOrder.orderNumber);
-
-        // Find the gmu.Order UUID
-        const rawGmuOrder = await tx.$queryRawUnsafe(`
-          SELECT o.id FROM public."Order" o WHERE o."orderId" = $1 AND o.phase = 'PICKUP' LIMIT 1;
-        `, masterOrder.orderNumber) as any[];
-        if (rawGmuOrder.length > 0) {
-          orderUuidToBroadcast = rawGmuOrder[0].id;
-        }
-
-        // Update public.master_orders status
-        await tx.masterOrder.update({
-          where: { id: pickupOrder.masterOrderId },
-          data: { status: nextGmuStatus },
-        });
-
-        return updated;
-      } else {
-        // Transporter Handover Phase
-        const rawGmuOrder = await tx.$queryRawUnsafe(`
-          SELECT id, "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
-        `, masterOrder.orderNumber) as any[];
-
-        let transporterPicked = false;
-        let orderUuid = null;
-        if (rawGmuOrder.length > 0) {
-          orderUuid = rawGmuOrder[0].id;
-          transporterPicked = rawGmuOrder[0].pickupTransporterStatus === 'PICKED';
-        }
-
-        const isReturn = pickupOrder.status === 'RETURN_ACCEPTED';
-        const shgStatusVal = isReturn ? 'RETURNED' : 'DROPPED';
-
-        if (transporterPicked) {
-          // Both complete!
-          const nextStatus = isReturn ? 'RETURNED' : 'COMPLETED';
-          const nextGmuStatus = isReturn ? 'RETURN_IN_TRANSIT_TO_HUB' : 'IN_TRANSIT_TO_HUB';
-
-          await tx.pickupOrder.update({
-            where: { id: pickupOrderId },
-            data: {
-              status: nextStatus,
-              pickupTime: new Date(),
-            },
-          });
-
-          await tx.$executeRawUnsafe(`
-            UPDATE public."Order"
-            SET "pickupShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-            WHERE "orderId" = $3 AND phase = 'PICKUP';
-          `, shgStatusVal, nextGmuStatus, masterOrder.orderNumber);
-
-          await tx.masterOrder.update({
-            where: { id: pickupOrder.masterOrderId },
-            data: { status: nextGmuStatus },
-          });
-
-          if (orderUuid) {
-            await tx.$executeRawUnsafe(`
-              UPDATE public."OrderAssignment"
-              SET status = 'COMPLETED', "updatedAt" = NOW()
-              WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
-            `, orderUuid);
+            verificationCode: null,
+            generatedTime: null,
+            verificationStatus: 'PENDING',
+            verifiedTime: null,
           }
-
-          // Create tracking
-          await tx.pickupTracking.create({
-            data: {
-              pickupOrderId,
-              status: nextStatus,
-              remarks: 'Handover to transporter completed. Package in transit to GMU Hub.',
-            },
-          });
-
-          const associatedDrop = await tx.dropOrder.findFirst({
-            where: { masterOrderId: pickupOrder.masterOrderId }
-          });
-
-          if (associatedDrop) {
-            await tx.dropTracking.create({
-              data: {
-                dropOrderId: associatedDrop.id,
-                status: nextGmuStatus,
-                remarks: 'Package is in transit to GMU Hub.'
-              }
-            });
-          }
-        } else {
-          // Only SHG has completed
-          const nextGmuStatus = isReturn ? 'RETURN_PARCEL_AT_TRANSPORTER' : 'PARCEL_AT_TRANSPORTER';
-          const nextStatus = isReturn ? 'RETURNED' : 'COMPLETED';
-
-          await tx.pickupOrder.update({
-            where: { id: pickupOrderId },
-            data: {
-              status: nextStatus,
-              pickupTime: new Date(),
-            },
-          });
-
-          await tx.$executeRawUnsafe(`
-            UPDATE public."Order"
-            SET "pickupShgStatus" = $1, "mainStatus" = $2, "updatedAt" = NOW()
-            WHERE "orderId" = $3 AND phase = 'PICKUP';
-          `, shgStatusVal, nextGmuStatus, masterOrder.orderNumber);
-
-          await tx.masterOrder.update({
-            where: { id: pickupOrder.masterOrderId },
-            data: { status: nextGmuStatus },
-          });
-
-          await tx.pickupTracking.create({
-            data: {
-              pickupOrderId,
-              status: pickupOrder.status,
-              remarks: 'Package dropped to transporter by SHG. Awaiting transporter confirmation.',
-            },
-          });
-
-          const associatedDrop = await tx.dropOrder.findFirst({
-            where: { masterOrderId: pickupOrder.masterOrderId }
-          });
-
-          if (associatedDrop) {
-            await tx.dropTracking.create({
-              data: {
-                dropOrderId: associatedDrop.id,
-                status: nextGmuStatus,
-                remarks: 'Package dropped to transporter by SHG.'
-              }
-            });
-          }
-        }
-
-        return pickupOrder;
+        });
       }
+
+      // Update gmu.Order mainStatus and pickupShgStatus, resetting transporter fields
+      const nextGmuStatus = nextStatus === 'RETURNED' ? 'RETURN_PARCEL_AT_SHG' : 'PARCEL_AT_SHG';
+      const nextShgStatus = nextStatus === 'RETURNED' ? 'RETURNED' : 'PICKED';
+      await tx.$executeRawUnsafe(`
+        UPDATE public."Order"
+        SET "pickupShgStatus" = $1, "mainStatus" = $2, "pickupTransporterId" = NULL, "pickupTransporterStatus" = 'PENDING', "updatedAt" = NOW()
+        WHERE "orderId" = $3 AND phase = 'PICKUP';
+      `, nextShgStatus, nextGmuStatus, masterOrder.orderNumber);
+
+      // Find the gmu.Order UUID
+      const rawGmuOrder = await tx.$queryRawUnsafe(`
+        SELECT o.id FROM public."Order" o WHERE o."orderId" = $1 AND o.phase = 'PICKUP' LIMIT 1;
+      `, masterOrder.orderNumber) as any[];
+      if (rawGmuOrder.length > 0) {
+        orderUuidToBroadcast = rawGmuOrder[0].id;
+      }
+
+      // Update public.master_orders status
+      await tx.masterOrder.update({
+        where: { id: pickupOrder.masterOrderId },
+        data: { status: nextGmuStatus },
+      });
+
+      return updated;
     }, {
       maxWait: 10000,
       timeout: 30000
@@ -1019,10 +912,11 @@ export class OrderService {
 
     if (orderUuidToBroadcast) {
       try {
-        await axios.post(`http://localhost:3001/orders/${orderUuidToBroadcast}/broadcast-transporter`, {}, {
+        await axios.post(`http://localhost:3001/api/orders/${orderUuidToBroadcast}/broadcast-transporter`, {}, {
           headers: {
             'x-bypass-token': 'GMU_INTERNAL_BYPASS'
-          }
+          },
+          timeout: 3000
         });
         console.log(`[SHG Backend] Successfully triggered transporter broadcast for ${orderUuidToBroadcast}`);
       } catch (error) {
@@ -2242,7 +2136,10 @@ export class OrderService {
     if (!user || user.role !== 'SHG') return { newOrders: [], returnOrders: [] };
 
     const pickups = await this.prisma.pickupOrder.findMany({
-      where: { shgId, status: 'COMPLETED' },
+      where: {
+        shgId,
+        status: { in: ['COMPLETED', 'DROPPED', 'PICKED_UP', 'PARCEL_AT_GMU', 'STORED'] }
+      },
       include: {
         seller: true,
         items: { include: { product: true } },
@@ -2258,8 +2155,7 @@ export class OrderService {
     const drops = await this.prisma.dropOrder.findMany({
       where: {
         shgId,
-        buyerId: { not: shgId },
-        status: { in: ['DELIVERED', 'COMPLETED'] },
+        status: { in: ['DELIVERED', 'COMPLETED', 'DROPPED'] },
         NOT: { dropOrderNumber: { startsWith: 'RET-' } }
       },
       include: {
@@ -2279,7 +2175,6 @@ export class OrderService {
     const returnDrops = await this.prisma.dropOrder.findMany({
       where: {
         shgId,
-        buyerId: { not: shgId },
         status: 'RETURNED', // Completed returns
       },
       include: {

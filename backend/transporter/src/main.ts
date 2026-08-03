@@ -88,3 +88,6 @@ async function bootstrap() {
   console.log(`Swagger documentation: http://localhost:${port}/api/docs`);
 }
 bootstrap();
+// Trigger server reload - SHG seller pickup transporter broadcast rule
+// Trigger server reload - acceptPickup PICKED_UP fix applied
+

@@ -178,19 +178,59 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       sourceAddress: finalSourceAddress,
       deliveryDay: dateStr,
       date: dateStr,
-      status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
-              (type === 'pickup') ? (
-                ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? (
-                  ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? 'COMPLETED' : 'PickedUp'
-                ) : (
-                  (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' : 'COMPLETED'
-                )
-              ) : (
-                // Drop Leg logic
-                (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' :
-                (dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') ? 'PickedUp' :
-                dbOrder.status === 'REJECTED' ? 'REJECTED' : 'COMPLETED'
-              ),
+      status: (() => {
+        const mStatus = dbOrder.masterOrder?.status || '';
+        const pStatus = dbOrder.status || '';
+        const shgStatus = dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '';
+
+        if (type === 'pickup') {
+          const isPickupCompleted = [
+            'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB',
+            'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB',
+            'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
+            'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU',
+            'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB',
+            'HUB_RECEIVED', 'STORED', 'DISPATCHED',
+            'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
+            'DELIVERED', 'COMPLETED',
+            'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
+            'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'
+          ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
+
+          if (isPickupCompleted) {
+            return 'COMPLETED';
+          }
+
+          const isPickedUpAtShg = [
+            'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP'
+          ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || shgStatus === 'PICKED';
+
+          if (isPickedUpAtShg) {
+            return 'PickedUp';
+          }
+
+          if (pStatus === 'REJECTED') {
+            return 'REJECTED';
+          }
+
+          return 'Accepted';
+        } else {
+          // Drop leg mapping for SHG (Phase 2)
+          if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+            return 'COMPLETED';
+          }
+
+          if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
+            return 'PickedUp';
+          }
+
+          if (pStatus === 'REJECTED') {
+            return 'REJECTED';
+          }
+
+          return 'Accepted';
+        }
+      })(),
       isReturn: isReturnFlag,
       image: items[0]?.product?.image || '',
       currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
@@ -358,10 +398,30 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.warn('Failed to fetch rejected orders:', err);
       }
 
+      // Auto-accept any assigned PENDING / RETURN_PENDING pickups & returns on backend
+      rawPickups.forEach((o: any) => {
+        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+          axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => {});
+        }
+      });
+
+      rawReturns.forEach((o: any) => {
+        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+          axiosInstance.post(`/orders/returns/${o.id}/accept`).catch(() => {});
+        }
+      });
+
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
-        if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
+        if (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED') {
+          order.status = 'COMPLETED';
+          const pIdx = localPickedUp.indexOf(order.id);
+          if (pIdx !== -1) {
+            localPickedUp.splice(pIdx, 1);
+            AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp)).catch(() => {});
+          }
+        } else if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
           order.status = 'PickedUp';
         }
         if (localRejected.includes(order.id)) {
@@ -514,10 +574,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setReturnedOrders(mappedReturned);
 
-      // Completed = Everything Completed from Dedicated Endpoints
+      // Completed = Everything Completed from Dedicated Endpoints + COMPLETED mapped orders
       const mappedCompletedNew = (rawCompleted.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
-      const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
+      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED');
+      const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
       const uniqueCompletedMap = new Map<string, Order>();
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));
       setDeliveredOrders(Array.from(uniqueCompletedMap.values()));
@@ -839,7 +900,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
-      if (order.legType === 'pickup') {
+      const isPickupLeg = order.legType === 'pickup' || order.id.startsWith('pickup-');
+      if (isPickupLeg) {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
         const paramLegType = activeType === 'transporter' ? 'handover' : 'pickup';
         await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });

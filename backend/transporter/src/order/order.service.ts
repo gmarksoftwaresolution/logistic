@@ -82,7 +82,7 @@ export class OrderService {
         masterOrder: {
           orderNumber: { in: assignedPickupOrderIds }
         },
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'PICKED_UP', 'COMPLETED', 'REJECTED', 'RETURN_PENDING', 'RETURN_ACCEPTED', 'RETURNED'] },
       },
       include: {
         seller: {
@@ -134,7 +134,7 @@ export class OrderService {
         filteredPickups.push(pickup);
       } else if (pickup.transporterId === null) {
         // Must be completed (picked up by SHG) and match transporter's operating area
-        if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED') {
+        if (pickup.status === 'COMPLETED' || pickup.status === 'RETURNED' || pickup.status === 'PICKED_UP' || pickup.status === 'ACCEPTED') {
           // Check gmu.Order mainStatus
           const gmuOrders = await this.prisma.$queryRawUnsafe(`
             SELECT id, "mainStatus", "pickupTransporterStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
@@ -155,7 +155,7 @@ export class OrderService {
             `, orderUuid, transporterUuid) as any[];
 
             if (assignments.length > 0) {
-              if (mainStatus === 'PARCEL_AT_SHG' || mainStatus === 'RETURN_PARCEL_AT_SHG') {
+              if (mainStatus === 'PARCEL_AT_SHG' || mainStatus === 'PARCEL_PICKED' || mainStatus === 'RETURN_PARCEL_AT_SHG') {
                 if (matchesRoute(pickup.seller.pincode, pickup.seller.village)) {
                   filteredPickups.push(pickup);
                 }
@@ -214,7 +214,7 @@ export class OrderService {
       return pickupOrder;
     }
 
-    const allowedStatuses = ['PENDING', 'RETURN_PENDING', 'COMPLETED', 'RETURNED'];
+    const allowedStatuses = ['PENDING', 'RETURN_PENDING', 'PICKED_UP', 'COMPLETED', 'RETURNED'];
     if (!allowedStatuses.includes(pickupOrder.status)) {
       throw new BadRequestException(`Cannot accept pickup order in its current status (${pickupOrder.status}).`);
     }
@@ -475,8 +475,8 @@ export class OrderService {
       throw new NotFoundException(`Pickup order with ID ${pickupOrderId} not found.`);
     }
 
-    if (pickupOrder.status !== 'ACCEPTED' && pickupOrder.status !== 'RETURN_ACCEPTED') {
-      throw new BadRequestException(`Cannot complete pickup order in its current status (${pickupOrder.status}). It must be ACCEPTED or RETURN_ACCEPTED.`);
+    if (!['ACCEPTED', 'RETURN_ACCEPTED', 'PICKED_UP'].includes(pickupOrder.status)) {
+      throw new BadRequestException(`Cannot complete pickup order in its current status (${pickupOrder.status}). It must be ACCEPTED, RETURN_ACCEPTED, or PICKED_UP.`);
     }
 
     const sellerName = pickupOrder.seller?.sellerName || '';
@@ -505,91 +505,50 @@ export class OrderService {
         SELECT id, "pickupShgStatus" FROM public."Order" WHERE "orderId" = $1 AND phase = 'PICKUP' LIMIT 1;
       `, masterOrder.orderNumber) as any[];
 
-      let shgDropped = false;
       let orderUuid = null;
       if (rawGmuOrder.length > 0) {
         orderUuid = rawGmuOrder[0].id;
-        shgDropped = ['DROPPED', 'RETURNED'].includes(rawGmuOrder[0].pickupShgStatus);
-      }
-
-      if (!shgDropped) {
-        throw new BadRequestException('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
       }
 
       const isReturn = pickupOrder.status === 'RETURN_ACCEPTED';
       const nextStatus = isReturn ? 'RETURNED' : 'COMPLETED';
+      const nextGmuStatus = isReturn ? 'RETURN_IN_TRANSIT_TO_HUB' : 'IN_TRANSIT_TO_HUB';
 
-      let updated;
-      if (shgDropped) {
-        // Both complete!
-        const nextGmuStatus = isReturn ? 'RETURN_IN_TRANSIT_TO_HUB' : 'IN_TRANSIT_TO_HUB';
+      const updated = await tx.pickupOrder.update({
+        where: { id: pickupOrderId },
+        data: {
+          status: nextStatus,
+          pickupTime: new Date(),
+          transporterId,
+        },
+      });
 
-        updated = await tx.pickupOrder.update({
-          where: { id: pickupOrderId },
-          data: {
-            status: nextStatus,
-            pickupTime: new Date(),
-            transporterId,
-          },
-        });
+      await tx.$executeRawUnsafe(`
+        UPDATE public."Order"
+        SET "pickupShgStatus" = 'DROPPED', "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
+        WHERE "orderId" = $2 AND phase = 'PICKUP';
+      `, nextGmuStatus, masterOrder.orderNumber);
 
+      await tx.masterOrder.update({
+        where: { id: pickupOrder.masterOrderId },
+        data: { status: nextGmuStatus },
+      });
+
+      if (orderUuid) {
         await tx.$executeRawUnsafe(`
-          UPDATE public."Order"
-          SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
-          WHERE "orderId" = $2 AND phase = 'PICKUP';
-        `, nextGmuStatus, masterOrder.orderNumber);
-
-        await tx.masterOrder.update({
-          where: { id: pickupOrder.masterOrderId },
-          data: { status: nextGmuStatus },
-        });
-
-        if (orderUuid) {
-          await tx.$executeRawUnsafe(`
-            UPDATE public."OrderAssignment"
-            SET status = 'COMPLETED', "updatedAt" = NOW()
-            WHERE "orderId" = $1 AND role = 'PICKUP' AND "assigneeType" = 'TRANSPORTER';
-          `, orderUuid);
-        }
-
-        await tx.pickupTracking.create({
-          data: {
-            pickupOrderId,
-            status: nextStatus,
-            remarks: 'Pickup leg completed successfully by transporter.',
-          },
-        });
-      } else {
-        // Only transporter has completed
-        const nextGmuStatus = isReturn ? 'RETURN_PARCEL_AT_TRANSPORTER' : 'PARCEL_AT_TRANSPORTER';
-
-        updated = await tx.pickupOrder.update({
-          where: { id: pickupOrderId },
-          data: {
-            pickupTime: new Date(),
-            transporterId,
-          },
-        });
-
-        await tx.$executeRawUnsafe(`
-          UPDATE public."Order"
-          SET "pickupTransporterStatus" = 'PICKED', "mainStatus" = $1, "updatedAt" = NOW()
-          WHERE "orderId" = $2 AND phase = 'PICKUP';
-        `, nextGmuStatus, masterOrder.orderNumber);
-
-        await tx.masterOrder.update({
-          where: { id: pickupOrder.masterOrderId },
-          data: { status: nextGmuStatus },
-        });
-
-        await tx.pickupTracking.create({
-          data: {
-            pickupOrderId,
-            status: pickupOrder.status,
-            remarks: 'Package picked up by transporter. Awaiting SHG drop confirmation.',
-          },
-        });
+          UPDATE public."OrderAssignment"
+          SET status = 'COMPLETED', "updatedAt" = NOW()
+          WHERE "orderId" = $1 AND role = 'PICKUP';
+        `, orderUuid);
       }
+
+      await tx.pickupTracking.create({
+        data: {
+          pickupOrderId,
+          status: nextStatus,
+          remarks: 'Pickup leg completed successfully by transporter.',
+        },
+      });
 
       // Automatically transition any associated PENDING drop orders to ACCEPTED and assign to the transporter
       // (Disabled in separated phase architecture)

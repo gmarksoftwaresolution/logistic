@@ -285,6 +285,27 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     }
   };
 
+  // Auto-fetch/generate QR codes when opening the View Modal
+  useEffect(() => {
+    if (isViewModalOpen && selectedOrderDetails && (!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0)) {
+      const autoFetchQr = async () => {
+        setIsGeneratingQr(true);
+        try {
+          const targetId = selectedOrderDetails.uuid || selectedOrderDetails.id;
+          const res = await api.orders.generateQr(targetId, false);
+          if (res && Array.isArray(res) && res.length > 0) {
+            setSelectedOrderDetails((prev: any) => prev ? { ...prev, parcels: res } : prev);
+          }
+        } catch (err) {
+          console.warn("Auto-generate QR failed in InventoryManagementPage:", err);
+        } finally {
+          setIsGeneratingQr(false);
+        }
+      };
+      autoFetchQr();
+    }
+  }, [isViewModalOpen, selectedOrderDetails?.id]);
+
   // QR Scan Modal State
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [qrItem, setQrItem] = useState<InventoryItem | null>(null);
@@ -979,15 +1000,8 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       </div>
 
                       {!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0 ? (
-                        <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-3">
-                          <p className="text-xs font-semibold text-slate-500">No QR codes generated for this order yet.</p>
-                          <button
-                            onClick={() => handleGenerateAllQr(selectedOrderDetails.uuid || selectedOrderDetails.id)}
-                            disabled={isGeneratingQr}
-                            className="bg-[#073318] hover:bg-[#073318]/90 disabled:bg-slate-350 text-white text-xs font-bold py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer border-none"
-                          >
-                            {isGeneratingQr ? 'Generating...' : 'Generate QRs'}
-                          </button>
+                        <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
+                          <p className="text-xs font-semibold text-slate-400 italic">No QR codes available for this order.</p>
                         </div>
                       ) : (
                         <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
