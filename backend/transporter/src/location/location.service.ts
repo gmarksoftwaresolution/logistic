@@ -6,12 +6,66 @@ import { PrismaService } from '../common/prisma.service';
 export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Centralized lookup methods
   async findByPincode(pincode: string) {
-    return this.prisma.pincodeDirectory.findMany({
-      where: { pincode: pincode.trim() },
-      orderBy: { village: 'asc' },
-    });
+    if (!pincode) return [];
+    const cleanPin = String(pincode).trim();
+
+    try {
+      const dbResults = await this.prisma.pincodeDirectory.findMany({
+        where: {
+          pincode: cleanPin,
+        },
+        orderBy: { village: 'asc' },
+      });
+
+      if (dbResults && dbResults.length > 0) {
+        return dbResults;
+      }
+    } catch (e: any) {
+      console.warn('findByPincode ORM query note, attempting raw query:', e.message);
+    }
+
+    try {
+      const rawResults: any[] = await this.prisma.$queryRaw`
+        SELECT 
+          id,
+          pincode,
+          COALESCE(village, name, '') as village,
+          COALESCE(post_office, village, name, '') as "postOffice",
+          COALESCE(taluka, block, district, '') as taluka,
+          district,
+          state
+        FROM pincode_directory
+        WHERE pincode = ${cleanPin}
+        ORDER BY village ASC
+      `;
+
+      if (rawResults && rawResults.length > 0) {
+        return rawResults;
+      }
+    } catch (rawErr: any) {
+      console.warn('findByPincode raw query fallback note:', rawErr.message);
+    }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPin}`, { timeout: 4000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success') {
+        const postOffices = response.data[0].PostOffice || [];
+        return postOffices.map((po: any, index: number) => ({
+          id: index + 1,
+          village: po.Name || po.Block || '',
+          postOffice: po.Name || '',
+          pincode: cleanPin,
+          taluka: (po.Block && po.Block !== 'NA') ? po.Block : ((po.District && po.District !== 'NA') ? po.District : ''),
+          district: (po.District && po.District !== 'NA') ? po.District : '',
+          state: (po.State && po.State !== 'NA') ? po.State : '',
+        }));
+      }
+    } catch (apiErr: any) {
+      console.log('Postal API fallback note:', apiErr?.message);
+    }
+
+    return [];
   }
 
   async findByVillage(village: string) {
@@ -154,4 +208,116 @@ export class LocationService {
     });
     return !!record;
   }
+
+  // Backward compatibility methods
+  async getAddressFromPincode(pincode: string) {
+    if (!pincode || pincode.trim().length !== 6) {
+      throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
+    }
+    const cleanPincode = pincode.trim();
+
+    try {
+      const records = await this.prisma.pincodeDirectory.findMany({
+        where: { pincode: cleanPincode },
+      });
+
+      if (records && records.length > 0) {
+        const first = records[0];
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        records.forEach((r: any) => {
+          const po = r.postOffice || 'N/A';
+          postOfficesSet.add(po);
+          if (!postOfficeMap[po]) {
+            postOfficeMap[po] = [];
+          }
+          if (r.village && !postOfficeMap[po].includes(r.village)) {
+            postOfficeMap[po].push(r.village);
+          }
+        });
+
+        // Sort villages in map
+        Object.keys(postOfficeMap).forEach((po) => {
+          postOfficeMap[po].sort();
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
+        return {
+          state: first.state,
+          district: first.district,
+          taluka: first.taluka || first.district || 'N/A',
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
+          source: 'local_db',
+        };
+      }
+    } catch (dbErr: any) {
+      console.warn(`Local DB pincode query notice for ${cleanPincode}:`, dbErr.message);
+    }
+
+    try {
+      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
+      if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
+        const postOfficesData = response.data[0].PostOffice;
+        const first = postOfficesData[0];
+        const postOfficeMap: Record<string, string[]> = {};
+        const postOfficesSet = new Set<string>();
+
+        postOfficesData.forEach((po: any) => {
+          const poName = po.Name;
+          postOfficesSet.add(poName);
+          if (!postOfficeMap[poName]) {
+            postOfficeMap[poName] = [];
+          }
+          postOfficeMap[poName].push(poName);
+        });
+
+        const postOffices = Array.from(postOfficesSet).sort();
+
+        return {
+          state: first.State,
+          district: first.District,
+          taluka: first.Block || first.Taluka || first.District || 'N/A',
+          postOffices: postOffices,
+          postOfficeMap: postOfficeMap,
+          source: 'postal_api',
+        };
+      }
+    } catch (apiErr: any) {
+      console.warn(`External postal pincode fallback failed for ${cleanPincode}:`, apiErr.message);
+    }
+
+    throw new HttpException('Pincode details not found in directory', HttpStatus.NOT_FOUND);
+  }
+
+  async getBankFromIfsc(ifsc: string) {
+    try {
+      if (ifsc.length !== 11) {
+        throw new HttpException('Invalid IFSC length', HttpStatus.BAD_REQUEST);
+      }
+
+      const response = await axios.get(`https://ifsc.razorpay.com/${ifsc}`, { timeout: 5000 });
+      const data = response.data;
+
+      return {
+        bankName: data.BANK,
+        branchName: data.BRANCH,
+        city: data.CITY,
+        state: data.STATE,
+      };
+    } catch (error) {
+      console.error('IFSC Fetch Error:', error.message);
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        throw new HttpException('IFSC code not found', HttpStatus.NOT_FOUND);
+      }
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        `Error fetching bank details: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
+

@@ -33,15 +33,7 @@ export const HistoryStats = ({ stats }: { stats: StatsType | null }) => {
         </View>
       </View>
 
-      <View className="bg-white border border-slate-100 rounded-2xl p-3 mr-3 w-[130px] h-[64px] flex-row items-center shadow-sm" style={{ elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 }}>
-        <View className="w-8 h-8 rounded-full border items-center justify-center mr-3" style={{ borderColor: HISTORY_STATUS_COLORS.REJECTED.border + '4D', backgroundColor: HISTORY_STATUS_COLORS.REJECTED.bg }}>
-          <Ionicons name="close-circle-outline" size={13} color={HISTORY_STATUS_COLORS.REJECTED.color} />
-        </View>
-        <View className="flex-1 justify-center">
-          <Text className="text-[18px] font-black text-[#111827] leading-none" numberOfLines={1}>{stats.rejectedOrders}</Text>
-          <Text className="text-[10px] font-bold text-slate-500 mt-1" numberOfLines={1}>{t('rejected') || 'Rejected'}</Text>
-        </View>
-      </View>
+
     </ScrollView>
   );
 };

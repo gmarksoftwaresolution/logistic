@@ -11,7 +11,6 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
 import { useUser } from '../context/UserContext';
 import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
-import { RejectReasonModal } from '../components/RejectReasonModal';
 import { Order } from '../context/OrderContext';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
@@ -52,7 +51,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   } = route.params;
   const {
     receiveOrder,
-    rejectOrder,
     deliverOrder,
     orders,
     rescheduleOrder,
@@ -71,7 +69,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   // For drop orders:
   // - When accepted (status === 'Accepted'), SHG is picking up from the Transporter (show Transporter details)
   // - Once picked up (status === 'PickedUp'), SHG is delivering to the Buyer (show Buyer details)
-  const isDeliveryPhase = order.status === 'PickedUp' 
+  const isDeliveryPhase = order.status === 'PickedUp'
     || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
   // 2. Resolve active side details
@@ -91,13 +89,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     } else {
       activeType = 'seller';
     }
-  }
-
-  if (order.isRejectedDelivery) {
-    activeType = 'transporter';
-  }
-
-  // 3. Set details values dynamically
+  }  // 3. Set details values dynamically
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
   let nameLabel = t('su_person_name') || "Person Name";
@@ -108,11 +100,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "N/A";
 
-  if (order.isRejectedDelivery && activeType === 'transporter') {
-    addressOrVehicleLabel = "Return Hub Address";
-    addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = "Kolhapur Transporter Hub, Main Road, Kolhapur";
-  } else if (isDeliveryPhase && activeType === 'transporter') {
+  if (isDeliveryPhase && activeType === 'transporter') {
     nameLabel = "Transporter Name";
     mobileLabel = "Transporter Mobile Number";
     addressOrVehicleLabel = "Transporter Address";
@@ -126,11 +114,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
     nameLabel = t('su_seller_name') || "Seller Name";
     nameValue = order.sellerName || source;
     mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
-    
+
     // Validate mobile number to avoid showing seller IDs
     const isValidPhone = order.mobile && /^[+]?[0-9\s-]{10,15}$/.test(order.mobile);
     mobileValue = isValidPhone ? order.mobile : "9876543210";
-    
+
     addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
     addressOrVehicleIcon = "location-outline";
 
@@ -223,14 +211,15 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [showRedirectModal, setShowRedirectModal] = useState<boolean>(false);
+  const [selectedQrParcel, setSelectedQrParcel] = useState<any | null>(null);
 
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
     if (!matchingParcel) return false;
-    
+
     const status = matchingParcel.parcelStatus;
     const phase = order.phase || 'PICKUP';
-    
+
     if (phase === 'PICKUP') {
       if (isDeliveryPhase) {
         // Step 2: SHG delivery handover to Transporter
@@ -246,14 +235,14 @@ const OrderDetailsScreen: React.FC<Props> = ({
       if (isDeliveryPhase) {
         // Step 10: Drop SHG delivery to Buyer
         return status === 'DELIVERED' ||
-               status === 'COMPLETED' ||
-               status === 'VERIFIED';
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       } else {
         // Step 9: Drop SHG pickup from Transporter
         return status === 'PARCEL_WITH_DROP_SHG' ||
-               status === 'DELIVERED' ||
-               status === 'COMPLETED' ||
-               status === 'VERIFIED';
+          status === 'DELIVERED' ||
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       }
     }
   };
@@ -276,7 +265,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [scannerModalVisible, setScannerModalVisible] = useState<boolean>(false);
   const [scanningStatus, setScanningStatus] = useState<'scanning' | 'success'>('scanning');
   const isScanningRef = useRef(false);
-  const [rejectModalVisible, setRejectModalVisible] = useState(false);
 
   // Reschedule state hooks
   const [showRescheduleBottomSheet, setShowRescheduleBottomSheet] = useState(false);
@@ -403,7 +391,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
     try {
       let parcelId = "";
       let verificationToken = "";
-      
+
       if (data.trim().startsWith("{")) {
         const parsed = JSON.parse(data.trim());
         parcelId = parsed.parcelId;
@@ -625,40 +613,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: 'delivery' });
+          navigation.navigate('AcceptedOrders', { initialTab: 'drop' as any });
         }
       }
     } catch (error) {
       Alert.alert("Error", "Failed to submit order. Please try again.");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-  const handleRejectOrder = () => {
-    setRejectModalVisible(true);
-  };
-  const handleRejectModalSubmit = async (ord: Order, reason: string) => {
-    try {
-      await rejectOrder({
-        ...ord,
-        rejectReason: reason
-      });
-      setRejectModalVisible(false);
-      if (isDeliveryPhase) {
-        Toast.show({
-          type: 'success',
-          text1: t("su_address_updated") || "Return Address Updated",
-          text2: t("su_please_return_to_source") || "Please deliver the order back to the pickup point."
-        });
-      } else {
-        if (navigation.canGoBack()) {
-          navigation.goBack();
-        } else {
-          navigation.navigate('AcceptedOrders', { initialTab: 'pickup' });
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to reject order. Please try again.");
     }
   };
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
@@ -668,7 +629,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
+          navigation.navigate('AcceptedOrders', { initialTab: (isDeliveryPhase ? 'drop' : 'pickup') as any });
         }
       }} className="w-11 h-11 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" style={{
         elevation: 2
@@ -713,9 +674,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </Text>
             </View>
           </View>
-          <View className={order.isRejectedDelivery ? "bg-[#7F1D1D] border border-red-500/20 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0" : "bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0"}>
-            <Text className={`text-[10px] font-black uppercase tracking-wider ${order.isRejectedDelivery ? 'text-[#FECACA]' : 'text-[#6EE7B7]'}`}>
-              {order.isRejectedDelivery ? "RETURNING" : (order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status)}
+          <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-shrink-0">
+            <Text className="text-[10px] font-black uppercase tracking-wider text-[#6EE7B7]">
+              {(order.status === 'Accepted' ? t('su_status_accepted') || 'ACCEPTED' : order.status === 'Received' ? t('su_status_received') || 'RECEIVED' : order.status === 'Delivered' ? t('su_status_delivered') || 'DELIVERED' : order.status)}
             </Text>
           </View>
         </View>
@@ -900,20 +861,6 @@ const OrderDetailsScreen: React.FC<Props> = ({
               <Text className="text-[14px] font-black text-[#111827] pr-2">
                 {addressOrVehicleValue}
               </Text>
-
-              {order.isRejectedDelivery && (
-                <View className="mt-3 bg-[#FEF2F2] border border-[#FECACA] p-3 rounded-[16px] flex-row items-start">
-                  <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 8, marginTop: 2 }} />
-                  <View className="flex-1">
-                    <Text className="text-[12px] font-extrabold text-[#991B1B] uppercase tracking-wider mb-1">
-                      Return Address Updated
-                    </Text>
-                    <Text className="text-[12px] font-medium text-[#7F1D1D] leading-tight">
-                      This order was rejected during delivery. The address has been updated to the original pickup point from where the order was collected. Please return the products to this location.
-                    </Text>
-                  </View>
-                </View>
-              )}
             </View>
           </View>
         )}
@@ -970,7 +917,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         </View>
       </View>
-      
+
       {/* Verification Progress Bar */}
       {(() => {
         const verifiedCount = (products || []).filter((item: any) => {
@@ -996,10 +943,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </View>
             </View>
             <View className={`p-2 rounded-lg flex-row items-center justify-center ${verifiedCount === totalCount ? 'bg-[#ECFDF5]' : 'bg-[#FFFBEB]'}`}>
-              <Ionicons 
-                name={verifiedCount === totalCount ? "checkmark-circle" : "alert-circle"} 
-                size={16} 
-                color={verifiedCount === totalCount ? "#10B981" : "#D97706"} 
+              <Ionicons
+                name={verifiedCount === totalCount ? "checkmark-circle" : "alert-circle"}
+                size={16}
+                color={verifiedCount === totalCount ? "#10B981" : "#D97706"}
               />
             </View>
           </View>
@@ -1041,10 +988,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   </Text>
                   {/* Status Badge */}
                   <View className={`px-1.5 py-0.5 rounded-md flex-row items-center ${isVerified ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                    <Ionicons 
-                      name={isVerified ? "checkmark-circle-outline" : "ellipse-outline"} 
-                      size={10} 
-                      color={isVerified ? "#10B981" : "#F59E0B"} 
+                    <Ionicons
+                      name={isVerified ? "checkmark-circle-outline" : "ellipse-outline"}
+                      size={10}
+                      color={isVerified ? "#10B981" : "#F59E0B"}
                       style={{ marginRight: 3 }}
                     />
                     <Text className={`text-[9px] font-black uppercase ${isVerified ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -1055,15 +1002,33 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </View>
             </View>
 
-            {/* RIGHT: Scanner Action Button or checkmark */}
-            {isVerified ? (
-              <View className="flex-row items-center gap-1">
-                <Ionicons name="checkmark-done" size={16} color="#10B981" />
-                <Text className="text-[11px] font-bold text-[#10B981]">Verified</Text>
-              </View>
-            ) : (
-              <Text className="text-[11px] font-bold text-slate-400">Awaiting Dashboard Scan</Text>
-            )}
+            {/* RIGHT: Scanner Action Button, QR View or checkmark */}
+            <View className="flex-row items-center gap-2">
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedQrParcel({
+                    ...(matchingParcel || {}),
+                    productName: item.name,
+                    parcelId: matchingParcel?.parcelId || item.code || `PCL-${item.productId}`,
+                    verificationToken: matchingParcel?.verificationToken || item.verificationCode || 'N/A',
+                    qrImage: matchingParcel?.qrImage || null,
+                    parcelStatus: matchingParcel?.parcelStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
+                  });
+                }}
+                className="flex-row items-center bg-[#ECFDF5] px-2.5 py-1.5 rounded-lg border border-[#A7F3D0]"
+              >
+                <Ionicons name="qr-code-outline" size={14} color="#059669" />
+                <Text className="text-[11px] font-black text-[#059669] ml-1">QR Code</Text>
+              </TouchableOpacity>
+              {isVerified ? (
+                <View className="flex-row items-center gap-1">
+                  <Ionicons name="checkmark-done" size={16} color="#10B981" />
+                  <Text className="text-[11px] font-bold text-[#10B981]">Verified</Text>
+                </View>
+              ) : (
+                <Text className="text-[11px] font-bold text-slate-400">Pending</Text>
+              )}
+            </View>
           </View>;
         })}
       </View>
@@ -1086,7 +1051,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         const parsedWeight = Number(oWeight);
         // Default to 30 if carrying capacity is missing, since we updated all DB users to 30
         const parsedCap = Number(uCarrying ?? uVehicle ?? 30);
-        
+
         const isHeavy = parsedWeight > parsedCap;
         const showRedirect = !isDeliveryPhase && order.status?.toUpperCase() === 'ACCEPTED' && order.recommendedVehicle && oWeight !== undefined && isHeavy;
 
@@ -1103,268 +1068,299 @@ const OrderDetailsScreen: React.FC<Props> = ({
       })()}
 
       {/* Action Buttons Row */}
-        {(!order.isRejectedDelivery && order.status !== 'REJECTED') && (
-          <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
-            {/* Reschedule Button Area */}
-            <View className="flex-1 justify-end" pointerEvents={(showRescheduleTimer && rescheduleExpired) ? 'none' : 'auto'}>
-              {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
-                <View className="mb-2">
-                  {rescheduleExpired ? (
-                    <Text className="text-[12px] font-bold text-red-500 text-center mb-1">
-                      Reschedule Window Expired
-                    </Text>
-                  ) : (
-                    <>
-                      <Text className="text-[10px] font-bold text-slate-500 text-center">
-                        Reschedule Available
-                      </Text>
-                      <Text className="text-[13px] font-black text-[#073318] text-center mb-1.5 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
-                        {rescheduleTimeLeft !== null ? formatTimeLeft(rescheduleTimeLeft) : '02:00:00'}
-                      </Text>
-                      <View className="h-1 bg-slate-100 rounded-full w-full overflow-hidden mx-auto max-w-[120px]">
-                        <View className="h-full bg-[#059669] rounded-full" style={{ width: `${rescheduleProgress}%` }} />
-                      </View>
-                    </>
-                  )}
-                </View>
-              )}
-              <TouchableOpacity
-                onPress={() => setRescheduleReasonModalVisible(true)}
-                disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)}
-                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
-                style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.5 : 1 }}
-              >
-                <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
-                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
-                  {t("su_reschedule_401") || "Reschedule"}
+      <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">
+        {/* Reschedule Button Area */}
+        <View className="flex-1 justify-end" pointerEvents={(showRescheduleTimer && rescheduleExpired) ? 'none' : 'auto'}>
+          {showRescheduleTimer && order.acceptedAt && !isNaN(new Date(order.acceptedAt).getTime()) && (
+            <View className="mb-2">
+              {rescheduleExpired ? (
+                <Text className="text-[12px] font-bold text-red-500 text-center mb-1">
+                  Reschedule Window Expired
                 </Text>
-              </TouchableOpacity>
+              ) : (
+                <>
+                  <Text className="text-[10px] font-bold text-slate-500 text-center">
+                    Reschedule Available
+                  </Text>
+                  <Text className="text-[13px] font-black text-[#073318] text-center mb-1.5 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
+                    {rescheduleTimeLeft !== null ? formatTimeLeft(rescheduleTimeLeft) : '02:00:00'}
+                  </Text>
+                  <View className="h-1 bg-slate-100 rounded-full w-full overflow-hidden mx-auto max-w-[120px]">
+                    <View className="h-full bg-[#059669] rounded-full" style={{ width: `${rescheduleProgress}%` }} />
+                  </View>
+                </>
+              )}
             </View>
+          )}
+          <TouchableOpacity
+            onPress={() => setRescheduleReasonModalVisible(true)}
+            disabled={isSubmitting || (showRescheduleTimer && rescheduleExpired)}
+            className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-white border-[#073318]'}`}
+            style={{ opacity: (showRescheduleTimer && rescheduleExpired) ? 0.5 : 1 }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={isSubmitting || (showRescheduleTimer && rescheduleExpired) ? "#94A3B8" : "#073318"} />
+            <Text className={`text-[14px] font-bold ml-2 ${isSubmitting || (showRescheduleTimer && rescheduleExpired) ? 'text-[#94A3B8]' : 'text-[#073318]'}`}>
+              {t("su_reschedule_401") || "Reschedule"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-            {/* Reject Order Button Area */}
-            <View className="flex-1 justify-end" pointerEvents={isDeliveryPhase ? 'none' : 'auto'}>
-              <TouchableOpacity
-                onPress={handleRejectOrder}
-                disabled={isSubmitting || isDeliveryPhase}
-                className={`border h-12 rounded-[16px] flex-row items-center justify-center ${isSubmitting ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]'}`}
-                style={isDeliveryPhase ? { opacity: 0.5 } : {}}
-              >
-                <Ionicons name="close" size={16} color={isSubmitting ? "#FCA5A5" : "#DC2626"} />
-                <Text className={`text-[14px] font-bold ml-2 ${isSubmitting ? 'text-[#FCA5A5]' : 'text-[#DC2626]'}`}>{t("su_reject_order_356") || "Reject Order"}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-          <View className="h-32" />
-        </ScrollView>
-
+      <View className="h-32" />
+    </ScrollView>
 
 
-        {/* Photo Preview Modal */}
-        <Modal visible={previewVisible} transparent={false} animationType="slide" onRequestClose={() => setPreviewVisible(false)}>
-          <SafeAreaView className="flex-1 bg-black justify-between p-6">
-            <View className="items-center justify-center flex-1 my-4">
-              {tempPhotoUri ? <Image source={{
-                uri: tempPhotoUri
-              }} className="w-full h-[75%] rounded-[20px]" style={{
-                resizeMode: 'contain'
-              }} /> : null}
-            </View>
 
-            <View className="gap-3 pb-8">
-              {/* Retake Photo Button */}
-              <TouchableOpacity onPress={openCamera} className="bg-white/20 border border-white/30 h-12 rounded-[16px] flex-row items-center justify-center active:bg-white/30">
-                <Ionicons name="camera-outline" size={16} color="white" />
-                <Text className="text-[14px] font-bold text-white ml-2">{t("su_retake_photo_358")}</Text>
-              </TouchableOpacity>
+    {/* Photo Preview Modal */}
+    <Modal visible={previewVisible} transparent={false} animationType="slide" onRequestClose={() => setPreviewVisible(false)}>
+      <SafeAreaView className="flex-1 bg-black justify-between p-6">
+        <View className="items-center justify-center flex-1 my-4">
+          {tempPhotoUri ? <Image source={{
+            uri: tempPhotoUri
+          }} className="w-full h-[75%] rounded-[20px]" style={{
+            resizeMode: 'contain'
+          }} /> : null}
+        </View>
 
-              {/* Done Button */}
-              <TouchableOpacity onPress={() => {
-                setCapturedPhotoUri(tempPhotoUri);
-                setPreviewVisible(false);
-                if (isActive && currentStep?.id === 'capture_photos_button') {
-                  nextStep();
-                }
-              }} className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center active:bg-[#052210] shadow-md">
-                <Ionicons name="checkmark-circle-outline" size={16} color="white" />
-                <Text className="text-[14px] font-bold text-white ml-2">{t("su_done_359")}</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </Modal>
+        <View className="gap-3 pb-8">
+          {/* Retake Photo Button */}
+          <TouchableOpacity onPress={openCamera} className="bg-white/20 border border-white/30 h-12 rounded-[16px] flex-row items-center justify-center active:bg-white/30">
+            <Ionicons name="camera-outline" size={16} color="white" />
+            <Text className="text-[14px] font-bold text-white ml-2">{t("su_retake_photo_358")}</Text>
+          </TouchableOpacity>
 
-        {/* Scanner Modal */}
-        <Modal visible={scannerModalVisible} transparent={false} animationType="slide" onRequestClose={() => setScannerModalVisible(false)}>
-          <SafeAreaView className="flex-1 bg-black justify-between p-6">
-            {/* Header */}
-            <View className="flex-row items-center justify-between mt-2 px-2">
-              <TouchableOpacity onPress={() => setScannerModalVisible(false)} className="w-11 h-11 bg-white/10 rounded-full items-center justify-center border border-white/20">
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text className="text-[18px] font-black text-white text-center flex-1 mr-11">{t("su_verify_products_360")}</Text>
-            </View>
+          {/* Done Button */}
+          <TouchableOpacity onPress={() => {
+            setCapturedPhotoUri(tempPhotoUri);
+            setPreviewVisible(false);
+            if (isActive && currentStep?.id === 'capture_photos_button') {
+              nextStep();
+            }
+          }} className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center active:bg-[#052210] shadow-md">
+            <Ionicons name="checkmark-circle-outline" size={16} color="white" />
+            <Text className="text-[14px] font-bold text-white ml-2">{t("su_done_359")}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
 
-            {/* Viewfinder Area */}
-            <View className="items-center justify-center flex-1 my-4">
-              <View className="w-[260px] h-[260px] relative justify-center items-center">
-                {/* Corner brackets */}
-                {/* Top Left */}
-                <View className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#059669] rounded-tl-[12px]" />
-                {/* Top Right */}
-                <View className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#059669] rounded-tr-[12px]" />
-                {/* Bottom Left */}
-                <View className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#059669] rounded-bl-[12px]" />
-                {/* Bottom Right */}
-                <View className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#059669] rounded-br-[12px]" />
+    {/* Scanner Modal */}
+    <Modal visible={scannerModalVisible} transparent={false} animationType="slide" onRequestClose={() => setScannerModalVisible(false)}>
+      <SafeAreaView className="flex-1 bg-black justify-between p-6">
+        {/* Header */}
+        <View className="flex-row items-center justify-between mt-2 px-2">
+          <TouchableOpacity onPress={() => setScannerModalVisible(false)} className="w-11 h-11 bg-white/10 rounded-full items-center justify-center border border-white/20">
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text className="text-[18px] font-black text-white text-center flex-1 mr-11">{t("su_verify_products_360")}</Text>
+        </View>
 
-                {/* Central scanning grid area / transparent frame */}
-                <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center relative">
-                  {scanningStatus === 'scanning' ? <>
-                    {permission?.granted ? (
-                      <CameraView
-                        style={{ width: '100%', height: '100%', position: 'absolute' }}
-                        facing="back"
-                        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-                        barcodeScannerSettings={{
-                          barcodeTypes: ["qr"],
-                        }}
-                      />
-                    ) : (
-                      <TouchableOpacity onPress={requestPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
-                        <Text className="text-white font-bold text-[13px]">Request Camera</Text>
-                      </TouchableOpacity>
-                    )}
-                    <Animated.View style={{
-                      transform: [{
-                        translateY
-                      }],
-                      width: '100%',
-                      height: 3,
-                      backgroundColor: '#EF4444',
-                      position: 'absolute',
-                      top: 0,
-                      shadowColor: '#EF4444',
-                      shadowOffset: {
-                        width: 0,
-                        height: 4
-                      },
-                      shadowOpacity: 0.8,
-                      shadowRadius: 5,
-                      elevation: 5
-                    }} />
-                  </> : <View className="absolute inset-0 bg-[#059669]/90 items-center justify-center">
-                    <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
-                      <Ionicons name="checkmark" size={32} color="#FFFFFF" />
-                    </View>
-                    <Text className="text-white text-[16px] font-black">{t("su_scan_successful_361")}</Text>
-                  </View>}
+        {/* Viewfinder Area */}
+        <View className="items-center justify-center flex-1 my-4">
+          <View className="w-[260px] h-[260px] relative justify-center items-center">
+            {/* Corner brackets */}
+            {/* Top Left */}
+            <View className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#059669] rounded-tl-[12px]" />
+            {/* Top Right */}
+            <View className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#059669] rounded-tr-[12px]" />
+            {/* Bottom Left */}
+            <View className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#059669] rounded-bl-[12px]" />
+            {/* Bottom Right */}
+            <View className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#059669] rounded-br-[12px]" />
+
+            {/* Central scanning grid area / transparent frame */}
+            <View className="w-[240px] h-[240px] bg-white/5 rounded-[8px] overflow-hidden justify-center items-center relative">
+              {scanningStatus === 'scanning' ? <>
+                {permission?.granted ? (
+                  <CameraView
+                    style={{ width: '100%', height: '100%', position: 'absolute' }}
+                    facing="back"
+                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                    barcodeScannerSettings={{
+                      barcodeTypes: ["qr"],
+                    }}
+                  />
+                ) : (
+                  <TouchableOpacity onPress={requestPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
+                    <Text className="text-white font-bold text-[13px]">Request Camera</Text>
+                  </TouchableOpacity>
+                )}
+                <Animated.View style={{
+                  transform: [{
+                    translateY
+                  }],
+                  width: '100%',
+                  height: 3,
+                  backgroundColor: '#EF4444',
+                  position: 'absolute',
+                  top: 0,
+                  shadowColor: '#EF4444',
+                  shadowOffset: {
+                    width: 0,
+                    height: 4
+                  },
+                  shadowOpacity: 0.8,
+                  shadowRadius: 5,
+                  elevation: 5
+                }} />
+              </> : <View className="absolute inset-0 bg-[#059669]/90 items-center justify-center">
+                <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
+                  <Ionicons name="checkmark" size={32} color="#FFFFFF" />
                 </View>
-              </View>
-
-              {/* Instruction Text */}
-              <Text className="text-[14px] font-bold text-white/70 mt-8 text-center px-6">
-                {scanningStatus === 'scanning' ? (t('su_align_barcode') || "Align the barcode/QR code within the frame to verify products") : (t('su_product_verified_success') || "Product verified successfully!")}
-              </Text>
-            </View>
-
-            {/* Bottom actions */}
-            <View className="pb-8 items-center justify-center">
-              {scanningStatus === 'scanning' ? <View className="flex-row items-center gap-2 bg-white/10 px-4 py-2.5 rounded-full border border-white/10">
-                <ActivityIndicator size="small" color="#059669" />
-                <Text className="text-[13px] font-bold text-white ml-1">{t("su_scanning_products_362")}</Text>
-              </View> : <View className="flex-row items-center gap-2 bg-[#E8F5EC] px-4 py-2.5 rounded-full border border-[#D5EFE0]">
-                <Ionicons name="checkmark-circle" size={16} color="#073318" />
-                <Text className="text-[13px] font-black text-[#073318] ml-1">{t("su_verification_complet_363")}</Text>
+                <Text className="text-white text-[16px] font-black">{t("su_scan_successful_361")}</Text>
               </View>}
             </View>
-          </SafeAreaView>
-        </Modal>
-
-        {/* Reject Reason Modal */}
-        <RejectReasonModal visible={rejectModalVisible} order={order} onClose={() => setRejectModalVisible(false)} onSubmit={handleRejectModalSubmit} />
-
-        {/* Reschedule Modals */}
-        <RescheduleModals
-          showBottomSheet={showRescheduleBottomSheet}
-          setShowBottomSheet={setShowRescheduleBottomSheet}
-          rescheduleReasonModalVisible={rescheduleReasonModalVisible}
-          setRescheduleReasonModalVisible={setRescheduleReasonModalVisible}
-          expectedDate={(order as any).date || ''}
-          onConfirm={async (date, time, reason) => {
-            try {
-              await rescheduleOrder(order.id, date, time, reason);
-              Toast.show({
-                type: 'success',
-                text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
-                text2: t("su_order_has_been_updated") || "Order has been updated with the new date and time."
-              });
-
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate('AcceptedOrders', { initialTab: isDeliveryPhase ? 'delivery' : 'pickup' });
-              }
-            } catch (error: any) {
-              const errMsg = error.response?.data?.message || error.message || "Failed to reschedule order.";
-              Toast.show({
-                type: 'error',
-                text1: t("error") || "Error",
-                text2: errMsg
-              });
-            }
-          }}
-        />
-
-        {/* Redirect Confirmation Modal */}
-        <Modal
-          visible={showRedirectModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowRedirectModal(false)}
-        >
-          <View 
-            className="flex-1 bg-black/50 justify-center px-6"
-            style={{ paddingBottom: insets.bottom + 24 }}
-          >
-            <View className="bg-white rounded-[24px] p-6 shadow-lg">
-              <View className="items-center mb-4">
-                <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-3">
-                  <Ionicons name="alert-circle-outline" size={28} color="#F59E0B" />
-                </View>
-                <Text className="text-[18px] font-black text-[#111827] text-center mb-2">Redirect Order</Text>
-                <Text className="text-[14px] font-medium text-[#4B5563] text-center px-2">
-                  Are you sure you want to redirect this order to the transporter?
-                </Text>
-              </View>
-
-              <View className="flex-row gap-3 mt-4">
-                <TouchableOpacity
-                  onPress={() => setShowRedirectModal(false)}
-                  className="flex-1 bg-white border border-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
-                >
-                  <Text className="text-[14px] font-bold text-[#9333EA]">Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    console.log("Redirect confirmed");
-                    setShowRedirectModal(false);
-                  }}
-                  className="flex-1 bg-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
-                >
-                  <Text className="text-[14px] font-bold text-white">Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
-        </Modal>
-        {(isPickupAccepted && !isDeliveryPhase && order.status !== 'Delivered') && (
-          <FloatingScannerButton
-            module="PICKUP"
-            orderIds={[order.orderId]}
-            navigation={navigation}
-          />
-        )}
-      </SafeAreaView>;
+
+          {/* Instruction Text */}
+          <Text className="text-[14px] font-bold text-white/70 mt-8 text-center px-6">
+            {scanningStatus === 'scanning' ? (t('su_align_barcode') || "Align the barcode/QR code within the frame to verify products") : (t('su_product_verified_success') || "Product verified successfully!")}
+          </Text>
+        </View>
+
+        {/* Bottom actions */}
+        <View className="pb-8 items-center justify-center">
+          {scanningStatus === 'scanning' ? <View className="flex-row items-center gap-2 bg-white/10 px-4 py-2.5 rounded-full border border-white/10">
+            <ActivityIndicator size="small" color="#059669" />
+            <Text className="text-[13px] font-bold text-white ml-1">{t("su_scanning_products_362")}</Text>
+          </View> : <View className="flex-row items-center gap-2 bg-[#E8F5EC] px-4 py-2.5 rounded-full border border-[#D5EFE0]">
+            <Ionicons name="checkmark-circle" size={16} color="#073318" />
+            <Text className="text-[13px] font-black text-[#073318] ml-1">{t("su_verification_complet_363")}</Text>
+          </View>}
+        </View>
+      </SafeAreaView>
+    </Modal>
+
+    {/* Reschedule Modals */}
+    <RescheduleModals
+      showBottomSheet={showRescheduleBottomSheet}
+      setShowBottomSheet={setShowRescheduleBottomSheet}
+      rescheduleReasonModalVisible={rescheduleReasonModalVisible}
+      setRescheduleReasonModalVisible={setRescheduleReasonModalVisible}
+      expectedDate={(order as any).date || ''}
+      onConfirm={async (date, time, reason) => {
+        try {
+          await rescheduleOrder(order.id, date, time, reason);
+          Toast.show({
+            type: 'success',
+            text1: t("su_order_rescheduled_success") || "1 order rescheduled successfully",
+            text2: t("su_order_has_been_updated") || "Order has been updated with the new date and time."
+          });
+
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('AcceptedOrders', { initialTab: (isDeliveryPhase ? 'drop' : 'pickup') as any });
+          }
+        } catch (error: any) {
+          const errMsg = error.response?.data?.message || error.message || "Failed to reschedule order.";
+          Toast.show({
+            type: 'error',
+            text1: t("error") || "Error",
+            text2: errMsg
+          });
+        }
+      }}
+    />
+
+    {/* Redirect Confirmation Modal */}
+    <Modal
+      visible={showRedirectModal}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowRedirectModal(false)}
+    >
+      <View
+        className="flex-1 bg-black/50 justify-center px-6"
+        style={{ paddingBottom: insets.bottom + 24 }}
+      >
+        <View className="bg-white rounded-[24px] p-6 shadow-lg">
+          <View className="items-center mb-4">
+            <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-3">
+              <Ionicons name="alert-circle-outline" size={28} color="#F59E0B" />
+            </View>
+            <Text className="text-[18px] font-black text-[#111827] text-center mb-2">Redirect Order</Text>
+            <Text className="text-[14px] font-medium text-[#4B5563] text-center px-2">
+              Are you sure you want to redirect this order to the transporter?
+            </Text>
+          </View>
+
+          <View className="flex-row gap-3 mt-4">
+            <TouchableOpacity
+              onPress={() => setShowRedirectModal(false)}
+              className="flex-1 bg-white border border-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+            >
+              <Text className="text-[14px] font-bold text-[#9333EA]">Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                console.log("Redirect confirmed");
+                setShowRedirectModal(false);
+              }}
+              className="flex-1 bg-[#9333EA] h-[48px] rounded-[16px] items-center justify-center"
+            >
+              <Text className="text-[14px] font-bold text-white">Confirm</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Parcel QR Code Display Modal */}
+    <Modal
+      visible={Boolean(selectedQrParcel)}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setSelectedQrParcel(null)}
+    >
+      <View className="flex-1 bg-black/60 justify-center items-center px-6">
+        <View className="bg-white rounded-[28px] p-6 w-full max-w-[340px] items-center shadow-xl border border-slate-100">
+          <View className="w-12 h-12 bg-[#ECFDF5] rounded-full items-center justify-center mb-3">
+            <Ionicons name="qr-code" size={26} color="#059669" />
+          </View>
+          <Text className="text-[18px] font-black text-[#111827] text-center mb-1">
+            {selectedQrParcel?.productName || 'Parcel QR Code'}
+          </Text>
+          <Text className="text-[12px] font-extrabold text-[#059669] text-center mb-4 uppercase tracking-wider">
+            Parcel ID: {selectedQrParcel?.parcelId || 'N/A'}
+          </Text>
+
+          {selectedQrParcel?.qrImage ? (
+            <Image
+              source={{ uri: selectedQrParcel.qrImage }}
+              className="w-48 h-48 rounded-xl mb-4 border border-slate-200"
+              resizeMode="contain"
+            />
+          ) : (
+            <View className="w-48 h-48 bg-slate-100 rounded-xl items-center justify-center mb-4 border border-dashed border-slate-300">
+              <Ionicons name="qr-code-outline" size={64} color="#94A3B8" />
+              <Text className="text-[11px] font-bold text-slate-400 mt-2">QR Code Preview</Text>
+            </View>
+          )}
+
+          <View className="bg-slate-50 p-3.5 rounded-xl w-full border border-slate-200 mb-5 items-center">
+            <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Verification Code</Text>
+            <Text className="text-[20px] font-black text-[#111827] tracking-widest" style={{ fontVariant: ['tabular-nums'] }}>
+              {selectedQrParcel?.verificationToken || 'N/A'}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => setSelectedQrParcel(null)}
+            className="bg-[#073318] h-12 rounded-[16px] items-center justify-center w-full shadow-sm"
+          >
+            <Text className="text-[14px] font-bold text-white">Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    {(isPickupAccepted && !isDeliveryPhase && order.status !== 'Delivered') && (
+      <FloatingScannerButton
+        module="PICKUP"
+        orderIds={[order.orderId]}
+        navigation={navigation}
+      />
+    )}
+  </SafeAreaView>;
 };
-      export default OrderDetailsScreen;
+export default OrderDetailsScreen;

@@ -59,6 +59,7 @@ interface SHGProfileExt {
   taluka: string;
   district: string;
   state: string;
+  postOffice: string;
 
   // Section 5: Documents
   aadhaarNumber: string;
@@ -125,6 +126,7 @@ const initialSHGs: SHGProfileExt[] = [
     taluka: 'Junnar',
     district: 'Pune',
     state: 'Maharashtra',
+    postOffice: 'Junnar',
     aadhaarNumber: '5432 9876 1201',
     panNumber: 'BPDPA1201K',
     aadhaarFront: 'aadhaar_front_savita.jpg',
@@ -183,6 +185,7 @@ const initialSHGs: SHGProfileExt[] = [
     taluka: 'Shirur',
     district: 'Pune',
     state: 'Maharashtra',
+    postOffice: 'Shirur',
     aadhaarNumber: '9876 5432 1098',
     panNumber: 'CLKPS9876D',
     aadhaarFront: 'aadhaar_front_lata.jpg',
@@ -235,6 +238,7 @@ const initialSHGs: SHGProfileExt[] = [
     taluka: 'Ambegaon',
     district: 'Pune',
     state: 'Maharashtra',
+    postOffice: 'Manchar',
     aadhaarNumber: '8765 4321 0987',
     panNumber: 'ASDPR8765F',
     aadhaarFront: 'aadhaar_front_shankar.jpg',
@@ -293,6 +297,7 @@ const initialSHGs: SHGProfileExt[] = [
     taluka: 'Indapur',
     district: 'Pune',
     state: 'Maharashtra',
+    postOffice: 'Indapur',
     aadhaarNumber: '1234 5678 9012',
     panNumber: 'DFGHI1234F',
     aadhaarFront: 'aadhaar_front_anisha.jpg',
@@ -345,6 +350,7 @@ const initialSHGs: SHGProfileExt[] = [
     taluka: 'Karjat',
     district: 'Ahmednagar',
     state: 'Maharashtra',
+    postOffice: 'Karjat',
     aadhaarNumber: '2345 6789 0123',
     panNumber: 'JKLMN2345P',
     aadhaarFront: 'aadhaar_front_raju.jpg',
@@ -369,22 +375,24 @@ const initialSHGs: SHGProfileExt[] = [
 
 const normalizeUrl = (url?: string) => {
   if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    try {
-      const parsed = new URL(url);
-      parsed.hostname = 'localhost';
-      parsed.port = '3000';
-      return parsed.toString();
-    } catch (e) {
-      return url;
+
+  // Extract relative path of uploads and rewrite dynamic local IP hosts to localhost
+  const uploadsIdx = url.indexOf('/uploads/');
+  if (uploadsIdx !== -1) {
+    const relPath = url.substring(uploadsIdx);
+    if (url.includes(':3002')) {
+      return `http://localhost:3002${relPath}`;
     }
+    return `http://localhost:3001${relPath}`;
   }
-  if (url.startsWith('/uploads')) {
-    return `http://localhost:3001${url}`;
-  }
+
   if (url.startsWith('uploads/')) {
     return `http://localhost:3001/${url}`;
   }
+  if (url.startsWith('/')) {
+    return `http://localhost:3001${url}`;
+  }
+
   return url;
 };
 
@@ -407,6 +415,7 @@ import { useAppContext } from '../context/AppContext';
 export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const { communityMembersList: shgList, setCommunityMembersList: setShgList } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isActionProcessing, setIsActionProcessing] = useState(false);
 
@@ -431,9 +440,93 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
     documentNumber?: string
   } | null>(null);
 
+  // Section-by-section approval checklist state
+  const [approvedSections, setApprovedSections] = useState<Record<string, boolean>>({});
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+
+  useEffect(() => {
+    if (!isViewModalOpen) {
+      setApprovedSections({});
+      setShowValidationErrors(false);
+    }
+  }, [isViewModalOpen]);
+
+  const areAllSectionsApproved = useMemo(() => {
+    if (!selectedProfile) return false;
+    const required = ['personal', 'storage', 'address', 'bank', 'documents'];
+    if (selectedProfile.type === 'SHG Group') {
+      required.push('shg_group', 'business');
+    }
+    return required.every((key) => approvedSections[key]);
+  }, [selectedProfile, approvedSections]);
+
+  const getCardBorderClass = (sectionId: string, baseBorder = 'border-emerald-500/20') => {
+    const isPending = selectedProfile?.status === 'PENDING_APPROVAL';
+    if (isPending && showValidationErrors && !approvedSections[sectionId]) {
+      return `border border-red-500 ring-4 ring-red-500/20 shadow-lg shadow-red-100/50 transition-all duration-300`;
+    }
+    return `border ${baseBorder} transition-all duration-300`;
+  };
+
+  const handleFinalApproveClick = () => {
+    if (!selectedProfile) return;
+    if (!areAllSectionsApproved) {
+      setShowValidationErrors(true);
+      setErrorMsg('Please review and verify all registration sections highlighted in red.');
+
+      // Find first unapproved section card and scroll to it
+      const required = ['personal', 'storage', 'address', 'bank', 'documents'];
+      if (selectedProfile.type === 'SHG Group') {
+        required.push('shg_group', 'business');
+      }
+      const firstUnapproved = required.find((key) => !approvedSections[key]);
+      if (firstUnapproved) {
+        const element = document.getElementById(`section-card-${firstUnapproved}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+
+      setTimeout(() => {
+        setShowValidationErrors(false);
+      }, 2000);
+      return;
+    }
+    setErrorMsg('');
+    setModalAction({ type: 'approve', id: selectedProfile.id });
+  };
+
+  const SectionApprovalButton = ({ sectionId }: { sectionId: string }) => {
+    const isApproved = approvedSections[sectionId];
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          setApprovedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+        }}
+        className="flex items-center gap-2.5 cursor-pointer select-none group"
+      >
+        <span className="text-xs font-black text-slate-700 group-hover:text-[#073318] transition-colors uppercase tracking-wider">
+          Verify Section
+        </span>
+        <div className={`w-5.5 h-5.5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+          isApproved
+            ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100'
+            : 'bg-white border-slate-400 group-hover:border-slate-500'
+        }`}>
+          {isApproved && <Check className="h-3.5 w-3.5 stroke-[3.5]" />}
+        </div>
+      </div>
+    );
+  };
+
+
+
   const fetchData = async (isManualRefresh = false) => {
-    if (shgList.length === 0 || isManualRefresh) {
+    if (shgList.length === 0) {
       setIsLoading(true);
+    } else if (isManualRefresh) {
+      setIsRefreshing(true);
     }
     setErrorMsg('');
     try {
@@ -458,7 +551,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       const mapItem = (item: any) => {
         const dims = parseDimensions(item.storageSpace);
         return {
-          id: item.memberCode || String(item.id),
+          id: String(item.id),
           memberCode: item.memberCode || String(item.id),
           type: (activeTopSection === 'shg' ? 'SHG Group' : 'Individual') as any,
           fullName: item.fullName || '',
@@ -473,7 +566,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
           activeOrders: 0,
           completedOrders: 0,
-          photo: item.profilePhoto || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+          photo: normalizeUrl(item.profilePhoto) || '',
           age: item.age || 0,
           occupation: 'N/A',
           crpName: item.crpName || 'N/A',
@@ -496,6 +589,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           taluka: item.taluka || '',
           district: item.district || '',
           state: item.state || '',
+          postOffice: item.postOffice || item.postoffice || 'N/A',
           aadhaarNumber: item.aadhaarNumber || 'N/A',
           panNumber: item.panNumber || 'N/A',
           aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || 'N/A',
@@ -527,6 +621,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
       setErrorMsg(err.message || 'Failed to fetch community data.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -610,6 +705,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             taluka: item.taluka || '',
             district: item.district || '',
             state: item.state || '',
+            postOffice: item.postOffice || item.postoffice || '',
             aadhaarNumber: item.aadhaarNumber || '',
             panNumber: item.panNumber || '',
             aadhaarFront: normalizeUrl(item.aadhaarFrontPhoto) || '',
@@ -780,6 +876,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
     { header: 'Mobile Number', accessor: 'mobile' as keyof SHGProfileExt },
     { header: 'Village', accessor: 'village' as keyof SHGProfileExt },
     { header: 'Pincode', accessor: 'pincode' as keyof SHGProfileExt },
+    { header: 'Post Office', accessor: 'postOffice' as keyof SHGProfileExt },
     { header: 'Role', accessor: 'role' as keyof SHGProfileExt },
     { header: 'SHG Name', accessor: 'shgName' as keyof SHGProfileExt },
     { header: 'Storage Available', accessor: 'storageAvailable' as keyof SHGProfileExt },
@@ -805,6 +902,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
     { header: 'Mobile Number', accessor: 'mobile' as keyof SHGProfileExt },
     { header: 'Village', accessor: 'village' as keyof SHGProfileExt },
     { header: 'Pincode', accessor: 'pincode' as keyof SHGProfileExt },
+    { header: 'Post Office', accessor: 'postOffice' as keyof SHGProfileExt },
     { header: 'Role', accessor: 'role' as keyof SHGProfileExt },
     { header: 'SHG Name', accessor: 'shgName' as keyof SHGProfileExt },
     { header: 'Storage Available', accessor: 'storageAvailable' as keyof SHGProfileExt },
@@ -831,6 +929,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
     { header: 'Mobile Number', accessor: 'mobile' as keyof SHGProfileExt },
     { header: 'Village', accessor: 'village' as keyof SHGProfileExt },
     { header: 'Pincode', accessor: 'pincode' as keyof SHGProfileExt },
+    { header: 'Post Office', accessor: 'postOffice' as keyof SHGProfileExt },
     { header: 'Role', accessor: 'role' as keyof SHGProfileExt },
     { header: 'SHG Name', accessor: 'shgName' as keyof SHGProfileExt },
     { header: 'Storage Available', accessor: 'storageAvailable' as keyof SHGProfileExt },
@@ -916,7 +1015,8 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             data={tabData}
             statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
-            onRefresh={fetchData}
+            onRefresh={() => fetchData(true)}
+            isRefreshing={isRefreshing}
           />
         )}
       </div>
@@ -972,41 +1072,72 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             </div>
 
             {/* Actions Panel */}
-            <div className="flex justify-end gap-3">
-              {(selectedProfile.status === 'PENDING_APPROVAL' || selectedProfile.status === 'REJECTED') && (
-                <>
+            <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 rounded-2xl border ${
+              selectedProfile.status === 'PENDING_APPROVAL'
+                ? areAllSectionsApproved
+                  ? 'bg-emerald-50/50 border-emerald-200'
+                  : 'bg-amber-50/50 border-amber-200'
+                : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="text-left">
+                {selectedProfile.status === 'PENDING_APPROVAL' && (
+                  !areAllSectionsApproved ? (
+                    <p className="text-xs font-bold text-amber-700 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Review Checklist: Please approve all individual sections below to enable the final registration approval.</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs font-bold text-emerald-700 flex items-center gap-2">
+                      <Check className="h-4 w-4 stroke-[3] text-emerald-600" />
+                      <span>All sections verified! Ready to approve the registration.</span>
+                    </p>
+                  )
+                )}
+                {selectedProfile.status === 'ACTIVE' && (
+                  <p className="text-xs font-semibold text-slate-500">This member is active and verified.</p>
+                )}
+                {selectedProfile.status === 'INACTIVE' && (
+                  <p className="text-xs font-semibold text-slate-500">This member is currently inactive.</p>
+                )}
+                {selectedProfile.status === 'REJECTED' && (
+                  <p className="text-xs font-semibold text-red-500">This registration request was rejected.</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 w-full sm:w-auto justify-end">
+                {selectedProfile.status === 'PENDING_APPROVAL' && (
                   <button
-                    onClick={() => setModalAction({ type: 'approve', id: selectedProfile.id })}
+                    onClick={() => setModalAction({ type: 'reject', id: selectedProfile.id })}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                  >
+                    Reject Request
+                  </button>
+                )}
+                {(selectedProfile.status === 'PENDING_APPROVAL' || selectedProfile.status === 'REJECTED') && (
+                  <button
+                    onClick={handleFinalApproveClick}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
                   >
                     Approve Request
                   </button>
-                  {selectedProfile.status === 'PENDING_APPROVAL' && (
-                    <button
-                      onClick={() => setModalAction({ type: 'reject', id: selectedProfile.id })}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
-                    >
-                      Reject Request
-                    </button>
-                  )}
-                </>
-              )}
-              {selectedProfile.status === 'ACTIVE' && (
-                <button
-                  onClick={() => setModalAction({ type: 'deactivate', id: selectedProfile.id })}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
-                >
-                  Deactivate Member
-                </button>
-              )}
-              {selectedProfile.status === 'INACTIVE' && (
-                <button
-                  onClick={() => setModalAction({ type: 'activate', id: selectedProfile.id })}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
-                >
-                  Activate Member
-                </button>
-              )}
+                )}
+                {selectedProfile.status === 'ACTIVE' && (
+                  <button
+                    onClick={() => setModalAction({ type: 'deactivate', id: selectedProfile.id })}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                  >
+                    Deactivate Member
+                  </button>
+                )}
+                {selectedProfile.status === 'INACTIVE' && (
+                  <button
+                    onClick={() => setModalAction({ type: 'activate', id: selectedProfile.id })}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                  >
+                    Activate Member
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Main Grid Layout */}
@@ -1014,7 +1145,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
               {/* Left Section (Summary, Business, Address) */}
               <div className="lg:col-span-2 space-y-6">
                 {/* Summary Card */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
+                <div id="section-card-personal" className={`${getCardBorderClass('personal')} bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left`}>
                   <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
                     <div className="flex items-center gap-2">
                       <div className="bg-[#073318] p-1.5 rounded-lg text-white">
@@ -1022,9 +1153,11 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       </div>
                       <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Representative Summary</span>
                     </div>
-                    <span className="bg-[#073318] text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                      {selectedProfile.type}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="bg-[#073318] text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                        {selectedProfile.type}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-6 items-center md:items-start pt-2">
@@ -1058,16 +1191,24 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       </div>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="personal" />
+                    </div>
+                  )}
                 </div>
 
                 {/* SHG Details Card (Only for SHG Group) */}
                 {selectedProfile.type === 'SHG Group' && (
-                  <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
-                    <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-3">
-                      <div className="bg-[#073318] p-1.5 rounded-lg text-white">
-                        <Building2 className="h-4 w-4" />
+                  <div id="section-card-shg_group" className={`${getCardBorderClass('shg_group')} bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left`}>
+                    <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-[#073318] p-1.5 rounded-lg text-white">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">SHG Group Details</span>
                       </div>
-                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">SHG Group Details</span>
                     </div>
 
                     <div className="space-y-4 text-xs">
@@ -1124,17 +1265,25 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                         </div>
                       </div>
                     </div>
+
+                    {selectedProfile.status === 'PENDING_APPROVAL' && (
+                      <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                        <SectionApprovalButton sectionId="shg_group" />
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Business Details Card (Only for SHG Group) */}
                 {selectedProfile.type === 'SHG Group' && (
-                  <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
-                    <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-3">
-                      <div className="bg-[#073318] p-1.5 rounded-lg text-white">
-                        <Store className="h-4 w-4" />
+                  <div id="section-card-business" className={`${getCardBorderClass('business')} bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left`}>
+                    <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-[#073318] p-1.5 rounded-lg text-white">
+                          <Store className="h-4 w-4" />
+                        </div>
+                        <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Business & Production details</span>
                       </div>
-                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Business & Production details</span>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
@@ -1171,16 +1320,24 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                         <p className="font-bold text-emerald-700">₹{selectedProfile.pricePerUnit}</p>
                       </div>
                     </div>
+
+                    {selectedProfile.status === 'PENDING_APPROVAL' && (
+                      <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                        <SectionApprovalButton sectionId="business" />
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Storage & Logistics Card */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
-                  <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-3">
-                    <div className="bg-[#073318] p-1.5 rounded-lg text-white">
-                      <Layers className="h-4 w-4" />
+                <div id="section-card-storage" className={`${getCardBorderClass('storage')} bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left`}>
+                  <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-[#073318] p-1.5 rounded-lg text-white">
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Storage & Logistics</span>
                     </div>
-                    <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Storage & Logistics</span>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
@@ -1224,7 +1381,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                               profileId: selectedProfile.id,
                               documentNumber: selectedProfile.drivingLicenseNumber
                             })}
-                            className="p-2.5 bg-white hover:bg-slate-50 border border-dashed border-slate-350 text-[10px] font-bold text-slate-500 cursor-pointer rounded-xl flex items-center justify-center gap-1.5 mt-1 transition-colors"
+                            className="p-2.5 bg-white hover:bg-slate-50 border border-dashed border-slate-355 text-[10px] font-bold text-slate-500 cursor-pointer rounded-xl flex items-center justify-center gap-1.5 mt-1 transition-colors"
                           >
                             📂 View DL Photo
                           </div>
@@ -1239,7 +1396,7 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                               profileId: selectedProfile.id,
                               documentNumber: selectedProfile.registrationNumber
                             })}
-                            className="p-2.5 bg-white hover:bg-slate-50 border border-dashed border-slate-350 text-[10px] font-bold text-slate-500 cursor-pointer rounded-xl flex items-center justify-center gap-1.5 mt-1 transition-colors"
+                            className="p-2.5 bg-white hover:bg-slate-50 border border-dashed border-slate-355 text-[10px] font-bold text-slate-500 cursor-pointer rounded-xl flex items-center justify-center gap-1.5 mt-1 transition-colors"
                           >
                             📂 View Vehicle Photo
                           </div>
@@ -1247,18 +1404,26 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       </>
                     )}
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="storage" />
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Right Section (Bank & Timeline) */}
               <div className="space-y-6">
                 {/* Address Details Card */}
-                <div className="border border-emerald-500/20 bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left">
-                  <div className="flex items-center gap-2 border-b border-[#073318]/10 pb-3">
-                    <div className="bg-[#073318] p-1.5 rounded-lg text-white">
-                      <MapPin className="h-4 w-4" />
+                <div id="section-card-address" className={`${getCardBorderClass('address')} bg-[#F4F9F6] rounded-3xl p-6 space-y-4 shadow-sm text-left`}>
+                  <div className="flex items-center justify-between border-b border-[#073318]/10 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-[#073318] p-1.5 rounded-lg text-white">
+                        <MapPin className="h-4 w-4" />
+                      </div>
+                      <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Address Details</span>
                     </div>
-                    <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Address Details</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1290,15 +1455,27 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       <p className="text-slate-400 font-bold uppercase text-[9px] mb-0.5">Pincode</p>
                       <p className="font-bold text-slate-800 font-mono">{selectedProfile.pincode || 'N/A'}</p>
                     </div>
+                    <div>
+                      <p className="text-slate-400 font-bold uppercase text-[9px] mb-0.5">Post Office</p>
+                      <p className="font-bold text-slate-800">{selectedProfile.postOffice || 'N/A'}</p>
+                    </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-[#073318]/10">
+                      <SectionApprovalButton sectionId="address" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Bank Card */}
-                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
-                  <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-[#073318]" />
-                    Settlement Bank Details
-                  </h4>
+                <div id="section-card-bank" className={`${getCardBorderClass('bank', 'border-slate-200')} bg-white rounded-3xl p-6 shadow-sm text-left space-y-4`}>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-[#073318]" />
+                      Settlement Bank Details
+                    </h4>
+                  </div>
                   <div className="space-y-3 text-xs pt-1">
                     <div className="flex justify-between border-b border-slate-50 pb-1.5">
                       <span className="text-slate-400">Account Holder:</span>
@@ -1321,6 +1498,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                       <span className="font-bold text-slate-700 font-mono">{selectedProfile.upiId}</span>
                     </div>
                   </div>
+
+                  {selectedProfile.status === 'PENDING_APPROVAL' && (
+                    <div className="flex justify-center pt-4 mt-3 border-t border-slate-100">
+                      <SectionApprovalButton sectionId="bank" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Timeline Card */}
@@ -1359,12 +1542,14 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
             </div>
 
             {/* Bottom Documents Verification Section */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 text-left">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                <div className="bg-slate-100 p-1.5 rounded-lg text-slate-700">
-                  <FileText className="h-4 w-4" />
+            <div id="section-card-documents" className={`${getCardBorderClass('documents', 'border-slate-200')} bg-white rounded-3xl p-6 space-y-4 text-left`}>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-slate-100 p-1.5 rounded-lg text-slate-700">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Uploaded Documents Photocopies</span>
                 </div>
-                <span className="font-extrabold text-sm text-[#073318] uppercase tracking-wider">Uploaded Documents Photocopies</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 text-center">
@@ -1408,6 +1593,12 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
                   📂 PAN Card Scan
                 </div>
               </div>
+
+              {selectedProfile.status === 'PENDING_APPROVAL' && (
+                <div className="flex justify-center pt-4 mt-3 border-t border-slate-100">
+                  <SectionApprovalButton sectionId="documents" />
+                </div>
+              )}
             </div>
           </div>
         )}

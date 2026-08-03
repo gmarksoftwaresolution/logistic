@@ -9,18 +9,6 @@ export class AcceptOrdersDto {
   orderIds: number[];
 }
 
-export class RejectOrdersDto {
-  @ApiProperty({ type: [Number], description: 'Array of Order integer IDs to reject' })
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsInt({ each: true })
-  orderIds: number[];
-
-  @ApiProperty({ description: 'Rejection reason' })
-  @IsString()
-  @IsNotEmpty()
-  reason: string;
-}
 
 export class RescheduleOrderDto {
   @ApiProperty({ description: 'Order integer ID to reschedule' })

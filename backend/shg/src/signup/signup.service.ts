@@ -145,12 +145,55 @@ export class SignupService {
     this.ensureUserType(user.role, UserRole.SHG);
     this.validateStep(user.currentStep, 1);
 
+    if (dto.shgRole === ShgRole.CRP) {
+      if (!dto.crpName) dto.crpName = user.fullName || undefined;
+      if (!dto.crpMobile) dto.crpMobile = user.phoneNumber || undefined;
+    }
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { currentStep: 2 },
     });
 
     await this.trackStep(userId, 2, 'COMPLETED', dto);
+
+    let shgLeaderName = dto.shgLeaderName || null;
+    let shgLeaderContact = dto.shgLeaderContact || null;
+    if (dto.shgRole === ShgRole.LEADER) {
+      shgLeaderName = user.fullName || null;
+      shgLeaderContact = user.phoneNumber || null;
+    }
+
+    await this.prisma.shgDetail.upsert({
+      where: { userId },
+      create: {
+        userId,
+        shgName: dto.shgName || null,
+        shgLeaderName,
+        shgLeaderContact,
+        shgRole: dto.shgRole as any,
+        crpName: dto.crpName || null,
+        crpMobile: dto.crpMobile || null,
+        crpEmail: dto.crpEmail || null,
+        groupSize: dto.shgGroupSize || null,
+        fullName: user.fullName || null,
+        imgUrl: user.profilePhoto || null,
+        memberCode: user.uniqueCode || null,
+      },
+      update: {
+        shgName: dto.shgName || null,
+        shgLeaderName,
+        shgLeaderContact,
+        shgRole: dto.shgRole as any,
+        crpName: dto.crpName || null,
+        crpMobile: dto.crpMobile || null,
+        crpEmail: dto.crpEmail || null,
+        groupSize: dto.shgGroupSize || null,
+        fullName: user.fullName || null,
+        imgUrl: user.profilePhoto || null,
+        memberCode: user.uniqueCode || null,
+      },
+    });
 
     return {
       success: true,
@@ -263,7 +306,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: null,
+        postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
       },
       update: {
@@ -273,7 +316,7 @@ export class SignupService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        postOffice: null,
+        postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
       },
     });
@@ -504,8 +547,8 @@ export class SignupService {
           if (s2) {
             shgName = s2.shgName || null;
             shgRole = s2.shgRole || null;
-            crpName = s2.crpName || null;
-            crpMobile = s2.crpMobile || null;
+            crpName = s2.crpName || (s2.shgRole === 'CRP' ? updatedUser.fullName : null);
+            crpMobile = s2.crpMobile || (s2.shgRole === 'CRP' ? updatedUser.phoneNumber : null);
             crpEmail = s2.crpEmail || null;
             groupSize = s2.shgGroupSize ? parseInt(s2.shgGroupSize, 10) : null;
 
@@ -672,6 +715,7 @@ export class SignupService {
           }
         } else if (tracking.step === 4) {
           signupData.pincode = stepData.pincode;
+          signupData.postOffice = stepData.postOffice;
           signupData.village = stepData.village;
           signupData.taluka = stepData.taluka;
           signupData.district = stepData.district;

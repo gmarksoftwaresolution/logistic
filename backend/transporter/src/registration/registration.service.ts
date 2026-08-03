@@ -49,9 +49,14 @@ export class RegistrationService {
   }
 
   private async generateTransporterUniqueId(): Promise<string> {
-    // Generate a random unique ID for the transporter since sequence table is removed
-    const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
-    return `GMU-TP-${randomCode}`;
+    const count = await this.prisma.user.count({
+      where: {
+        role: UserRole.TRANSPORTER,
+        uniqueCode: { startsWith: 'LOG-TP-' },
+      },
+    });
+    const seq = (count + 1).toString().padStart(4, '0');
+    return `LOG-TP-${seq}`;
   }
 
   private async generateTokens(user: any) {
@@ -259,12 +264,18 @@ export class RegistrationService {
       throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
     }
 
+    let uniqueCode = user.uniqueCode;
+    if (!uniqueCode) {
+      uniqueCode = await this.generateTransporterUniqueId();
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
         fullName: `${dto.firstName} ${dto.lastName}`.trim(),
         email: dto.email,
         profilePhoto: dto.profilePhoto,
+        uniqueCode: uniqueCode,
         currentStep: Math.max(user.currentStep, 2),
       },
     });
@@ -425,26 +436,67 @@ export class RegistrationService {
   }
 
   async getPincodeInfo(pincode: string) {
-    const records = await this.locationService.findByPincode(pincode);
-    if (!records || records.length === 0) {
-      throw new NotFoundException('Pincode details not found');
+    try {
+      const records = await this.locationService.findByPincode(pincode);
+      if (!records || records.length === 0) {
+        return {
+          success: false,
+          state: '',
+          district: '',
+          taluka: '',
+          talukas: [],
+          postOffices: [],
+          records: [],
+        };
+      }
+      const data = records[0];
+      const talukas = Array.from(new Set(records.map(r => String(r.taluka || r.district || '').trim()).filter(Boolean)));
+      const postOffices = Array.from(new Set(records.map(r => String(r.postOffice || r.village || '').trim()).filter(Boolean)));
+      return {
+        success: true,
+        state: data.state || '',
+        district: data.district || '',
+        taluka: data.taluka || data.district || '',
+        talukas,
+        postOffices,
+        records: records.map(r => ({
+          name: r.village || '',
+          village: r.village || '',
+          taluka: r.taluka || r.district || '',
+          postOffice: r.postOffice || r.village || '',
+          district: r.district || '',
+          state: r.state || '',
+        })),
+      };
+    } catch (e) {
+      console.error('getPincodeInfo error:', e);
+      return {
+        success: false,
+        state: '',
+        district: '',
+        taluka: '',
+        talukas: [],
+        postOffices: [],
+        records: [],
+      };
     }
-    const data = records[0];
-    return {
-      success: true,
-      state: data.state,
-      district: data.district,
-      taluka: data.taluka || data.district,
-    };
   }
 
   async getPincodeVillages(pincode: string) {
-    const records = await this.locationService.findByPincode(pincode);
-    return records.map(r => ({
-      name: r.village,
-      taluka: r.taluka || r.district || '',
-      postOffice: r.postOffice || r.village,
-    }));
+    try {
+      const records = await this.locationService.findByPincode(pincode);
+      return (records || []).map(r => ({
+        name: r.village || '',
+        village: r.village || '',
+        taluka: r.taluka || r.district || '',
+        postOffice: r.postOffice || r.village || '',
+        district: r.district || '',
+        state: r.state || '',
+      }));
+    } catch (e) {
+      console.error('getPincodeVillages error:', e);
+      return [];
+    }
   }
 
   private async validateStep(
@@ -520,7 +572,7 @@ export class RegistrationService {
       };
     }
 
-    const transporterUniqueId = await this.generateTransporterUniqueId();
+    const transporterUniqueId = user.uniqueCode || (await this.generateTransporterUniqueId());
 
     const txResult = await this.prisma.$transaction(async (tx) => {
       // 1. Update user details
@@ -549,7 +601,6 @@ export class RegistrationService {
             licenseNumber: s2.licenseNumber,
             expiryDate: new Date(s2.expiryDate),
             drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-            drivingLicenseNo: s2.licenseNumber,
             drivingLicenseUrl: s2.licensePhoto || null,
           },
           create: {
@@ -557,7 +608,6 @@ export class RegistrationService {
             licenseNumber: s2.licenseNumber,
             expiryDate: new Date(s2.expiryDate),
             drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-            drivingLicenseNo: s2.licenseNumber,
             drivingLicenseUrl: s2.licensePhoto || null,
           },
         });

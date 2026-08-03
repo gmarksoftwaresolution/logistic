@@ -18,8 +18,11 @@ interface OrderCardProps {
   distance?: string | number;
   onViewAddress?: () => void;
   isHighlighted?: 'new' | 'updated';
-  isRejectedDelivery?: boolean;
+
   isRescheduled?: boolean;
+  isRedirected?: boolean;
+  isRejectedDelivery?: boolean;
+  onRedirect?: () => void;
   transporterName?: string;
   transporterMobile?: string;
   vehicleNumber?: string;
@@ -40,8 +43,10 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   distance,
   onViewAddress,
   isHighlighted,
-  isRejectedDelivery,
   isRescheduled,
+  isRedirected = false,
+  isRejectedDelivery = false,
+  onRedirect,
   transporterName,
   transporterMobile,
   vehicleNumber,
@@ -69,7 +74,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         borderWidth: 1.5,
         backgroundColor: isRescheduled ? '#FFFBEB' : 'white'
       }} className="flex-row items-center justify-between overflow-hidden">
-        
+
         {/* RESCHEDULED Badge */}
         {isRescheduled && (
           <View className="absolute top-0 right-0 bg-[#FEF08A] px-2 py-0.5 rounded-bl-[12px] rounded-tr-[18px] border-b border-l border-[#FDE047]/50" style={{ zIndex: 10 }}>
@@ -95,11 +100,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
           </View>
 
-          {/* View Address Button */}
-          {onViewAddress && (
-            <View className="flex-row items-center mt-2 mb-1 gap-2 flex-wrap">
-              <TouchableOpacity 
-                onPress={onViewAddress} 
+          {/* View Address & Action Buttons */}
+          <View className="flex-row items-center mt-2 mb-1 gap-2 flex-wrap">
+            {onViewAddress && (
+              <TouchableOpacity
+                onPress={onViewAddress}
                 activeOpacity={0.7}
                 className="self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
               >
@@ -108,26 +113,39 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                   {t("view_address") || "View Address"}
                 </Text>
               </TouchableOpacity>
-              
-              {isRejectedDelivery && (
-                <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#EF4444]/40 bg-[#FEF2F2]">
-                  <Ionicons name="information-circle" size={10} color="#DC2626" style={{ marginRight: 4 }} />
-                  <Text className="text-[9px] font-black text-[#DC2626] tracking-wide">
-                    Return Address Updated
-                  </Text>
-                </View>
-              )}
+            )}
 
-              {verificationPending && (
-                <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#F59E0B]/40 bg-[#FFFBEB]">
-                  <Ionicons name="time-outline" size={10} color="#D97706" style={{ marginRight: 4 }} />
-                  <Text className="text-[9px] font-black text-[#D97706] tracking-wide">
-                    Verification Pending
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+            {isRedirected && (
+              <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-purple-300 bg-purple-50">
+                <Ionicons name="swap-horizontal-outline" size={10} color="#7C3AED" style={{ marginRight: 4 }} />
+                <Text className="text-[9.5px] font-black text-purple-700 tracking-wide uppercase">
+                  REDIRECTED TO TRANSPORTER
+                </Text>
+              </View>
+            )}
+
+            {!isRedirected && onRedirect && (
+              <TouchableOpacity
+                onPress={onRedirect}
+                activeOpacity={0.7}
+                className="flex-row items-center px-2.5 py-0.5 rounded-[6px] border border-purple-500 bg-purple-600 shadow-xs"
+              >
+                <Ionicons name="swap-horizontal" size={10} color="white" style={{ marginRight: 4 }} />
+                <Text className="text-[10px] font-extrabold text-white tracking-wide">
+                  Redirect Order
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {isRejectedDelivery && (
+              <View className="flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#EF4444]/40 bg-[#FEF2F2]">
+                <Ionicons name="information-circle" size={10} color="#DC2626" style={{ marginRight: 4 }} />
+                <Text className="text-[9px] font-black text-[#DC2626] tracking-wide">
+                  Return Address Updated
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Bottom Info Badges Row (All in one line) */}
           <View className="flex-row items-center mt-2 flex-wrap">
@@ -186,18 +204,39 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         {/* Right Icon and Distance */}
         <View className="flex-row items-center">
           <OrderDistance distance={distance} />
-          
-          {/* Right Icon - Circular Outline Style */}
-          <View style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
-            borderWidth: 2,
-            borderColor: '#CBD5E1',
-            backgroundColor: 'white'
-          }} className="items-center justify-center ml-2">
-            <Ionicons name="eye" size={24} color="#073318" />
-          </View>
+
+          {showScanner && onScan ? (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                onScan();
+              }}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: '#073318',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: 8
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="qr-code-outline" size={16} color="white" />
+            </TouchableOpacity>
+          ) : (
+            /* Right Icon - Circular Outline Style */
+            <View style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              borderWidth: 2,
+              borderColor: '#CBD5E1',
+              backgroundColor: 'white'
+            }} className="items-center justify-center ml-2">
+              <Ionicons name="eye" size={24} color="#073318" />
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     </HighlightCardWrapper>

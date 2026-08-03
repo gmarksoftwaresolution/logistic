@@ -12,7 +12,7 @@ export const getOrderHistory = async (
   const params: any = { page, limit };
   if (query) params.query = query;
   if (status && status !== 'All Orders') {
-    // backend expects 'Completed' or 'Rejected'
+    // backend expects 'Completed'
     params.status = status;
   }
   if (fromDate) params.fromDate = fromDate;

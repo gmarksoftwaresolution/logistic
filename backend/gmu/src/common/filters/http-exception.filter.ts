@@ -51,6 +51,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.warn(`[${status} Client Exception] ${request.method} ${request.url} - ${finalMessage}`);
     }
 
+    if (status >= 500) {
+      console.error(`[Server Error ${status}] ${request?.method} ${request?.url}:`, exception);
+    } else if (status === 401) {
+      console.warn(`[Auth 401] ${request?.method} ${request?.url} - Unauthorized request`);
+    } else {
+      console.warn(`[Client Error ${status}] ${request?.method} ${request?.url} - ${message}`);
+    }
+
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
@@ -59,3 +67,4 @@ export class AllExceptionsFilter implements ExceptionFilter {
     });
   }
 }
+

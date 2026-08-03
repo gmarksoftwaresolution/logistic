@@ -123,7 +123,7 @@
     "village_pincode": "गाँव का पिनकोड",
     "enter_pincode_first": "गाँव लोड करने के लिए 6-अंकीय पिनकोड दर्ज करें",
     "no_villages_found": "इस पिनकोड के लिए कोई गाँव नहीं मिला",
-    "select_village_dropdown": "गाँव चुनें ({{count}} उपलब्ध)",
+    "select_village_dropdown": "गाँव चुनें",
     "no_villages_assigned_placeholder": "चयनित गाँव यहाँ दिखाई देंगे",
     "approval_pending": "अनुमोदन लंबित",
     "approval_title": "पंजीकरण जमा कर दिया गया!",

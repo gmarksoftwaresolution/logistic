@@ -45,14 +45,11 @@ export interface Order {
   categoryBg?: string;
   categoryText?: string;
   scanned?: boolean;
-  rejectReason?: string;
-  rejectedAt?: string;
-  rejectedBy?: string;
   acceptedAt?: string;
   completedAt?: string;
   legType?: 'pickup' | 'drop';
   phase?: 'PICKUP' | 'DROP';
-  isRejectedDelivery?: boolean;
+
   fromLocation?: string;
   toLocation?: string;
   rescheduledTime?: string;
@@ -66,6 +63,12 @@ export interface Order {
   recommendedVehicle?: VehicleInfo | null;
   recommendedCapacity?: number | null;
   otherSuitableVehicles?: VehicleInfo[];
+  barcode?: string;
+  isPickupRedirected?: boolean;
+  isDropRedirected?: boolean;
+  isRedirected?: boolean;
+  pickupShgStatus?: string;
+  dropShgStatus?: string;
 }
 
 interface OrderContextType {
@@ -73,15 +76,14 @@ interface OrderContextType {
   acceptedOrders: Order[];
   deliveredOrders: Order[];
   pendingOrders: Order[];
-  rejectedOrders: Order[];
   returnedOrders: Order[];
   orders: Order[];
   highlightedOrders: Record<string, 'new' | 'updated'>;
   getStockItems: () => Order[];
   acceptOrder: (order: Order, selectedVehicle?: VehicleInfo) => Promise<void>;
+  redirectOrder: (order: Order, reason?: string) => Promise<void>;
   acceptOrders: (orders: Order[]) => Promise<void>;
   acceptAllOrders: () => Promise<void>;
-  rejectOrder: (order: Order) => Promise<void>;
   receiveOrder: (order: Order, code?: string, activeType?: string) => Promise<void>;
   notReceiveOrder: (order: Order) => void;
   deliverOrder: (order: Order, code?: string) => Promise<void>;
@@ -89,7 +91,6 @@ interface OrderContextType {
   isOrdersLoading: boolean;
   incomingReturnOrders: Order[];
   acceptReturnOrders: (orderIds: string[]) => void;
-  rejectReturnOrders: (orderIds: string[], reason: string) => void;
   rescheduleOrder: (orderId: string, date: string, time: string, reason: string) => Promise<void>;
 }
 
@@ -147,150 +148,152 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || '');
   }
 
-    const dateObj = dbOrder.scheduledDateTime ? new Date(dbOrder.scheduledDateTime) : (dbOrder.createdAt ? new Date(dbOrder.createdAt) : new Date());
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const dateStr = `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-    const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateObj = dbOrder.scheduledDateTime ? new Date(dbOrder.scheduledDateTime) : (dbOrder.createdAt ? new Date(dbOrder.createdAt) : new Date());
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dateStr = `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+  const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
-    const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
+  const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
+  const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
 
-    const finalAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress));
-    const finalSourceAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress);
+  const finalAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress));
+  const finalSourceAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress);
 
-    let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
-    if (isGeneratedNewOrder) isReturnFlag = false;
-    if (isGeneratedReturn) isReturnFlag = true;
+  let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
+  if (isGeneratedNewOrder) isReturnFlag = false;
+  if (isGeneratedReturn) isReturnFlag = true;
 
-    return {
-      id: `${type}-${dbOrder.id}`,
-      orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
-      parcelName,
-      parcelWeight: dbOrder.parcelWeight,
-      recommendedVehicle: dbOrder.recommendedVehicle,
-      recommendedCapacity: dbOrder.recommendedCapacity,
-      otherSuitableVehicles: dbOrder.otherSuitableVehicles || [],
-      category,
-      mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
-      amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
-      payment: dbOrder.masterOrder?.paymentMethod || 'Online',
-      address: finalAddress,
-      sourceAddress: finalSourceAddress,
-      deliveryDay: dateStr,
-      date: dateStr,
-      status: (() => {
-        const mStatus = dbOrder.masterOrder?.status || '';
-        const pStatus = dbOrder.status || '';
-        const shgStatus = dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '';
+  return {
+    id: `${type}-${dbOrder.id}`,
+    orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
+    parcelName,
+    parcelWeight: dbOrder.parcelWeight,
+    recommendedVehicle: dbOrder.recommendedVehicle,
+    recommendedCapacity: dbOrder.recommendedCapacity,
+    otherSuitableVehicles: dbOrder.otherSuitableVehicles || [],
+    category,
+    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
+    amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
+    payment: dbOrder.masterOrder?.paymentMethod || 'Online',
+    address: finalAddress,
+    sourceAddress: finalSourceAddress,
+    deliveryDay: dateStr,
+    date: dateStr,
+    status: (() => {
+      const mStatus = dbOrder.mainStatus || dbOrder.masterOrder?.status || '';
+      const pStatus = dbOrder.status || dbOrder.mainStatus || '';
+      const shgStatus = dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '';
 
-        if (type === 'pickup') {
-          const isPickupCompleted = [
-            'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB',
-            'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB',
-            'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
-            'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU',
-            'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB',
-            'HUB_RECEIVED', 'STORED', 'DISPATCHED',
-            'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-            'DELIVERED', 'COMPLETED',
-            'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
-            'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'
-          ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
+      if (type === 'pickup') {
+        const isPickupCompleted = [
+          'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB',
+          'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB',
+          'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
+          'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU',
+          'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB',
+          'HUB_RECEIVED', 'STORED', 'DISPATCHED',
+          'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
+          'DELIVERED', 'COMPLETED',
+          'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
+          'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER',
+          'PARCEL_PICKED'
+        ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
 
-          if (isPickupCompleted) {
-            return 'COMPLETED';
-          }
-
-          const isPickedUpAtShg = [
-            'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP'
-          ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || shgStatus === 'PICKED';
-
-          if (isPickedUpAtShg) {
-            return 'PickedUp';
-          }
-
-          if (pStatus === 'REJECTED') {
-            return 'REJECTED';
-          }
-
-          return 'Accepted';
-        } else {
-          // Drop leg mapping for SHG (Phase 2)
-          if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
-            return 'COMPLETED';
-          }
-
-          if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
-            return 'PickedUp';
-          }
-
-          if (pStatus === 'REJECTED') {
-            return 'REJECTED';
-          }
-
-          return 'Accepted';
+        if (isPickupCompleted) {
+          return 'COMPLETED';
         }
-      })(),
-      isReturn: isReturnFlag,
-      image: items[0]?.product?.image || '',
-      currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
-      remainingQty: qty,
-      weight: orderItems.reduce((sum: number, i: any) => sum + ((i.product?.weight || 0) * (i.quantity || 1)), 0) || '',
-      distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
-      time: timeStr,
-      legType: type,
-      phase: type === 'drop' ? 'DROP' : 'PICKUP',
-      rejectReason: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Pickup leg rejected by SHG. Reason: ', '')
-        : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.remarks?.replace('Delivery leg rejected by SHG. Reason: ', ''),
-      rejectedAt: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt
-        : dbOrder.tracking?.find((t: any) => t.status === 'REJECTED')?.updatedAt,
-      acceptedAt: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
-        : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
-      completedAt: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
-        : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
-      fromLocation: isGeneratedReturn
-        ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
-        : isGeneratedNewOrder
-          ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
-          : (type === 'drop' 
-            ? (actualPickupAddress || 'Transporter')
-            : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
-      toLocation: isGeneratedReturn
+
+        const isPickedUpAtShg = [
+          'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
+          'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'
+        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
+
+        if (isPickedUpAtShg) {
+          return 'PickedUp';
+        }
+
+        if (pStatus === 'REJECTED') {
+          return 'REJECTED';
+        }
+
+        return 'Accepted';
+      } else {
+        // Drop leg mapping for SHG (Phase 2)
+        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+          return 'COMPLETED';
+        }
+
+        if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
+          return 'PickedUp';
+        }
+
+        if (pStatus === 'REJECTED') {
+          return 'REJECTED';
+        }
+
+        return 'Accepted';
+      }
+    })(),
+    isReturn: isReturnFlag,
+    barcode: dbOrder.barcode || dbOrder.masterOrder?.barcode || '',
+    image: items[0]?.product?.image || '',
+    currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
+    remainingQty: qty,
+    weight: orderItems.reduce((sum: number, i: any) => sum + ((i.product?.weight || 0) * (i.quantity || 1)), 0) || '',
+    distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
+    time: timeStr,
+    legType: type,
+    phase: type === 'drop' ? 'DROP' : 'PICKUP',
+    acceptedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
+    completedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+    fromLocation: isGeneratedReturn
+      ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
+      : isGeneratedNewOrder
+        ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
+        : (type === 'drop'
+          ? (actualPickupAddress || 'Transporter')
+          : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
+    toLocation: isGeneratedReturn
+      ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
+      : isGeneratedNewOrder
         ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-        : isGeneratedNewOrder
-          ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-          : (type === 'drop' 
-            ? (actualDropAddress || 'Buyer') 
-            : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
-      buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
-      sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
-      products: orderItems.map((item: any) => ({
-        code: `#P-${item.productId || item.id}`,
-        tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
-        name: item.product?.name || 'Item',
-        details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
-        weightValue: (item.product?.weight || 0) * item.quantity,
-        qty: item.quantity,
-        unit: item.product?.unit || 'kg',
-        price: item.product?.price || 0,
-        category: item.product?.category || 'FOOD',
-        itemId: item.id,
-        productId: item.productId,
-        verificationCode: item.verificationCode || '',
-        verificationStatus: item.verificationStatus || 'PENDING',
-      })),
-      transporterName: dbOrder.transporter?.fullName || '',
-      transporterMobile: dbOrder.transporter?.phoneNumber || '',
-      vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
-      transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
-      transporterAddress: dbOrder.transporter?.transporterAddress || '',
-      transporterRoute: dbOrder.transporter?.transporterRoute || '',
-      handoverCode: dbOrder.handoverCode || '',
-    };
+        : (type === 'drop'
+          ? (actualDropAddress || 'Buyer')
+          : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
+    buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
+    sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
+    products: orderItems.map((item: any) => ({
+      code: `#P-${item.productId || item.id}`,
+      tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
+      name: item.product?.name || 'Item',
+      details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
+      weightValue: (item.product?.weight || 0) * item.quantity,
+      qty: item.quantity,
+      unit: item.product?.unit || 'kg',
+      price: item.product?.price || 0,
+      category: item.product?.category || 'FOOD',
+      itemId: item.id,
+      productId: item.productId,
+      verificationCode: item.verificationCode || '',
+      verificationStatus: item.verificationStatus || 'PENDING',
+    })),
+    transporterName: dbOrder.transporter?.fullName || '',
+    transporterMobile: dbOrder.transporter?.phoneNumber || '',
+    vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
+    transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
+    transporterAddress: dbOrder.transporter?.transporterAddress || '',
+    transporterRoute: dbOrder.transporter?.transporterRoute || '',
+    handoverCode: dbOrder.handoverCode || '',
+    isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
+    isDropRedirected: !!(dbOrder.isDropRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.dropShgStatus === 'REDIRECTED'),
+    isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
+    pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
+    dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
+  };
 };
 
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -298,19 +301,16 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [acceptedOrders, setAcceptedOrders] = useState<Order[]>([]);
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
-  const [rejectedOrders, setRejectedOrders] = useState<Order[]>([]);
   const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
   const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
 
   const [incomingReturnOrders, setIncomingReturnOrders] = useState<Order[]>([]);
   const localAcceptedReturnsRef = useRef<Order[]>([]);
-  const localRejectedReturnsRef = useRef<Order[]>([]);
   const localCompletedReturnsRef = useRef<Order[]>([]);
   const localCompletedOrdersRef = useRef<Order[]>([]);
 
   const [localPickedUpPickups, setLocalPickedUpPickups] = useState<string[]>([]);
-  const [rejectedDeliveries, setRejectedDeliveries] = useState<string[]>([]);
 
   const applyHighlight = (orderId: string) => {
     setHighlightedOrders(prev => ({ ...prev, [orderId]: 'new' }));
@@ -330,11 +330,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (val) {
           setLocalPickedUpPickups(JSON.parse(val));
         }
-
-        const rejectedVal = await AsyncStorage.getItem('rejected_deliveries');
-        if (rejectedVal) {
-          setRejectedDeliveries(JSON.parse(rejectedVal));
-        }
       } catch (e) {
         console.warn('Failed to load local data from storage:', e);
       }
@@ -344,7 +339,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
-  const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...rejectedOrders, ...returnedOrders];
+  const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...returnedOrders];
 
   const refreshOrdersList = useCallback(async () => {
     try {
@@ -360,11 +355,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
       const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
 
-      const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
-      const localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
-
       const localRescheduledStr = await AsyncStorage.getItem('rescheduled_orders');
-      const localRescheduled: Record<string, {date: string, time: string, reason: string}> = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
+      const localRescheduled: Record<string, { date: string, time: string, reason: string }> = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
 
       // 1. Fetch live assigned pickups
       const pickupResponse = await axiosInstance.get('/orders/new/assigned');
@@ -401,13 +393,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Auto-accept any assigned PENDING / RETURN_PENDING pickups & returns on backend
       rawPickups.forEach((o: any) => {
         if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
-          axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => {});
+          axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => { });
         }
       });
 
       rawReturns.forEach((o: any) => {
         if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
-          axiosInstance.post(`/orders/returns/${o.id}/accept`).catch(() => {});
+          axiosInstance.post(`/orders/returns/${o.id}/accept`).catch(() => { });
         }
       });
 
@@ -419,21 +411,15 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const pIdx = localPickedUp.indexOf(order.id);
           if (pIdx !== -1) {
             localPickedUp.splice(pIdx, 1);
-            AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp)).catch(() => {});
+            AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp)).catch(() => { });
           }
         } else if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
           order.status = 'PickedUp';
-        }
-        if (localRejected.includes(order.id)) {
-          order.isRejectedDelivery = true;
         }
         return order;
       });
       const mappedDrops = rawDrops.map((o: any) => {
         const order = mapDbOrderToUi(o, 'drop', false);
-        if (localRejected.includes(order.id)) {
-          order.isRejectedDelivery = true;
-        }
         return order;
       });
 
@@ -507,7 +493,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return bNum - aNum;
       });
       const uniqueIncomingMap = new Map<string, Order>();
-      sortedIncoming.forEach(o => uniqueIncomingMap.set(o.id, o));
+      sortedIncoming.forEach(o => {
+        if (!uniqueIncomingMap.has(o.orderId)) {
+          uniqueIncomingMap.set(o.orderId, o);
+        }
+      });
       setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
       const sortedAccepted = finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').sort((a, b) => {
@@ -516,14 +506,15 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return bNum - aNum;
       });
       const uniqueAcceptedMap = new Map<string, Order>();
-      sortedAccepted.forEach(o => uniqueAcceptedMap.set(o.id, o));
+      sortedAccepted.forEach(o => {
+        if (!uniqueAcceptedMap.has(o.orderId)) {
+          uniqueAcceptedMap.set(o.orderId, o);
+        }
+      });
       setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
 
       const mappedReturns = rawReturns.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType, true);
-        if (localRejected.includes(order.id)) {
-          order.isRejectedDelivery = true;
-        }
         if (localRescheduled[order.id]) {
           order.rescheduledDate = localRescheduled[order.id].date;
           order.rescheduledTime = localRescheduled[order.id].time;
@@ -541,12 +532,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const activeReturns = mappedReturns.filter(o => o.status !== 'REJECTED' && o.status !== 'COMPLETED' && o.status !== 'assigned');
       const rejectedReturnsFromBackend = mappedReturns.filter(o => o.status === 'REJECTED');
 
-      const mappedRejectedNew = (rawRejected.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
-      const mappedRejectedReturns = (rawRejected.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
-      const allRejected = [...mappedRejectedNew, ...mappedRejectedReturns, ...localRejectedReturnsRef.current];
-      const uniqueRejectedMap = new Map<string, Order>();
-      allRejected.forEach(o => uniqueRejectedMap.set(o.id, o));
-      setRejectedOrders(Array.from(uniqueRejectedMap.values()));
 
       const sortedReturned = finalMapped.filter(o => o.status === 'RETURNED').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
@@ -564,9 +549,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
 
       const mappedReturned = Array.from(uniqueReturnedMap.values()).map(o => {
-        if (localRejected.includes(o.id)) {
-          return { ...o, isRejectedDelivery: true };
-        }
         if (localRescheduled[o.id]) {
           return { ...o, rescheduledDate: localRescheduled[o.id].date, rescheduledTime: localRescheduled[o.id].time };
         }
@@ -604,7 +586,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setAcceptedOrders([]);
             setDeliveredOrders([]);
             setPendingOrders([]);
-            setRejectedOrders([]);
+
             setReturnedOrders([]);
           } else {
             await refreshOrdersList();
@@ -631,12 +613,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       localPickedUp = localPickedUp.filter(id => !orderIds.includes(id));
       await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
       setLocalPickedUpPickups(localPickedUp);
-
-      const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
-      let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
-      localRejected = localRejected.filter(id => !orderIds.includes(id));
-      await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
-      setRejectedDeliveries(localRejected);
 
       const localRescheduledStr = await AsyncStorage.getItem('rescheduled_orders');
       let localRescheduled = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
@@ -670,6 +646,22 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const redirectOrder = async (order: Order, reason: string = '') => {
+    try {
+      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
+      const endpoint = `/orders/${rawId}/redirect`;
+      await axiosInstance.post(endpoint, {
+        legType: order.legType || 'pickup',
+        reason
+      });
+      await clearLocalStateForOrders([order.id]);
+      await refreshOrdersList();
+    } catch (error) {
+      console.error(`Error redirecting order ${order.id}:`, error);
+      throw error;
+    }
+  };
+
   const acceptOrders = async (ordersToAccept: Order[]) => {
     try {
       await Promise.all(ordersToAccept.map(order => {
@@ -693,7 +685,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }));
       await clearLocalStateForOrders(orderIds);
       await refreshOrdersList();
-      
+
       setHighlightedOrders(prev => {
         const next = { ...prev };
         orderIds.forEach(id => { next[id] = 'new'; });
@@ -712,40 +704,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const rejectReturnOrders = async (orderIds: string[], reason: string) => {
-    try {
-      await Promise.all(orderIds.map(id => {
-        const rawId = id.replace('pickup-', '').replace('drop-', '');
-        const order = incomingReturnOrders.find(o => o.id === id);
-        const endpoint = order?.legType === 'pickup' 
-          ? `/orders/returns/pickup/${rawId}/reject`
-          : `/orders/returns/${rawId}/reject`;
-        return axiosInstance.post(endpoint, { reason });
-      }));
-
-      // Update local state ONLY on API success
-      const rejectedOrdersToAdd = incomingReturnOrders
-        .filter(o => orderIds.includes(o.id))
-        .map(o => ({
-          ...o,
-          status: 'REJECTED' as any,
-          rejectedAt: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-          rejectedBy: 'SHG Hub',
-        }));
-      
-      setIncomingReturnOrders(prev => prev.filter(o => !orderIds.includes(o.id)));
-      setRejectedOrders(prev => [...prev, ...rejectedOrdersToAdd]);
-
-      orderIds.forEach(id => applyHighlight(id));
-
-      await refreshOrdersList();
-    } catch (error) {
-      console.error('Error rejecting return orders:', error);
-      await refreshOrdersList(); // Revert/Refresh on failure
-      throw error;
-    }
-  };
-
   const acceptAllOrders = async () => {
     await acceptOrders(incomingOrders);
   };
@@ -757,10 +715,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (!isDemo && order) {
         const rawId = Number(orderId.replace('pickup-', '').replace('drop-', ''));
-        const isDelivery = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop') || order.isRejectedDelivery;
+        const isDelivery = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
-        const endpoint = isDelivery 
-          ? '/orders/reschedule/delivery' 
+        const endpoint = isDelivery
+          ? '/orders/reschedule/delivery'
           : '/orders/reschedule';
 
         await axiosInstance.post(endpoint, {
@@ -782,106 +740,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const rejectOrder = async (order: Order) => {
-    try {
-      // Intercept rejections in the delivery phase to transition them to "Return to Source" flow
-      if (order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop')) {
-        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
-        const localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
-        if (!localRejected.includes(order.id)) {
-          localRejected.push(order.id);
-          await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
-          setRejectedDeliveries(localRejected);
-        }
-        await refreshOrdersList();
-        return;
-      }
-
-      const isDemo = order.id.startsWith('RTO-') || order.id.includes('demo') || (order as any).isDemo;
-      
-      if (isDemo) {
-        // Fallback local logic for demo/static orders
-        setIncomingOrders(prev => prev.filter(o => o.id !== order.id));
-        setIncomingReturnOrders(prev => prev.filter(o => o.id !== order.id));
-        setAcceptedOrders(prev => prev.filter(o => o.id !== order.id));
-        setReturnedOrders(prev => prev.filter(o => o.id !== order.id));
-        localAcceptedReturnsRef.current = localAcceptedReturnsRef.current.filter(o => o.id !== order.id);
-        
-        const rejectedOrder = {
-          ...order,
-          status: 'REJECTED' as any,
-          rejectedAt: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-          rejectedBy: 'SHG Hub',
-        };
-        
-        localRejectedReturnsRef.current = [...localRejectedReturnsRef.current, rejectedOrder];
-        
-        setRejectedOrders(prev => {
-          if (prev.some(o => o.id === order.id)) return prev;
-          return [...prev, rejectedOrder];
-        });
-
-        if (order.isReturn || order.id.startsWith('RTO-')) {
-          applyHighlight(order.id);
-        }
-        return;
-      }
-
-      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-
-      let endpoint = '';
-      if (order.isReturn) {
-        endpoint = order.legType === 'pickup'
-          ? `/orders/returns/pickup/${rawId}/reject`
-          : `/orders/returns/${rawId}/reject`;
-      } else if (order.status === 'Accepted') {
-        endpoint = `/orders/new/pickup/${rawId}/reject`;
-      } else {
-        endpoint = `/orders/new/${rawId}/reject`;
-      }
-
-      // 1. Call API FIRST
-      await axiosInstance.post(endpoint, { reason: order.rejectReason || '' });
-
-      // 2. Wait for API success response, THEN update local state
-      setIncomingOrders(prev => prev.filter(o => o.id !== order.id));
-      setIncomingReturnOrders(prev => prev.filter(o => o.id !== order.id));
-      setAcceptedOrders(prev => prev.filter(o => o.id !== order.id));
-      setReturnedOrders(prev => prev.filter(o => o.id !== order.id));
-      
-      const rejectedOrderData = {
-        ...order,
-        status: 'REJECTED' as any,
-        rejectedAt: new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        rejectedBy: 'SHG Hub',
-      };
-      
-      setRejectedOrders(prev => {
-        if (prev.some(o => o.id === order.id)) return prev;
-        return [...prev, rejectedOrderData];
-      });
-
-      if (order.isReturn) {
-        applyHighlight(order.id);
-      }
-
-      if (order.legType === 'pickup') {
-        const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
-        let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
-        localPickedUp = localPickedUp.filter(id => id !== order.id);
-        await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
-        setLocalPickedUpPickups(localPickedUp);
-      }
-
-      await refreshOrdersList();
-
-    } catch (error) {
-      console.error('Error rejecting order:', error);
-      await refreshOrdersList(); // Revert on failure
-      throw error;
-    }
-  };
-
   const receiveOrder = async (order: Order, code?: string, activeType?: string) => {
     if (order.id.startsWith('RTO-') && order.status === 'COMPLETED') {
       const updatedOrder = { ...order, isRejectedDelivery: true };
@@ -892,7 +750,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      if (order.isReturn) {
+      if (order.isReturn && order.status === 'Accepted') {
         const endpoint = `/orders/returns/pickup/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
@@ -903,7 +761,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const isPickupLeg = order.legType === 'pickup' || order.id.startsWith('pickup-');
       if (isPickupLeg) {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
-        const paramLegType = activeType === 'transporter' ? 'handover' : 'pickup';
+        const paramLegType = (activeType === 'transporter' || order.isReturn) ? 'handover' : 'pickup';
         await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });
         await refreshOrdersList();
       } else {
@@ -934,41 +792,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setReturnedOrders(prev => prev.filter(o => o.id !== order.id));
         setDeliveredOrders(prev => [...prev, completedOrder]);
 
-        // Remove from rejected deliveries
-        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
-        let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
-        localRejected = localRejected.filter(id => id !== order.id);
-        await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
-        setRejectedDeliveries(localRejected);
-
         applyHighlight(order.id);
-        await refreshOrdersList();
-        return;
-      }
-
-      if (order.isRejectedDelivery) {
-        // Complete the order on backend (return to origin complete)
-        const endpoint = order.legType === 'pickup'
-          ? `/orders/new/pickup/${rawId}/complete`
-          : `/orders/new/dilivery/${rawId}/complete`;
-        await axiosInstance.post(endpoint, { code: code || '1234' });
-
-        // Remove from rejected deliveries
-        const localRejectedStr = await AsyncStorage.getItem('rejected_deliveries');
-        let localRejected: string[] = localRejectedStr ? JSON.parse(localRejectedStr) : [];
-        localRejected = localRejected.filter(id => id !== order.id);
-        await AsyncStorage.setItem('rejected_deliveries', JSON.stringify(localRejected));
-        setRejectedDeliveries(localRejected);
-
-        // Also clean up picked_up_pickups if it was a pickup leg
-        if (order.legType === 'pickup') {
-          const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
-          let localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
-          localPickedUp = localPickedUp.filter(id => id !== order.id);
-          await AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp));
-          setLocalPickedUpPickups(localPickedUp);
-        }
-
         await refreshOrdersList();
         return;
       }
@@ -999,10 +823,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       } else {
         const endpoint = `/orders/new/dilivery/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
-        
+
         const completedOrder = { ...order, status: 'COMPLETED' as any };
         localCompletedOrdersRef.current = [...localCompletedOrdersRef.current, completedOrder];
-        
+
         await refreshOrdersList();
       }
     } catch (error) {
@@ -1016,15 +840,14 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       acceptedOrders,
       deliveredOrders,
       pendingOrders,
-      rejectedOrders,
       returnedOrders,
       orders,
       highlightedOrders,
       getStockItems,
       acceptOrder,
+      redirectOrder,
       acceptOrders,
       acceptAllOrders,
-      rejectOrder,
       receiveOrder,
       notReceiveOrder,
       deliverOrder,
@@ -1032,7 +855,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       isOrdersLoading,
       incomingReturnOrders,
       acceptReturnOrders,
-      rejectReturnOrders,
       rescheduleOrder,
     }}>
       {children}

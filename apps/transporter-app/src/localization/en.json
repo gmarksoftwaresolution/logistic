@@ -123,7 +123,7 @@
     "village_pincode": "Village Pincode",
     "enter_pincode_first": "Enter 6-digit pincode to load villages",
     "no_villages_found": "No villages found for this pincode",
-    "select_village_dropdown": "Select Village ({{count}} available)",
+    "select_village_dropdown": "Select Village",
     "no_villages_assigned_placeholder": "Selected villages will appear here",
     "approval_pending": "Approval Pending",
     "approval_title": "Registration Submitted!",

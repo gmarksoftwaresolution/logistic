@@ -9,78 +9,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model AdminUser {
-  id            String   @id @default(uuid())
-  mobileNumber  String   @unique
-  name          String
-  role          String
-  createdAt     DateTime @default(now())
-}
-
-model Order {
-  id                      String            @id @default(uuid())
-  orderId                 String
-  barcode                 String?
-  phase                   String            @default("PICKUP")
-  
-  sellerId                Int
-  seller                  Seller            @relation(fields: [sellerId], references: [id])
-  buyerId                 Int
-  buyer                   Buyer             @relation(fields: [buyerId], references: [id])
-  
-  // Package dimensions
-  productCount            Int               @default(1)
-  totalQty                Int               @default(1)
-  totalWeight             Float             @default(0.0)
-  
-  // SHG & Transporter assignments
-  pickupShgId             String?
-  pickupTransporterId     String?
-  dropShgId               String?
-  dropTransporterId       String?
-  pickupReturnShgId       String?
-  returnTransporterId     String?
-  
-  // Statuses
-  mainStatus              String            // Enum values like PENDING_PICKUP, HUB_RECEIVED, etc.
-  pickupShgStatus         String?           // PENDING, ACCEPTED, REJECTED, PICKED
-  pickupTransporterStatus String?           // PENDING, TRANSPORTER_ACCEPTED, IN_TRANSIT_TO_HUB
-  dropShgStatus           String?           // PENDING, ACCEPTED, REJECTED, DROP_SHG_DELIVERED
-  dropTransporterStatus   String?           // PENDING, TRANSPORTER_ACCEPTED, PARCEL_AT_DROP_SHG
-  
-  // Return & Reschedule indicators
-  returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
-  rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
-  rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
-  
-  // Timestamps
-  warehouseReceivedAt     DateTime?
-  barcodeGeneratedAt      DateTime?
-  storedAt                DateTime?
-  dispatchedAt            DateTime?
-  deliveredAt             DateTime?
-  rescheduledAt           DateTime?
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
-
-  assignments             OrderAssignment[]
-
-  @@index([orderId])
-  @@index([barcode])
-}
-
-model OrderAssignment {
-  id           String   @id @default(uuid())
-  orderId      String
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  assigneeId   String
-  assigneeType String   // SHG, TRANSPORTER
-  role         String   // PICKUP, DROP, RETURN
-  status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
 enum UserRole {
   SHG
   INDIVIDUAL
@@ -127,6 +55,86 @@ enum ShgRole {
   MEMBER
 }
 
+model AdminUser {
+  id            String   @id @default(uuid())
+  mobileNumber  String   @unique
+  name          String
+  role          String
+  createdAt     DateTime @default(now())
+}
+
+model Order {
+  id                      String            @id @default(uuid())
+  orderId                 String
+  barcode                 String?
+  phase                   String            @default("PICKUP")
+  
+  sellerId                Int
+  seller                  Seller            @relation(fields: [sellerId], references: [id])
+  buyerId                 Int
+  buyer                   Buyer             @relation(fields: [buyerId], references: [id])
+  
+  // Package dimensions
+  productCount            Int               @default(1)
+  totalQty                Int               @default(1)
+  totalWeight             Float             @default(0.0)
+  
+  // SHG & Transporter assignments
+  pickupShgId             String?
+  pickupTransporterId     String?
+  dropShgId               String?
+  dropTransporterId       String?
+  pickupReturnShgId       String?
+  returnTransporterId     String?
+  
+  // Statuses
+  mainStatus              String            // Enum values like PENDING_PICKUP, HUB_RECEIVED, etc.
+  pickupShgStatus         String?           // PENDING, ACCEPTED, REJECTED, PICKED
+  pickupTransporterStatus String?           // PENDING, TRANSPORTER_ACCEPTED, IN_TRANSIT_TO_HUB
+  dropShgStatus           String?           // PENDING, ACCEPTED, REJECTED, DROP_SHG_DELIVERED
+  dropTransporterStatus   String?           // PENDING, TRANSPORTER_ACCEPTED, PARCEL_AT_DROP_SHG
+  
+  // Return & Reschedule indicators
+  returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
+  rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
+  rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
+  
+  // Redirect indicators
+  isPickupRedirected      Boolean?          @default(false)
+  isDropRedirected        Boolean?          @default(false)
+  redirectedPickupAt      DateTime?
+  redirectedDropAt        DateTime?
+  redirectedPickupShgId   String?
+  redirectedDropShgId     String?
+  
+  // Timestamps
+  warehouseReceivedAt     DateTime?
+  barcodeGeneratedAt      DateTime?
+  storedAt                DateTime?
+  dispatchedAt            DateTime?
+  deliveredAt             DateTime?
+  rescheduledAt           DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  assignments             OrderAssignment[]
+
+  @@index([orderId])
+  @@index([barcode])
+}
+
+model OrderAssignment {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  assigneeId   String
+  assigneeType String   // SHG, TRANSPORTER
+  role         String   // PICKUP, DROP, RETURN
+  status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model User {
   id                  Int       @id @default(autoincrement())
 
@@ -159,6 +167,10 @@ model User {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+
   address             Address?
   bankDetails         BankDetail[]
   documents           Document[]
@@ -186,6 +198,10 @@ model User {
 
   @@index([phoneNumber])
   @@index([role])
+  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
+  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
+  return_order_assignments  return_order_assignments[]
+  return_order_scan_history return_order_scan_history[]
 }
 
 model Address {
@@ -200,7 +216,7 @@ model Address {
   village       String?
   taluka        String?
   district      String
-  state         String   @default("Maharashtra")
+  state         String
   pincode       String
   postOffice    String?
 
@@ -396,7 +412,6 @@ model DrivingDetail {
   expiryDate            DateTime
 
   drivingExperience     Int?
-  drivingLicenseNo      String?
   drivingLicenseUrl     String?
 
   createdAt             DateTime @default(now())
@@ -498,6 +513,7 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@map("products")
+  returnOrderItems   ReturnOrderItem[]
 }
 
 model MasterOrder {
@@ -600,11 +616,14 @@ model WarehouseInventory {
   product     Product   @relation(fields: [productId], references: [id])
   quantity    Int?
   qcStatus    String?   @map("qc_status")
+  orderId     String?   @map("order_id")
+  status      String?   @default("STORED")
+  dispatchedAt DateTime? @map("dispatched_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  @@unique([warehouseId, productId])
   @@index([warehouseId])
   @@index([productId])
+  @@index([orderId])
   @@map("warehouse_inventory")
 }
 
@@ -633,6 +652,7 @@ model DropOrder {
   @@index([transporterId])
   @@index([status])
   @@map("drop_orders")
+  returnOrders    ReturnOrder[]
 }
 
 model DropOrderItem {
@@ -671,7 +691,7 @@ model DropTracking {
   dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
   status      String?
   remarks     String?
-  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([dropOrderId])
   @@map("drop_tracking")
@@ -680,7 +700,7 @@ model DropTracking {
 model PincodeDirectory {
   id             Int      @id @default(autoincrement())
   village        String
-  postOffice     String
+  postOffice     String   @map("post_office")
   pincode        String
   taluka         String
   district       String
@@ -707,7 +727,7 @@ model Seller {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -731,7 +751,7 @@ model Buyer {
   village      String
   taluka       String
   district     String
-  state        String   @default("Maharashtra")
+  state        String
   pincode      String
   postOffice   String?  @map("post_office")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -742,6 +762,7 @@ model Buyer {
   orders           Order[]
 
   @@map("buyers")
+  returnOrders ReturnOrder[]
 }
 
 model VerificationRecord {
@@ -765,21 +786,6 @@ model VerificationRecord {
   updatedAt        DateTime  @updatedAt
 
   @@map("VerificationRecord")
-}
-
-model ScanHistory {
-  id           Int       @id @default(autoincrement())
-  orderId      String
-  barcode      String
-  scanType     String
-  scanLocation String?
-  scannedBy    Int?
-  userRole     String?
-  scanResult   String
-  device       String?
-  timestamp    DateTime  @default(now())
-
-  @@map("ScanHistory")
 }
 
 model Parcel {
@@ -855,136 +861,122 @@ model ScanSessionItem {
   @@map("ScanSessionItem")
 }
 
-model CommunityMember {
-  id            String   @id @default(uuid())
-  memberCode    String?  @unique
-  type          String   // SHG, INDIVIDUAL
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt     DateTime @default(now())
-  approvedAt    DateTime?
-  rejectedAt    DateTime?
+model ShgServiceArea {
+  id          String   @id @default(uuid())
+  shgUserId   String
+  village     String
+  pincode     String
+  isPrimary   Boolean  @default(true)
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE, ON_LEAVE
+  maxCapacity Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // Personal Details
-  profilePhoto      String?
-  fullName          String
-  mobileNumber      String
-  age               Int?
-  occupation        String?
-
-  // SHG Details
-  roleInShg         String?
-  shgName           String?
-  crpName           String?
-  crpMobile         String?
-  crpEmail          String?
-  leaderName        String?
-  leaderMobile      String?
-  groupSize         Int?
-  activeSince       String?
-
-  // Business Details
-  producesProducts  Boolean? @default(false)
-  businessTeamSize  Int?
-  productName       String?
-  productCategory   String?
-  dailyProduction   Float?
-  weeklyProduction  Float?
-  productionUnit    String?
-  pricePerUnit      Float?
-
-  // Address Details
-  houseNo           String?
-  deliveryAddress   String?
-  village           String?
-  taluka            String?
-  district          String?
-  state             String?
-  pincode           String?
-
-  // Document Details
-  aadhaarNumber     String?
-  panNumber         String?
-  aadhaarFrontPhoto String?
-  aadhaarBackPhoto  String?
-  panCardPhoto      String?
-
-  // Bank Details
-  accountHolderName String?
-  accountNumber     String?
-  ifscCode          String?
-  bankName          String?
-  branchName        String?
-  upiId             String?
-
-  // Storage Details
-  storageSpace      String?
-  storageWidth      Float?
-  storageHeight     Float?
-  storageDescription String?
-
-  // Vehicle Details
-  vehicleAvailable          Boolean? @default(false)
-  vehicleType               String?
-  vehicleRegistrationNumber String?
-  drivingLicenseNumber      String?
-  drivingLicensePhoto       String?
-  vehiclePhoto              String?
+  @@index([village, pincode, status])
+  @@map("ShgServiceArea")
 }
 
-model TransporterMember {
-  id              String   @id @default(uuid())
-  transporterCode String?  @unique
-  type            String   // ROUTE_PARTNER, PERSONAL
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt       DateTime @default(now())
-  approvedAt      DateTime?
-  rejectedAt      DateTime?
+model Earning {
+  id              Int       @id @default(autoincrement())
+  
+  shgId           Int       @map("shg_id")
+  orderId         String    @map("order_id")
+  orderNumber     String    @map("order_number")
+  
+  amount          Decimal   @db.Decimal(10,2)
+  completedAt     DateTime  @map("completed_at")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  // Personal Details
-  profilePhoto    String?
-  firstName       String
-  lastName        String
-  mobileNumber    String
-  email           String?
-
-  // Address Details
-  residentialAddress String?
-  village            String?
-  taluka             String?
-  district           String?
-  state              String?
-  pincode            String?
-
-  // Driving Details
-  licenseNumber      String?
-  licensePhoto       String?
-  licenseExpiryDate  DateTime?
-  experienceYears    Int?
-
-  // Bank Details
-  accountHolderName  String?
-  accountNumber      String?
-  ifscCode           String?
-  bankName           String?
-  branchName         String?
-  upiId              String?
-
-  // Vehicle Details
-  vehicleCategory       String?
-  vehicleType           String?
-  vehicleMake           String?
-  vehicleNumber         String?
-  vehicleRcPhoto        String?
-  vehicleInsurancePhoto String?
-
-  // Route Details
-  assignedPincodes   Json?
-  assignedVillages   Json?
-  morningShift       String?
-  eveningShift       String?
-  workingDays        Json?
-
-  // Milk Organization Details
-  milkOrganizationName String?
-  milkCenterName       String?
+  @@index([shgId, completedAt])
+  @@unique([shgId, orderId])
+  @@map("earnings")
 }
+
+model ReturnOrder {
+  id                        Int                         @id @default(autoincrement())
+  returnOrderNumber         String?                     @unique @map("return_order_number")
+  originalOrderId           Int                         @map("original_order_id")
+  buyerId                   Int                         @map("buyer_id")
+  shgId                     Int?                        @map("shg_id")
+  transporterId             Int?                        @map("transporter_id")
+  status                    String                      @default("RETURN_REQUESTED")
+  returnReason              String?                     @map("return_reason")
+  barcode                   String?                     @unique
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
+  return_order_assignments  return_order_assignments[]
+  items                     ReturnOrderItem[]
+  return_order_scan_history return_order_scan_history[]
+  return_order_timeline     return_order_timeline[]
+  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
+  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
+  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
+  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
+
+  @@index([originalOrderId])
+  @@index([buyerId])
+  @@index([shgId])
+  @@index([transporterId])
+  @@index([status])
+  @@map("return_orders")
+}
+
+model ReturnOrderItem {
+  id            Int         @id @default(autoincrement())
+  returnOrderId Int         @map("return_order_id")
+  productId     Int         @map("product_id")
+  quantity      Int?
+  product       Product     @relation(fields: [productId], references: [id])
+  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+
+  @@index([returnOrderId])
+  @@index([productId])
+  @@map("return_order_items")
+}
+
+model return_order_assignments {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  assignee_id     Int
+  assigneeType    String
+  status          String      @default("PENDING")
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @default(now())
+  User            User        @relation(fields: [assignee_id], references: [id])
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([assignee_id])
+  @@index([return_order_id])
+}
+
+model return_order_scan_history {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  scanned_by      Int
+  userRole        String
+  scanResult      String
+  barcode         String
+  scanLocation    String?
+  timestamp       DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+  User            User        @relation(fields: [scanned_by], references: [id])
+
+  @@index([return_order_id])
+  @@index([scanned_by])
+}
+
+model return_order_timeline {
+  id              Int         @id @default(autoincrement())
+  return_order_id Int
+  status          String
+  remarks         String?
+  updated_at      DateTime    @default(now())
+  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
+
+  @@index([return_order_id])
+}
+
+
+

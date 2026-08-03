@@ -45,7 +45,7 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
 
   const orderId = order.pickupOrderNumber || order.dropOrderNumber || order.masterOrder?.orderNumber || `ORD-${order.id}`;
   const isCompleted = order.status === 'COMPLETED';
-  const isCancelled = order.status === 'CANCELLED' || order.status === 'REJECTED';
+  const isCancelled = order.status === 'CANCELLED';
   
   let statusColor = HISTORY_STATUS_COLORS.DEFAULT.color;
   let statusBg = HISTORY_STATUS_COLORS.DEFAULT.bg;
@@ -55,10 +55,7 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
     statusColor = HISTORY_STATUS_COLORS.COMPLETED.color;
     statusBg = HISTORY_STATUS_COLORS.COMPLETED.bg;
     statusText = t('completed') || 'Completed';
-  } else if (order.status === 'REJECTED') {
-    statusColor = HISTORY_STATUS_COLORS.REJECTED.color;
-    statusBg = HISTORY_STATUS_COLORS.REJECTED.bg;
-    statusText = t('rejected') || 'Rejected';
+
   } else if (order.status === 'CANCELLED') {
     statusColor = HISTORY_STATUS_COLORS.CANCELLED.color;
     statusBg = HISTORY_STATUS_COLORS.CANCELLED.bg;

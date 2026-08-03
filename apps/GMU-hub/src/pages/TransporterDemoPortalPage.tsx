@@ -206,8 +206,7 @@ export const TransporterDemoPortalPage = ({ onNavigate }: { onNavigate: (page: s
                   </tr>
                 ))}
 
-                {/* 5. Return Pickup Requests */}
-                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.filter(o => o.mainStatus === 'RETURN_TRANSPORTER_PENDING' && ['return_picked_by_shg', 'picked'].includes(o.shgStatus?.toLowerCase() || '') && o.transporterStatus?.toLowerCase() === 'pending').map((o) => (
+                {activeTab === 'ret-pickup-req' && returnPickupNewOrders.filter(o => ['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED'].includes(o.mainStatus) && ['return_picked_by_shg', 'picked'].includes(o.shgStatus?.toLowerCase() || '') && o.transporterStatus?.toLowerCase() === 'pending').map((o) => (
                   <tr key={o.id}>
                     <td className="p-4"><TimeAgo sectionEnteredAt={o.sectionEnteredAt} /></td>
                     <td className="p-4 font-bold text-[#073318]">{o.id}</td>

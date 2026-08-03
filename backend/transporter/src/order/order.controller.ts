@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, Request, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Request, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrderService } from './order.service';
@@ -10,6 +10,12 @@ import { OrderService } from './order.service';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @Get('dashboard-summary')
+  @ApiOperation({ summary: 'Get dashboard summary metrics for logged-in transporter' })
+  async getDashboardSummary(@Request() req: any, @Query('filter') filter?: string) {
+    return this.orderService.getDashboardSummary(req.user.id, filter || 'Today');
+  }
+
   @Get('pickup/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in transporter' })
   async getAssignedPickups(@Request() req: any) {
@@ -18,7 +24,7 @@ export class OrderController {
 
   @Post('pickup/:id/accept')
   @ApiOperation({ summary: 'Accept a pickup order' })
-  async acceptPickup(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  async acceptPickup(@Param('id') id: string, @Request() req: any) {
     return this.orderService.acceptPickup(id, req.user.id);
   }
 
@@ -38,7 +44,7 @@ export class OrderController {
     },
   })
   async completePickup(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
     @Body('code') code?: string,
   ) {
@@ -48,7 +54,7 @@ export class OrderController {
   @Post('pickup/:id/complete-drop')
   @ApiOperation({ summary: 'Mark a pickup order delivery to hub as complete' })
   async completePickupDrop(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
   ) {
     return this.orderService.completePickupDrop(id, req.user.id);
@@ -57,7 +63,7 @@ export class OrderController {
   @Post('pickup/:id/reject')
   @ApiOperation({ summary: 'Reject a pickup order' })
   async rejectPickup(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
     @Body('remarks') remarks?: string,
   ) {
@@ -71,13 +77,13 @@ export class OrderController {
   }
   @Post('drop/:id/accept')
   @ApiOperation({ summary: 'Accept a drop order' })
-  async acceptDrop(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  async acceptDrop(@Param('id') id: string, @Request() req: any) {
     return this.orderService.acceptDrop(id, req.user.id);
   }
   @Post('drop/:id/generate-code')
   @ApiOperation({ summary: 'Generate handover code for drop delivery' })
   async generateDropHandoverCode(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
   ) {
     return this.orderService.generateDropHandoverCode(id, req.user.id);
@@ -98,7 +104,7 @@ export class OrderController {
     },
   })
   async completeDrop(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
     @Body('code') code?: string,
   ) {
@@ -120,7 +126,7 @@ export class OrderController {
     },
   })
   async completeDropPickup(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
     @Body('code') code?: string,
   ) {
@@ -131,7 +137,7 @@ export class OrderController {
   @Post('drop/:id/reject')
   @ApiOperation({ summary: 'Reject a drop order' })
   async rejectDrop(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Request() req: any,
     @Body('remarks') remarks?: string,
   ) {
@@ -140,7 +146,7 @@ export class OrderController {
 
   @Post('bulk-accept')
   @ApiOperation({ summary: 'Bulk accept pickup and drop orders' })
-  async bulkAccept(@Request() req: any, @Body('orders') orders: { id: number; type: 'pickup' | 'drop' }[]) {
+  async bulkAccept(@Request() req: any, @Body('orders') orders: { id: string | number; type: 'pickup' | 'drop' }[]) {
     return this.orderService.bulkAccept(orders, req.user.id);
   }
 }

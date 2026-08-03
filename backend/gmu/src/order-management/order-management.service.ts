@@ -11,15 +11,21 @@ export class OrderManagementService implements OnModuleInit {
     private qrService: QrService
   ) { }
 
+  private isLoopRunning = false;
+
   onModuleInit() {
     // Start background auto-broadcast polling loop
     setInterval(async () => {
+      if (this.isLoopRunning) return;
+      this.isLoopRunning = true;
       try {
         await this.runAutoBroadcastLoop();
       } catch (err: any) {
         console.error('[AutoBroadcastLoop] Error running loop:', err.message);
+      } finally {
+        this.isLoopRunning = false;
       }
-    }, 10000); // Check every 10 seconds
+    }, 30000); // Check every 30 seconds
   }
 
   async runAutoBroadcastLoop() {
@@ -32,7 +38,8 @@ export class OrderManagementService implements OnModuleInit {
     const ordersPlaced = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
-        mainStatus: { in: ['ORDER_PLACED', 'PICKUP_ASSIGNED'] },
+        mainStatus: { in: ['NEW', 'ORDER_PLACED', 'PICKUP_ASSIGNED'] },
+        NOT: { pickupShgStatus: 'NO_PARTNERS_FOUND' }
       },
       include: {
         seller: true,
@@ -44,6 +51,7 @@ export class OrderManagementService implements OnModuleInit {
           },
         },
       },
+      take: 50
     });
 
     for (const order of ordersPlaced) {
@@ -57,7 +65,7 @@ export class OrderManagementService implements OnModuleInit {
       );
       const isMissingPartner = matchingShgs.some(s => !existingAssigneeIds.has(String(s.id)));
 
-      if (order.assignments.length === 0 || isMissingPartner || order.pickupShgStatus === 'NO_PARTNERS_FOUND') {
+      if (order.assignments.length === 0 || isMissingPartner) {
         console.log(`[AutoBroadcastLoop] Automatically triggering SHG broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastShg(order.id);
@@ -73,6 +81,7 @@ export class OrderManagementService implements OnModuleInit {
         phase: 'PICKUP',
         mainStatus: { in: ['PARCEL_AT_SHG', 'PARCEL_PICKED'] },
         pickupTransporterId: null,
+        NOT: { pickupTransporterStatus: 'NO_PARTNERS_FOUND' }
       },
       include: {
         seller: true,
@@ -84,6 +93,7 @@ export class OrderManagementService implements OnModuleInit {
           },
         },
       },
+      take: 50
     });
 
     for (const order of ordersAtShg) {
@@ -101,7 +111,7 @@ export class OrderManagementService implements OnModuleInit {
       const hasStaleAssignments = order.assignments.some(a => !matchingIds.has(String(a.assigneeId)));
       const isMissingPartner = matchingTransporters.some(t => !existingAssigneeIds.has(String(t.id)));
 
-      if (order.assignments.length === 0 || isMissingPartner || hasStaleAssignments || order.pickupTransporterStatus === 'NO_PARTNERS_FOUND') {
+      if (order.assignments.length === 0 || (isMissingPartner && matchingTransporters.length > existingAssigneeIds.size) || hasStaleAssignments) {
         console.log(`[AutoBroadcastLoop] Automatically triggering Transporter broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastTransporter(order.id);
@@ -116,6 +126,9 @@ export class OrderManagementService implements OnModuleInit {
       where: {
         phase: 'DROP',
         mainStatus: { in: ['DROP_PENDING', 'DROP_CREATED'] },
+        NOT: {
+          dropShgStatus: 'NO_PARTNERS_FOUND'
+        }
       },
       include: {
         assignments: {
@@ -126,6 +139,7 @@ export class OrderManagementService implements OnModuleInit {
           },
         },
       },
+      take: 50
     });
 
     for (const order of dropOrdersPlaced) {
@@ -143,7 +157,10 @@ export class OrderManagementService implements OnModuleInit {
     const dropOrdersForTransporter = await this.prisma.order.findMany({
       where: {
         phase: 'DROP',
-        mainStatus: { in: ['DROP_SHG_ACCEPTED', 'RETURN_SHG_ACCEPTED'] },
+        mainStatus: 'DROP_SHG_ACCEPTED',
+        NOT: {
+          returnType: 'BUYER_RETURN',
+        },
       },
       include: {
         assignments: {
@@ -154,6 +171,7 @@ export class OrderManagementService implements OnModuleInit {
           },
         },
       },
+      take: 50
     });
 
     for (const order of dropOrdersForTransporter) {
@@ -194,7 +212,7 @@ export class OrderManagementService implements OnModuleInit {
 
     const normalizeVillage = (v?: string | null): string => {
       if (!v) return '';
-      return v.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
+      return v.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     };
 
     const targetVillage = normalizeVillage(address.village);
@@ -204,11 +222,11 @@ export class OrderManagementService implements OnModuleInit {
       const shgVillage = normalizeVillage(shg.address?.village);
       const shgPincode = shg.address?.pincode ? shg.address.pincode.toLowerCase().trim() : '';
 
-      // BOTH village and pincode must match
-      const villageMatches = !targetVillage || shgVillage === targetVillage;
-      const pincodeMatches = !targetPincode || shgPincode === targetPincode;
-
-      return villageMatches && pincodeMatches;
+      // STRICT MATCHING: Both Village AND Pincode MUST be present and match EXACTLY
+      if (!targetVillage || !targetPincode || !shgVillage || !shgPincode) {
+        return false;
+      }
+      return shgVillage === targetVillage && shgPincode === targetPincode;
     });
 
     return matchedShgUsers.map((shg: any) => ({
@@ -304,8 +322,8 @@ export class OrderManagementService implements OnModuleInit {
     const s = status.toUpperCase().trim().replace(/[\s-]/g, '_');
 
     // ── Phase 1: Order Creation ──────────────────────────────────────────────
-    if (s === 'ORDER_PLACED' || s === 'PENDING' || s === 'PENDING_PICKUP') {
-      return ['ORDER_PLACED', 'PENDING_PICKUP', 'PENDING_DROP', 'DISPATCHED', 'PENDING'];
+    if (s === 'ORDER_PLACED' || s === 'PENDING' || s === 'PENDING_PICKUP' || s === 'NEW') {
+      return ['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PENDING_DROP', 'DISPATCHED', 'PENDING'];
     }
 
     // ── Phase 2: Pickup Assignment ────────────────────────────────────────────
@@ -426,7 +444,7 @@ export class OrderManagementService implements OnModuleInit {
       ];
     }
     if (s === 'PICKED') {
-      return ['PARCEL_AT_SHG', 'PARCEL_AT_DROP_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_COMPLETED', 'STORED', 'INVENTORY_TRANSPORTER_RETURN', 'INVENTORY_BUYER_RETURN'];
+      return ['PARCEL_AT_SHG', 'PARCEL_AT_DROP_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_COMPLETED', 'STORED', 'INVENTORY_TRANSPORTER_RETURN', 'INVENTORY_BUYER_RETURN'];
     }
 
     return [s, status];
@@ -457,7 +475,7 @@ export class OrderManagementService implements OnModuleInit {
         }
       }
     } else if (allowedStatuses) {
-      if (!where.mainStatus) {
+      if (!where.mainStatus && !where.OR) {
         where.mainStatus = { in: allowedStatuses };
       }
     }
@@ -474,7 +492,18 @@ export class OrderManagementService implements OnModuleInit {
     return where;
   }
 
+  private countsCache: { data: any; timestamp: number } | null = null;
+  private readonly COUNTS_CACHE_TTL_MS = 5000; // 5 seconds TTL cache
+
+  clearCountsCache() {
+    this.countsCache = null;
+  }
+
   async getCounts() {
+    const now = Date.now();
+    if (this.countsCache && (now - this.countsCache.timestamp) < this.COUNTS_CACHE_TTL_MS) {
+      return this.countsCache.data;
+    }
     const [
       pickupNew,
       pickupAssigned,
@@ -517,9 +546,9 @@ export class OrderManagementService implements OnModuleInit {
         )
       }),
       // pickup.warehouse — Phase 5
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', returnType: null }, undefined, ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB', 'STORED']) }),
       // pickup.rejected — orders with any rejected assignment
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
+      this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', assignments: { some: { role: 'PICKUP', status: 'REJECTED' } }, returnType: null }, undefined, ['NEW', 'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING']) }),
       // pickup.rescheduled — REASSIGNED or legacy RESCHEDULED
       this.prisma.order.count({ where: this.applyFilters({ phase: 'PICKUP', mainStatus: { in: ['REASSIGNED', 'RESCHEDULED'] }, rescheduleType: { in: ['PICKUP_SHG', 'PICKUP_TRANSPORTER'] }, returnType: null }) }),
       // drop.new — Phase 5 dispatch
@@ -588,7 +617,7 @@ export class OrderManagementService implements OnModuleInit {
       this.prisma.order.count({ where: this.applyFilters({ returnType: 'BUYER_RETURN' }, undefined, ['INVENTORY_BUYER_RETURN']) }),
     ]);
 
-    return {
+    const result = {
       pickup: {
         new: pickupNew,
         assigned: pickupAssigned,
@@ -613,13 +642,24 @@ export class OrderManagementService implements OnModuleInit {
         buyerReturn: inventoryBuyerReturn
       }
     };
+
+    this.countsCache = { data: result, timestamp: Date.now() };
+    return result;
   }
 
   // --- QUERY ENDPOINTS ---
 
   async getOrderDetails(id: string, phase?: string): Promise<any> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-    const whereClause: any = isUuid ? { id } : { orderId: id };
+    const cleanId = String(id || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+    const whereClause: any = {
+      OR: [
+        { id },
+        { orderId: id },
+        { id: cleanId },
+        { orderId: cleanId },
+        { orderId: `ORD-${cleanId}` },
+      ]
+    };
     if (phase) {
       whereClause.phase = phase;
     }
@@ -995,9 +1035,10 @@ export class OrderManagementService implements OnModuleInit {
       { returnType: 'BUYER_RETURN' },
       filter,
       [
-        'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG',
-        'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED',
-        'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED',
+        'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG',
+        'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED',
+        'RETURN_IN_TRANSIT_TO_HUB', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB',
+        'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED',
       ]
     );
     return this.prisma.order.findMany({
@@ -1015,8 +1056,7 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       { phase: 'PICKUP', returnType: null },
       filter,
-      // Phase 5: only stored and active dispatch states (intaken only)
-      ['STORED', 'DROP_ASSIGNED', 'DISPATCHED']
+      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']
     );
     return this.prisma.order.findMany({
       where,
@@ -1262,50 +1302,6 @@ export class OrderManagementService implements OnModuleInit {
         totalAmount += quantity * price;
       }
 
-      // 5. Create in public.master_orders
-      const insertMo = await tx.$queryRawUnsafe(`
-        INSERT INTO public.master_orders (order_number, buyer_id, total_amount, payment_status, status, created_at, updated_at)
-        VALUES ($1, $2, $3, 'PENDING', 'CREATED', NOW(), NOW())
-        RETURNING id;
-      `, orderId, buyer.id, totalAmount) as any[];
-      const masterOrderId = insertMo[0].id;
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.master_orders;`);
-
-      // 6. Create in public.master_order_items
-      for (const item of resolvedItems) {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO public.master_order_items (master_order_id, product_id, seller_id, quantity, price)
-          VALUES ($1, $2, $3, $4, $5);
-        `, masterOrderId, item.productId, seller.id, item.qty, item.price);
-      }
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.master_order_items;`);
-
-      // 7. Create in public.pickup_orders
-      const insertPo = await tx.$queryRawUnsafe(`
-        INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
-        VALUES ($1, $2, $3, 'PENDING', NOW())
-        RETURNING id;
-      `, `PKP-${orderId}`, masterOrderId, seller.id) as any[];
-      const pickupOrderId = insertPo[0].id;
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
-
-      // 8. Create in public.pickup_order_items
-      for (const item of resolvedItems) {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity)
-          VALUES ($1, $2, $3);
-        `, pickupOrderId, item.productId, item.qty);
-      }
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
-
-      // 9. Create in public.pickup_tracking
-      await tx.$executeRawUnsafe(`
-        INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
-        VALUES ($1, 'ORDER_PLACED', 'Order Created', NOW());
-      `, pickupOrderId);
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
-
-      // 10. Create in public."Order"
       const productCount = resolvedItems.length;
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
@@ -1497,79 +1493,6 @@ export class OrderManagementService implements OnModuleInit {
         totalAmount += quantity * price;
       }
 
-      // 5. Create in public.master_orders
-      const insertMo = await tx.$queryRawUnsafe(`
-        INSERT INTO public.master_orders (order_number, buyer_id, total_amount, payment_status, status, created_at, updated_at)
-        VALUES ($1, $2, $3, 'PENDING', 'STORED', NOW(), NOW())
-        RETURNING id;
-      `, orderId, buyer.id, totalAmount) as any[];
-      const masterOrderId = insertMo[0].id;
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.master_orders;`);
-
-      // 6. Create in public.master_order_items
-      for (const item of resolvedItems) {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO public.master_order_items (master_order_id, product_id, seller_id, quantity, price)
-          VALUES ($1, $2, $3, $4, $5);
-        `, masterOrderId, item.productId, seller.id, item.qty, item.price);
-      }
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.master_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.master_order_items;`);
-
-      // 7. Create in public.pickup_orders
-      const insertPo = await tx.$queryRawUnsafe(`
-        INSERT INTO public.pickup_orders (pickup_order_number, master_order_id, seller_id, status, created_at)
-        VALUES ($1, $2, $3, 'COMPLETED', NOW())
-        RETURNING id;
-      `, `PKP-${orderId}`, masterOrderId, seller.id) as any[];
-      const pickupOrderId = insertPo[0].id;
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_orders;`);
-
-      // 8. Create in public.pickup_order_items
-      for (const item of resolvedItems) {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO public.pickup_order_items (pickup_order_id, product_id, quantity)
-          VALUES ($1, $2, $3);
-        `, pickupOrderId, item.productId, item.qty);
-      }
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_order_items;`);
-
-      // 9. Create in public.pickup_tracking
-      await tx.$executeRawUnsafe(`
-        INSERT INTO public.pickup_tracking (pickup_order_id, status, remarks, updated_at)
-        VALUES ($1, 'STORED', 'Order Created and Stored directly in GMU Hub', NOW());
-      `, pickupOrderId);
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.pickup_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.pickup_tracking;`);
-
-      // 10. Create in public.drop_orders
-      const deliveryAddress = [buyer.addressLine1, buyer.addressLine2, buyer.village, buyer.taluka, buyer.district, buyer.pincode]
-        .filter(Boolean)
-        .join(', ') || '';
-
-      const insertDo = await tx.$queryRawUnsafe(`
-        INSERT INTO public.drop_orders (master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number)
-        VALUES ($1, $2, 'PENDING', $3, NOW(), $4)
-        RETURNING id;
-      `, masterOrderId, buyer.id, deliveryAddress, `DRP-${orderId}`) as any[];
-      const dropOrderId = insertDo[0].id;
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_orders', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_orders;`);
-
-      // 11. Create in public.drop_order_items
-      for (const item of resolvedItems) {
-        await tx.$executeRawUnsafe(`
-          INSERT INTO public.drop_order_items (drop_order_id, product_id, quantity, verification_status)
-          VALUES ($1, $2, $3, 'PENDING');
-        `, dropOrderId, item.productId, item.qty);
-      }
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_order_items', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_order_items;`);
-
-      // 12. Create in public.drop_tracking
-      await tx.$executeRawUnsafe(`
-        INSERT INTO public.drop_tracking (drop_order_id, status, remarks, updated_at)
-        VALUES ($1, 'PENDING', 'Delivery leg created upon manual GMU Hub Drop Order creation.', NOW());
-      `, dropOrderId);
-      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('public.drop_tracking', 'id'), COALESCE(MAX(id), 1)) FROM public.drop_tracking;`);
-
-      // 13. Create in public."Order" for DROP phase only (as DROP_PENDING)
       const productCount = resolvedItems.length;
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
@@ -1650,15 +1573,7 @@ export class OrderManagementService implements OnModuleInit {
     const assignedShg = matchingShgs[0];
     const shgNumericId = parseInt(assignedShg.id, 10);
 
-    if (!isNaN(shgNumericId)) {
-      await this.prisma.$executeRawUnsafe(`
-        UPDATE public.pickup_orders
-        SET status = 'ACCEPTED', shg_id = $1
-        WHERE master_order_id = (
-          SELECT id FROM public.master_orders WHERE order_number = $2 LIMIT 1
-        );
-      `, shgNumericId, order.orderId);
-    }
+
 
     await this.prisma.orderAssignment.deleteMany({
       where: {
@@ -1827,13 +1742,21 @@ export class OrderManagementService implements OnModuleInit {
   async shgPicked(id: string) {
     const order = await this.getOrderDetails(id);
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id: order.id },
       data: {
         pickupShgStatus: 'PICKED',
         mainStatus: 'PARCEL_AT_SHG',
       },
     });
+
+    try {
+      await this.broadcastTransporter(order.id);
+    } catch (err: any) {
+      console.warn(`[shgPicked auto-broadcastTransporter] Failed for order ${order.id}:`, err.message);
+    }
+
+    return updated;
   }
 
   async broadcastTransporter(id: string) {
@@ -2046,248 +1969,89 @@ export class OrderManagementService implements OnModuleInit {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        // Phase 5: Parcel arrives at hub → HUB_RECEIVED / AT_HUB
-        mainStatus: 'HUB_RECEIVED',
+        mainStatus: 'STORED',
         pickupTransporterStatus: 'COMPLETED',
         pickupShgStatus: 'DROPPED',
         warehouseReceivedAt: new Date(),
+        storedAt: new Date(),
       },
     });
 
     return this.storeInventory(order.id);
   }
 
-
-
   async storeInventory(id: string) {
     const order = await this.getOrderDetails(id);
 
-    // Find the master order to get items and buyer address details using raw SQL from public schema
-    const rawMasterOrders = await this.prisma.$queryRawUnsafe(`
-      SELECT id, order_number, buyer_id FROM public.master_orders WHERE order_number = $1 LIMIT 1;
-    `, order.orderId) as any[];
-    const masterOrder = rawMasterOrders?.[0] || null;
+    // 1. Update status to STORED
+    const updated = await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        mainStatus: 'STORED',
+        storedAt: new Date(),
+      },
+    });
 
-    let buyer: any = null;
-    let items: any[] = [];
-
-    if (masterOrder) {
-      const rawBuyers = await this.prisma.$queryRawUnsafe(`
-        SELECT id, village, pincode, taluka, district, address_line1, address_line2 FROM public.buyers WHERE id = $1 LIMIT 1;
-      `, masterOrder.buyer_id) as any[];
-      buyer = rawBuyers?.[0] || null;
-
-      items = await this.prisma.$queryRawUnsafe(`
-        SELECT product_id, quantity FROM public.master_order_items WHERE master_order_id = $1;
-      `, masterOrder.id) as any[];
+    // 2. Ensure Warehouse Inventory record
+    try {
+      let warehouse = await this.prisma.warehouse.findFirst();
+      if (!warehouse) {
+        warehouse = await this.prisma.warehouse.create({
+          data: {
+            name: 'GMU Hub Warehouse',
+            address: 'Kolhapur',
+          }
+        });
+      }
+    } catch (wErr: any) {
+      console.warn(`[storeInventory] Warehouse creation note:`, wErr.message);
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const parseDate = (d: any) => {
-        if (!d) return null;
-        try {
-          if (d && typeof d === 'object') {
-            if ('prisma__value' in d && d.prisma__value) {
-              return new Date(d.prisma__value).toISOString();
-            }
-            if (d.prisma__value !== undefined && d.prisma__value) {
-              return new Date(d.prisma__value).toISOString();
-            }
-            if (d instanceof Date) {
-              return d.toISOString();
-            }
-          }
-          const parsed = new Date(d);
-          if (!isNaN(parsed.getTime())) {
-            return parsed.toISOString();
-          }
-        } catch (e) { }
-        return null;
-      };
-
-      if (masterOrder) {
-        // Increment warehouse inventory
-        let warehouse = await tx.warehouse.findFirst();
-        if (!warehouse) {
-          warehouse = await tx.warehouse.create({
-            data: {
-              name: 'GMU Hub Warehouse',
-              address: 'Kolhapur',
-            }
-          });
-        }
-
-        // Synchronize products and seller users from public schema to gmu schema
-        for (const item of items) {
-          const rawPubProducts = await tx.$queryRawUnsafe(`
-            SELECT * FROM public.products WHERE id = $1 LIMIT 1;
-          `, item.product_id) as any[];
-          const pubProduct = rawPubProducts?.[0];
-
-          if (pubProduct) {
-            // Check if seller exists in public."User"
-            const rawGmuUsers = await tx.$queryRawUnsafe(`
-              SELECT id FROM public."User" WHERE id = $1 LIMIT 1;
-            `, pubProduct.seller_id) as any[];
-            const gmuUser = rawGmuUsers?.[0];
-
-            if (!gmuUser) {
-              // Fetch user from public."User"
-              const rawPubUsers = await tx.$queryRawUnsafe(`
-                SELECT * FROM public."User" WHERE id = $1 LIMIT 1;
-              `, pubProduct.seller_id) as any[];
-              const pubUser = rawPubUsers?.[0];
-
-              if (pubUser) {
-                // Insert into public."User"
-                await tx.$executeRawUnsafe(`
-                  INSERT INTO public."User" (
-                    id, "authId", role, "phoneNumber", email, "fullName", "profilePhoto", 
-                    language, "isVerified", "currentStep", "profileCompletion", "applicationStatus", 
-                    "uniqueCode", "approvedAt", "rejectedAt", "rejectionReason", "createdAt", "updatedAt", "deletedAt"
-                  ) VALUES (
-                    $1, $2::uuid, $3::"UserRole", $4, $5, $6, $7, 
-                    $8, $9, $10, $11, $12::"ApplicationStatus", 
-                    $13, $14::timestamp, $15::timestamp, $16, $17::timestamp, $18::timestamp, $19::timestamp
-                  ) ON CONFLICT (id) DO NOTHING;
-                `,
-                  pubUser.id, pubUser.authId, pubUser.role, pubUser.phoneNumber, pubUser.email, pubUser.fullName, pubUser.profilePhoto,
-                  pubUser.language, pubUser.isVerified, pubUser.currentStep, pubUser.profileCompletion, pubUser.applicationStatus,
-                  pubUser.uniqueCode, parseDate(pubUser.approvedAt), parseDate(pubUser.rejectedAt), pubUser.rejectionReason, parseDate(pubUser.createdAt), parseDate(pubUser.updatedAt), parseDate(pubUser.deletedAt)
-                );
-              }
-            }
-
-            // Check if product exists in public.products
-            const rawGmuProducts = await tx.$queryRawUnsafe(`
-              SELECT id FROM public.products WHERE id = $1 LIMIT 1;
-            `, item.product_id) as any[];
-            const gmuProduct = rawGmuProducts?.[0];
-
-            if (!gmuProduct) {
-              // Insert product into public.products
-              await tx.$executeRawUnsafe(`
-                INSERT INTO public.products (
-                  id, seller_id, name, category, price, weight, image, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamp)
-                ON CONFLICT (id) DO NOTHING;
-              `,
-                pubProduct.id, pubProduct.seller_id, pubProduct.name, pubProduct.category,
-                pubProduct.price, pubProduct.weight, pubProduct.image || pubProduct.image_uri || null,
-                parseDate(pubProduct.createdAt || pubProduct.created_at || new Date())
-              );
-            }
-          }
-
-          await tx.warehouseInventory.upsert({
-            where: {
-              warehouseId_productId: {
-                warehouseId: warehouse.id,
-                productId: item.product_id
-              }
-            },
-            update: {
-              quantity: { increment: item.quantity }
-            },
-            create: {
-              warehouseId: warehouse.id,
-              productId: item.product_id,
-              quantity: item.quantity,
-              qcStatus: 'PASSED'
-            }
-          });
-        }
+    // 3. Create or find Phase 2 Drop Order
+    let dropId: string = '';
+    const existingDropOrder = await this.prisma.order.findFirst({
+      where: {
+        orderId: order.orderId,
+        phase: 'DROP',
       }
+    });
 
-      // 1. Update Phase 1 Pickup Order status strictly to STORED
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          mainStatus: 'STORED',
-          storedAt: new Date(),
-        },
-      });
-
-      // Update public.master_orders status
-      await tx.masterOrder.updateMany({
-        where: { orderNumber: order.orderId },
-        data: { status: 'STORED' }
-      });
-
-      // 2. Create the new Phase 2 Drop Order in public."Order"
+    if (!existingDropOrder) {
       const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-      const dropId = dropOrderUuid();
-      await tx.order.create({
+      dropId = dropOrderUuid();
+      await this.prisma.order.create({
         data: {
           id: dropId,
           orderId: order.orderId,
           barcode: order.barcode,
           sellerId: order.sellerId,
           buyerId: order.buyerId,
-          productCount: order.productCount,
-          totalQty: order.totalQty,
-          totalWeight: order.totalWeight,
+          productCount: order.productCount || 1,
+          totalQty: order.totalQty || 1,
+          totalWeight: order.totalWeight || 5,
           mainStatus: 'DROP_PENDING',
           dropShgStatus: 'PENDING',
           phase: 'DROP',
         }
+      }).catch(err => {
+        console.warn(`[storeInventory] Phase 2 drop order creation note:`, err.message);
+      });
+    } else {
+      dropId = existingDropOrder.id;
+    }
+
+    // 4. Trigger Phase 2 Partner Matching & Broadcasts asynchronously
+    if (dropId) {
+      this.broadcastDropShg(dropId).catch(err => {
+        console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
       });
 
-      // 3. Create the corresponding public DropOrder if it doesn't exist
-      if (masterOrder && buyer) {
-        const existingDrop = await tx.$queryRawUnsafe(`
-          SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
-        `, `DRP-${order.orderId}`) as any[];
+      this.broadcastDropTransporter(dropId).catch(err => {
+        console.error(`[storeInventory] Immediate drop Transporter broadcast failed:`, err.message);
+      });
+    }
 
-        if (existingDrop.length === 0) {
-          const deliveryAddress = [buyer.address_line1, buyer.address_line2, buyer.village, buyer.taluka, buyer.district, buyer.pincode]
-            .filter(Boolean)
-            .join(', ') || '';
-
-          await tx.$executeRawUnsafe(`
-            INSERT INTO public.drop_orders (
-              master_order_id, buyer_id, status, delivery_address, created_at, drop_order_number
-            ) VALUES ($1, $2, 'PENDING', $3, NOW(), $4);
-          `, masterOrder.id, buyer.id, deliveryAddress, `DRP-${order.orderId}`);
-
-          const generatedDrop = await tx.$queryRawUnsafe(`
-            SELECT id FROM public.drop_orders WHERE drop_order_number = $1 LIMIT 1;
-          `, `DRP-${order.orderId}`) as any[];
-
-          if (generatedDrop?.[0]) {
-            const dropOrderId = generatedDrop[0].id;
-            for (const item of items) {
-              await tx.$executeRawUnsafe(`
-                INSERT INTO public.drop_order_items (
-                  drop_order_id, product_id, quantity, verification_status
-                ) VALUES ($1, $2, $3, 'PENDING');
-              `, dropOrderId, item.product_id, item.quantity);
-            }
-
-            await tx.$executeRawUnsafe(`
-              INSERT INTO public.drop_tracking (
-                drop_order_id, status, remarks, updated_at
-              ) VALUES ($1, 'PENDING', 'Delivery leg created upon arrival at GMU Hub.', NOW());
-            `, dropOrderId);
-          }
-        }
-      }
-
-      return { updated, dropId };
-    }, {
-      timeout: 30000
-    });
-
-    // Run partner matching and broadcasts asynchronously in background for instant < 200ms intake API response
-    this.broadcastDropShg(result.dropId).catch(err => {
-      console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
-    });
-
-    this.broadcastDropTransporter(result.dropId).catch(err => {
-      console.error(`[storeInventory] Immediate drop Transporter broadcast failed:`, err.message);
-    });
-
-    return result.updated;
+    return updated;
   }
 
 
@@ -2368,21 +2132,7 @@ export class OrderManagementService implements OnModuleInit {
       });
     }
 
-    // Sync public.master_orders and public.drop_orders
-    await this.prisma.$executeRawUnsafe(`
-      UPDATE public.master_orders
-      SET status = 'DROP_SHG_ACCEPTED', updated_at = NOW()
-      WHERE order_number = $1;
-    `, order.orderId);
 
-    const shgUserId = parseInt(allocatedShgId, 10);
-    if (!isNaN(shgUserId)) {
-      await this.prisma.$executeRawUnsafe(`
-        UPDATE public.drop_orders
-        SET status = 'ACCEPTED', shg_id = $1, updated_at = NOW()
-        WHERE drop_order_number = $2 OR master_order_id IN (SELECT id FROM public.master_orders WHERE order_number = $3);
-      `, shgUserId, `DRP-${order.orderId}`, order.orderId);
-    }
 
     console.log(`[Drop SHG Auto-Accept]
       Order ID: ${order.orderId} (${order.id})
@@ -2436,35 +2186,6 @@ export class OrderManagementService implements OnModuleInit {
           mainStatus: 'DROP_SHG_ACCEPTED',
         },
       });
-
-      // Update public.master_orders status
-      await tx.masterOrder.updateMany({
-        where: { orderNumber: order.orderId },
-        data: { status: 'DROP_SHG_ACCEPTED' }
-      });
-
-      // Update public.drop_orders status
-      const shgUserId = parseInt(shgId, 10);
-
-      await tx.dropOrder.updateMany({
-        where: { dropOrderNumber: `DRP-${order.orderId}` },
-        data: { status: 'ACCEPTED', shgId: shgUserId }
-      });
-
-      // Update public.drop_tracking
-      const dropOrders = await tx.dropOrder.findMany({
-        where: { dropOrderNumber: `DRP-${order.orderId}` }
-      });
-      if (dropOrders && dropOrders[0]) {
-        const dropOrderId = dropOrders[0].id;
-        await tx.dropTracking.create({
-          data: {
-            dropOrderId: dropOrderId,
-            status: 'DROP_SHG_ACCEPTED',
-            remarks: 'Drop Order accepted by SHG Member.',
-          }
-        });
-      }
 
       return updated;
     });
@@ -2885,27 +2606,79 @@ export class OrderManagementService implements OnModuleInit {
   // --- NEW BUYER RETURN FLOW ---
 
   async requestBuyerReturn(id: string) {
-    const order = await this.getOrderDetails(id);
+    let order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id },
+          { orderId: id }
+        ],
+        phase: 'DROP'
+      },
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      }
+    });
+
+    if (!order) {
+      order = await this.getOrderDetails(id);
+    }
+    if (!order) {
+      throw new NotFoundException(`Order with ID/OrderId ${id} not found`);
+    }
 
     if (order.mainStatus !== 'DELIVERED') {
       throw new BadRequestException(`Order must be in DELIVERED status to create a buyer return request`);
     }
 
-    if (!order.dropShgId) {
+    let originalDropShgAuthId = order.dropShgId;
+    if (!originalDropShgAuthId) {
+      const dropAssignment = await this.prisma.orderAssignment.findFirst({
+        where: {
+          order: { orderId: order.orderId },
+          role: 'DROP',
+          assigneeType: 'SHG',
+          status: { in: ['ACCEPTED', 'COMPLETED'] }
+        }
+      });
+      if (dropAssignment) {
+        originalDropShgAuthId = dropAssignment.assigneeId;
+      }
+    }
+
+    if (!originalDropShgAuthId) {
       throw new BadRequestException(`No original SHG drop assignment found to return to`);
     }
 
-    // Deletes any old return assignments just in case
+    // 2. Find SHG user and their ID
+    let shgUser = null;
+    const isNumber = !isNaN(Number(originalDropShgAuthId));
+    if (isNumber) {
+      shgUser = await this.prisma.user.findFirst({
+        where: { id: Number(originalDropShgAuthId) }
+      });
+    } else {
+      shgUser = await this.prisma.user.findFirst({
+        where: { authId: originalDropShgAuthId }
+      });
+    }
+    if (!shgUser) {
+      throw new BadRequestException(`No SHG user record found for original Drop SHG identifier ${originalDropShgAuthId}`);
+    }
+
+    // 3. Deletes any old return assignments just in case
     await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'RETURN' },
+      where: { orderId: order.id, role: { in: ['DROP', 'RETURN'] } },
     });
 
+    // 4. Create OrderAssignment with role DROP so that SHG acceptDrop updates it correctly
     await this.prisma.orderAssignment.create({
       data: {
         orderId: order.id,
-        assigneeId: order.dropShgId,
+        assigneeId: shgUser.authId,
         assigneeType: 'SHG',
-        role: 'RETURN',
+        role: 'DROP',
         status: 'PENDING',
       },
     });
@@ -2915,7 +2688,7 @@ export class OrderManagementService implements OnModuleInit {
       data: {
         returnType: 'BUYER_RETURN',
         mainStatus: 'RETURN_SHG_PENDING',
-        pickupReturnShgId: order.dropShgId,
+        pickupReturnShgId: shgUser.authId,
         pickupShgStatus: 'PENDING',
       },
     });
@@ -2963,7 +2736,7 @@ export class OrderManagementService implements OnModuleInit {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        pickupShgStatus: 'PICKED',
+        pickupShgStatus: 'RETURN_PICKED_BY_SHG',
       },
     });
 
@@ -3003,7 +2776,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'RETURN_TRANSPORTER_PENDING',
+        mainStatus: 'RETURN_TRANSPORTER_REQUESTED',
         pickupTransporterStatus: 'PENDING',
       },
       include: { assignments: true },
@@ -3040,8 +2813,11 @@ export class OrderManagementService implements OnModuleInit {
       where: { id: order.id },
       data: {
         returnTransporterId: transporterId,
+        pickupTransporterId: transporterId,
+        dropTransporterId: transporterId,
         mainStatus: 'RETURN_TRANSPORTER_ACCEPTED',
         pickupTransporterStatus: 'ACCEPTED',
+        dropTransporterStatus: 'ACCEPTED',
       },
     });
   }
@@ -3151,7 +2927,41 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getMatchingShgs(village: string, pincode: string, postOffice: string, excludedIds: string[] = []): Promise<any[]> {
+    const normalizeStr = (s: string) => {
+      if (!s) return '';
+      return s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+    };
+
+    const ov = village ? normalizeStr(village) : '';
+    const op = pincode ? pincode.trim().toLowerCase() : '';
+
     const whereExcluded = excludedIds.length > 0
+      ? `AND sa."shgUserId" NOT IN (${excludedIds.map(id => `'${id}'`).join(', ')})`
+      : '';
+
+    // Priority 1: Query ShgServiceArea table for active SHGs serving this exact Village + Pincode
+    let serviceAreaShgs: any[] = [];
+    if (ov && op) {
+      serviceAreaShgs = await this.prisma.$queryRawUnsafe(`
+        SELECT sa."shgUserId" as id, sa.village, sa.pincode
+        FROM public."ShgServiceArea" sa
+        JOIN public."User" u ON CAST(sa."shgUserId" AS INTEGER) = u.id
+        WHERE sa.status = 'ACTIVE' AND u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL
+          AND LOWER(REGEXP_REPLACE(sa.village, '[^a-zA-Z0-9]', '', 'g')) = $1
+          AND sa.pincode = $2 ${whereExcluded}
+        ORDER BY sa."isPrimary" DESC;
+      `, ov, op) as any[];
+    }
+
+    if (serviceAreaShgs.length > 0) {
+      return serviceAreaShgs.map(shg => ({
+        ...shg,
+        id: String(shg.id)
+      }));
+    }
+
+    // Fallback: Query public."Address" table if ShgServiceArea entry not found
+    const whereExcludedLegacy = excludedIds.length > 0
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
 
@@ -3159,22 +2969,25 @@ export class OrderManagementService implements OnModuleInit {
       SELECT u.id, a.pincode, a.village, a."postOffice"
       FROM public."User" u
       JOIN public."Address" a ON u.id = a."userId"
-      WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
+      WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcludedLegacy};
     `) as any[];
 
-    const normalizeStr = (s: string) => {
-      if (!s) return '';
-      return s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-    };
-
-    const ov = village;
-    const op = pincode;
-
-    // Match on Pincode AND Village (Both must match)
-    const matchingShgs = approvedShgs.filter(shg =>
-      (shg.pincode && op && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()) &&
-      (shg.village && ov && normalizeStr(shg.village) === normalizeStr(ov))
+    // 1. Match on Pincode AND Village (Both must match)
+    let matchingShgs = approvedShgs.filter(shg =>
+      (shg.pincode && op && shg.pincode.trim().toLowerCase() === op) &&
+      (shg.village && ov && (
+        normalizeStr(shg.village) === ov ||
+        normalizeStr(shg.village).includes(ov.substring(0, 5)) ||
+        ov.includes(normalizeStr(shg.village).substring(0, 5))
+      ))
     );
+
+    // 2. Fallback: Match on Pincode if no village match found
+    if (matchingShgs.length === 0 && op) {
+      matchingShgs = approvedShgs.filter(shg =>
+        shg.pincode && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()
+      );
+    }
 
     return matchingShgs.map(shg => ({
       ...shg,
@@ -3196,7 +3009,7 @@ export class OrderManagementService implements OnModuleInit {
     const approvedTransporters = await this.prisma.$queryRawUnsafe(`
       SELECT u.id, a.village as "homeVillage", a.pincode as "homePincode", a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
       FROM public."User" u
-      JOIN public."Address" a ON u.id = a."userId"
+      LEFT JOIN public."Address" a ON u.id = a."userId"
       LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
       LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
       WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
@@ -3227,24 +3040,23 @@ export class OrderManagementService implements OnModuleInit {
       return { areas, pincodes, postOffice: transporterPostOffice };
     };
 
-    // Priority Step 1 & 2: Village Match AND Pincode Match
-    let villageMatchedCount = 0;
-    let pincodeMatchedCount = 0;
-
+    // STRICT ROUTE MATCHING ONLY: Matches ONLY by Transporter Route Details (operatingArea & pickupLocations), NOT personal address
     const locationMatchedTransporters = approvedTransporters.filter((tr) => {
-      const homeV = tr.homeVillage ? normalizeStr(tr.homeVillage) : '';
-      const homeP = tr.homePincode ? tr.homePincode.trim().toLowerCase() : '';
       const { areas, pincodes } = getTransporterInfo(tr);
+      const targetV = v ? normalizeStr(v) : '';
+      const targetP = p ? p.trim().toLowerCase() : '';
 
-      const villageMatches = Boolean(
-        v && (homeV === normalizeStr(v) || areas.includes(normalizeStr(v)))
-      );
-      if (villageMatches) villageMatchedCount++;
+      if (!targetV || !targetP) return false;
 
-      const pinMatches = Boolean(
-        p && (homeP === p || pincodes.includes(p) || areas.includes(p))
-      );
-      if (pinMatches) pincodeMatchedCount++;
+      const villageMatches = areas.some((a: string) => {
+        const normA = normalizeStr(a);
+        return normA === targetV || normA.includes(targetV) || targetV.includes(normA);
+      });
+
+      const pinMatches = pincodes.some((pin: string) => {
+        const cleanPin = pin.split(' (')[0].trim().toLowerCase();
+        return cleanPin === targetP;
+      });
 
       return villageMatches && pinMatches;
     });
@@ -3271,9 +3083,7 @@ export class OrderManagementService implements OnModuleInit {
         const maxW = tr.maxWeight !== null && tr.maxWeight !== undefined ? Number(tr.maxWeight) : null;
         const effectiveMaxW = getEffectiveMaxWeight(maxW);
 
-        if (minW !== null && weightNum < minW) {
-          return false;
-        }
+        // Small parcels (e.g. 0.5 - 10 kg) are eligible as long as totalWeight does not exceed maximum carrying capacity
         if (effectiveMaxW !== null && weightNum > effectiveMaxW) {
           return false;
         }
@@ -3284,13 +3094,11 @@ export class OrderManagementService implements OnModuleInit {
     if (weightEligibleTransporters.length === 0) {
       console.log(`[Transporter Broadcast Matching]
         Total Shipment Weight: ${weightNum !== null ? `${weightNum} kg` : 'N/A'}
-        Village Matched Transporters: ${villageMatchedCount}
-        Pincode Matched Transporters: ${pincodeMatchedCount}
         Location Matched Transporters: ${locationMatchedTransporters.length}
         Weight Eligible Transporters: 0
         Lowest Rate Selected: N/A
         Selected Transporter IDs: []
-        Reason: No location-matched transporter can carry the total weight (${weightNum} kg).
+        Reason: No location-matched transporter covers weight range (${weightNum} kg).
       `);
       return [];
     }
@@ -3314,8 +3122,7 @@ export class OrderManagementService implements OnModuleInit {
 
     console.log(`[Transporter Broadcast Matching]
       Total Shipment Weight: ${weightNum !== null ? `${weightNum} kg` : 'N/A'}
-      Village Matched Transporters: ${villageMatchedCount}
-      Pincode Matched Transporters: ${pincodeMatchedCount}
+      Location Matched Transporters: ${locationMatchedTransporters.length}
       Weight Eligible Transporters: ${weightEligibleTransporters.length}
       Lowest Rate Selected: ${lowestRateStr}
       Broadcast Sent To Transporter IDs: ${JSON.stringify(finalSelectedTransporters.map(tr => String(tr.id)))}

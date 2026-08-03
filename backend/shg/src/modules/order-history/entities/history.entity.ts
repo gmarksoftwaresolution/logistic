@@ -1,4 +1,4 @@
-import { PickupOrder, DropOrder, MasterOrder, User } from '@prisma/client';
+import { Order, User } from '@prisma/client';
 
 export class HistoryEntity {
   // A wrapper to unify PickupOrder and DropOrder for history responses

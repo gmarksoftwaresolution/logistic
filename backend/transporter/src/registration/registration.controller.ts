@@ -159,16 +159,12 @@ export class RegistrationController {
     return this.registrationService.saveStep7MilkVan(req.user.phoneNumber, dto);
   }
 
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Get('pincode/:pincode')
   @ApiOperation({ summary: 'Lookup state, district, and taluka for a pincode' })
   getPincodeInfo(@Param('pincode') pincode: string) {
     return this.registrationService.getPincodeInfo(pincode);
   }
 
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Get('pincode/:pincode/villages')
   @ApiOperation({ summary: 'Get list of unique villages/post office names for a pincode' })
   getPincodeVillages(@Param('pincode') pincode: string) {

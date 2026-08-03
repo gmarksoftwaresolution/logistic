@@ -62,6 +62,9 @@ export interface BatchOrder {
   masterOrderId?: number;
   handoverCode?: string;
   isRTO?: boolean;
+  isPickupRedirected?: boolean;
+  isDropRedirected?: boolean;
+  isRedirected?: boolean;
   shgContact: {
     name: string;
     shgName?: string;
@@ -151,10 +154,10 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   // Always-fresh ref so async functions avoid stale closures on batches and photos
   const batchesRef = useRef<BatchOrder[]>(batches);
   const capturedPhotosRef = useRef<Record<string, any>>(capturedPhotos);
-  
+
   useEffect(() => { batchesRef.current = batches; }, [batches]);
   useEffect(() => { capturedPhotosRef.current = capturedPhotos; }, [capturedPhotos]);
-  
+
   // Notification State
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -210,24 +213,24 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedPickups = rawPickups.map((o: any) => ({
         id: `pickup-${o.id}`,
         displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.address?.taluka || 'Nesari',
+        areaName: o.seller?.taluka || o.seller?.address?.taluka || 'Nesari',
         flowType: 'shg_to_gmu' as FlowType,
         shgName: o.shg?.shgDetail?.shgName || 'Local SHG',
-        pickupPointName: o.seller?.address?.village || 'Nesari Stand',
+        pickupPointName: o.seller?.village || o.seller?.address?.village || 'Nesari Stand',
         dropPointName: 'Gadhinglaj Hub',
         pickupCount: 1,
         dropCount: 0,
         totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
         totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-        status: (o.pickupTransporterStatus === 'PENDING' || (o.status === 'PENDING' && !o.pickupTransporterStatus) || ((o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'PICKED_UP') && !o.transporterId && o.pickupTransporterStatus !== 'ACCEPTED' && o.pickupTransporterStatus !== 'PICKED' && o.pickupTransporterStatus !== 'IN_TRANSIT_TO_HUB' && o.pickupTransporterStatus !== 'DELIVERED_TO_HUB'))
-          ? 'NEW_ORDER'
-          : (o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED' || o.pickupTransporterStatus === 'DELIVERED_TO_HUB' || ['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || ''))
-            ? 'DROP_COMPLETED'
-            : (o.pickupTransporterStatus === 'ACCEPTED')
+        status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || '') || o.pickupTransporterStatus === 'DELIVERED_TO_HUB' || o.pickupTransporterStatus === 'DROPPED')
+          ? 'DROP_COMPLETED'
+          : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
+            ? 'PICKUP_COMPLETED'
+            : (o.transporterId || o.pickupTransporterId || o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
               ? 'ACCEPTED_PICKUP'
-              : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB')
-                ? 'PICKUP_COMPLETED'
-                : 'rejected',
+              : (o.pickupTransporterStatus === 'PENDING' || o.mainStatus === 'PENDING' || o.mainStatus === 'PARCEL_AT_SHG' || o.mainStatus === 'PICKUP_SHG_ACCEPTED')
+                ? 'NEW_ORDER'
+                : 'ACCEPTED_PICKUP',
         rejectReason: (() => {
           const rawReason = o.tracking?.[0]?.remarks;
           let reasonVal = rawReason;
@@ -267,15 +270,15 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           taluka: o.shg?.address?.taluka || o.seller?.taluka || '',
           district: o.shg?.address?.district || o.seller?.district || '',
         },
-        products: o.items?.map((item: any) => {
-          const pId = String(item.id);
-          const photoKey = `${o.masterOrderId}-${item.product?.name || 'General Item'}`;
+        products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
+          const pId = String(item.id || item.parcelId || Math.random());
+          const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
           const cached = capturedPhotosRef.current[photoKey] || capturedPhotosRef.current[pId] || {};
           return {
             id: pId,
-            name: item.product?.name || 'General Item',
-            qty: item.quantity,
-            weight: `${item.product?.weight || 1} kg`,
+            name: item.product?.name || item.productName || 'General Item',
+            qty: item.quantity || 1,
+            weight: `${item.product?.weight || item.weight || 1} kg`,
             legType: 'pickup' as const,
             status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
             pickupPhoto: cached.pickupPhoto,
@@ -287,7 +290,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             verificationStatus: item.verificationStatus || 'PENDING',
             productId: item.productId,
           };
-        }) || [],
+        }) : [{
+          id: `p-${o.id}`,
+          name: 'General Parcel Package',
+          qty: o.totalQty || 1,
+          weight: `${o.totalWeight || 5} kg`,
+          legType: 'pickup' as const,
+          status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
+          verificationCode: '',
+          verificationStatus: 'PENDING',
+        }],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: o.createdAt,
       }));
@@ -295,11 +307,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedDrops = rawDrops.map((o: any) => {
         const bId = `drop-${o.id}`;
         const isPickupFinished = resolvedDropPickups.includes(bId);
-        
+
         return {
           id: bId,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: o.buyer?.address?.taluka || 'Nesari',
+          areaName: o.buyer?.taluka || o.buyer?.address?.taluka || 'Nesari',
           flowType: 'gmu_to_shg' as FlowType,
           shgName: 'Gadhinglaj Hub',
           pickupPointName: 'Gadhinglaj Hub',
@@ -308,63 +320,72 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropCount: 1,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-          status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId) 
-            ? 'NEW_ORDER' 
+          status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId)
+            ? 'NEW_ORDER'
             : (o.masterOrder?.dropTransporterStatus === 'COMPLETED' || o.masterOrder?.status === 'PARCEL_AT_DROP_SHG' || o.masterOrder?.status === 'PARCEL_WITH_DROP_SHG' || o.masterOrder?.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'DELIVERED')
               ? ('DROP_COMPLETED' as const)
-              : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED') 
-                ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const)) 
+              : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED')
+                ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const))
                 : (o.status === 'PICKED_UP' || o.status === 'RETURN_PICKED_UP')
                   ? ('DROP_COMPLETED' as const) // Since SHG picked it up, Transporter must be done
                   : ('rejected' as const),
-        rejectReason: (() => {
-          const rawReason = o.tracking?.[0]?.remarks;
-          let reasonVal = rawReason;
-          if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.pickupOrders?.[0]) {
-            const pickupReason = o.masterOrder.pickupOrders[0].tracking?.[0]?.remarks;
-            if (pickupReason) reasonVal = pickupReason;
-          }
-          const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Recipient Not Available' : undefined);
-          return finalReason ? cleanRejectReason(finalReason) : undefined;
-        })(),
-        masterOrderId: o.masterOrderId,
-        dropOrderId: o.id, // Track the actual DB drop order ID
-        transporterId: o.transporterId,
-        handoverCode: o.handoverCode,
-        isRTO: o.isRTO || false,
-        shgContact: {
-          name: o.shg?.fullName || o.buyer?.fullName || 'Recipient',
-          shgName: o.shg?.shgDetail?.shgName || '',
-          phone: o.shg?.phoneNumber || o.buyer?.phoneNumber || '',
-          address: o.deliveryAddress || (o.shg?.address ? `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim() : ''),
-          village: o.shg?.address?.village || o.buyer?.address?.village || 'Nesari',
-          pincode: o.shg?.address?.pincode || o.buyer?.address?.pincode || '416504',
-        },
-        products: o.items?.map((item: any) => {
-          const pId = String(item.id);
-          const photoKey = `${o.masterOrderId}-${item.product?.name || 'General Item'}`;
-          const cached = capturedPhotosRef.current[photoKey] || capturedPhotosRef.current[pId] || {};
-          return {
-            id: pId,
-            name: item.product?.name || 'General Item',
-            qty: item.quantity,
-            weight: `${item.product?.weight || 1} kg`,
+          rejectReason: (() => {
+            const rawReason = o.tracking?.[0]?.remarks;
+            let reasonVal = rawReason;
+            if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.pickupOrders?.[0]) {
+              const pickupReason = o.masterOrder.pickupOrders[0].tracking?.[0]?.remarks;
+              if (pickupReason) reasonVal = pickupReason;
+            }
+            const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Recipient Not Available' : undefined);
+            return finalReason ? cleanRejectReason(finalReason) : undefined;
+          })(),
+          masterOrderId: o.masterOrderId,
+          dropOrderId: o.id, // Track the actual DB drop order ID
+          transporterId: o.transporterId,
+          handoverCode: o.handoverCode,
+          isRTO: o.isRTO || false,
+          shgContact: {
+            name: o.shg?.fullName || o.buyer?.fullName || 'Recipient',
+            shgName: o.shg?.shgDetail?.shgName || '',
+            phone: o.shg?.phoneNumber || o.buyer?.phoneNumber || '',
+            address: o.deliveryAddress || (o.shg?.address ? `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim() : ''),
+            village: o.shg?.address?.village || o.buyer?.address?.village || 'Nesari',
+            pincode: o.shg?.address?.pincode || o.buyer?.address?.pincode || '416504',
+          },
+          products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
+            const pId = String(item.id || item.parcelId || Math.random());
+            const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
+            const cached = capturedPhotosRef.current[photoKey] || capturedPhotosRef.current[pId] || {};
+            return {
+              id: pId,
+              name: item.product?.name || item.productName || 'General Item',
+              qty: item.quantity || 1,
+              weight: `${item.product?.weight || item.weight || 1} kg`,
+              legType: 'drop' as const,
+              status: (o.status === 'COMPLETED' || o.status === 'RETURNED') ? 'completed' : 'pending',
+              pickupPhoto: cached.pickupPhoto,
+              pickupPhotoTime: cached.pickupPhotoTime,
+              dropPhoto: cached.dropPhoto,
+              dropPhotoTime: cached.dropPhotoTime,
+              isRTO: o.isRTO || false,
+              verificationCode: item.verificationCode || '',
+              verificationStatus: item.verificationStatus || 'PENDING',
+              productId: item.productId,
+            };
+          }) : [{
+            id: `p-${o.id}`,
+            name: 'General Parcel Package',
+            qty: o.totalQty || 1,
+            weight: `${o.totalWeight || 5} kg`,
             legType: 'drop' as const,
             status: (o.status === 'COMPLETED' || o.status === 'RETURNED') ? 'completed' : 'pending',
-            pickupPhoto: cached.pickupPhoto,
-            pickupPhotoTime: cached.pickupPhotoTime,
-            dropPhoto: cached.dropPhoto,
-            dropPhotoTime: cached.dropPhotoTime,
-            isRTO: o.isRTO || false,
-            verificationCode: item.verificationCode || '',
-            verificationStatus: item.verificationStatus || 'PENDING',
-            productId: item.productId,
-          };
-        }) || [],
-        timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        createdAt: o.createdAt,
-      };
-    });
+            verificationCode: '',
+            verificationStatus: 'PENDING',
+          }],
+          timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: o.createdAt,
+        };
+      });
 
       // Reconcile completed drop pickups
       const liveDropIds = new Set(mappedDrops.map((d: any) => d.id));
@@ -406,7 +427,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       setRejectedBatches(prev => {
         const cleaned = prev.filter(b => liveIds.has(b.id));
         if (cleaned.length !== prev.length) {
-          AsyncStorage.setItem('rejected_batches', JSON.stringify(cleaned)).catch(() => {});
+          AsyncStorage.setItem('rejected_batches', JSON.stringify(cleaned)).catch(() => { });
         }
         return cleaned;
       });
@@ -419,7 +440,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           const newCompleted = serverCompletedDrops.filter(b => !existingIds.has(b.id));
           if (newCompleted.length === 0) return prev;
           const updated = [...prev, ...newCompleted];
-          AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => {});
+          AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
           return updated;
         });
       } else {
@@ -427,7 +448,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         setCompletedBatches(prev => {
           const cleaned = prev.filter(b => liveIds.has(b.id));
           if (cleaned.length !== prev.length) {
-            AsyncStorage.setItem('completed_batches', JSON.stringify(cleaned)).catch(() => {});
+            AsyncStorage.setItem('completed_batches', JSON.stringify(cleaned)).catch(() => { });
           }
           return cleaned;
         });
@@ -437,7 +458,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       setActivities(prev => {
         const cleaned = prev.filter(act => liveIds.has(act.orderId));
         if (cleaned.length !== prev.length) {
-          AsyncStorage.setItem('transporter_activities', JSON.stringify(cleaned)).catch(() => {});
+          AsyncStorage.setItem('transporter_activities', JSON.stringify(cleaned)).catch(() => { });
         }
         return cleaned;
       });
@@ -456,7 +477,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           }
         });
         if (changed) {
-          AsyncStorage.setItem('captured_photos', JSON.stringify(cleaned)).catch(() => {});
+          AsyncStorage.setItem('captured_photos', JSON.stringify(cleaned)).catch(() => { });
         }
         return cleaned;
       });
@@ -467,7 +488,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (error.response?.status === 401) {
         console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
       } else {
-        console.error('Error fetching live transporter batches:', error);
+        console.warn('[Transporter Batches] Note on fetching live transporter batches:', error?.message || error);
       }
     }
   };
@@ -521,7 +542,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             setCompletedBatches(storedCompleted ? JSON.parse(storedCompleted) : []);
             setCapturedPhotos(storedPhotos ? JSON.parse(storedPhotos) : {});
             setActivities(storedActivities ? JSON.parse(storedActivities) : []);
-            
+
             await refreshBatchesList();
           }
         }
@@ -542,7 +563,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   const activities = useMemo(() => {
     const list: { entry: ActivityEntry; timeMs: number }[] = [];
-    
+
     const formatActivityTimestamp = (dateInput?: string | Date): string => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const dateObj = dateInput ? new Date(dateInput) : new Date();
@@ -620,7 +641,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           if (parts.length >= 2) {
             timeMs = new Date(parts[0] + ' ' + parts[1]).getTime();
           }
-        } catch (e) {}
+        } catch (e) { }
         list.push({ entry: act, timeMs });
       }
     });
@@ -636,7 +657,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const completedOrdersCount = useMemo(() => {
     const journeyMap: Record<string, boolean> = {};
     allBatches.forEach((b) => {
-      if (b.status === 'PICKUP_COMPLETED' || b.status === 'DROP_COMPLETED') {
+      if (b.status === 'DROP_COMPLETED') {
         const mId = b.masterOrderId ? String(b.masterOrderId) : b.id;
         journeyMap[mId] = true;
       }
@@ -649,15 +670,15 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     const now = new Date();
     const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+
     setActivities(prev => {
       const existingIndex = prev.findIndex(act => act.orderId === orderId && act.status === status);
       const newEntry: ActivityEntry = {
         id: existingIndex !== -1 ? prev[existingIndex].id : `act-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
-        orderId, 
-        route, 
-        status, 
-        qty, 
+        orderId,
+        route,
+        status,
+        qty,
         weight,
         timestamp: `${dateStr}, ${timeStr}`,
       };
@@ -669,7 +690,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       } else {
         updated = [newEntry, ...prev];
       }
-      AsyncStorage.setItem('transporter_activities', JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem('transporter_activities', JSON.stringify(updated)).catch(() => { });
       return updated;
     });
   };
@@ -677,12 +698,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const pruneStaleBatch = (batchId: string) => {
     setRejectedBatches(prev => {
       const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('rejected_batches', JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem('rejected_batches', JSON.stringify(updated)).catch(() => { });
       return updated;
     });
     setCompletedBatches(prev => {
       const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
       return updated;
     });
     setBatches(prev => prev.filter(b => b.id !== batchId));
@@ -721,9 +742,9 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       }
       // Roll back optimistic update on error
       await refreshBatchesList();
-      
-      const message = is404 
-        ? 'Order is no longer available.' 
+
+      const message = is404
+        ? 'Order is no longer available.'
         : 'Failed to accept order. Please try again.';
       if (!skipToast) {
         showToast(message, 'error');
@@ -777,7 +798,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       await refreshBatchesList();
     } catch (error: any) {
       console.error(`Error rejecting batch ${batchId}:`, error);
-      
+
       const is404 = error.response?.status === 404;
       if (is404) {
         showToast('Order is no longer available.', 'error');
@@ -805,13 +826,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           ...prev,
           [photoKey]: {
             ...existing,
-            ...(context === 'pickup' 
-              ? { pickupPhoto: photoUri, pickupPhotoTime: Date.now() } 
+            ...(context === 'pickup'
+              ? { pickupPhoto: photoUri, pickupPhotoTime: Date.now() }
               : { dropPhoto: photoUri, dropPhotoTime: Date.now() }
             )
           }
         };
-        AsyncStorage.setItem('captured_photos', JSON.stringify(updated)).catch(() => {});
+        AsyncStorage.setItem('captured_photos', JSON.stringify(updated)).catch(() => { });
         return updated;
       });
 
@@ -820,19 +841,19 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         prev.map(b =>
           b.id === batchId
             ? {
-                ...b,
-                products: b.products.map(p =>
-                  p.id === productId
-                    ? {
-                        ...p,
-                        ...(context === 'pickup'
-                          ? { pickupPhoto: photoUri, pickupPhotoTime: Date.now() }
-                          : { dropPhoto: photoUri, dropPhotoTime: Date.now() }
-                        ),
-                      }
-                    : p
-                ),
-              }
+              ...b,
+              products: b.products.map(p =>
+                p.id === productId
+                  ? {
+                    ...p,
+                    ...(context === 'pickup'
+                      ? { pickupPhoto: photoUri, pickupPhotoTime: Date.now() }
+                      : { dropPhoto: photoUri, dropPhotoTime: Date.now() }
+                    ),
+                  }
+                  : p
+              ),
+            }
             : b
         )
       );
@@ -861,13 +882,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           prev.map(b =>
             b.id === batchId
               ? {
-                  ...b,
-                  status: 'PICKUP_COMPLETED' as BatchOrder['status'],
-                  products: b.products.map(p => ({
-                    ...p,
-                    status: 'completed' as const,
-                  })),
-                }
+                ...b,
+                status: 'PICKUP_COMPLETED' as BatchOrder['status'],
+                products: b.products.map(p => ({
+                  ...p,
+                  status: 'completed' as const,
+                })),
+              }
               : b
           )
         );
@@ -894,19 +915,19 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         prev.map(b =>
           b.id === batchId
             ? {
-                ...b,
-                status: 'PICKUP_COMPLETED' as BatchOrder['status'],
-                products: b.products.map(p =>
-                  p.legType === 'pickup' ? { ...p, status: 'picked' as const } : p
-                ),
-              }
+              ...b,
+              status: 'PICKUP_COMPLETED' as BatchOrder['status'],
+              products: b.products.map(p =>
+                p.legType === 'pickup' ? { ...p, status: 'picked' as const } : p
+              ),
+            }
             : b
         )
       );
 
       await api.post(`/orders/pickup/${rawPickupId}/complete`, { code });
       showToast('Pickup Confirmed', 'success');
-      
+
       // Confirm with fresh server data
       await refreshBatchesList();
     } catch (error: any) {
@@ -936,7 +957,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (batchId.startsWith('pickup-')) {
         const rawPickupId = batchId.replace('pickup-', '');
         console.log('Completing pickup-drop with ID:', rawPickupId);
-        
+
         // Optimistically move to completed in UI
         const batchToComplete = batchesRef.current.find(b => b.id === batchId);
         if (batchToComplete) {
@@ -1094,7 +1115,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
       finalizePickup, finalizeDrop, generateDropHandoverCode,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],
-      acceptShg: () => {}, completeProduct: () => {}, rejectProduct: () => {}, acceptAreaAssignment: () => {}, rejectAreaAssignment: () => {}, acceptAllRouteShgs: () => {}
+      acceptShg: () => { }, completeProduct: () => { }, rejectProduct: () => { }, acceptAreaAssignment: () => { }, rejectAreaAssignment: () => { }, acceptAllRouteShgs: () => { }
     }}>
       {children}
       {toastVisible && (

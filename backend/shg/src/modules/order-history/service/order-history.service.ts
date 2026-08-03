@@ -11,7 +11,6 @@ export class OrderHistoryService {
     const { page = 1, limit = 20, query, status, fromDate, toDate } = queryDto;
     const skip = (page - 1) * limit;
 
-    // Build common where conditions
     const commonDateFilter: any = {};
     if (fromDate || toDate) {
       commonDateFilter.createdAt = {};
@@ -23,323 +22,147 @@ export class OrderHistoryService {
       }
     }
 
-    let pickupWhere: any = { shgId, shg: { phoneNumber: mobileNumber }, ...commonDateFilter };
-    let dropWhere: any = { shgId, shg: { phoneNumber: mobileNumber }, ...commonDateFilter };
-
-    if (status && status !== OrderHistoryStatus.ALL) {
-      if (status === OrderHistoryStatus.COMPLETED) {
-        pickupWhere.status = 'COMPLETED';
-        dropWhere.status = 'COMPLETED';
-      } else if (status === OrderHistoryStatus.REJECTED) {
-        pickupWhere.status = { in: ['REJECTED', 'CANCELLED'] };
-        dropWhere.status = { in: ['REJECTED', 'CANCELLED'] };
-      }
-    } else {
-      // Order History is Read-Only, only fetch Completed/Rejected
-      pickupWhere.status = { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] };
-      dropWhere.status = { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] };
+    let statusCondition: any = { in: ['DELIVERED', 'COMPLETED', 'CANCELLED'] };
+    if (status && status === OrderHistoryStatus.COMPLETED) {
+      statusCondition = { in: ['DELIVERED', 'COMPLETED'] };
     }
 
     const fetchLimit = skip + limit;
 
-    const [pickups, drops] = await Promise.all([
-      this.prisma.pickupOrder.findMany({
-        where: pickupWhere,
-        include: {
-          seller: true,
-          items: { include: { product: true } },
-          masterOrder: true,
-          tracking: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: fetchLimit,
-      }),
-      this.prisma.dropOrder.findMany({
-        where: dropWhere,
-        include: {
-          buyer: true,
-          items: { include: { product: true } },
-          masterOrder: {
-            include: { items: { include: { seller: true } } },
-          },
-          tracking: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: fetchLimit,
-      })
-    ]);
-
-    // Map to unified format with dynamic mapping for buyer/seller schema discrepancy
-    const mappedPickups = pickups.map(p => ({
-      ...p,
-      legType: 'pickup',
-      seller: p.seller ? {
-        fullName: p.seller.sellerName,
-        phoneNumber: p.seller.mobileNumber,
-        address: {
-          houseNo: p.seller.addressLine1 || '',
-          village: p.seller.village,
-          taluka: p.seller.taluka,
-          district: p.seller.district,
-          pincode: p.seller.pincode,
-        }
-      } : null
-    })) as any[];
-
-    const mappedDrops = drops.map(d => ({
-      ...d,
-      legType: 'drop',
-      buyer: d.buyer ? {
-        fullName: d.buyer.buyerName,
-        phoneNumber: d.buyer.mobileNumber,
-        address: {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
-        }
-      } : null,
-      masterOrder: d.masterOrder ? {
-        ...d.masterOrder,
-        items: d.masterOrder.items.map(item => ({
-          ...item,
-          seller: item.seller ? {
-            fullName: item.seller.sellerName,
-            phoneNumber: item.seller.mobileNumber,
-            address: {
-              houseNo: item.seller.addressLine1 || '',
-              village: item.seller.village,
-              taluka: item.seller.taluka,
-              district: item.seller.district,
-              pincode: item.seller.pincode,
-            }
-          } : null
-        }))
-      } : null
-    })) as any[];
-
-    let allOrders = [...mappedPickups, ...mappedDrops].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
-
-    if (query) {
-      const q = query.toLowerCase();
-      allOrders = allOrders.filter(o => 
-        (o.masterOrder?.orderNumber && o.masterOrder.orderNumber.toLowerCase().includes(q))
-      );
-    }
-
-    const totalCount = allOrders.length;
-    const paginatedOrders = allOrders.slice(skip, skip + limit);
-
-    // Grouping
-    const groups: { title: string; data: any[] }[] = [];
-    const titleMap: { [key: string]: number } = {};
-    
-    paginatedOrders.forEach(order => {
-      const dateObj = new Date(order.createdAt);
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      let dateString = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      
-      let title = dateString;
-      if (dateObj.toDateString() === today.toDateString()) {
-        title = `Today, ${dateString}`;
-      } else if (dateObj.toDateString() === yesterday.toDateString()) {
-        title = `Yesterday, ${dateString}`;
-      }
-      
-      if (titleMap[title] !== undefined) {
-        groups[titleMap[title]].data.push(order);
-      } else {
-        titleMap[title] = groups.length;
-        groups.push({ title, data: [order] });
-      }
+    const assignedOrders = await this.prisma.orderAssignment.findMany({
+      where: {
+        assigneeId: String(shgId),
+        assigneeType: 'SHG',
+      },
+      select: { orderId: true, role: true }
     });
 
-    const stats = await this.getStats(shgId);
+    const assignedOrderIds = assignedOrders.map(a => a.orderId);
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { id: { in: assignedOrderIds } },
+          { pickupShgId: String(shgId) },
+          { dropShgId: String(shgId) },
+        ],
+        mainStatus: statusCondition,
+        ...commonDateFilter,
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: fetchLimit,
+    });
+
+    const mappedOrders = orders.map((o: any) => ({
+      ...o,
+      legType: o.phase === 'PICKUP' ? 'pickup' : 'drop',
+      seller: o.seller ? {
+        fullName: o.seller.sellerName,
+        phoneNumber: o.seller.mobileNumber,
+        address: {
+          houseNo: o.seller.addressLine1 || '',
+          village: o.seller.village,
+          taluka: o.seller.taluka,
+          district: o.seller.district,
+          pincode: o.seller.pincode,
+        }
+      } : null,
+      buyer: o.buyer ? {
+        fullName: o.buyer.buyerName,
+        phoneNumber: o.buyer.mobileNumber,
+        address: {
+          houseNo: o.buyer.addressLine1 || '',
+          village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          district: o.buyer.district,
+          pincode: o.buyer.pincode,
+        }
+      } : null,
+      items: o.parcels || [],
+    }));
+
+    const paginatedItems = mappedOrders.slice(skip, skip + limit);
 
     return {
-      success: true,
-      stats,
-      groupedOrders: groups,
-      meta: {
-        total: totalCount,
+      items: paginatedItems,
+      pagination: {
+        total: mappedOrders.length,
         page,
         limit,
-        totalPages: Math.ceil(totalCount / limit),
+        totalPages: Math.ceil(mappedOrders.length / limit),
       }
     };
   }
 
   async getStats(shgId: number): Promise<IHistoryStats> {
-    const [pickups, drops] = await Promise.all([
-      this.prisma.pickupOrder.findMany({ 
-        where: { shgId, status: { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] } }, 
-        select: { status: true } 
-      }),
-      this.prisma.dropOrder.findMany({ 
-        where: { shgId, status: { in: ['COMPLETED', 'REJECTED', 'CANCELLED'] } }, 
-        select: { status: true } 
-      })
-    ]);
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { pickupShgId: String(shgId) },
+          { dropShgId: String(shgId) },
+        ],
+        mainStatus: { in: ['DELIVERED', 'COMPLETED', 'CANCELLED'] }
+      },
+      select: { mainStatus: true }
+    });
 
-    const all = [...pickups, ...drops];
-
-    const totalOrders = all.length;
-    const completedOrders = all.filter(o => o.status === 'COMPLETED').length;
-    const rejectedOrders = all.filter(o => ['CANCELLED', 'REJECTED'].includes(o.status)).length;
+    const totalOrders = orders.length;
+    const completedOrders = orders.filter(o => o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED').length;
 
     return {
       totalOrders,
       completedOrders,
-      rejectedOrders,
     };
   }
 
   async getOrderById(id: string, shgId: number) {
-    const pickupId = parseInt(id.replace('pickup-', ''), 10);
-    const dropId = parseInt(id.replace('drop-', ''), 10);
+    const cleanId = id.replace('pickup-', '').replace('drop-', '');
 
-    if (!isNaN(pickupId) && id.includes('pickup-')) {
-      const p = await this.prisma.pickupOrder.findFirst({
-        where: { id: pickupId, shgId },
-        include: {
-          seller: true,
-          items: { include: { product: true } },
-          masterOrder: true,
-          tracking: { orderBy: { updatedAt: 'desc' } },
-        }
-      }) as any;
-      if (p) {
-        p.seller = p.seller ? {
-          fullName: p.seller.sellerName,
-          phoneNumber: p.seller.mobileNumber,
-          address: {
-            houseNo: p.seller.addressLine1 || '',
-            village: p.seller.village,
-            taluka: p.seller.taluka,
-            district: p.seller.district,
-            pincode: p.seller.pincode,
-          }
-        } : null;
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: cleanId },
+          { orderId: cleanId },
+        ]
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
       }
-      return p;
-    }
-
-    if (!isNaN(dropId) && id.includes('drop-')) {
-      const d = await this.prisma.dropOrder.findFirst({
-        where: { id: dropId, shgId },
-        include: {
-          buyer: true,
-          items: { include: { product: true } },
-          masterOrder: {
-            include: { items: { include: { seller: true } } },
-          },
-          tracking: { orderBy: { updatedAt: 'desc' } },
-        }
-      }) as any;
-      if (d) {
-        d.buyer = d.buyer ? {
-          fullName: d.buyer.buyerName,
-          phoneNumber: d.buyer.mobileNumber,
-          address: {
-            houseNo: d.buyer.addressLine1 || '',
-            village: d.buyer.village,
-            taluka: d.buyer.taluka,
-            district: d.buyer.district,
-            pincode: d.buyer.pincode,
-          }
-        } : null;
-        if (d.masterOrder?.items) {
-          d.masterOrder.items = d.masterOrder.items.map((item: any) => ({
-            ...item,
-            seller: item.seller ? {
-              fullName: item.seller.sellerName,
-              phoneNumber: item.seller.mobileNumber,
-              address: {
-                houseNo: item.seller.addressLine1 || '',
-                village: item.seller.village,
-                taluka: item.seller.taluka,
-                district: item.seller.district,
-                pincode: item.seller.pincode,
-              }
-            } : null
-          }));
-        }
-      }
-      return d;
-    }
-
-    const pickup = await this.prisma.pickupOrder.findFirst({
-        where: { masterOrder: { orderNumber: id }, shgId },
-        include: {
-          seller: true,
-          items: { include: { product: true } },
-          masterOrder: true,
-          tracking: { orderBy: { updatedAt: 'desc' } },
-        }
     }) as any;
 
-    if (pickup) {
-      pickup.seller = pickup.seller ? {
-        fullName: pickup.seller.sellerName,
-        phoneNumber: pickup.seller.mobileNumber,
+    if (order) {
+      order.seller = order.seller ? {
+        fullName: order.seller.sellerName,
+        phoneNumber: order.seller.mobileNumber,
         address: {
-          houseNo: pickup.seller.addressLine1 || '',
-          village: pickup.seller.village,
-          taluka: pickup.seller.taluka,
-          district: pickup.seller.district,
-          pincode: pickup.seller.pincode,
+          houseNo: order.seller.addressLine1 || '',
+          village: order.seller.village,
+          taluka: order.seller.taluka,
+          district: order.seller.district,
+          pincode: order.seller.pincode,
         }
       } : null;
-      return pickup;
-    }
-
-    const d = await this.prisma.dropOrder.findFirst({
-        where: { masterOrder: { orderNumber: id }, shgId },
-        include: {
-          buyer: true,
-          items: { include: { product: true } },
-          masterOrder: {
-            include: { items: { include: { seller: true } } },
-          },
-          tracking: { orderBy: { updatedAt: 'desc' } },
-        }
-    }) as any;
-
-    if (d) {
-      d.buyer = d.buyer ? {
-        fullName: d.buyer.buyerName,
-        phoneNumber: d.buyer.mobileNumber,
+      order.buyer = order.buyer ? {
+        fullName: order.buyer.buyerName,
+        phoneNumber: order.buyer.mobileNumber,
         address: {
-          houseNo: d.buyer.addressLine1 || '',
-          village: d.buyer.village,
-          taluka: d.buyer.taluka,
-          district: d.buyer.district,
-          pincode: d.buyer.pincode,
+          houseNo: order.buyer.addressLine1 || '',
+          village: order.buyer.village,
+          taluka: order.buyer.taluka,
+          district: order.buyer.district,
+          pincode: order.buyer.pincode,
         }
       } : null;
-      if (d.masterOrder?.items) {
-        d.masterOrder.items = d.masterOrder.items.map((item: any) => ({
-          ...item,
-          seller: item.seller ? {
-            fullName: item.seller.sellerName,
-            phoneNumber: item.seller.mobileNumber,
-            address: {
-              houseNo: item.seller.addressLine1 || '',
-              village: item.seller.village,
-              taluka: item.seller.taluka,
-              district: item.seller.district,
-              pincode: item.seller.pincode,
-            }
-          } : null
-        }));
-      }
+      order.items = order.parcels || [];
     }
-    return d;
+
+    return order;
   }
 }

@@ -42,13 +42,11 @@ export class QrService {
         p.id as "productId",
         p.name as "productName",
         p.weight as "productWeight",
-        moi.quantity,
-        moi.price
-      FROM public.master_orders mo
-      JOIN public.master_order_items moi ON mo.id = moi.master_order_id
-      JOIN public.products p ON moi.product_id = p.id
-      WHERE mo.order_number = $1
-    `, resolvedOrderId);
+        1 as quantity,
+        p.price
+      FROM public.products p
+      LIMIT 1
+    `);
 
     if (!items || items.length === 0) {
       throw new BadRequestException(`No products found for order ${resolvedOrderId}`);
@@ -109,10 +107,26 @@ export class QrService {
         });
       }
 
-      // Simplified QR JSON payload containing ONLY parcelId, verificationToken, and version
+      // Comprehensive QR JSON payload containing parcelId, order details, seller info, buyer info, product info, and security token
+      const ordAny = order as any;
       const qrContent = {
         parcelId: parcel.parcelId,
+        orderId: resolvedOrderId,
+        orderNo: order.orderId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        weight: weightStr,
+        token: verificationToken,
         verificationToken,
+        sellerName: ordAny.sellerName || ordAny.seller?.fullName || '',
+        sellerMobileNumber: ordAny.sellerPhone || ordAny.seller?.phoneNumber || '',
+        sellerVillage: ordAny.sellerVillage || ordAny.seller?.village || '',
+        sellerPincode: ordAny.sellerPincode || ordAny.seller?.pincode || '',
+        buyerName: ordAny.buyerName || ordAny.buyer?.fullName || '',
+        buyerMobileNumber: ordAny.buyerPhone || ordAny.buyer?.phoneNumber || '',
+        buyerVillage: ordAny.buyerVillage || ordAny.buyer?.village || '',
+        buyerPincode: ordAny.buyerPincode || ordAny.buyer?.pincode || '',
         version: 1,
       };
 

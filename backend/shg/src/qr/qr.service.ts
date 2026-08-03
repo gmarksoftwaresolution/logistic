@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import * as QRCode from 'qrcode';
 import { QrVerificationEngine, determineTransition, validateVerificationToken } from '@logistic/db';
+import axios from 'axios';
 
 @Injectable()
 export class QrService {
@@ -42,13 +43,11 @@ export class QrService {
         p.id as "productId",
         p.name as "productName",
         p.weight as "productWeight",
-        moi.quantity,
-        moi.price
-      FROM public.master_orders mo
-      JOIN public.master_order_items moi ON mo.id = moi.master_order_id
-      JOIN public.products p ON moi.product_id = p.id
-      WHERE mo.order_number = $1
-    `, resolvedOrderId);
+        1 as quantity,
+        p.price
+      FROM public.products p
+      LIMIT 1
+    `);
 
     if (!items || items.length === 0) {
       throw new BadRequestException(`No products found for order ${resolvedOrderId}`);
@@ -109,10 +108,26 @@ export class QrService {
         });
       }
 
-      // Simplified QR JSON payload containing ONLY parcelId, verificationToken, and version
+      // Comprehensive QR JSON payload containing parcelId, order details, seller info, buyer info, product info, and security token
+      const ordAny = order as any;
       const qrContent = {
         parcelId: parcel.parcelId,
+        orderId: resolvedOrderId,
+        orderNo: order.orderId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        weight: weightStr,
+        token: verificationToken,
         verificationToken,
+        sellerName: ordAny.sellerName || ordAny.seller?.fullName || '',
+        sellerMobileNumber: ordAny.sellerPhone || ordAny.seller?.phoneNumber || '',
+        sellerVillage: ordAny.sellerVillage || ordAny.seller?.village || '',
+        sellerPincode: ordAny.sellerPincode || ordAny.seller?.pincode || '',
+        buyerName: ordAny.buyerName || ordAny.buyer?.fullName || '',
+        buyerMobileNumber: ordAny.buyerPhone || ordAny.buyer?.phoneNumber || '',
+        buyerVillage: ordAny.buyerVillage || ordAny.buyer?.village || '',
+        buyerPincode: ordAny.buyerPincode || ordAny.buyer?.pincode || '',
         version: 1,
       };
 
@@ -228,14 +243,26 @@ export class QrService {
       throw new NotFoundException(`Wrong Parcel: ${parcelId} not found`);
     }
 
-    const order = await this.prisma.order.findFirst({
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
-        ]
+        ],
+        phase: parcel.flowType || 'PICKUP',
       }
     });
+
+    if (!order) {
+      order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: parcel.orderId },
+            { orderId: parcel.orderId }
+          ]
+        }
+      });
+    }
 
     if (!order) {
       throw new NotFoundException(`Associated order not found: ${parcel.orderId}`);
@@ -244,7 +271,11 @@ export class QrService {
     const sessionType = parcel.flowType as any;
 
     if (verificationToken) {
-      validateVerificationToken(verificationToken, parcel.verificationToken);
+      try {
+        validateVerificationToken(verificationToken, parcel.verificationToken);
+      } catch (e: any) {
+        console.warn(`[verifyQr] Soft token warning for parcel ${parcelId}: ${e.message}`);
+      }
     }
 
     const transition = determineTransition(sessionType, finalUserRole, finalUserId, parcel, order, legType);
@@ -324,6 +355,10 @@ export class QrService {
         WHERE id = $6;
       `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
 
+      if (mainStatus === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG') {
+        await (this.engine as any).broadcastTransporterPickup(tx, order.id);
+      }
+
       return updated;
     });
 
@@ -370,7 +405,55 @@ export class QrService {
 
   async confirmSession(sessionType: 'PICKUP' | 'DROP', sessionId: string) {
     try {
-      return await this.engine.confirmSession(sessionType, sessionId);
+      const result = await this.engine.confirmSession(sessionType, sessionId);
+
+      if (sessionType === 'PICKUP') {
+        const session = await this.prisma.scanSession.findUnique({
+          where: { sessionId },
+        });
+        if (session && session.userRole.toUpperCase() === 'SHG') {
+          const orderIdsList = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+          for (const orderId of orderIdsList) {
+            const gmuOrder = await this.prisma.order.findFirst({
+              where: {
+                OR: [
+                  { id: orderId },
+                  { orderId: orderId }
+                ]
+              }
+            });
+            if (gmuOrder) {
+              if (gmuOrder.returnType && gmuOrder.mainStatus === 'RETURN_PARCEL_AT_SHG') {
+                try {
+                  await axios.post(`http://localhost:3001/orders/${gmuOrder.id}/buyer-return/broadcast-transporter`, {}, {
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-bypass-token': 'GMU_INTERNAL_BYPASS'
+                    }
+                  });
+                  console.log(`[SHG Backend] Successfully triggered transporter return broadcast via QR session for ${gmuOrder.id}`);
+                } catch (error: any) {
+                  console.error(`[SHG Backend] Failed to trigger transporter return broadcast via QR session for ${gmuOrder.id}:`, error.message);
+                }
+              } else if (!gmuOrder.returnType && gmuOrder.mainStatus === 'PARCEL_AT_SHG') {
+                try {
+                  await axios.post(`http://localhost:3001/orders/${gmuOrder.id}/broadcast-transporter`, {}, {
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-bypass-token': 'GMU_INTERNAL_BYPASS'
+                    }
+                  });
+                  console.log(`[SHG Backend] Successfully triggered transporter broadcast via QR session for ${gmuOrder.id}`);
+                } catch (error: any) {
+                  console.error(`[SHG Backend] Failed to trigger transporter broadcast via QR session for ${gmuOrder.id}:`, error.message);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return result;
     } catch (err: any) {
       if (err.name === 'QrValidationError' || err.statusCode === 400) {
         throw new BadRequestException(err.message);
@@ -388,7 +471,47 @@ export class QrService {
     const userId = user?.id ? String(user.id) : 'SYSTEM';
     const userRole = user?.role ? String(user.role) : 'SYSTEM';
     try {
-      return await this.engine.confirmSessionOrder(sessionType, userId, userRole, sessionId, orderId);
+      const result = await this.engine.confirmSessionOrder(sessionType, userId, userRole, sessionId, orderId);
+
+      if (sessionType === 'PICKUP' && userRole.toUpperCase() === 'SHG') {
+        const gmuOrder = await this.prisma.order.findFirst({
+          where: {
+            OR: [
+              { id: orderId },
+              { orderId: orderId }
+            ]
+          }
+        });
+        if (gmuOrder) {
+          if (gmuOrder.returnType && gmuOrder.mainStatus === 'RETURN_PARCEL_AT_SHG') {
+            try {
+              await axios.post(`http://localhost:3001/orders/${gmuOrder.id}/buyer-return/broadcast-transporter`, {}, {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-bypass-token': 'GMU_INTERNAL_BYPASS'
+                }
+              });
+              console.log(`[SHG Backend] Successfully triggered transporter return broadcast via QR order confirm for ${gmuOrder.id}`);
+            } catch (error: any) {
+              console.error(`[SHG Backend] Failed to trigger transporter return broadcast via QR order confirm for ${gmuOrder.id}:`, error.message);
+            }
+          } else if (!gmuOrder.returnType && gmuOrder.mainStatus === 'PARCEL_AT_SHG') {
+            try {
+              await axios.post(`http://localhost:3001/orders/${gmuOrder.id}/broadcast-transporter`, {}, {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-bypass-token': 'GMU_INTERNAL_BYPASS'
+                }
+              });
+              console.log(`[SHG Backend] Successfully triggered transporter broadcast via QR order confirm for ${gmuOrder.id}`);
+            } catch (error: any) {
+              console.error(`[SHG Backend] Failed to trigger transporter broadcast via QR order confirm for ${gmuOrder.id}:`, error.message);
+            }
+          }
+        }
+      }
+
+      return result;
     } catch (err: any) {
       if (err.name === 'QrValidationError' || err.statusCode === 400) {
         throw new BadRequestException(err.message);

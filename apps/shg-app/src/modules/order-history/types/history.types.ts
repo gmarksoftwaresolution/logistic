@@ -1,9 +1,8 @@
-export type HistoryStatus = 'All Orders' | 'Completed' | 'Rejected';
+export type HistoryStatus = 'All Orders' | 'Completed';
 
 export interface HistoryStats {
   totalOrders: number;
   completedOrders: number;
-  rejectedOrders: number;
 }
 
 export interface HistoryFilter {

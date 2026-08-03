@@ -70,6 +70,8 @@ const STATUS_MAP: Record<string, { colorClasses: string; dotColor: string }> = {
   // Return sub-statuses
   RETURN_SHG_ASSIGNED:        { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
   RETURN_PARCEL_AT_SHG:       { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  RETURN_PICKED_BY_SHG:       { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  RETURN_TRANSPORTER_REQUESTED:{ colorClasses: 'bg-amber-50 text-amber-800 border-amber-200',    dotColor: 'bg-amber-500' },
   RETURN_TRANSPORTER_PENDING: { colorClasses: 'bg-amber-50 text-amber-800 border-amber-200',    dotColor: 'bg-amber-500' },
   RETURN_TRANSPORTER_ACCEPTED:{ colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
   RETURN_IN_TRANSIT_TO_GMU:   { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },

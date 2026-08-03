@@ -16,7 +16,7 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress }) 
   const t = context?.t || ((k: string) => k);
 
   const isCompleted = order.status === 'COMPLETED';
-  const isCancelled = order.status === 'CANCELLED' || order.status === 'REJECTED';
+  const isCancelled = order.status === 'CANCELLED';
   const isInProgress = !isCompleted && !isCancelled;
 
   let statusColor = HISTORY_STATUS_COLORS.DEFAULT.color;
@@ -29,11 +29,7 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress }) 
     statusBg = HISTORY_STATUS_COLORS.COMPLETED.bg;
     statusIcon = 'checkmark-circle-outline';
     statusText = t('completed') || 'Completed';
-  } else if (order.status === 'REJECTED') {
-    statusColor = HISTORY_STATUS_COLORS.REJECTED.color;
-    statusBg = HISTORY_STATUS_COLORS.REJECTED.bg;
-    statusIcon = 'close-circle-outline';
-    statusText = t('rejected') || 'Rejected';
+
   } else if (order.status === 'CANCELLED') {
     statusColor = HISTORY_STATUS_COLORS.CANCELLED.color;
     statusBg = HISTORY_STATUS_COLORS.CANCELLED.bg;

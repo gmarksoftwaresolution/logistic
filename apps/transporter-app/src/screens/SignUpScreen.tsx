@@ -57,7 +57,8 @@ import {
   Loader2,
   Check,
   Square,
-  CheckSquare
+  CheckSquare,
+  Lock
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import TimePickerPopup from '../components/TimePickerPopup';
@@ -227,7 +228,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timeMode, setTimeMode] = useState<'morning' | 'evening'>('morning');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | 'village' | 'residential_village' | 'post_office' | 'replace_assigned_village' | 'replace_operating_area' | null>(null);
+  const [dropdownType, setDropdownType] = useState<'wheeler' | 'type' | 'make' | 'sangathan' | 'milkCenter' | 'village' | 'residential_village' | 'post_office' | 'route_post_office' | 'taluka' | 'replace_assigned_village' | 'replace_operating_area' | null>(null);
   const [areaInput, setAreaInput] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -240,7 +241,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [centers, setCenters] = useState<string[]>([]);
   const [villagePincode, setVillagePincode] = useState('');
   const [pincodeVillages, setPincodeVillages] = useState<string[]>([]);
-  const [residentialVillages, setResidentialVillages] = useState<Array<{ name: string; taluka: string }>>([]);
+  const [selectedRoutePostOffice, setSelectedRoutePostOffice] = useState('');
+  const [routePostOffices, setRoutePostOffices] = useState<string[]>([]);
+  const [routeRecords, setRouteRecords] = useState<Array<{ village: string; name: string; postOffice: string; taluka: string }>>([]);
+  const [residentialVillages, setResidentialVillages] = useState<Array<{ name: string; village: string; taluka: string; postOffice: string; district: string; state: string }>>([]);
+  const [pincodeTalukas, setPincodeTalukas] = useState<string[]>([]);
   const [postOffices, setPostOffices] = useState<string[]>([]);
   const [editingVillageIndex, setEditingVillageIndex] = useState<number | null>(null);
   const [isCustomVehicleType, setIsCustomVehicleType] = useState(false);
@@ -1254,57 +1259,115 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (pin && pin.length === 6) {
         try {
           setIsLoading(true);
-          const response = await api.get(`/registration/pincode/${pin}`);
-          if (response.data && response.data.success) {
-            const { state, district, taluka } = response.data;
-            const pincodeChanged = lastFetchedPincodeRef.current !== '' && lastFetchedPincodeRef.current !== pin;
-            setFormData(prev => ({
-              ...prev,
-              state: state || prev.state,
-              district: district || prev.district,
-              taluka: taluka || prev.taluka,
-              ...(pincodeChanged ? { village: '' } : {}),
-            }));
-            setTouchedFields(prev => ({
-              ...prev,
-              state: false,
-              district: false,
-              taluka: false,
-              village: false,
-              postOffice: false,
-            }));
-            lastFetchedPincodeRef.current = pin;
+          let infoData: any = {};
+          try {
+            const response = await api.get(`/registration/pincode/${pin}`);
+            if (response.data && (response.data.success || response.data.state)) {
+              infoData = response.data;
+            }
+          } catch (e) {
+            console.log('Pincode info registration endpoint note, trying location endpoint:', e);
           }
-          const villagesResponse = await api.get(`/registration/pincode/${pin}/villages`);
-          if (villagesResponse.data) {
-            setResidentialVillages(villagesResponse.data);
-            const pOffices = Array.from(new Set(villagesResponse.data.map((v: any) => v.postOffice).filter(Boolean))) as string[];
-            setPostOffices(pOffices);
-            setFormData(prev => {
-              const villageNames = Array.from(new Set(villagesResponse.data.map((v: any) => typeof v === 'string' ? v : v.name))) as string[];
-              const pincodeChanged = lastFetchedPincodeRef.current !== '' && lastFetchedPincodeRef.current !== pin;
-              let nextVillage = prev.village;
-              let nextPostOffice = prev.postOffice;
-              if (pincodeChanged) {
-                nextVillage = '';
-                nextPostOffice = '';
-              } else {
-                if (prev.village && !villageNames.includes(prev.village)) {
-                  nextVillage = '';
-                }
-                if (prev.postOffice && !pOffices.includes(prev.postOffice)) {
-                  nextPostOffice = '';
-                }
+
+          if (!infoData.state) {
+            try {
+              const locResponse = await api.get(`/location/pincode/${pin}`);
+              if (locResponse.data && locResponse.data.state) {
+                infoData = {
+                  success: true,
+                  state: locResponse.data.state,
+                  district: locResponse.data.district,
+                  taluka: locResponse.data.taluka,
+                  talukas: locResponse.data.talukas || [locResponse.data.taluka],
+                  postOffices: locResponse.data.postOffices || [],
+                  records: locResponse.data.records || [],
+                };
               }
-              if (!nextVillage && villageNames.length === 1) {
-                nextVillage = villageNames[0];
-              }
-              if (!nextPostOffice && pOffices.length === 1) {
-                nextPostOffice = pOffices[0];
-              }
-              return { ...prev, village: nextVillage, postOffice: nextPostOffice };
-            });
+            } catch (locErr) {
+              console.log('Location endpoint fallback note:', locErr);
+            }
           }
+
+          let villagesData: any[] = [];
+          try {
+            const villagesResponse = await api.get(`/registration/pincode/${pin}/villages`);
+            if (Array.isArray(villagesResponse.data)) {
+              villagesData = villagesResponse.data;
+            }
+          } catch (e) {
+            console.log('Villages lookup note:', e);
+          }
+
+          const rawRecords: any[] = (infoData.records && infoData.records.length > 0)
+            ? infoData.records
+            : villagesData;
+
+          const formattedRecords = rawRecords.map((r: any) => ({
+            name: (r.village || r.name || '').trim(),
+            village: (r.village || r.name || '').trim(),
+            taluka: (r.taluka || r.block || r.district || '').trim(),
+            postOffice: (r.postOffice || r.village || r.name || '').trim(),
+            district: (r.district || infoData.district || '').trim(),
+            state: (r.state || infoData.state || '').trim(),
+          }));
+
+          setResidentialVillages(formattedRecords);
+
+          const stateVal = infoData.state || (formattedRecords[0]?.state) || '';
+          const districtVal = infoData.district || (formattedRecords[0]?.district) || '';
+
+          const uniqueTalukas = Array.from(new Set(formattedRecords.map(r => r.taluka).filter(Boolean))) as string[];
+          if (uniqueTalukas.length === 0 && infoData.taluka) {
+            uniqueTalukas.push(infoData.taluka);
+          }
+          setPincodeTalukas(uniqueTalukas);
+
+          const pincodeChanged = lastFetchedPincodeRef.current !== '' && lastFetchedPincodeRef.current !== pin;
+
+          setFormData(prev => {
+            let nextTaluka = pincodeChanged ? '' : prev.taluka;
+            let nextPostOffice = pincodeChanged ? '' : prev.postOffice;
+            let nextVillage = pincodeChanged ? '' : prev.village;
+
+            if (!nextTaluka && uniqueTalukas.length > 0) {
+              nextTaluka = uniqueTalukas[0];
+            } else if (nextTaluka && uniqueTalukas.length > 0 && !uniqueTalukas.includes(nextTaluka)) {
+              nextTaluka = uniqueTalukas[0];
+            }
+
+            const talukaRecords = formattedRecords.filter(r => !nextTaluka || r.taluka.toLowerCase() === nextTaluka.toLowerCase());
+            const uniquePOs = Array.from(new Set(talukaRecords.map(r => r.postOffice).filter(Boolean))) as string[];
+            setPostOffices(uniquePOs);
+
+            // Keep postOffice & village empty on pincode change or initial pincode enter so user selects from dropdown
+            if (pincodeChanged) {
+              nextPostOffice = '';
+              nextVillage = '';
+            } else if (nextPostOffice && uniquePOs.length > 0 && !uniquePOs.includes(nextPostOffice)) {
+              nextPostOffice = '';
+              nextVillage = '';
+            }
+
+            return {
+              ...prev,
+              state: stateVal || prev.state,
+              district: districtVal || prev.district,
+              taluka: nextTaluka || prev.taluka,
+              postOffice: nextPostOffice,
+              village: nextVillage,
+            };
+          });
+
+          setTouchedFields(prev => ({
+            ...prev,
+            state: false,
+            district: false,
+            taluka: false,
+            postOffice: false,
+            village: false,
+          }));
+
+          lastFetchedPincodeRef.current = pin;
         } catch (error) {
           console.log('Pincode fetch error:', error);
         } finally {
@@ -1312,8 +1375,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         }
       } else {
         setResidentialVillages([]);
+        setPincodeTalukas([]);
         setPostOffices([]);
-        setFormData(prev => ({ ...prev, village: '', postOffice: '' }));
+        setFormData(prev => ({ ...prev, village: '', postOffice: '', taluka: '', state: '', district: '' }));
         lastFetchedPincodeRef.current = '';
       }
     };
@@ -1321,30 +1385,67 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   }, [formData.pincode]);
 
   useEffect(() => {
-    const fetchVillages = async () => {
+    const fetchRoutePincodeDetails = async () => {
       const pin = villagePincode;
       if (pin && pin.length === 6) {
         try {
           setIsLoading(true);
-          const response = await api.get(`/registration/pincode/${pin}/villages`);
-          if (response.data) {
-            const mapped = response.data.map((v: any) => {
-              if (typeof v === 'string') return v;
-              return v.name;
-            });
-            setPincodeVillages(Array.from(new Set(mapped)));
+          let rawRecords: any[] = [];
+          try {
+            const response = await api.get(`/registration/pincode/${pin}/villages`);
+            if (Array.isArray(response.data)) {
+              rawRecords = response.data;
+            }
+          } catch (e) {
+            console.log('Fetch route villages note:', e);
           }
+
+          if (rawRecords.length === 0) {
+            try {
+              const infoRes = await api.get(`/registration/pincode/${pin}`);
+              if (infoRes.data && infoRes.data.records) {
+                rawRecords = infoRes.data.records;
+              }
+            } catch (e) {
+              console.log('Fetch route pincode info note:', e);
+            }
+          }
+
+          const formatted = rawRecords.map((r: any) => {
+            const vName = typeof r === 'string' ? r : (r.village || r.name || '');
+            const poName = typeof r === 'string' ? r : (r.postOffice || r.postoffice || r.village || r.name || '');
+            return {
+              village: vName.trim(),
+              name: vName.trim(),
+              postOffice: poName.trim(),
+              taluka: typeof r === 'object' && r.taluka ? String(r.taluka).trim() : '',
+            };
+          });
+
+          setRouteRecords(formatted);
+          const mappedVillages = formatted.map(f => f.village).filter(Boolean);
+          setPincodeVillages(Array.from(new Set(mappedVillages)));
+
+          const pos = Array.from(new Set(formatted.map(f => f.postOffice).filter(Boolean))) as string[];
+          setRoutePostOffices(pos);
+          setSelectedRoutePostOffice('');
         } catch (error) {
-          console.log('Fetch villages error:', error);
+          console.log('Fetch route pincode error:', error);
           setPincodeVillages([]);
+          setRoutePostOffices([]);
+          setRouteRecords([]);
+          setSelectedRoutePostOffice('');
         } finally {
           setIsLoading(false);
         }
       } else {
         setPincodeVillages([]);
+        setRoutePostOffices([]);
+        setRouteRecords([]);
+        setSelectedRoutePostOffice('');
       }
     };
-    fetchVillages();
+    fetchRoutePincodeDetails();
   }, [villagePincode]);
 
   const fetchSangathans = async () => {
@@ -1535,6 +1636,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const nextStep = async () => {
+    if (isLoading) return;
     let fieldsToValidate: (keyof FormData)[] = [];
     if (currentStep === 1) {
       if (!isOtpVerified) {
@@ -1601,9 +1703,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       const dataSnapshot = { ...formData };
       const timingsSnapshot = { ...dayTimings };
 
+      const prevPromise = activeSavePromise.current;
       activeSavePromise.current = (async () => {
-        // Wait for any previous background saving to complete
-        await activeSavePromise.current;
+        try {
+          if (prevPromise) await prevPromise;
+        } catch (e) {
+          // Ignore previous background save error so chain doesn't lock
+        }
         try {
           await performSave(stepToSave, dataSnapshot, timingsSnapshot);
         } catch (error: any) {
@@ -1624,7 +1730,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       setIsLoading(true);
       setApiError(null);
       try {
-        await activeSavePromise.current;
+        if (activeSavePromise.current) {
+          try {
+            await activeSavePromise.current;
+          } catch (e) {
+            // Ignore previous error from background save so final submit can proceed cleanly
+          }
+        }
         const finalRes = await performSave(currentStep, formData, dayTimings);
 
         const uniqueId = finalRes?.data?.transporterUniqueId;
@@ -1934,7 +2046,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               returnKeyType="next"
             />
           </View>
-          {getError('email') && <Text style={styles.errorText}>{getError('email')}</Text>}
+          {Boolean(getError('email')) && <Text style={styles.errorText}>{getError('email')}</Text>}
         </View>
 
         <View 
@@ -1955,121 +2067,62 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               onChangeText={(val) => updateFormData('pincode', val.replace(/[^0-9]/g, ''))}
               onFocus={() => autoScroll(475)}
               onBlur={() => handleBlur('pincode')}
-              onSubmitEditing={() => stateRef.current?.focus()}
-              returnKeyType="next"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              returnKeyType="done"
             />
           </View>
-          {getError('pincode') && <Text style={styles.errorText}>{getError('pincode')}</Text>}
+          {Boolean(getError('pincode')) && <Text style={styles.errorText}>{getError('pincode')}</Text>}
         </View>
 
+        {/* 2. Post Office Field - Right after Pincode */}
         <View 
           style={styles.inputContainer}
-          onLayout={(e) => { fieldPositions.current['state'] = e.nativeEvent.layout.y; }}
+          onLayout={(e) => { fieldPositions.current['postOffice'] = e.nativeEvent.layout.y; }}
         >
-          <Text style={styles.label}>{t('signup.state')} *</Text>
-          <View style={[styles.inputWrapper, getError('state') && styles.inputError]}>
-            <MapIcon size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <TextInput
-              ref={stateRef}
-              style={styles.input}
-              placeholder={t('signup.enter_state')}
-              placeholderTextColor={Colors.textPlaceholder}
-              value={formData.state}
-              onChangeText={(val) => {
-                const cleaned = val.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
-                updateFormData('state', cleaned);
-              }}
-              onFocus={() => {
-                const yOffset = fieldPositions.current['state'];
-                if (yOffset !== undefined) {
-                  setTimeout(() => scrollViewRef.current?.scrollTo({ y: yOffset - verticalScale(40), animated: true }), 100);
+          <Text style={styles.label}>{t('signup.post_office', { defaultValue: 'Post Office' })} *</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!formData.pincode || formData.pincode.length < 6 || postOffices.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 },
+              getError('postOffice') && styles.inputError
+            ]}
+            onPress={() => {
+              if (formData.pincode && formData.pincode.length === 6) {
+                if (postOffices.length > 0) {
+                  setDropdownType('post_office');
+                  setShowDropdown(true);
                 } else {
-                  autoScroll(600);
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' }));
                 }
-              }}
-              onBlur={() => {
-                updateFormData('state', formData.state.trim());
-                handleBlur('state');
-              }}
-              onSubmitEditing={() => districtRef.current?.focus()}
-              returnKeyType="next"
-            />
-          </View>
-          {getError('state') && <Text style={styles.errorText}>{getError('state')}</Text>}
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(formData.pincode && formData.pincode.length === 6 && postOffices.length > 0) ? 0.7 : 1}
+          >
+            <Building2 size={scale(20)} color={(formData.pincode && formData.pincode.length === 6 && postOffices.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: formData.postOffice ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {formData.postOffice || (
+                formData.pincode.length < 6
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load post offices' })
+                  : postOffices.length === 0
+                    ? t('signup.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' })
+                    : t('signup.select_post_office', { defaultValue: 'Select Post Office' })
+              )}
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+          {Boolean(getError('postOffice')) && <Text style={styles.errorText}>{getError('postOffice')}</Text>}
         </View>
 
-        <View 
-          style={styles.inputContainer}
-          onLayout={(e) => { fieldPositions.current['district'] = e.nativeEvent.layout.y; }}
-        >
-          <Text style={styles.label}>{t('signup.district')} *</Text>
-          <View style={[styles.inputWrapper, getError('district') && styles.inputError]}>
-            <Navigation size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <TextInput
-              ref={districtRef}
-              style={styles.input}
-              placeholder={t('signup.enter_district')}
-              placeholderTextColor={Colors.textPlaceholder}
-              value={formData.district}
-              onChangeText={(val) => {
-                const cleaned = val.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
-                updateFormData('district', cleaned);
-              }}
-              onFocus={() => {
-                const yOffset = fieldPositions.current['district'];
-                if (yOffset !== undefined) {
-                  setTimeout(() => scrollViewRef.current?.scrollTo({ y: yOffset - verticalScale(40), animated: true }), 100);
-                } else {
-                  autoScroll(650);
-                }
-              }}
-              onBlur={() => {
-                updateFormData('district', formData.district.trim());
-                handleBlur('district');
-              }}
-              onSubmitEditing={() => talukaRef.current?.focus()}
-              returnKeyType="next"
-            />
-          </View>
-          {getError('district') && <Text style={styles.errorText}>{getError('district')}</Text>}
-        </View>
-
-        <View 
-          style={styles.inputContainer}
-          onLayout={(e) => { fieldPositions.current['taluka'] = e.nativeEvent.layout.y; }}
-        >
-          <Text style={styles.label}>{t('signup.taluka')} *</Text>
-          <View style={[styles.inputWrapper, getError('taluka') && styles.inputError]}>
-            <Building2 size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
-            <TextInput
-              ref={talukaRef}
-              style={styles.input}
-              placeholder={t('signup.enter_taluka')}
-              placeholderTextColor={Colors.textPlaceholder}
-              value={formData.taluka}
-              onChangeText={(val) => {
-                const cleaned = val.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
-                updateFormData('taluka', cleaned);
-              }}
-              onFocus={() => {
-                const yOffset = fieldPositions.current['taluka'];
-                if (yOffset !== undefined) {
-                  setTimeout(() => scrollViewRef.current?.scrollTo({ y: yOffset - verticalScale(40), animated: true }), 100);
-                } else {
-                  autoScroll(750);
-                }
-              }}
-              onBlur={() => {
-                updateFormData('taluka', formData.taluka.trim());
-                handleBlur('taluka');
-              }}
-              onSubmitEditing={() => addressRef.current?.focus()}
-              returnKeyType="next"
-            />
-          </View>
-          {getError('taluka') && <Text style={styles.errorText}>{getError('taluka')}</Text>}
-        </View>
-
+        {/* 3. Village Field - Right after Post Office */}
         <View 
           style={styles.inputContainer}
           onLayout={(e) => { fieldPositions.current['village'] = e.nativeEvent.layout.y; }}
@@ -2078,24 +2131,29 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={[
               styles.inputWrapper,
-              (!formData.pincode || formData.pincode.length < 6 || residentialVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 },
+              (!formData.pincode || formData.pincode.length < 6 || !formData.postOffice || residentialVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 },
               getError('village') && styles.inputError
             ]}
             onPress={() => {
               if (formData.pincode && formData.pincode.length === 6) {
-                if (residentialVillages.length > 0) {
+                if (!formData.postOffice) {
+                  Alert.alert(
+                    t('common.info', { defaultValue: 'Info' }),
+                    t('errors.select_post_office_first', { defaultValue: 'Please select a Post Office first' })
+                  );
+                } else if (residentialVillages.length > 0) {
                   setDropdownType('residential_village');
                   setShowDropdown(true);
                 } else {
-                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this post office' }));
                 }
               } else {
                 Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
               }
             }}
-            activeOpacity={(formData.pincode && formData.pincode.length === 6 && residentialVillages.length > 0) ? 0.7 : 1}
+            activeOpacity={(formData.pincode && formData.pincode.length === 6 && formData.postOffice && residentialVillages.length > 0) ? 0.7 : 1}
           >
-            <MapIcon size={scale(20)} color={(formData.pincode && formData.pincode.length === 6 && residentialVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <MapIcon size={scale(20)} color={(formData.pincode && formData.pincode.length === 6 && formData.postOffice && residentialVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
             <Text style={[
               styles.input,
               { 
@@ -2107,18 +2165,82 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               {formData.village || (
                 formData.pincode.length < 6
                   ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
-                  : residentialVillages.length === 0
-                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
-                    : t('signup.select_village', { defaultValue: 'Select Village' })
+                  : !formData.postOffice
+                    ? t('signup.select_post_office_first', { defaultValue: 'Select Post Office first' })
+                    : residentialVillages.length === 0
+                      ? t('signup.no_villages_found', { defaultValue: 'No villages found for this post office' })
+                      : t('signup.select_village', { defaultValue: 'Select Village' })
               )}
             </Text>
             <ChevronDown size={20} color={Colors.iconSecondary} />
           </TouchableOpacity>
-          {getError('village') && <Text style={styles.errorText}>{getError('village')}</Text>}
+          {Boolean(getError('village')) && <Text style={styles.errorText}>{getError('village')}</Text>}
         </View>
 
+        {/* 4. Read-Only Taluka Field */}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['taluka'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.taluka')} *</Text>
+          <View style={[styles.inputWrapper, { backgroundColor: '#F3F4F6', opacity: 0.9 }, getError('taluka') && styles.inputError]}>
+            <Building2 size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              ref={talukaRef}
+              style={[styles.input, { color: formData.taluka ? Colors.textPrimary : Colors.textPlaceholder }]}
+              placeholder={t('signup.auto_filled_from_pincode', { defaultValue: 'Auto-filled from pincode' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={formData.taluka}
+              editable={false}
+            />
+            <Lock size={16} color={Colors.textPlaceholder} style={{ marginRight: scale(12) }} />
+          </View>
+          {Boolean(getError('taluka')) && <Text style={styles.errorText}>{getError('taluka')}</Text>}
+        </View>
 
+        {/* 5. Read-Only District Field */}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['district'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.district')} *</Text>
+          <View style={[styles.inputWrapper, { backgroundColor: '#F3F4F6', opacity: 0.9 }, getError('district') && styles.inputError]}>
+            <Navigation size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              ref={districtRef}
+              style={[styles.input, { color: formData.district ? Colors.textPrimary : Colors.textPlaceholder }]}
+              placeholder={t('signup.auto_filled_from_pincode', { defaultValue: 'Auto-filled from pincode' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={formData.district}
+              editable={false}
+            />
+            <Lock size={16} color={Colors.textPlaceholder} style={{ marginRight: scale(12) }} />
+          </View>
+          {Boolean(getError('district')) && <Text style={styles.errorText}>{getError('district')}</Text>}
+        </View>
 
+        {/* 6. Read-Only State Field */}
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['state'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t('signup.state')} *</Text>
+          <View style={[styles.inputWrapper, { backgroundColor: '#F3F4F6', opacity: 0.9 }, getError('state') && styles.inputError]}>
+            <MapIcon size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              ref={stateRef}
+              style={[styles.input, { color: formData.state ? Colors.textPrimary : Colors.textPlaceholder }]}
+              placeholder={t('signup.auto_filled_from_pincode', { defaultValue: 'Auto-filled from pincode' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={formData.state}
+              editable={false}
+            />
+            <Lock size={16} color={Colors.textPlaceholder} style={{ marginRight: scale(12) }} />
+          </View>
+          {Boolean(getError('state')) && <Text style={styles.errorText}>{getError('state')}</Text>}
+        </View>
+
+        {/* 7. Residential Address Field */}
         <View 
           style={styles.inputContainer}
           onLayout={(e) => { fieldPositions.current['address'] = e.nativeEvent.layout.y; }}
@@ -2147,7 +2269,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               returnKeyType="done"
             />
           </View>
-          {getError('address') && <Text style={styles.errorText}>{getError('address')}</Text>}
+          {Boolean(getError('address')) && <Text style={styles.errorText}>{getError('address')}</Text>}
         </View>
 
 
@@ -2635,12 +2757,39 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       options = centers;
       title = t('signup.milk_center_name');
       key = 'milkCenterName';
+    } else if (dropdownType === 'route_post_office') {
+      options = routePostOffices;
+      title = t('signup.select_post_office', { defaultValue: 'Select Post Office' });
+      key = 'routePostOffice' as any;
     } else if (dropdownType === 'village') {
-      options = pincodeVillages;
+      const filtered = routeRecords
+        .filter(r => !selectedRoutePostOffice || r.postOffice.toLowerCase() === selectedRoutePostOffice.toLowerCase())
+        .map(r => r.village || r.name)
+        .filter(Boolean);
+      options = Array.from(new Set(filtered.length > 0 ? filtered : pincodeVillages));
       title = t('signup.select_village', { defaultValue: 'Select Village' });
       key = 'selectedVillage';
+    } else if (dropdownType === 'taluka') {
+      options = pincodeTalukas.length > 0 ? pincodeTalukas : (formData.taluka ? [formData.taluka] : []);
+      title = t('signup.select_taluka', { defaultValue: 'Select Taluka' });
+      key = 'taluka';
+    } else if (dropdownType === 'post_office') {
+      const filteredPO = residentialVillages
+        .filter(r => !formData.taluka || r.taluka.toLowerCase() === formData.taluka.toLowerCase())
+        .map(r => r.postOffice)
+        .filter(Boolean);
+      options = Array.from(new Set(filteredPO.length > 0 ? filteredPO : postOffices));
+      title = t('signup.select_post_office', { defaultValue: 'Select Post Office' });
+      key = 'postOffice';
     } else if (dropdownType === 'residential_village') {
-      options = Array.from(new Set(residentialVillages.map(v => v.name)));
+      const filteredVillages = residentialVillages
+        .filter(r => 
+          (!formData.taluka || r.taluka.toLowerCase() === formData.taluka.toLowerCase()) &&
+          (!formData.postOffice || r.postOffice.toLowerCase() === formData.postOffice.toLowerCase())
+        )
+        .map(r => r.name || r.village)
+        .filter(Boolean);
+      options = Array.from(new Set(filteredVillages));
       title = t('signup.select_village', { defaultValue: 'Select Village' });
       key = 'village';
     } else if (dropdownType === 'replace_assigned_village') {
@@ -2683,10 +2832,12 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                   )}
                 </View>
               ) : options.map((option, index) => {
-                const isOptionActive = key === 'selectedVillage'
-                  ? (formData.vehicleTypeSelection === 'Milk'
-                    ? formData.assignedVillages.includes(option)
-                    : (formData.operatingArea ? formData.operatingArea.split(', ').map(s => s.trim()).includes(option.trim()) : false))
+                const isOptionActive = key === ('routePostOffice' as any)
+                  ? selectedRoutePostOffice === option
+                  : key === 'selectedVillage'
+                    ? (formData.vehicleTypeSelection === 'Milk'
+                      ? formData.assignedVillages.includes(option)
+                      : (formData.operatingArea ? formData.operatingArea.split(', ').map(s => s.trim()).includes(option.trim()) : false))
                   : key === 'replace_assigned_village'
                     ? (editingVillageIndex !== null && (
                       formData.vehicleTypeSelection === 'Milk'
@@ -2744,38 +2895,56 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                           toggleArea(option);
                         }
                         setApiError(null);
+                      } else if (key === 'taluka') {
+                        const selectedTaluka = option;
+                        setFormData(prev => {
+                          const talukaRecords = residentialVillages.filter(r => r.taluka.toLowerCase() === selectedTaluka.toLowerCase());
+                          const uniquePOs = Array.from(new Set(talukaRecords.map(r => r.postOffice).filter(Boolean))) as string[];
+                          setPostOffices(uniquePOs);
+                          return {
+                            ...prev,
+                            taluka: selectedTaluka,
+                            postOffice: '',
+                            village: '',
+                          };
+                        });
+                        setShowDropdown(false);
+                      } else if (key === ('routePostOffice' as any)) {
+                        setSelectedRoutePostOffice(option);
+                        setShowDropdown(false);
+                      } else if (key === 'postOffice') {
+                        const selectedPO = option;
+                        setFormData(prev => ({
+                          ...prev,
+                          postOffice: selectedPO,
+                          village: '',
+                        }));
+                        setShowDropdown(false);
+                      } else if (key === 'village') {
+                        setFormData(prev => ({
+                          ...prev,
+                          village: option,
+                        }));
+                        setShowDropdown(false);
                       } else {
-                        if (key === 'village') {
-                          const selectedObj = residentialVillages.find(v => v.name === option);
-                          if (selectedObj) {
-                            setFormData(prev => ({
-                              ...prev,
-                              village: option,
-                              taluka: selectedObj.taluka || prev.taluka,
-                            }));
+                        if (key === 'vehicleType') {
+                          if (option === 'Others') {
+                            setIsCustomVehicleType(true);
+                            updateFormData('vehicleType', '');
                           } else {
-                            updateFormData(key as keyof FormData, option);
+                            setIsCustomVehicleType(false);
+                            updateFormData('vehicleType', option);
+                          }
+                        } else if (key === 'vehicleMake') {
+                          if (option === 'Others') {
+                            setIsCustomVehicleMake(true);
+                            updateFormData('vehicleMake', '');
+                          } else {
+                            setIsCustomVehicleMake(false);
+                            updateFormData('vehicleMake', option);
                           }
                         } else {
-                          if (key === 'vehicleType') {
-                            if (option === 'Others') {
-                              setIsCustomVehicleType(true);
-                              updateFormData('vehicleType', '');
-                            } else {
-                              setIsCustomVehicleType(false);
-                              updateFormData('vehicleType', option);
-                            }
-                          } else if (key === 'vehicleMake') {
-                            if (option === 'Others') {
-                              setIsCustomVehicleMake(true);
-                              updateFormData('vehicleMake', '');
-                            } else {
-                              setIsCustomVehicleMake(false);
-                              updateFormData('vehicleMake', option);
-                            }
-                          } else {
-                            updateFormData(key as keyof FormData, option);
-                          }
+                          updateFormData(key as keyof FormData, option);
                         }
                       }
                       if (key !== 'selectedVillage') {
@@ -3089,18 +3258,25 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <TouchableOpacity
-          style={styles.primaryButton}
+          style={[styles.primaryButton, isLoading && { opacity: 0.7 }]}
           onPress={nextStep}
+          disabled={isLoading}
         >
-          <Text style={styles.primaryButtonText}>
-            {(formData.vehicleTypeSelection === "Milk" && currentStep === 7)
-              ? t("signup.complete_signup")
-              : t("signup.next_step")}
-          </Text>
-          {(formData.vehicleTypeSelection === "Milk" && currentStep === 7) ? (
-            <CheckCircle2 size={20} color="#FFFFFF" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <ChevronRight size={20} color="#FFFFFF" />
+            <>
+              <Text style={styles.primaryButtonText}>
+                {(formData.vehicleTypeSelection === "Milk" && currentStep === 7)
+                  ? t("signup.complete_signup")
+                  : t("signup.next_step")}
+              </Text>
+              {(formData.vehicleTypeSelection === "Milk" && currentStep === 7) ? (
+                <CheckCircle2 size={20} color="#FFFFFF" />
+              ) : (
+                <ChevronRight size={20} color="#FFFFFF" />
+              )}
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -3221,33 +3397,78 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Dropdown for Post Office fetched from Pincode */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>{t('signup.post_office', { defaultValue: 'Post Office' })}</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!villagePincode || villagePincode.length < 6 || routePostOffices.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+            ]}
+            onPress={() => {
+              if (villagePincode && villagePincode.length === 6) {
+                if (routePostOffices.length > 0) {
+                  setDropdownType('route_post_office');
+                  setShowDropdown(true);
+                } else {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' }));
+                }
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && routePostOffices.length > 0) ? 0.7 : 1}
+          >
+            <Building2 size={scale(20)} color={(villagePincode && villagePincode.length === 6 && routePostOffices.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: selectedRoutePostOffice ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {selectedRoutePostOffice || (
+                villagePincode.length < 6 
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load post offices' })
+                  : routePostOffices.length === 0
+                    ? t('signup.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' })
+                    : t('signup.select_post_office', { defaultValue: 'Select Post Office' })
+              )}
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+        </View>
+
         {/* Dropdown for Villages fetched from Pincode */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>{t('signup.select_village', { defaultValue: 'Select Village' })}</Text>
           <TouchableOpacity
             style={[
               styles.inputWrapper,
-              (!villagePincode || villagePincode.length < 6 || pincodeVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+              (!villagePincode || villagePincode.length < 6 || !selectedRoutePostOffice || routeRecords.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
             ]}
             onPress={() => {
               if (villagePincode && villagePincode.length === 6) {
-                if (pincodeVillages.length > 0) {
+                if (!selectedRoutePostOffice) {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.select_post_office_first', { defaultValue: 'Please select a Post Office first' }));
+                } else if (routeRecords.length > 0) {
                   setDropdownType('village');
                   setShowDropdown(true);
                 } else {
-                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this post office' }));
                 }
               } else {
                 Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
               }
             }}
-            activeOpacity={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? 0.7 : 1}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && selectedRoutePostOffice && routeRecords.length > 0) ? 0.7 : 1}
           >
-            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && selectedRoutePostOffice && routeRecords.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
             <Text style={[
               styles.input,
               { 
-                color: (villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.textPrimary : Colors.textPlaceholder, 
+                color: (villagePincode && villagePincode.length === 6 && selectedRoutePostOffice) ? Colors.textPrimary : Colors.textPlaceholder, 
                 textAlignVertical: 'center', 
                 lineHeight: verticalScale(52) 
               }
@@ -3256,9 +3477,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 ? t('common.loading', { defaultValue: 'Loading villages...' }) 
                 : villagePincode.length < 6 
                   ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
-                  : pincodeVillages.length === 0 
-                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
-                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village ({{count}} available)', count: pincodeVillages.length })
+                  : !selectedRoutePostOffice
+                    ? t('signup.select_post_office_first', { defaultValue: 'Select Post Office first' })
+                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village' })
               }
             </Text>
             <ChevronDown size={20} color={Colors.iconSecondary} />
@@ -3438,11 +3659,18 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         {renderDayTimingEditor()}
 
         <TouchableOpacity
-          style={styles.primaryButton}
+          style={[styles.primaryButton, isLoading && { opacity: 0.7 }]}
           onPress={nextStep}
+          disabled={isLoading}
         >
-          <Text style={styles.primaryButtonText}>{t('signup.complete_signup')}</Text>
-          <CheckCircle2 size={20} color="#FFFFFF" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Text style={styles.primaryButtonText}>{t('signup.complete_signup')}</Text>
+              <CheckCircle2 size={20} color="#FFFFFF" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -3560,33 +3788,78 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Dropdown for Post Office fetched from Pincode */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>{t('signup.post_office', { defaultValue: 'Post Office' })}</Text>
+          <TouchableOpacity
+            style={[
+              styles.inputWrapper,
+              (!villagePincode || villagePincode.length < 6 || routePostOffices.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+            ]}
+            onPress={() => {
+              if (villagePincode && villagePincode.length === 6) {
+                if (routePostOffices.length > 0) {
+                  setDropdownType('route_post_office');
+                  setShowDropdown(true);
+                } else {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' }));
+                }
+              } else {
+                Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
+              }
+            }}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && routePostOffices.length > 0) ? 0.7 : 1}
+          >
+            <Building2 size={scale(20)} color={(villagePincode && villagePincode.length === 6 && routePostOffices.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <Text style={[
+              styles.input,
+              { 
+                color: selectedRoutePostOffice ? Colors.textPrimary : Colors.textPlaceholder, 
+                textAlignVertical: 'center', 
+                lineHeight: verticalScale(52) 
+              }
+            ]}>
+              {selectedRoutePostOffice || (
+                villagePincode.length < 6 
+                  ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load post offices' })
+                  : routePostOffices.length === 0
+                    ? t('signup.no_post_offices_found', { defaultValue: 'No post offices found for this pincode' })
+                    : t('signup.select_post_office', { defaultValue: 'Select Post Office' })
+              )}
+            </Text>
+            <ChevronDown size={20} color={Colors.iconSecondary} />
+          </TouchableOpacity>
+        </View>
+
         {/* Dropdown for Villages fetched from Pincode */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>{t('signup.select_village', { defaultValue: 'Select Village' })}</Text>
           <TouchableOpacity
             style={[
               styles.inputWrapper,
-              (!villagePincode || villagePincode.length < 6 || pincodeVillages.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
+              (!villagePincode || villagePincode.length < 6 || !selectedRoutePostOffice || routeRecords.length === 0) && { backgroundColor: '#F3F4F6', opacity: 0.7 }
             ]}
             onPress={() => {
               if (villagePincode && villagePincode.length === 6) {
-                if (pincodeVillages.length > 0) {
+                if (!selectedRoutePostOffice) {
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.select_post_office_first', { defaultValue: 'Please select a Post Office first' }));
+                } else if (routeRecords.length > 0) {
                   setDropdownType('village');
                   setShowDropdown(true);
                 } else {
-                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this pincode' }));
+                  Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.no_villages_found', { defaultValue: 'No villages found for this post office' }));
                 }
               } else {
                 Alert.alert(t('common.info', { defaultValue: 'Info' }), t('errors.enter_pincode_first', { defaultValue: 'Please enter a 6-digit pincode first' }));
               }
             }}
-            activeOpacity={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? 0.7 : 1}
+            activeOpacity={(villagePincode && villagePincode.length === 6 && selectedRoutePostOffice && routeRecords.length > 0) ? 0.7 : 1}
           >
-            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
+            <MapIcon size={scale(20)} color={(villagePincode && villagePincode.length === 6 && selectedRoutePostOffice && routeRecords.length > 0) ? Colors.iconSecondary : Colors.textPlaceholder} style={styles.inputIcon} />
             <Text style={[
               styles.input,
               { 
-                color: (villagePincode && villagePincode.length === 6 && pincodeVillages.length > 0) ? Colors.textPrimary : Colors.textPlaceholder, 
+                color: (villagePincode && villagePincode.length === 6 && selectedRoutePostOffice) ? Colors.textPrimary : Colors.textPlaceholder, 
                 textAlignVertical: 'center', 
                 lineHeight: verticalScale(52) 
               }
@@ -3595,9 +3868,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 ? t('common.loading', { defaultValue: 'Loading villages...' }) 
                 : villagePincode.length < 6 
                   ? t('signup.enter_pincode_first', { defaultValue: 'Enter 6-digit pincode to load villages' })
-                  : pincodeVillages.length === 0 
-                    ? t('signup.no_villages_found', { defaultValue: 'No villages found for this pincode' })
-                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village ({{count}} available)', count: pincodeVillages.length })
+                  : !selectedRoutePostOffice
+                    ? t('signup.select_post_office_first', { defaultValue: 'Select Post Office first' })
+                    : t('signup.select_village_dropdown', { defaultValue: 'Select Village' })
               }
             </Text>
             <ChevronDown size={20} color={Colors.iconSecondary} />

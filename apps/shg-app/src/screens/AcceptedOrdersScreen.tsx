@@ -10,6 +10,7 @@ import {
   Dimensions,
   FlatList
 } from 'react-native';
+import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -41,20 +42,32 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder, highlightedOrders } = useOrders();
+  const { acceptedOrders, receiveOrder, highlightedOrders, redirectOrder, refreshOrdersList } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Delivery tab
+  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Drop tab
   const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
   const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
-  const [activeTab, setActiveTab] = useState<'pickup' | 'delivery'>(
-    route.params?.initialTab === 'delivery' ? 'delivery' : 'pickup'
+  const initialTabParam = route.params?.initialTab as string | undefined;
+  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>(
+    (initialTabParam === 'drop' || initialTabParam === 'delivery') ? 'drop' : 'pickup'
   );
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (refreshOrdersList) await refreshOrdersList();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const PAGE_SIZE = 5;
   const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
@@ -63,8 +76,9 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   // Sync tab index when navigating between routes or receiving new initialTab param
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    const isDelivery = route.params?.initialTab === 'delivery';
-    setActiveTab(isDelivery ? 'delivery' : 'pickup');
+    const tabParam = route.params?.initialTab as string | undefined;
+    const isDelivery = tabParam === 'drop' || tabParam === 'delivery';
+    setActiveTab(isDelivery ? 'drop' : 'pickup');
     timer = setTimeout(() => {
       scrollViewRef.current?.scrollTo({
         x: isDelivery ? SCREEN_WIDTH : 0,
@@ -74,7 +88,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => clearTimeout(timer);
   }, [route.params?.initialTab, route.name]);
 
-  const handleTabPress = (tab: 'pickup' | 'delivery') => {
+  const handleTabPress = (tab: 'pickup' | 'drop') => {
     setActiveTab(tab);
     scrollViewRef.current?.scrollTo({
       x: tab === 'pickup' ? 0 : SCREEN_WIDTH,
@@ -85,7 +99,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / SCREEN_WIDTH);
-    const newTab = index === 0 ? 'pickup' : 'delivery';
+    const newTab = index === 0 ? 'pickup' : 'drop';
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
@@ -108,6 +122,34 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleEyeDetails = (order: Order) => {
     navigation.navigate('OrderDetails', { order });
+  };
+
+  const handleRedirectOrder = (item: Order) => {
+    const isDelivery = item.legType === 'drop';
+    setModalConfig({
+      visible: true,
+      title: isDelivery ? 'Redirect Delivery to Buyer?' : 'Redirect Pickup to Transporter?',
+      message: isDelivery
+        ? 'Are you sure you want to redirect this delivery directly to Buyer Address via Transporter?'
+        : 'Are you sure you want to redirect this pickup directly from Seller Shop to Transporter?',
+      confirmText: 'Confirm Redirect',
+      onConfirm: async () => {
+        try {
+          await redirectOrder(item);
+          Toast.show({
+            type: 'success',
+            text1: 'Order Redirected',
+            text2: 'Order has been redirected to Transporters successfully.'
+          });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to redirect order.'
+          });
+        }
+      }
+    });
   };
 
   return (
@@ -133,9 +175,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity
           onPress={() => handleTabPress('pickup')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'
-          }`}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
           style={activeTab === 'pickup' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
@@ -149,31 +190,28 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             size={16}
             color={activeTab === 'pickup' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
-          }`}>
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
+            }`}>
             {t("tab_pickup")}
           </Text>
-          <View 
+          <View
             className="px-2.5 py-0.5 rounded-full ml-2"
             style={activeTab === 'pickup' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
-            <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
-            }`}>
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
+              }`}>
               {pickupOrders.length}
             </Text>
           </View>
         </TouchableOpacity>
 
-        {/* Delivery Tab Button */}
+        {/* Drop Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('delivery')}
+          onPress={() => handleTabPress('drop')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'delivery' ? 'bg-[#073318]' : 'bg-transparent'
-          }`}
-          style={activeTab === 'delivery' ? {
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
+          style={activeTab === 'drop' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -182,22 +220,20 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'delivery' ? "bicycle" : "bicycle-outline"}
+            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
             size={16}
-            color={activeTab === 'delivery' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
-          }`}>
-            {t("tab_delivery")}
-          </Text>
-          <View 
-            className="px-2.5 py-0.5 rounded-full ml-2"
-            style={activeTab === 'delivery' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
-          >
-            <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'delivery' ? 'text-white' : 'text-slate-500'
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'
             }`}>
+            Drop
+          </Text>
+          <View
+            className="px-2.5 py-0.5 rounded-full ml-2"
+            style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'
+              }`}>
               {deliveryOrders.length}
             </Text>
           </View>
@@ -217,6 +253,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
       >
         {/* Page 1: Pickup Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -224,7 +261,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             pickupOrders.length === 0 ? (
-              <View 
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -247,6 +284,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
+            const isRedirected = !!item.isPickupRedirected || item.pickupShgStatus === 'REDIRECTED';
 
             return (
               <OrderCard
@@ -257,19 +295,21 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 date={info.date}
                 time={info.time}
                 distance={item.distance}
-                showScanner={true}
+                showScanner={!isRedirected}
                 onScan={() => handleQRScan(item)}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
+                isRedirected={isRedirected}
+                onRedirect={() => handleRedirectOrder(item)}
               />
             );
           }}
           ListFooterComponent={
             <>
               {pickupOrders.length > 0 && (
-                <ViewMoreButton 
+                <ViewMoreButton
                   totalCount={pickupOrders.length}
                   visibleCount={pickupVisibleCount}
                   onPress={() => setPickupVisibleCount(prev => prev + PAGE_SIZE)}
@@ -282,6 +322,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Page 2: Delivery Screen */}
         <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -289,7 +330,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             deliveryOrders.length === 0 ? (
-              <View 
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -312,6 +353,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
+            const isRedirected = !!item.isDropRedirected || item.dropShgStatus === 'REDIRECTED';
 
             return (
               <OrderCard
@@ -326,8 +368,9 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
-                isRejectedDelivery={item.isRejectedDelivery}
                 isRescheduled={!!item.rescheduledDate}
+                isRedirected={isRedirected}
+                onRedirect={() => handleRedirectOrder(item)}
                 transporterName={item.transporterName}
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}
@@ -339,7 +382,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           ListFooterComponent={
             <>
               {deliveryOrders.length > 0 && (
-                <ViewMoreButton 
+                <ViewMoreButton
                   totalCount={deliveryOrders.length}
                   visibleCount={deliveryVisibleCount}
                   onPress={() => setDeliveryVisibleCount(prev => prev + PAGE_SIZE)}
@@ -373,7 +416,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             pickupAddress={pickup}
             deliveryAddress={delivery}
             distance={selectedAddressOrder.distance || '0'}
-            isRejectedDelivery={selectedAddressOrder.isRejectedDelivery}
           />
         );
       })()}
