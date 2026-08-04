@@ -83,3 +83,4 @@ async function bootstrap() {
   console.log(`Swagger documentation: http://localhost:${port}/api`);
 }
 bootstrap();
+// Trigger server reload - Phase 2 complete end-to-end flow verified

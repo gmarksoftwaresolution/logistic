@@ -19,6 +19,6 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true
   },
-  "exclude": ["prisma/**/*", "test/**/*", "dist/**/*", "node_modules/**/*", "scratch-test-service.ts"],
+  "exclude": ["test/**/*", "dist/**/*", "node_modules/**/*"],
   "include": ["src/**/*"]
 }

@@ -771,11 +771,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const intakePickupOrders = async (orderIds: string[]) => {
     for (const id of orderIds) {
-      const order = pickupAssignedOrders.find((o) => o.id === id) || 
-                    pickupWarehouseOrders.find((o) => o.id === id) ||
-                    pickupNewOrders.find((o) => o.id === id) as any;
-      await api.orders.warehouseIntake(order?.uuid || id);
+      const cleanId = String(id || '').replace(/^ORD-/, '');
+      const order = pickupAssignedOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) || 
+                    pickupWarehouseOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
+                    pickupNewOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
+                    inTransitOrdersList.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) as any;
+      const targetId = order?.uuid || order?.id || id;
+      await api.orders.warehouseIntake(targetId);
     }
+    await loadData();
     await loadCounts();
   };
 
@@ -807,9 +811,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const uuid = order?.uuid || orderId;
     const res = await api.orders.generateQr(uuid, regenerate);
-    await loadCounts();
-    await loadPickupWarehouse();
-    await loadInventoryStored();
+    Promise.all([
+      loadCounts(),
+      loadPickupWarehouse(),
+      loadInventoryStored()
+    ]).catch((err) => console.warn('Background sync after generateQr failed:', err));
     return res;
   };
 

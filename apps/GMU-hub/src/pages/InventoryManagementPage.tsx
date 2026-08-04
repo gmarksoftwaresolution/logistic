@@ -453,6 +453,27 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     }
   };
 
+  // Auto-fetch/generate QR codes when opening the View Modal
+  useEffect(() => {
+    if (isViewModalOpen && selectedOrderDetails && (!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0)) {
+      const autoFetchQr = async () => {
+        setIsGeneratingQr(true);
+        try {
+          const targetId = selectedOrderDetails.uuid || selectedOrderDetails.id;
+          const res = await api.orders.generateQr(targetId, false);
+          if (res && Array.isArray(res) && res.length > 0) {
+            setSelectedOrderDetails((prev: any) => prev ? { ...prev, parcels: res } : prev);
+          }
+        } catch (err) {
+          console.warn("Auto-generate QR failed in InventoryManagementPage:", err);
+        } finally {
+          setIsGeneratingQr(false);
+        }
+      };
+      autoFetchQr();
+    }
+  }, [isViewModalOpen, selectedOrderDetails?.id]);
+
   // QR Scan Modal State
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [qrItem, setQrItem] = useState<InventoryItem | null>(null);

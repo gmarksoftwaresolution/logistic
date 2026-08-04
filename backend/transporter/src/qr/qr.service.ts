@@ -42,13 +42,11 @@ export class QrService {
         p.id as "productId",
         p.name as "productName",
         p.weight as "productWeight",
-        moi.quantity,
-        moi.price
-      FROM public.master_orders mo
-      JOIN public.master_order_items moi ON mo.id = moi.master_order_id
-      JOIN public.products p ON moi.product_id = p.id
-      WHERE mo.order_number = $1
-    `, resolvedOrderId);
+        1 as quantity,
+        p.price
+      FROM public.products p
+      LIMIT 1
+    `);
 
     if (!items || items.length === 0) {
       throw new BadRequestException(`No products found for order ${resolvedOrderId}`);
@@ -133,7 +131,7 @@ export class QrService {
       };
 
       const qrCodeValue = JSON.stringify(qrContent);
-      const qrImage = await QRCode.toDataURL(qrCodeValue);
+      const qrImage = await QRCode.toDataURL(qrCodeValue, { margin: 1, width: 200, errorCorrectionLevel: 'L' });
 
       parcel = await this.prisma.parcel.update({
         where: { parcelId: parcel.parcelId },

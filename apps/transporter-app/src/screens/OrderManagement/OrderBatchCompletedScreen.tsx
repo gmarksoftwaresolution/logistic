@@ -24,8 +24,8 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
     const journeyMap: Record<string, any> = {};
 
     batches.forEach((b) => {
-      // We only care about orders that have completed at least one leg
-      if (b.status !== 'PICKUP_COMPLETED' && b.status !== 'DROP_COMPLETED') {
+      // We only care about orders that are fully drop completed
+      if (b.status !== 'DROP_COMPLETED') {
         return;
       }
 
@@ -41,8 +41,8 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
           timestamp: b.timestamp || '5:02 PM',
           pickupPoint: b.pickupPointName || 'Local SHG',
           dropPoint: b.dropPointName || 'Customer Address',
-          pickupCompleted: false,
-          dropCompleted: false,
+          pickupCompleted: true,
+          dropCompleted: true,
           pickupBatchId: undefined,
           dropBatchId: undefined,
         };
@@ -53,18 +53,12 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
       if (b.id.startsWith('pickup-')) {
         journey.pickupBatchId = b.id;
         journey.pickupPoint = b.pickupPointName;
-        if (b.status === 'PICKUP_COMPLETED' || b.status === 'DROP_COMPLETED') {
-          journey.pickupCompleted = true;
-        }
-        if (b.status === 'DROP_COMPLETED') {
-          journey.dropCompleted = true;
-        }
+        journey.pickupCompleted = true;
+        journey.dropCompleted = true;
       } else if (b.id.startsWith('drop-')) {
         journey.dropBatchId = b.id;
         journey.dropPoint = b.dropPointName;
-        if (b.status === 'DROP_COMPLETED') {
-          journey.dropCompleted = true;
-        }
+        journey.dropCompleted = true;
       }
     });
 

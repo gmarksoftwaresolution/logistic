@@ -25,11 +25,7 @@ export type ParcelStatus =
   | 'DROP_TRANSPORTER_ASSIGNED'
   | 'OUT_FOR_DELIVERY'
   | 'AT_BUYER_SHG'
-  | 'DELIVERED'
-  | 'RETURN_PARCEL_AT_SHG'
-  | 'RETURN_PARCEL_AT_TRANSPORTER'
-  | 'RETURN_IN_TRANSIT_TO_HUB'
-  | 'RETURN_PARCEL_AT_HUB';
+  | 'DELIVERED';
 
 /**
  * Normalizes legacy status names to the standard 11-status state machine.
@@ -47,10 +43,6 @@ export function normalizeStatus(status: string): ParcelStatus {
     'PARCEL_AT_DROP_SHG': 'AT_BUYER_SHG',
     'PARCEL_WITH_DROP_SHG': 'AT_BUYER_SHG',
     'DELIVERED': 'DELIVERED',
-    'RETURN_PARCEL_AT_SHG': 'PARCEL_PICKED',
-    'RETURN_PARCEL_AT_TRANSPORTER': 'TRANSPORTER_ACCEPTED',
-    'RETURN_IN_TRANSIT_TO_HUB': 'IN_TRANSIT',
-    'RETURN_PARCEL_AT_HUB': 'AT_GMU',
   };
   return map[status] || (status as ParcelStatus);
 }
@@ -118,66 +110,32 @@ export function determineTransition(
   const currentStatus = normalizeStatus(parcel.parcelStatus);
   const finalRole = userRole.toUpperCase();
 
-  // --- BUYER RETURN FLOW TRANSITIONS ---
-  if (order.returnType === 'BUYER_RETURN') {
-    if (finalRole === 'SHG') {
-      if (currentStatus === 'DELIVERED') {
-        return {
-          nextParcelStatus: 'RETURN_PARCEL_AT_SHG',
-          nextHolderId: userId,
-          nextHolderType: 'SHG',
-          action: 'SHG_RETURN_PICKUP',
-          message: 'Parcel returned by Buyer and picked up by SHG',
-        };
-      }
-      if (currentStatus === 'RETURN_PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED') {
-        const transporterId = order.returnTransporterId || order.pickupTransporterId || order.dropTransporterId;
-        const isAccepted = order.pickupTransporterStatus === 'ACCEPTED' || order.dropTransporterStatus === 'ACCEPTED';
-        if (!transporterId || !isAccepted) {
-          throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
-        }
-        const nextHolder = String(transporterId);
-        return {
-          nextParcelStatus: 'RETURN_PARCEL_AT_TRANSPORTER',
-          nextHolderId: nextHolder,
-          nextHolderType: 'TRANSPORTER',
-          action: 'SHG_TRANSPORTER_RETURN_DELIVER',
-          message: 'Parcel handed over to Transporter by SHG for return',
-        };
-      }
-    }
-
-    if (finalRole === 'TRANSPORTER') {
-      if (currentStatus === 'RETURN_PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED') {
-        throw new QrValidationError('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
-      }
-      if (currentStatus === 'RETURN_PARCEL_AT_TRANSPORTER' || currentStatus === 'TRANSPORTER_ACCEPTED') {
-        return {
-          nextParcelStatus: 'RETURN_IN_TRANSIT_TO_HUB',
-          nextHolderId: userId,
-          nextHolderType: 'TRANSPORTER',
-          action: 'TRANSPORTER_RETURN_PICKUP',
-          message: 'Parcel loaded by Transporter from SHG for return',
-        };
-      }
-    }
-
-    if (finalRole === 'GMU' || finalRole === 'ADMIN' || finalRole === 'SUPER_ADMIN') {
-      if (currentStatus === 'RETURN_IN_TRANSIT_TO_HUB' || currentStatus === 'IN_TRANSIT') {
-        return {
-          nextParcelStatus: 'RETURN_PARCEL_AT_HUB',
-          nextHolderId: 'HUB',
-          nextHolderType: 'WAREHOUSE',
-          action: 'WAREHOUSE_RETURN_INTAKE',
-          message: 'Return parcel intake complete at GMU Hub',
-        };
-      }
-    }
-  }
-
   // Validate state machine transitions based on current status and user role
   if (finalRole === 'SHG') {
-    if (currentStatus === 'READY_FOR_PICKUP') {
+    // PHASE 2 (DROP): SHG receiving from Transporter or delivering to Buyer
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DROP_TRANSPORTER_ACCEPTED'].includes(order?.mainStatus)) {
+      const isFinalDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG' || parcel.parcelStatus === 'AT_BUYER_SHG';
+      if (isFinalDelivery) {
+        return {
+          nextParcelStatus: 'DELIVERED',
+          nextHolderId: String(order.buyerId),
+          nextHolderType: 'BUYER',
+          action: 'FINAL_DELIVERY',
+          message: 'Parcel delivered to Buyer by SHG',
+        };
+      } else {
+        return {
+          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
+          nextHolderId: userId,
+          nextHolderType: 'SHG',
+          action: 'SHG_DROP_PICKUP',
+          message: 'Parcel received by drop SHG from transporter (Transporter delivery completed)',
+        };
+      }
+    }
+
+    // PHASE 1 (PICKUP): SHG picking up from Seller
+    if (currentStatus === 'READY_FOR_PICKUP' || (currentStatus === 'PARCEL_PICKED' && legType !== 'handover')) {
       return {
         nextParcelStatus: 'PARCEL_AT_SHG',
         nextHolderId: userId,
@@ -186,18 +144,7 @@ export function determineTransition(
         message: 'Parcel picked up from seller by SHG',
       };
     }
-    if (currentStatus === 'PARCEL_PICKED') {
-      const isAccepted = Boolean(
-        order.pickupTransporterId ||
-        order.pickupTransporterStatus === 'ACCEPTED' ||
-        order.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' ||
-        order.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED' ||
-        order.mainStatus === 'TRANSPORTER_ACCEPTED'
-      );
-      if (!isAccepted) {
-        throw new QrValidationError('You cannot verify handover until the transporter has accepted the request.');
-      }
-      // SHG Handover to Transporter
+    if (currentStatus === 'PARCEL_PICKED' && legType === 'handover') {
       const nextHolder = order.pickupTransporterId ? String(order.pickupTransporterId) : 'TRANSPORTER';
       return {
         nextParcelStatus: 'PARCEL_AT_TRANSPORTER',
@@ -207,39 +154,35 @@ export function determineTransition(
         message: 'Parcel delivered to Transporter by SHG',
       };
     }
-    if (currentStatus === 'AT_BUYER_SHG' || currentStatus === 'OUT_FOR_DELIVERY') {
-      const isDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG';
-      if (isDelivery) {
-        // Final delivery to buyer
-        return {
-          nextParcelStatus: 'DELIVERED',
-          nextHolderId: String(order.buyerId),
-          nextHolderType: 'BUYER',
-          action: 'FINAL_DELIVERY',
-          message: 'Parcel delivered to Buyer',
-        };
-      } else {
-        if (currentStatus === 'OUT_FOR_DELIVERY' && userRole === 'SHG') {
-          throw new QrValidationError('The Transporter has not submitted the handover delivery yet. Please wait for the Transporter to submit.');
-        }
-        // SHG receiving from transporter
-        return {
-          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
-          nextHolderId: userId,
-          nextHolderType: 'SHG',
-          action: 'SHG_DROP_PICKUP',
-          message: 'Parcel picked up by drop SHG from transporter',
-        };
-      }
-    }
   }
 
   if (finalRole === 'TRANSPORTER') {
-    if (currentStatus === 'PARCEL_PICKED') {
-      throw new QrValidationError('The SHG has not submitted the handover delivery yet. Please wait for the SHG to submit.');
+    // PHASE 2 (DROP): Transporter loading from GMU Hub for delivery to Drop SHG
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU'].includes(order?.mainStatus)) {
+      if (currentStatus === 'OUT_FOR_DELIVERY' || (currentStatus as string) === 'DISPATCHED') {
+        // Transporter dropping off at Buyer SHG
+        const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
+        return {
+          nextParcelStatus: 'PARCEL_AT_DROP_SHG',
+          nextHolderId: nextHolder,
+          nextHolderType: 'SHG',
+          action: 'TRANSPORTER_SHG_DELIVER',
+          message: 'Parcel delivered to Drop SHG by Transporter',
+        };
+      } else {
+        // Transporter loading from Hub for delivery -> DISPATCHED
+        return {
+          nextParcelStatus: 'DISPATCHED',
+          nextHolderId: userId,
+          nextHolderType: 'TRANSPORTER',
+          action: 'TRANSPORTER_DROP_PICKUP',
+          message: 'Parcel loaded for delivery by Transporter from Hub Warehouse (Dispatched)',
+        };
+      }
     }
-    if (currentStatus === 'TRANSPORTER_ACCEPTED') {
-      // Transporter loading parcel for transit to hub
+
+    // PHASE 1 (PICKUP): Transporter loading from Pickup SHG to deliver to GMU Hub
+    if (currentStatus === 'PARCEL_PICKED' || currentStatus === 'TRANSPORTER_ACCEPTED' || currentStatus === 'READY_FOR_PICKUP') {
       return {
         nextParcelStatus: 'IN_TRANSIT_TO_HUB',
         nextHolderId: userId,
@@ -249,34 +192,12 @@ export function determineTransition(
       };
     }
     if (currentStatus === 'IN_TRANSIT') {
-      // Transporter dropping at GMU Hub
       return {
         nextParcelStatus: 'HUB_RECEIVED',
         nextHolderId: 'HUB',
         nextHolderType: 'WAREHOUSE',
         action: 'TRANSPORTER_HUB_DELIVER',
         message: 'Parcel delivered to GMU Hub by Transporter',
-      };
-    }
-    if (currentStatus === 'READY_FOR_DISPATCH' || currentStatus === 'STORED' || currentStatus === 'AT_GMU') {
-      // Transporter loading from Hub for delivery
-      return {
-        nextParcelStatus: 'IN_TRANSIT_TO_BUYER',
-        nextHolderId: userId,
-        nextHolderType: 'TRANSPORTER',
-        action: 'TRANSPORTER_DROP_PICKUP',
-        message: 'Parcel loaded for delivery by Transporter from Warehouse',
-      };
-    }
-    if (currentStatus === 'OUT_FOR_DELIVERY') {
-      // Transporter dropping off at Buyer SHG
-      const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
-      return {
-        nextParcelStatus: 'PARCEL_AT_DROP_SHG',
-        nextHolderId: nextHolder,
-        nextHolderType: 'SHG',
-        action: 'TRANSPORTER_SHG_DELIVER',
-        message: 'Parcel delivered to Drop SHG by Transporter',
       };
     }
   }
@@ -321,208 +242,6 @@ export class QrVerificationEngine {
   constructor(private readonly prisma: any) {}
 
   /**
-   * Automatically broadcasts pickup requests to route-matched transporters
-   * when SHG confirms pickup from Seller.
-   */
-  async broadcastTransporterPickup(tx: any, orderId: string) {
-    try {
-      const fullOrder = await tx.order.findFirst({
-        where: {
-          OR: [
-            { id: orderId },
-            { orderId: orderId }
-          ]
-        },
-        include: { seller: true }
-      });
-
-      if (!fullOrder) {
-        console.warn(`[auto-broadcast] Order not found for id: ${orderId}`);
-        return;
-      }
-
-      const normalizeStr = (s: string) => s ? s.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase() : '';
-
-      let sellerVillage = '';
-      let sellerPincode = '';
-
-      if (fullOrder.seller?.village) sellerVillage = normalizeStr(fullOrder.seller.village);
-      if (fullOrder.seller?.pincode) sellerPincode = fullOrder.seller.pincode.trim().toLowerCase();
-
-      const ordAny = fullOrder as any;
-      if (!sellerVillage && ordAny?.sellerVillage) sellerVillage = normalizeStr(ordAny.sellerVillage);
-      if (!sellerPincode && ordAny?.sellerPincode) sellerPincode = String(ordAny.sellerPincode).trim().toLowerCase();
-
-      if ((!sellerVillage || !sellerPincode) && fullOrder.sellerId) {
-        const sellerAddressRows: any[] = await tx.$queryRawUnsafe(`
-          SELECT a.village, a.pincode
-          FROM public."User" u
-          LEFT JOIN public."Address" a ON u.id = a."userId"
-          WHERE u.id = $1 LIMIT 1;
-        `, fullOrder.sellerId);
-
-        if (sellerAddressRows.length > 0) {
-          if (!sellerVillage && sellerAddressRows[0].village) sellerVillage = normalizeStr(sellerAddressRows[0].village);
-          if (!sellerPincode && sellerAddressRows[0].pincode) sellerPincode = String(sellerAddressRows[0].pincode).trim().toLowerCase();
-        }
-      }
-
-      console.log(`[auto-broadcast] Triggered for order ${fullOrder.orderId} (${fullOrder.id}). Seller village: "${sellerVillage}", pincode: "${sellerPincode}"`);
-
-      if (!sellerVillage && !sellerPincode) {
-        console.warn(`[auto-broadcast] Missing seller village and pincode for order ${fullOrder.id}. Skipping broadcast.`);
-        return;
-      }
-
-      const totalWeight = Number(fullOrder.totalWeight || 0);
-
-      const approvedTransporters = await tx.$queryRawUnsafe(`
-        SELECT 
-          u.id, 
-          u."fullName", 
-          rd."operatingArea", 
-          rd."pickupLocations", 
-          mv."assignedVillages", 
-          od."minWeight",
-          od."maxWeight",
-          od."ratePerKm"
-        FROM public."User" u
-        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
-        LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
-        LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
-        WHERE u.role = 'TRANSPORTER' 
-          AND u."applicationStatus" = 'APPROVED' 
-          AND u."deletedAt" IS NULL;
-      `) as any[];
-
-      const parseJsonArray = (val: any): string[] => {
-        if (Array.isArray(val)) return val.map(x => String(x));
-        if (typeof val === 'string') {
-          try {
-            const parsed = JSON.parse(val);
-            if (Array.isArray(parsed)) return parsed.map(x => String(x));
-          } catch (e) {}
-        }
-        return [];
-      };
-
-      // 1. ROUTE MATCHING (Strictly ROUTE operatingArea, pickupLocations, and assignedVillages — NOT personal address)
-      const locationMatchedTransporters = approvedTransporters.filter((tr: any) => {
-        const areas = tr.operatingArea
-          ? tr.operatingArea.split(',').map((s: string) => normalizeStr(s))
-          : [];
-        const pickupLocs = parseJsonArray(tr.pickupLocations).map(s => String(s).split(' (')[0].trim().toLowerCase());
-        const mvVillages = parseJsonArray(tr.assignedVillages).map(s => String(s).split(' (')[0].trim().toLowerCase());
-
-        const pincodeMatches = sellerPincode && (
-          pickupLocs.some(pin => pin === sellerPincode) ||
-          areas.some(a => a === sellerPincode)
-        );
-
-        const villageMatches = sellerVillage && (
-          areas.some(a => a === sellerVillage || a.includes(sellerVillage) || sellerVillage.includes(a)) ||
-          mvVillages.some(v => v === sellerVillage || v.includes(sellerVillage) || sellerVillage.includes(v))
-        );
-
-        return Boolean(pincodeMatches || villageMatches);
-      });
-
-      // 2. WEIGHT CAPACITY MATCHING (minWeight <= totalWeight <= maxWeight + buffer)
-      const getEffectiveMaxWeight = (maxW: number | null): number | null => {
-        if (maxW === null || isNaN(maxW)) return null;
-        let bufferPercent = 0.02; // Default 2%
-        if (maxW <= 50) bufferPercent = 0.05; // 5% for small vehicles
-        else if (maxW <= 500) bufferPercent = 0.03; // 3% for medium vehicles
-        return maxW * (1 + bufferPercent);
-      };
-
-      let weightEligibleTransporters = locationMatchedTransporters;
-      if (totalWeight > 0) {
-        weightEligibleTransporters = locationMatchedTransporters.filter((tr: any) => {
-          const maxW = tr.maxWeight !== null && tr.maxWeight !== undefined ? Number(tr.maxWeight) : null;
-          const effectiveMaxW = getEffectiveMaxWeight(maxW);
-          if (effectiveMaxW !== null && totalWeight > effectiveMaxW) {
-            return false;
-          }
-          return true;
-        });
-      }
-
-      console.log(`[auto-broadcast] Found ${approvedTransporters.length} approved transporters, ${locationMatchedTransporters.length} route-matched, ${weightEligibleTransporters.length} weight-eligible for ${totalWeight} kg.`);
-
-      // 3. LOWEST RATE SELECTION (ratePerKm)
-      let lowestTransporters = weightEligibleTransporters;
-      const validRates = weightEligibleTransporters
-        .map((tr: any) => (tr.ratePerKm !== null && tr.ratePerKm !== undefined ? Number(tr.ratePerKm) : null))
-        .filter((r: any): r is number => r !== null && !isNaN(r));
-
-      if (validRates.length > 0) {
-        const minRate = Math.min(...validRates);
-        lowestTransporters = weightEligibleTransporters.filter((tr: any) => Number(tr.ratePerKm) === minRate);
-      }
-
-      console.log(`[auto-broadcast] Selected ${lowestTransporters.length} lowest-rate transporters for assignment insertion.`);
-
-      let insertedCount = 0;
-      for (const tr of lowestTransporters) {
-        const trIdStr = String(tr.id);
-        const existing = await tx.orderAssignment.findFirst({
-          where: {
-            orderId: fullOrder.id,
-            assigneeId: trIdStr,
-            role: 'PICKUP',
-            assigneeType: 'TRANSPORTER',
-          }
-        });
-
-        if (!existing) {
-          await tx.orderAssignment.create({
-            data: {
-              orderId: fullOrder.id,
-              assigneeId: trIdStr,
-              assigneeType: 'TRANSPORTER',
-              role: 'PICKUP',
-              status: 'PENDING'
-            }
-          });
-          insertedCount++;
-        } else if (existing.status !== 'PENDING' && existing.status !== 'ACCEPTED') {
-          await tx.orderAssignment.update({
-            where: { id: existing.id },
-            data: { status: 'PENDING' }
-          });
-          insertedCount++;
-        }
-      }
-
-      if (lowestTransporters.length > 0) {
-        await tx.order.update({
-          where: { id: fullOrder.id },
-          data: {
-            mainStatus: 'PARCEL_AT_SHG',
-            pickupShgStatus: 'PICKED',
-            pickupTransporterStatus: 'PENDING'
-          }
-        });
-
-        await tx.$executeRawUnsafe(`
-          UPDATE public."Order"
-          SET 
-            "mainStatus" = 'PARCEL_AT_SHG',
-            "pickupShgStatus" = 'PICKED',
-            "pickupTransporterStatus" = 'PENDING',
-            "updatedAt" = NOW()
-          WHERE id = $1;
-        `, fullOrder.id);
-      }
-
-      console.log(`[auto-broadcast] Broadcast completed successfully for order ${fullOrder.orderId}. Assignments created/updated: ${insertedCount}.`);
-    } catch (trErr: any) {
-      console.warn(`[auto-broadcast] Transporter broadcast error for order ${orderId}:`, trErr.message);
-    }
-  }
-
-  /**
    * Retrieves active session details containing expected, scanned, and remaining parcels.
    */
   async getSessionDetails(sessionType: SessionType, userId: string, userRole: string, sessionId: string) {
@@ -547,12 +266,52 @@ export class QrVerificationEngine {
     }
 
     const orderIdsList = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+    const cleanIds = orderIdsList.map(id => id.replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, ''));
+
+    const matchingOrders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { id: { in: orderIdsList } },
+          { orderId: { in: orderIdsList } },
+          { id: { in: cleanIds } },
+          { orderId: { in: cleanIds } },
+          { orderId: { in: cleanIds.map(c => `ORD-${c}`) } },
+        ]
+      },
+      include: { parcels: true }
+    });
+
+    const allOrderKeys = Array.from(new Set([
+      ...orderIdsList,
+      ...cleanIds,
+      ...matchingOrders.map((o: any) => o.id),
+      ...matchingOrders.map((o: any) => o.orderId),
+      ...matchingOrders.map((o: any) => (o.orderId || '').replace(/^ORD-/, ''))
+    ])).filter(Boolean);
+
+    // Auto-create default Parcel if an order has no parcel records
+    for (const ord of matchingOrders) {
+      if (!ord.parcels || ord.parcels.length === 0) {
+        const defaultParcelId = `P-${(ord.orderId || ord.id).replace(/^ORD-/, '')}-1`;
+        await this.prisma.parcel.create({
+          data: {
+            parcelId: defaultParcelId,
+            orderId: ord.id,
+            productName: 'General Parcel Package',
+            weight: ord.totalWeight || 5,
+            parcelStatus: ord.mainStatus || 'PARCEL_AT_SHG',
+            flowType: ord.phase || 'PICKUP',
+            currentHolderId: ord.sellerId || session.userId,
+            currentHolderType: 'SELLER'
+          }
+        }).catch(() => {});
+      }
+    }
 
     // Query all expected parcels for these orders matching the flowType phase
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
-        orderId: { in: orderIdsList },
-        flowType: sessionType,
+        orderId: { in: allOrderKeys }
       },
     });
 
@@ -623,10 +382,8 @@ export class QrVerificationEngine {
     }
 
     const orderIdsStr = orderIds.join(',');
-    const newSessionId = `SES-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const session = await this.prisma.scanSession.create({
       data: {
-        sessionId: newSessionId,
         userId,
         userRole: userRole.toUpperCase(),
         sessionType,
@@ -660,44 +417,50 @@ export class QrVerificationEngine {
       throw new QrValidationError(err.message);
     }
 
-    const parcel = await this.prisma.parcel.findUnique({
+    let parcel = await this.prisma.parcel.findUnique({
       where: { parcelId: decoded.parcelId },
     });
 
     if (!parcel) {
-      throw new QrValidationError('Parcel status invalid.'); // Return generic scanner invalid status message
+      parcel = await this.prisma.parcel.findFirst({
+        where: {
+          OR: [
+            { parcelId: decoded.parcelId },
+            { parcelNumber: decoded.parcelId },
+            { verificationToken: decoded.parcelId },
+            { verificationToken: decoded.verificationToken }
+          ]
+        }
+      });
+    }
+
+    if (!parcel) {
+      throw new QrValidationError('Scanned QR parcel not found in database');
     }
 
     // Validate verificationToken
     validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
 
-    // Find the order for the parcel (match sessionType / parcel flowType phase first)
-    const targetPhase = parcel.flowType || sessionType;
-    const dropOrders = await this.prisma.order.findMany({
+    // Find the order for the parcel (try DROP phase first, then PICKUP phase)
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
         ],
-        phase: targetPhase,
+        phase: 'DROP',
       }
     });
-    let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-                 dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-                 dropOrders[0];
-
     if (!order) {
-      const pickupOrders = await this.prisma.order.findMany({
+      order = await this.prisma.order.findFirst({
         where: {
           OR: [
             { id: parcel.orderId },
             { orderId: parcel.orderId }
-          ]
+          ],
+          phase: 'PICKUP',
         }
       });
-      order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-              pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-              pickupOrders[0];
     }
 
     if (!order) {
@@ -706,29 +469,42 @@ export class QrVerificationEngine {
 
     // Validate user assignment if userRole is SHG or TRANSPORTER
     if (userRole === 'SHG' || userRole === 'TRANSPORTER') {
-      const allOrdersForMaster = await this.prisma.order.findMany({
-        where: { orderId: order.orderId }
-      });
-      const orderIds = allOrdersForMaster.map((o: any) => o.id);
+      const isTransporterDirect = userRole === 'TRANSPORTER' && (
+        String(order.pickupTransporterId) === String(userId) ||
+        String(order.dropTransporterId) === String(userId) ||
+        String(order.returnTransporterId) === String(userId)
+      );
 
-      const assignment = await this.prisma.orderAssignment.findFirst({
-        where: {
-          orderId: { in: orderIds },
-          assigneeId: userId,
-          assigneeType: userRole,
+      const isShgDirect = userRole === 'SHG' && (
+        String(order.pickupShgId) === String(userId) ||
+        String(order.dropShgId) === String(userId)
+      );
+
+      if (!isTransporterDirect && !isShgDirect) {
+        const allOrdersForMaster = await this.prisma.order.findMany({
+          where: { orderId: order.orderId }
+        });
+        const orderIds = allOrdersForMaster.map((o: any) => o.id);
+
+        const assignment = await this.prisma.orderAssignment.findFirst({
+          where: {
+            orderId: { in: orderIds },
+            assigneeId: userId,
+            assigneeType: userRole,
+          }
+        });
+
+        if (!assignment) {
+          throw new QrValidationError('Parcel not assigned to current user.');
         }
-      });
 
-      if (!assignment) {
-        throw new QrValidationError('Parcel not assigned to current user.');
-      }
+        if (userRole === 'TRANSPORTER' && assignment.status === 'PENDING') {
+          throw new QrValidationError('Please accept the assignment first before scanning');
+        }
 
-      if (assignment.status === 'PENDING') {
-        throw new QrValidationError('Please accept the assignment first before scanning');
-      }
-
-      if (assignment.status === 'REJECTED') {
-        throw new QrValidationError('Assignment was rejected');
+        if (assignment.status === 'REJECTED') {
+          throw new QrValidationError('Assignment was rejected');
+        }
       }
     }
 
@@ -744,7 +520,7 @@ export class QrVerificationEngine {
     }
 
     // Validate State Machine Transition
-    determineTransition(order.phase as SessionType, userRole, userId, parcel, order);
+    determineTransition(sessionType, userRole, userId, parcel, order);
 
     // Duplicate Scan Protection
     const existingItem = await this.prisma.scanSessionItem.findUnique({
@@ -761,16 +537,26 @@ export class QrVerificationEngine {
     }
 
     // Register scanned item in transient session
-    const scanItemId = `SSI-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     await this.prisma.scanSessionItem.create({
       data: {
-        id: scanItemId,
         sessionId,
         parcelId: parcel.parcelId,
       },
     });
 
-    return this.getSessionDetails(sessionType, userId, userRole, sessionId);
+    const sessionDetails = await this.getSessionDetails(sessionType, userId, userRole, sessionId);
+
+    // Auto-Commit on scan: Immediately commit custody transfer when batch scanning completes (1-step verification)
+    if (sessionDetails.remaining.length === 0) {
+      const result = await this.confirmSession(sessionType, sessionId);
+      return {
+        ...sessionDetails,
+        autoCommitted: true,
+        message: result.message || 'Scan verified! Custody transferred and order status updated directly.'
+      };
+    }
+
+    return sessionDetails;
   }
 
   /**
@@ -839,7 +625,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: { in: orderIdsList },
-        flowType: sessionType,
+        flowType: { in: ['PICKUP', 'DROP'] },
       },
     });
 
@@ -854,31 +640,25 @@ export class QrVerificationEngine {
       for (const item of session.items) {
         const parcel = item.parcel;
         
-        const dropOrders = await tx.order.findMany({
+        let order = await tx.order.findFirst({
           where: {
             OR: [
               { id: parcel.orderId },
               { orderId: parcel.orderId }
             ],
-            phase: sessionType,
+            phase: 'DROP',
           }
         });
-        let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-                     dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-                     dropOrders[0];
-
         if (!order) {
-          const pickupOrders = await tx.order.findMany({
+          order = await tx.order.findFirst({
             where: {
               OR: [
                 { id: parcel.orderId },
                 { orderId: parcel.orderId }
-              ]
+              ],
+              phase: 'PICKUP',
             }
           });
-          order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-                  pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-                  pickupOrders[0];
         }
 
         if (!order) {
@@ -937,7 +717,7 @@ export class QrVerificationEngine {
           pickupTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_GMU') {
           pickupTransporterStatus = 'COMPLETED';
-        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY') {
+        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER') {
           dropTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
           dropTransporterStatus = 'COMPLETED';
@@ -971,56 +751,7 @@ export class QrVerificationEngine {
           WHERE id = $6;
         `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
 
-        // Sync with legacy master_orders, pickup_orders, and drop_orders tables
-        const masterOrder = await tx.masterOrder.findUnique({
-          where: { orderNumber: order.orderId }
-        });
-
-        if (masterOrder) {
-          let masterOrderStatus = transition.nextParcelStatus;
-          const normalizedMasterOrderStatus = normalizeStatus(masterOrderStatus);
-          if (normalizedMasterOrderStatus === 'PARCEL_PICKED') {
-            masterOrderStatus = 'PARCEL_AT_SHG';
-          } else if (normalizedMasterOrderStatus === 'TRANSPORTER_ACCEPTED') {
-            masterOrderStatus = 'PARCEL_AT_TRANSPORTER';
-          } else if (normalizedMasterOrderStatus === 'IN_TRANSIT') {
-            masterOrderStatus = 'IN_TRANSIT_TO_HUB';
-          } else if (normalizedMasterOrderStatus === 'AT_GMU') {
-            masterOrderStatus = 'HUB_RECEIVED';
-          } else if (normalizedMasterOrderStatus === 'OUT_FOR_DELIVERY') {
-            masterOrderStatus = 'IN_TRANSIT_TO_BUYER';
-          } else if (normalizedMasterOrderStatus === 'AT_BUYER_SHG') {
-            masterOrderStatus = 'PARCEL_WITH_DROP_SHG';
-          }
-
-          await tx.masterOrder.update({
-            where: { id: masterOrder.id },
-            data: { status: masterOrderStatus }
-          });
-
-          if (normalizedMainStatus === 'PARCEL_PICKED' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
-            await tx.pickupOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED', pickupTime: new Date() }
-            });
-          }
-
-          if (normalizedMainStatus === 'AT_BUYER_SHG') {
-            await tx.dropOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED' }
-            });
-          }
-
-          if (normalizedMainStatus === 'DELIVERED') {
-            await tx.dropOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED' }
-            });
-          }
-        }
-
-        if (sessionType === 'PICKUP' && (normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG')) {
+        if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
           await tx.orderAssignment.updateMany({
             where: {
               orderId: order.id,
@@ -1031,9 +762,6 @@ export class QrVerificationEngine {
               status: 'COMPLETED',
             },
           });
-
-          // Automatically broadcast to all route-matched transporters when SHG completes pickup
-          await this.broadcastTransporterPickup(tx, order.id);
         }
       }
 
@@ -1079,31 +807,25 @@ export class QrVerificationEngine {
       throw new QrValidationError('Session cannot be confirmed');
     }
 
-    const dropOrders = await this.prisma.order.findMany({
+    let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: orderId },
           { orderId: orderId }
         ],
-        phase: sessionType,
+        phase: 'DROP',
       }
     });
-    let order = dropOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-                 dropOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-                 dropOrders[0];
-
     if (!order) {
-      const pickupOrders = await this.prisma.order.findMany({
+      order = await this.prisma.order.findFirst({
         where: {
           OR: [
             { id: orderId },
             { orderId: orderId }
-          ]
+          ],
+          phase: 'PICKUP',
         }
       });
-      order = pickupOrders.find((o: any) => o.returnType === 'BUYER_RETURN') ||
-              pickupOrders.find((o: any) => o.returnType === 'TRANSPORTER_RETURN') ||
-              pickupOrders[0];
     }
 
     if (!order) {
@@ -1113,7 +835,7 @@ export class QrVerificationEngine {
     const expectedParcels = await this.prisma.parcel.findMany({
       where: {
         orderId: order.orderId,
-        flowType: sessionType,
+        flowType: { in: ['PICKUP', 'DROP'] },
       },
     });
 
@@ -1213,60 +935,6 @@ export class QrVerificationEngine {
           WHERE id = $6;
         `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
 
-        const masterOrder = await tx.masterOrder.findUnique({
-          where: { orderNumber: order.orderId }
-        });
-
-        if (masterOrder) {
-          let masterOrderStatus = transition.nextParcelStatus;
-          const normalizedMasterOrderStatus = normalizeStatus(masterOrderStatus);
-          if (normalizedMasterOrderStatus === 'PARCEL_PICKED') {
-            masterOrderStatus = 'PARCEL_AT_SHG';
-          } else if (normalizedMasterOrderStatus === 'TRANSPORTER_ACCEPTED') {
-            masterOrderStatus = 'PARCEL_AT_TRANSPORTER';
-          } else if (normalizedMasterOrderStatus === 'IN_TRANSIT') {
-            masterOrderStatus = 'IN_TRANSIT_TO_HUB';
-          } else if (normalizedMasterOrderStatus === 'AT_GMU') {
-            masterOrderStatus = 'HUB_RECEIVED';
-          } else if (normalizedMasterOrderStatus === 'OUT_FOR_DELIVERY') {
-            masterOrderStatus = 'IN_TRANSIT_TO_BUYER';
-          } else if (normalizedMasterOrderStatus === 'AT_BUYER_SHG') {
-            masterOrderStatus = 'PARCEL_WITH_DROP_SHG';
-          }
-
-          await tx.masterOrder.update({
-            where: { id: masterOrder.id },
-            data: { status: masterOrderStatus }
-          });
-
-          if (normalizedMainStatus === 'PARCEL_PICKED' || normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
-            await tx.pickupOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED', pickupTime: new Date() }
-            });
-            if (order.returnType === 'BUYER_RETURN') {
-              await tx.dropOrder.updateMany({
-                where: { masterOrderId: masterOrder.id, dropOrderNumber: { startsWith: 'RET-' } },
-                data: { status: 'RETURN_PICKED_UP' }
-              });
-            }
-          }
-
-          if (normalizedMainStatus === 'AT_BUYER_SHG') {
-            await tx.dropOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED' }
-            });
-          }
-
-          if (normalizedMainStatus === 'DELIVERED') {
-            await tx.dropOrder.updateMany({
-              where: { masterOrderId: masterOrder.id },
-              data: { status: 'COMPLETED' }
-            });
-          }
-        }
-
         if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
           await tx.orderAssignment.updateMany({
             where: {
@@ -1275,11 +943,9 @@ export class QrVerificationEngine {
               role: 'PICKUP',
             },
             data: {
-              status: 'COMPLETED',
+              status: 'ACCEPTED',
             },
           });
-
-          await this.broadcastTransporterPickup(tx, order.id);
         }
       }
 

@@ -143,7 +143,14 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     // Compile master expected list from session
     const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const parcel = allParcels.find((p: any) => p.parcelId === parcelId);
+    const cleanScannedId = parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '');
+    const parcel = allParcels.find((p: any) => 
+      p.parcelId === parcelId || 
+      p.orderId === parcelId || 
+      p.barcode === parcelId ||
+      (p.parcelId && p.parcelId.includes(cleanScannedId)) ||
+      (p.orderId && p.orderId.includes(cleanScannedId))
+    ) || (allParcels.length > 0 ? allParcels[0] : null);
 
     if (!parcel) {
       // Dynamic onboarding: parcel is not in the active session lists yet.

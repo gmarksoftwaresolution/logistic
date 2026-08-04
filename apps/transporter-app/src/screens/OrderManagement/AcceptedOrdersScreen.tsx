@@ -96,9 +96,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   };
 
   const getCounts = (b: BatchOrder) => {
-    const pickup = b.products.filter(p => p.status === 'pending').length;
-    const drop = b.products.filter(p => p.status === 'picked').length;
-    return { pickup, drop };
+    const total = b.products.length || 1;
+    return { pickup: total, drop: total };
   };
 
   // 1. Pickups Data
@@ -107,9 +106,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     const pickupBatches = batches.filter((b) => b.status === 'ACCEPTED_PICKUP');
     const pickupDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
     pickupBatches.forEach(b => {
-      if (b.products.some(p => p.status === 'pending')) {
-        pickupDisplayEntries.push({ batch: b, type: 'pickup' });
-      }
+      pickupDisplayEntries.push({ batch: b, type: 'pickup' });
     });
 
     const pickupGroupedEntries: Record<string, typeof pickupDisplayEntries> = {};
@@ -143,8 +140,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     const allFoundDropAreas = Object.keys(dropGroupedEntries);
     const dropAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => dropGroupedEntries[a]), ...allFoundDropAreas]));
 
-    const totalPickups = pickupBatches.filter(b => b.products.some(p => p.status === 'pending')).length;
-    const totalDrops = dropBatches.length;
+    const totalPickups = pickupDisplayEntries.length;
+    const totalDrops = dropDisplayEntries.length;
 
     const pickupOrderIds = Array.from(new Set(
       pickupBatches.map(b => String(b.displayId || ''))
@@ -378,13 +375,6 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         <FloatingScannerButton
           module="PICKUP"
           orderIds={pickupOrderIds}
-          navigation={navigation}
-        />
-      )}
-      {activeTab === 'drop' && (
-        <FloatingScannerButton
-          module="DROP"
-          orderIds={dropOrderIds}
           navigation={navigation}
         />
       )}

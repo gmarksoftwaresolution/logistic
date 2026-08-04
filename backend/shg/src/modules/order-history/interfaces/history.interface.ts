@@ -4,9 +4,11 @@ export interface IHistoryStats {
 }
 
 export interface IHistoryResponse {
-  success: boolean;
-  stats: IHistoryStats;
-  groupedOrders: any[]; // we'll use Prisma return types in the service, but keep interface generic or bind to entity
+  success?: boolean;
+  stats?: IHistoryStats;
+  groupedOrders?: any[];
+  items?: any[];
+  pagination?: any;
   meta?: {
     total: number;
     page: number;

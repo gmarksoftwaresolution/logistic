@@ -11,15 +11,13 @@ async function mapOrderToLegacy(prisma: any, order: any) {
       const rawItems: any[] = await prisma.$queryRawUnsafe(`
         SELECT 
           p.name as "productName",
-          p.category as "productCategory",
           p.weight as "productWeight",
-          moi.quantity,
-          moi.price
-        FROM public.master_orders mo
-        JOIN public.master_order_items moi ON mo.id = moi.master_order_id
-        JOIN public.products p ON moi.product_id = p.id
-        WHERE mo.order_number = $1
-      `, order.orderId);
+          1 as quantity,
+          p.category as "productCategory",
+          p.price
+        FROM public.products p
+        LIMIT 1
+      `);
 
       if (rawItems && rawItems.length > 0) {
         return rawItems.map((item: any) => ({
@@ -105,45 +103,20 @@ async function mapOrderToLegacy(prisma: any, order: any) {
         return trackingList;
       }
 
-      if (order.phase === 'DROP') {
-        const rawDropTracking: any[] = await prisma.$queryRawUnsafe(`
-          SELECT 
-            dt.status,
-            dt.remarks,
-            dt.updated_at as "updatedAt"
-          FROM public.drop_orders _do
-          JOIN public.drop_tracking dt ON _do.id = dt.drop_order_id
-          WHERE _do.drop_order_number = $1
-          ORDER BY dt.updated_at ASC
-        `, `DRP-${order.orderId}`);
-
-        if (rawDropTracking && rawDropTracking.length > 0) {
-          return rawDropTracking.map((t: any) => ({
-            status: t.status,
-            remarks: t.remarks,
-            updatedAt: t.updatedAt
-          }));
-        }
-      } else {
-        const rawTracking: any[] = await prisma.$queryRawUnsafe(`
-          SELECT 
-            pt.status,
-            pt.remarks,
-            pt.updated_at as "updatedAt"
-          FROM public.pickup_orders po
-          JOIN public.pickup_tracking pt ON po.id = pt.pickup_order_id
-          WHERE po.pickup_order_number = $1
-          ORDER BY pt.updated_at ASC
-        `, `PKP-${order.orderId}`);
-
-        if (rawTracking && rawTracking.length > 0) {
-          return rawTracking.map((t: any) => ({
-            status: t.status,
-            remarks: t.remarks,
-            updatedAt: t.updatedAt
-          }));
-        }
+      const scanHistory: any[] = await prisma.parcelScanHistory.findMany({
+        where: { orderId: order.orderId },
+        orderBy: { scanTime: 'asc' }
+      });
+      if (scanHistory && scanHistory.length > 0) {
+        return scanHistory.map((h: any) => ({
+          status: h.action || h.scanResult,
+          remarks: h.remarks || `Action by ${h.userRole || 'SYSTEM'}`,
+          updatedAt: h.scanTime
+        }));
       }
+      return [
+        { status: order.mainStatus, remarks: 'Order processing updated', updatedAt: order.updatedAt }
+      ];
     } catch (e) {
       console.error('Error fetching tracking in middleware:', e);
     }
@@ -157,93 +130,41 @@ async function mapOrderToLegacy(prisma: any, order: any) {
     ];
   };
 
+  const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+
   // 3. Fetch SHG Details dynamically
   const getShgDetails = async () => {
     try {
-      let activeShgId = null;
-      let activeShgRole = 'N/A';
       const isDrop = order.phase === 'DROP';
-      if (isDrop) {
-        activeShgId = order.dropShgId;
-        activeShgRole = 'DROP';
-      } else {
-        activeShgId = order.pickupShgId;
-        activeShgRole = 'PICKUP';
-      }
+      const activeShgId = isDrop ? order.dropShgId : order.pickupShgId;
+      const activeShgRole = isDrop ? 'DROP' : 'PICKUP';
 
       if (activeShgId) {
         const numericId = parseInt(activeShgId, 10);
-        if (!isNaN(numericId)) {
-          const shgUser = await prisma.user.findUnique({
-            where: { id: numericId },
-            include: {
-              shgDetail: true,
-              address: true,
-            }
-          });
-          if (shgUser) {
-            return {
-              id: String(shgUser.id),
-              name: shgUser.fullName || '',
-              mobile: shgUser.phoneNumber,
-              village: shgUser.address?.village || '',
-              pincode: shgUser.address?.pincode || '',
-              address: shgUser.address?.deliveryAddress || `${shgUser.address?.village || ''} ${shgUser.address?.taluka || ''} ${shgUser.address?.district || ''}`.trim(),
-              shgName: shgUser.shgDetail?.shgName || '',
-              role: activeShgRole,
-              status: shgUser.applicationStatus,
-            };
-          }
-        }
-      }
+        const orConditions: any[] = [];
+        if (!isNaN(numericId)) orConditions.push({ id: numericId });
+        if (isUuid(activeShgId)) orConditions.push({ authId: activeShgId });
+        orConditions.push({ uniqueCode: activeShgId });
 
-      if (order.orderId && !isDrop) {
-        const masterOrder = await prisma.masterOrder.findUnique({
-          where: { orderNumber: order.orderId },
+        const shgUser = await prisma.user.findFirst({
+          where: { OR: orConditions },
           include: {
-            pickupOrders: {
-              include: {
-                shg: {
-                  include: {
-                    shgDetail: true,
-                    address: true
-                  }
-                }
-              }
-            },
-            dropOrders: {
-              include: {
-                shg: {
-                  include: {
-                    shgDetail: true,
-                    address: true
-                  }
-                }
-              }
-            }
+            shgDetail: true,
+            address: true,
           }
         });
-
-        if (masterOrder) {
-          const associatedOrders = isDrop ? masterOrder.dropOrders : masterOrder.pickupOrders;
-          const activeAssOrder = associatedOrders.find((ao: any) => ao.shgId !== null);
-          if (activeAssOrder && activeAssOrder.shg) {
-            const shgUser = activeAssOrder.shg;
-            const shgDetail = shgUser.shgDetail;
-            const address = shgUser.address;
-
-            return {
-              id: '00000000-0000-0000-0000-' + String(shgUser.id).padStart(12, '0'),
-              name: shgUser.fullName || 'SHG Member',
-              mobile: shgUser.phoneNumber,
-              village: address?.village || '',
-              pincode: address?.pincode || '',
-              address: address?.deliveryAddress || `${address?.houseNo || ''} ${address?.village || ''} ${address?.taluka || ''} ${address?.district || ''}`.trim() || 'Local SHG Address',
-              shgName: shgDetail?.shgName || 'Local SHG',
-              role: activeShgRole,
-              status: shgUser.applicationStatus || 'APPROVED',
-            };
-          }
+        if (shgUser) {
+          return {
+            id: String(shgUser.id),
+            name: shgUser.fullName || '',
+            mobile: shgUser.phoneNumber,
+            village: shgUser.address?.village || '',
+            pincode: shgUser.address?.pincode || '',
+            address: shgUser.address?.deliveryAddress || `${shgUser.address?.village || ''} ${shgUser.address?.taluka || ''} ${shgUser.address?.district || ''}`.trim(),
+            shgName: shgUser.shgDetail?.shgName || '',
+            role: activeShgRole,
+            status: shgUser.applicationStatus,
+          };
         }
       }
     } catch (e) {
@@ -255,82 +176,33 @@ async function mapOrderToLegacy(prisma: any, order: any) {
   // 4. Fetch Transporter Details dynamically
   const getTransporterDetails = async () => {
     try {
-      let activeTransporterId = null;
       const isDrop = order.phase === 'DROP';
-      if (isDrop) {
-        activeTransporterId = order.dropTransporterId;
-      } else {
-        activeTransporterId = order.pickupTransporterId;
-      }
+      const activeTransporterId = isDrop ? order.dropTransporterId : order.pickupTransporterId;
 
       if (activeTransporterId) {
         const numericId = parseInt(activeTransporterId, 10);
-        if (!isNaN(numericId)) {
-          const transporterUser = await prisma.user.findUnique({
-            where: { id: numericId },
-            include: {
-              address: true,
-              transporterDetail: true,
-              otherDetails: true,
-            }
-          });
-          if (transporterUser) {
-            return {
-              id: String(transporterUser.id),
-              name: transporterUser.fullName || '',
-              mobile: transporterUser.phoneNumber,
-              address: transporterUser.address?.residentialAddress || `${transporterUser.address?.village || ''} ${transporterUser.address?.taluka || ''} ${transporterUser.address?.district || ''}`.trim(),
-              vehicleNumber: transporterUser.otherDetails?.[0]?.registrationNumber || '',
-              vehicleType: transporterUser.otherDetails?.[0]?.vehicleType || '',
-            };
-          }
-        }
-      }
+        const orConditions: any[] = [];
+        if (!isNaN(numericId)) orConditions.push({ id: numericId });
+        if (isUuid(activeTransporterId)) orConditions.push({ authId: activeTransporterId });
+        orConditions.push({ uniqueCode: activeTransporterId });
 
-      if (order.orderId && !isDrop) {
-        const masterOrder = await prisma.masterOrder.findUnique({
-          where: { orderNumber: order.orderId },
+        const transporterUser = await prisma.user.findFirst({
+          where: { OR: orConditions },
           include: {
-            pickupOrders: {
-              include: {
-                transporter: {
-                  include: {
-                    transporterDetail: true,
-                    address: true
-                  }
-                }
-              }
-            },
-            dropOrders: {
-              include: {
-                transporter: {
-                  include: {
-                    transporterDetail: true,
-                    address: true
-                  }
-                }
-              }
-            }
+            address: true,
+            transporterDetail: true,
+            otherDetails: true,
           }
         });
-
-        if (masterOrder) {
-          const associatedOrders = isDrop ? masterOrder.dropOrders : masterOrder.pickupOrders;
-          const activeAssOrder = associatedOrders.find((ao: any) => ao.transporterId !== null);
-          if (activeAssOrder && activeAssOrder.transporter) {
-            const transUser = activeAssOrder.transporter;
-            const transDetail = transUser.transporterDetail;
-            const address = transUser.address;
-
-            return {
-              id: transUser.id,
-              name: transUser.fullName || 'Transporter',
-              mobile: transUser.phoneNumber,
-              address: address?.deliveryAddress || `${address?.village || ''} ${address?.taluka || ''} ${address?.district || ''}`.trim() || 'Transporter Address',
-              vehicleNumber: transDetail?.transporterCode || '',
-              vehicleType: transDetail?.vehicleCategory || '',
-            };
-          }
+        if (transporterUser) {
+          return {
+            id: String(transporterUser.id),
+            name: transporterUser.fullName || '',
+            mobile: transporterUser.phoneNumber,
+            address: transporterUser.address?.residentialAddress || `${transporterUser.address?.village || ''} ${transporterUser.address?.taluka || ''} ${transporterUser.address?.district || ''}`.trim(),
+            vehicleNumber: transporterUser.otherDetails?.[0]?.registrationNumber || '',
+            vehicleType: transporterUser.otherDetails?.[0]?.vehicleType || '',
+          };
         }
       }
     } catch (e) {

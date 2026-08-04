@@ -49,7 +49,7 @@ export interface Order {
   completedAt?: string;
   legType?: 'pickup' | 'drop';
   phase?: 'PICKUP' | 'DROP';
-  
+
   fromLocation?: string;
   toLocation?: string;
   rescheduledTime?: string;
@@ -148,109 +148,152 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || '');
   }
 
-    const dateObj = dbOrder.scheduledDateTime ? new Date(dbOrder.scheduledDateTime) : (dbOrder.createdAt ? new Date(dbOrder.createdAt) : new Date());
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const dateStr = `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-    const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateObj = dbOrder.scheduledDateTime ? new Date(dbOrder.scheduledDateTime) : (dbOrder.createdAt ? new Date(dbOrder.createdAt) : new Date());
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dateStr = `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+  const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
-    const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
+  const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
+  const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
 
-    const finalAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress));
-    const finalSourceAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress);
+  const finalAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress));
+  const finalSourceAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress);
 
-    let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
-    if (isGeneratedNewOrder) isReturnFlag = false;
-    if (isGeneratedReturn) isReturnFlag = true;
+  let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
+  if (isGeneratedNewOrder) isReturnFlag = false;
+  if (isGeneratedReturn) isReturnFlag = true;
 
-    return {
-      id: `${type}-${dbOrder.id}`,
-      orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
-      parcelName,
-      parcelWeight: dbOrder.parcelWeight,
-      recommendedVehicle: dbOrder.recommendedVehicle,
-      recommendedCapacity: dbOrder.recommendedCapacity,
-      otherSuitableVehicles: dbOrder.otherSuitableVehicles || [],
-      category,
-      mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
-      amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
-      payment: dbOrder.masterOrder?.paymentMethod || 'Online',
-      address: finalAddress,
-      sourceAddress: finalSourceAddress,
-      deliveryDay: dateStr,
-      date: dateStr,
-      status: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'assigned' :
-              (type === 'pickup') ? (
-                ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKUP_TRANSPORTER_ACCEPTED', 'RETURN_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? (
-                  ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER'].includes(dbOrder.masterOrder?.status || '') ? 'COMPLETED' : 'PickedUp'
-                ) : (
-                  (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' : 'COMPLETED'
-                )
-              ) : (
-                // Drop Leg logic
-                (dbOrder.status === 'ACCEPTED' || dbOrder.status === 'RETURN_ACCEPTED') ? 'Accepted' :
-                (dbOrder.status === 'PICKED_UP' || dbOrder.status === 'RETURN_PICKED_UP') ? 'PickedUp' : 'COMPLETED'
-              ),
-      isReturn: isReturnFlag,
-      barcode: dbOrder.barcode || dbOrder.masterOrder?.barcode || '',
-      image: items[0]?.product?.image || '',
-      currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
-      remainingQty: qty,
-      weight: orderItems.reduce((sum: number, i: any) => sum + ((i.product?.weight || 0) * (i.quantity || 1)), 0) || '',
-      distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
-      time: timeStr,
-      legType: type,
-      phase: type === 'drop' ? 'DROP' : 'PICKUP',
-      acceptedAt: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
-        : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
-      completedAt: type === 'pickup'
-        ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
-        : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
-      fromLocation: isGeneratedReturn
-        ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
-        : isGeneratedNewOrder
-          ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
-          : (type === 'drop' 
-            ? (actualPickupAddress || 'Transporter')
-            : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
-      toLocation: isGeneratedReturn
+  return {
+    id: `${type}-${dbOrder.id}`,
+    orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
+    parcelName,
+    parcelWeight: dbOrder.parcelWeight,
+    recommendedVehicle: dbOrder.recommendedVehicle,
+    recommendedCapacity: dbOrder.recommendedCapacity,
+    otherSuitableVehicles: dbOrder.otherSuitableVehicles || [],
+    category,
+    mobile: type === 'pickup' ? (dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || '') : (dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || ''),
+    amount: String(orderItems.reduce((sum: number, i: any) => sum + (i.quantity * (i.product?.price || 0)), 0)),
+    payment: dbOrder.masterOrder?.paymentMethod || 'Online',
+    address: finalAddress,
+    sourceAddress: finalSourceAddress,
+    deliveryDay: dateStr,
+    date: dateStr,
+    status: (() => {
+      const mStatus = dbOrder.mainStatus || dbOrder.masterOrder?.status || '';
+      const pStatus = dbOrder.status || dbOrder.mainStatus || '';
+      const shgStatus = dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '';
+
+      if (type === 'pickup') {
+        const isPickupCompleted = [
+          'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB',
+          'DELIVERED_TO_HUB', 'RETURN_DELIVERED_TO_HUB',
+          'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
+          'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU',
+          'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB',
+          'HUB_RECEIVED', 'STORED', 'DISPATCHED',
+          'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
+          'DELIVERED', 'COMPLETED',
+          'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
+          'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER',
+          'PARCEL_PICKED'
+        ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
+
+        if (isPickupCompleted) {
+          return 'COMPLETED';
+        }
+
+        const isPickedUpAtShg = [
+          'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
+          'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'
+        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
+
+        if (isPickedUpAtShg) {
+          return 'PickedUp';
+        }
+
+        if (pStatus === 'REJECTED') {
+          return 'REJECTED';
+        }
+
+        return 'Accepted';
+      } else {
+        // Drop leg mapping for SHG (Phase 2)
+        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+          return 'COMPLETED';
+        }
+
+        if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
+          return 'PickedUp';
+        }
+
+        if (pStatus === 'REJECTED') {
+          return 'REJECTED';
+        }
+
+        return 'Accepted';
+      }
+    })(),
+    isReturn: isReturnFlag,
+    barcode: dbOrder.barcode || dbOrder.masterOrder?.barcode || '',
+    image: items[0]?.product?.image || '',
+    currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
+    remainingQty: qty,
+    weight: orderItems.reduce((sum: number, i: any) => sum + ((i.product?.weight || 0) * (i.quantity || 1)), 0) || '',
+    distance: dbOrder.distance || dbOrder.masterOrder?.distance || '',
+    time: timeStr,
+    legType: type,
+    phase: type === 'drop' ? 'DROP' : 'PICKUP',
+    acceptedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
+    completedAt: type === 'pickup'
+      ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
+      : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+    fromLocation: isGeneratedReturn
+      ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
+      : isGeneratedNewOrder
+        ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
+        : (type === 'drop'
+          ? (actualPickupAddress || 'Transporter')
+          : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
+    toLocation: isGeneratedReturn
+      ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
+      : isGeneratedNewOrder
         ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-        : isGeneratedNewOrder
-          ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-          : (type === 'drop' 
-            ? (actualDropAddress || 'Buyer') 
-            : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
-      buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
-      sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
-      products: orderItems.map((item: any) => ({
-        code: `#P-${item.productId || item.id}`,
-        tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
-        name: item.product?.name || 'Item',
-        details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
-        weightValue: (item.product?.weight || 0) * item.quantity,
-        qty: item.quantity,
-        unit: item.product?.unit || 'kg',
-        price: item.product?.price || 0,
-        category: item.product?.category || 'FOOD',
-        itemId: item.id,
-        productId: item.productId,
-        verificationCode: item.verificationCode || '',
-        verificationStatus: item.verificationStatus || 'PENDING',
-      })),
-      transporterName: dbOrder.transporter?.fullName || '',
-      transporterMobile: dbOrder.transporter?.phoneNumber || '',
-      vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
-      transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
-      transporterAddress: dbOrder.transporter?.transporterAddress || '',
-      transporterRoute: dbOrder.transporter?.transporterRoute || '',
-      handoverCode: dbOrder.handoverCode || '',
-      isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
-      isDropRedirected: !!(dbOrder.isDropRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.dropShgStatus === 'REDIRECTED'),
-      isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
-      pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
-      dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
-    };
+        : (type === 'drop'
+          ? (actualDropAddress || 'Buyer')
+          : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
+    buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
+    sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
+    products: orderItems.map((item: any) => ({
+      code: `#P-${item.productId || item.id}`,
+      tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
+      name: item.product?.name || 'Item',
+      details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
+      weightValue: (item.product?.weight || 0) * item.quantity,
+      qty: item.quantity,
+      unit: item.product?.unit || 'kg',
+      price: item.product?.price || 0,
+      category: item.product?.category || 'FOOD',
+      itemId: item.id,
+      productId: item.productId,
+      verificationCode: item.verificationCode || '',
+      verificationStatus: item.verificationStatus || 'PENDING',
+    })),
+    transporterName: dbOrder.transporter?.fullName || '',
+    transporterMobile: dbOrder.transporter?.phoneNumber || '',
+    vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
+    transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
+    transporterAddress: dbOrder.transporter?.transporterAddress || '',
+    transporterRoute: dbOrder.transporter?.transporterRoute || '',
+    handoverCode: dbOrder.handoverCode || '',
+    isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
+    isDropRedirected: !!(dbOrder.isDropRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.dropShgStatus === 'REDIRECTED'),
+    isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
+    pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
+    dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
+  };
 };
 
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -313,7 +356,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
 
       const localRescheduledStr = await AsyncStorage.getItem('rescheduled_orders');
-      const localRescheduled: Record<string, {date: string, time: string, reason: string}> = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
+      const localRescheduled: Record<string, { date: string, time: string, reason: string }> = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
 
       // 1. Fetch live assigned pickups
       const pickupResponse = await axiosInstance.get('/orders/new/assigned');
@@ -339,10 +382,38 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.warn('Failed to fetch completed orders:', err);
       }
 
+      let rawRejected: any = { newOrders: [], returnOrders: [] };
+      try {
+        const rejectedRes = await axiosInstance.get('/orders/rejected');
+        rawRejected = rejectedRes.data || { newOrders: [], returnOrders: [] };
+      } catch (err) {
+        console.warn('Failed to fetch rejected orders:', err);
+      }
+
+      // Auto-accept any assigned PENDING / RETURN_PENDING pickups & returns on backend
+      rawPickups.forEach((o: any) => {
+        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+          axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => { });
+        }
+      });
+
+      rawReturns.forEach((o: any) => {
+        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+          axiosInstance.post(`/orders/returns/${o.id}/accept`).catch(() => { });
+        }
+      });
+
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
-        if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
+        if (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED') {
+          order.status = 'COMPLETED';
+          const pIdx = localPickedUp.indexOf(order.id);
+          if (pIdx !== -1) {
+            localPickedUp.splice(pIdx, 1);
+            AsyncStorage.setItem('picked_up_pickups', JSON.stringify(localPickedUp)).catch(() => { });
+          }
+        } else if (order.status === 'Accepted' && localPickedUp.includes(order.id)) {
           order.status = 'PickedUp';
         }
         return order;
@@ -485,10 +556,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setReturnedOrders(mappedReturned);
 
-      // Completed = Everything Completed from Dedicated Endpoints
+      // Completed = Everything Completed from Dedicated Endpoints + COMPLETED mapped orders
       const mappedCompletedNew = (rawCompleted.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
-      const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
+      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED');
+      const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
       const uniqueCompletedMap = new Map<string, Order>();
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));
       setDeliveredOrders(Array.from(uniqueCompletedMap.values()));
@@ -514,7 +586,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setAcceptedOrders([]);
             setDeliveredOrders([]);
             setPendingOrders([]);
-            
+
             setReturnedOrders([]);
           } else {
             await refreshOrdersList();
@@ -613,7 +685,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }));
       await clearLocalStateForOrders(orderIds);
       await refreshOrdersList();
-      
+
       setHighlightedOrders(prev => {
         const next = { ...prev };
         orderIds.forEach(id => { next[id] = 'new'; });
@@ -645,8 +717,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const rawId = Number(orderId.replace('pickup-', '').replace('drop-', ''));
         const isDelivery = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && order.legType === 'drop');
 
-        const endpoint = isDelivery 
-          ? '/orders/reschedule/delivery' 
+        const endpoint = isDelivery
+          ? '/orders/reschedule/delivery'
           : '/orders/reschedule';
 
         await axiosInstance.post(endpoint, {
@@ -686,7 +758,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
-      if (order.legType === 'pickup') {
+      const isPickupLeg = order.legType === 'pickup' || order.id.startsWith('pickup-');
+      if (isPickupLeg) {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
         const paramLegType = (activeType === 'transporter' || order.isReturn) ? 'handover' : 'pickup';
         await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });
@@ -750,10 +823,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       } else {
         const endpoint = `/orders/new/dilivery/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
-        
+
         const completedOrder = { ...order, status: 'COMPLETED' as any };
         localCompletedOrdersRef.current = [...localCompletedOrdersRef.current, completedOrder];
-        
+
         await refreshOrdersList();
       }
     } catch (error) {

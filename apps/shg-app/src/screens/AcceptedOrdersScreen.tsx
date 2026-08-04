@@ -52,8 +52,9 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
+  const initialTabParam = route.params?.initialTab as string | undefined;
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>(
-    route.params?.initialTab === 'drop' ? 'drop' : 'pickup'
+    (initialTabParam === 'drop' || initialTabParam === 'delivery') ? 'drop' : 'pickup'
   );
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -75,7 +76,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   // Sync tab index when navigating between routes or receiving new initialTab param
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    const isDelivery = route.params?.initialTab === 'drop';
+    const tabParam = route.params?.initialTab as string | undefined;
+    const isDelivery = tabParam === 'drop' || tabParam === 'delivery';
     setActiveTab(isDelivery ? 'drop' : 'pickup');
     timer = setTimeout(() => {
       scrollViewRef.current?.scrollTo({
@@ -115,20 +117,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleQRScan = (order: Order) => {
-    setModalConfig({
-      visible: true,
-      title: t('confirm_pickup') || "Confirm Pickup",
-      message: (t('confirm_pickup_message') || `Have you successfully collected and loaded the "{parcel}"?`).replace('{parcel}', order.parcelName),
-      confirmText: t('su_confirm_358') || 'Confirm',
-      onConfirm: async () => {
-        try {
-          await receiveOrder(order);
-          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
-        } catch (error) {
-          Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to confirm pickup' });
-        }
-      }
-    });
+    navigation.navigate('OrderDetails', { order });
   };
 
   const handleEyeDetails = (order: Order) => {
@@ -140,8 +129,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
     setModalConfig({
       visible: true,
       title: isDelivery ? 'Redirect Delivery to Buyer?' : 'Redirect Pickup to Transporter?',
-      message: isDelivery 
-        ? 'Are you sure you want to redirect this delivery directly to Buyer Address via Transporter?' 
+      message: isDelivery
+        ? 'Are you sure you want to redirect this delivery directly to Buyer Address via Transporter?'
         : 'Are you sure you want to redirect this pickup directly from Seller Shop to Transporter?',
       confirmText: 'Confirm Redirect',
       onConfirm: async () => {
@@ -186,9 +175,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity
           onPress={() => handleTabPress('pickup')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'
-          }`}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
           style={activeTab === 'pickup' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
@@ -202,18 +190,16 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             size={16}
             color={activeTab === 'pickup' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
-          }`}>
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
+            }`}>
             {t("tab_pickup")}
           </Text>
-          <View 
+          <View
             className="px-2.5 py-0.5 rounded-full ml-2"
             style={activeTab === 'pickup' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
-            <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
-            }`}>
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'
+              }`}>
               {pickupOrders.length}
             </Text>
           </View>
@@ -223,9 +209,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity
           onPress={() => handleTabPress('drop')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
-            activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'
-          }`}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'
+            }`}
           style={activeTab === 'drop' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
@@ -239,18 +224,16 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             size={16}
             color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${
-            activeTab === 'drop' ? 'text-white' : 'text-slate-500'
-          }`}>
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'
+            }`}>
             Drop
           </Text>
-          <View 
+          <View
             className="px-2.5 py-0.5 rounded-full ml-2"
             style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
-            <Text className={`text-[10px] font-extrabold ${
-              activeTab === 'drop' ? 'text-white' : 'text-slate-500'
-            }`}>
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'
+              }`}>
               {deliveryOrders.length}
             </Text>
           </View>
@@ -278,7 +261,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             pickupOrders.length === 0 ? (
-              <View 
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -326,7 +309,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           ListFooterComponent={
             <>
               {pickupOrders.length > 0 && (
-                <ViewMoreButton 
+                <ViewMoreButton
                   totalCount={pickupOrders.length}
                   visibleCount={pickupVisibleCount}
                   onPress={() => setPickupVisibleCount(prev => prev + PAGE_SIZE)}
@@ -347,7 +330,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             deliveryOrders.length === 0 ? (
-              <View 
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -392,13 +375,14 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}
                 transporterId={item.transporterId}
+                verificationPending={item.legType === 'pickup'}
               />
             );
           }}
           ListFooterComponent={
             <>
               {deliveryOrders.length > 0 && (
-                <ViewMoreButton 
+                <ViewMoreButton
                   totalCount={deliveryOrders.length}
                   visibleCount={deliveryVisibleCount}
                   onPress={() => setDeliveryVisibleCount(prev => prev + PAGE_SIZE)}
@@ -440,13 +424,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
         <FloatingScannerButton
           module="PICKUP"
           orderIds={pickupOrders.map(o => o.orderId)}
-          navigation={navigation}
-        />
-      )}
-      {activeTab === 'drop' && (
-        <FloatingScannerButton
-          module="DROP"
-          orderIds={deliveryOrders.map(o => o.orderId)}
           navigation={navigation}
         />
       )}

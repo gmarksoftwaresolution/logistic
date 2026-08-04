@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards, Param, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -37,7 +37,7 @@ export class OrderController {
   @Post('new/:id/accept')
   @ApiOperation({ summary: 'Accept a pickup order (supports legType: drop to accept transporter deliveries)' })
   async acceptPickup(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('legType') legType?: 'pickup' | 'drop',
     @Body('selectedVehicleName') selectedVehicleName?: string,
@@ -54,7 +54,7 @@ export class OrderController {
   @Post(':id/redirect')
   @ApiOperation({ summary: 'Redirect an accepted order to Transporter (supports legType: pickup | drop)' })
   async redirectOrder(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('legType') legType?: 'pickup' | 'drop',
     @Body('reason') reason?: string,
@@ -72,7 +72,7 @@ export class OrderController {
   @Post('returns/:id/accept')
   @ApiOperation({ summary: 'Accept a return order (pickup or drop)' })
   async acceptReturn(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
   ) {
     return this.orderService.acceptDrop(id, user.id);
@@ -90,7 +90,7 @@ export class OrderController {
     }
   })
   async pickupReturn(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('code') code?: string,
   ) {
@@ -108,7 +108,7 @@ export class OrderController {
     }
   })
   async completeReturn(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('code') code?: string,
   ) {
@@ -128,7 +128,7 @@ export class OrderController {
     }
   })
   async completePickup(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('code') code?: string,
     @Body('legType') legType?: 'pickup' | 'drop',
@@ -144,7 +144,7 @@ export class OrderController {
   @Post('new/pickup/:id/generate-code')
   @ApiOperation({ summary: 'Generate verification code for pickup order' })
   async generateCode(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
   ) {
     return this.orderService.generateCode(id, user.id);
@@ -153,7 +153,7 @@ export class OrderController {
   @Post('new/pickup/:id/verify-codes')
   @ApiOperation({ summary: 'Verify product-wise codes for pickup order' })
   async verifyCodes(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('codes') codes: Record<number, string>,
   ) {
@@ -171,7 +171,7 @@ export class OrderController {
     }
   })
   async completeDrop(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @GetUser() user: User,
     @Body('code') code?: string,
   ) {

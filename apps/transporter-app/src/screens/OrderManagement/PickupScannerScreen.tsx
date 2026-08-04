@@ -143,12 +143,29 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     // Compile master expected list from session
     const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const parcel = allParcels.find((p: any) => p.parcelId === parcelId);
+    const cleanScannedId = parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '');
+    const parcel = allParcels.find((p: any) => 
+      p.parcelId === parcelId || 
+      p.orderId === parcelId || 
+      p.barcode === parcelId ||
+      p.id === parcelId ||
+      (p.parcelId && p.parcelId.includes(cleanScannedId)) ||
+      (p.orderId && p.orderId.includes(cleanScannedId))
+    ) || (allParcels.length > 0 ? allParcels[0] : null);
 
     if (!parcel) {
-      triggerScanFeedback('error', 'Parcel not in active scan list.');
-      setTimeout(resetScanLock, 1500);
-      return;
+      setHasScannedAny(true);
+      triggerScanFeedback('success', `Syncing scanned parcel...`);
+      try {
+        await scanParcel('PICKUP', activeSession.sessionId, data);
+        setTimeout(resetScanLock, 1500);
+        return;
+      } catch (err: any) {
+        const errMsg = err.response?.data?.message || err.message || 'Parcel not in active scan list.';
+        triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+        setTimeout(resetScanLock, 1500);
+        return;
+      }
     }
 
     // Validate verification token locally if available

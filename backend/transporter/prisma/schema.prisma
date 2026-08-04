@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -121,6 +120,11 @@ model Order {
 
   @@index([orderId])
   @@index([barcode])
+  @@index([mainStatus, phase])
+  @@index([pickupShgId])
+  @@index([pickupTransporterId])
+  @@index([dropShgId])
+  @@index([dropTransporterId])
 }
 
 model OrderAssignment {
@@ -133,6 +137,9 @@ model OrderAssignment {
   status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([assigneeId, role, status])
+  @@index([orderId, assigneeType])
 }
 
 model User {
@@ -189,19 +196,8 @@ model User {
   stepTracking        StepTracking[]
   auditLogs           AuditLog[]
 
-  // New clean architecture relations
-  shgPickupOrders     PickupOrder[]       @relation("ShgPickupOrders")
-  transporterPickups  PickupOrder[]       @relation("TransporterPickupOrders")
-  
-  shgDropOrders       DropOrder[]         @relation("ShgDropOrders")
-  transporterDrops    DropOrder[]         @relation("TransporterDropOrders")
-
   @@index([phoneNumber])
   @@index([role])
-  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
-  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
-  return_order_assignments  return_order_assignments[]
-  return_order_scan_history return_order_scan_history[]
 }
 
 model Address {
@@ -505,98 +501,11 @@ model Product {
   weeklyProduction Float?
   createdAt   DateTime @default(now()) @map("created_at")
 
-  masterOrderItems   MasterOrderItem[]
-  pickupOrderItems   PickupOrderItem[]
   warehouseInventory WarehouseInventory[]
-  dropOrderItems     DropOrderItem[]
 
   @@index([sellerId])
   @@index([category])
   @@map("products")
-  returnOrderItems   ReturnOrderItem[]
-}
-
-model MasterOrder {
-  id            Int               @id @default(autoincrement())
-  orderNumber   String            @unique @map("order_number")
-  buyerId       Int               @map("buyer_id")
-  buyer         Buyer             @relation("BuyerOrders", fields: [buyerId], references: [id])
-  totalAmount   Float             @map("total_amount")
-  paymentMethod String?           @map("payment_method")
-  paymentStatus String            @default("PENDING") @map("payment_status")
-  status        String            @default("CREATED")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at")
-
-  items         MasterOrderItem[]
-  pickupOrders  PickupOrder[]
-  dropOrders    DropOrder[]
-
-  @@index([buyerId])
-  @@index([status])
-  @@map("master_orders")
-}
-
-model MasterOrderItem {
-  id            Int         @id @default(autoincrement())
-  masterOrderId Int         @map("master_order_id")
-  masterOrder   MasterOrder @relation(fields: [masterOrderId], references: [id])
-  productId     Int         @map("product_id")
-  product       Product     @relation(fields: [productId], references: [id])
-  sellerId      Int         @map("seller_id")
-  seller        Seller      @relation(fields: [sellerId], references: [id])
-  quantity      Int
-  price         Float
-
-  @@index([masterOrderId])
-  @@index([productId])
-  @@index([sellerId])
-  @@map("master_order_items")
-}
-
-model PickupOrder {
-  id                 Int               @id @default(autoincrement())
-  pickupOrderNumber  String?           @unique @map("pickup_order_number")
-  masterOrderId      Int               @map("master_order_id")
-  masterOrder        MasterOrder       @relation(fields: [masterOrderId], references: [id])
-  sellerId           Int               @map("seller_id")
-  seller             Seller            @relation(fields: [sellerId], references: [id])
-  shgId              Int?              @map("shg_id")
-  shg                User?             @relation("ShgPickupOrders", fields: [shgId], references: [id])
-  transporterId      Int?              @map("transporter_id")
-  transporter        User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
-  status             String            @default("PENDING")
-  pickupTime         DateTime?         @map("pickup_time")
-  handoverCode       String?           @map("handover_code")
-  createdAt          DateTime          @default(now()) @map("created_at")
-
-  items              PickupOrderItem[]
-  tracking           PickupTracking[]
-
-  @@index([masterOrderId])
-  @@index([sellerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("pickup_orders")
-}
-
-model PickupOrderItem {
-  id            Int         @id @default(autoincrement())
-  pickupOrderId Int         @map("pickup_order_id")
-  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
-  productId     Int         @map("product_id")
-  product       Product     @relation(fields: [productId], references: [id])
-  quantity      Int
-
-  verificationCode String?   @map("verification_code")
-  generatedTime    DateTime? @map("generated_time")
-  verifiedTime     DateTime? @map("verified_time")
-  verificationStatus String?  @default("PENDING") @map("verification_status")
-
-  @@index([pickupOrderId])
-  @@index([productId])
-  @@map("pickup_order_items")
 }
 
 model Warehouse {
@@ -621,80 +530,11 @@ model WarehouseInventory {
   dispatchedAt DateTime? @map("dispatched_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
+  @@unique([warehouseId, productId])
   @@index([warehouseId])
   @@index([productId])
   @@index([orderId])
   @@map("warehouse_inventory")
-}
-
-model DropOrder {
-  id              Int             @id @default(autoincrement())
-  dropOrderNumber String?         @unique @map("drop_order_number")
-  masterOrderId   Int             @map("master_order_id")
-  masterOrder     MasterOrder     @relation(fields: [masterOrderId], references: [id])
-  buyerId         Int             @map("buyer_id")
-  buyer           Buyer           @relation(fields: [buyerId], references: [id])
-  shgId           Int?            @map("shg_id")
-  shg             User?           @relation("ShgDropOrders", fields: [shgId], references: [id])
-  transporterId   Int?            @map("transporter_id")
-  transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
-  status          String          @default("PENDING")
-  deliveryAddress String?         @map("delivery_address")
-  handoverCode    String?         @map("handover_code")
-  createdAt       DateTime        @default(now()) @map("created_at")
-
-  items           DropOrderItem[]
-  tracking        DropTracking[]
-
-  @@index([masterOrderId])
-  @@index([buyerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("drop_orders")
-  returnOrders    ReturnOrder[]
-}
-
-model DropOrderItem {
-  id          Int       @id @default(autoincrement())
-  dropOrderId Int       @map("drop_order_id")
-  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
-  productId   Int       @map("product_id")
-  product     Product   @relation(fields: [productId], references: [id])
-  quantity    Int?
-
-  verificationCode String?   @map("verification_code")
-  generatedTime    DateTime? @map("generated_time")
-  verifiedTime     DateTime? @map("verified_time")
-  verificationStatus String?  @default("PENDING") @map("verification_status")
-
-  @@index([dropOrderId])
-  @@index([productId])
-  @@map("drop_order_items")
-}
-
-model PickupTracking {
-  id            Int         @id @default(autoincrement())
-  pickupOrderId Int         @map("pickup_order_id")
-  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
-  status        String?
-  remarks       String?
-  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
-
-  @@index([pickupOrderId])
-  @@map("pickup_tracking")
-}
-
-model DropTracking {
-  id          Int       @id @default(autoincrement())
-  dropOrderId Int       @map("drop_order_id")
-  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
-  status      String?
-  remarks     String?
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
-
-  @@index([dropOrderId])
-  @@map("drop_tracking")
 }
 
 model PincodeDirectory {
@@ -733,8 +573,6 @@ model Seller {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
-  masterOrderItems  MasterOrderItem[]
-  pickupOrders      PickupOrder[]
   orders            Order[]
 
   @@map("sellers")
@@ -757,12 +595,9 @@ model Buyer {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
-  masterOrders     MasterOrder[]     @relation("BuyerOrders")
-  dropOrders       DropOrder[]
   orders           Order[]
 
   @@map("buyers")
-  returnOrders ReturnOrder[]
 }
 
 model VerificationRecord {
@@ -894,221 +729,4 @@ model Earning {
   @@map("earnings")
 }
 
-model ReturnOrder {
-  id                        Int                         @id @default(autoincrement())
-  returnOrderNumber         String?                     @unique @map("return_order_number")
-  originalOrderId           Int                         @map("original_order_id")
-  buyerId                   Int                         @map("buyer_id")
-  shgId                     Int?                        @map("shg_id")
-  transporterId             Int?                        @map("transporter_id")
-  status                    String                      @default("RETURN_REQUESTED")
-  returnReason              String?                     @map("return_reason")
-  barcode                   String?                     @unique
-  createdAt                 DateTime                    @default(now()) @map("created_at")
-  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
-  return_order_assignments  return_order_assignments[]
-  items                     ReturnOrderItem[]
-  return_order_scan_history return_order_scan_history[]
-  return_order_timeline     return_order_timeline[]
-  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
-  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
-  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
-  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
-
-  @@index([originalOrderId])
-  @@index([buyerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("return_orders")
-}
-
-model ReturnOrderItem {
-  id            Int         @id @default(autoincrement())
-  returnOrderId Int         @map("return_order_id")
-  productId     Int         @map("product_id")
-  quantity      Int?
-  product       Product     @relation(fields: [productId], references: [id])
-  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
-
-  @@index([returnOrderId])
-  @@index([productId])
-  @@map("return_order_items")
-}
-
-model return_order_assignments {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  assignee_id     Int
-  assigneeType    String
-  status          String      @default("PENDING")
-  created_at      DateTime    @default(now())
-  updated_at      DateTime    @default(now())
-  User            User        @relation(fields: [assignee_id], references: [id])
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-
-  @@index([assignee_id])
-  @@index([return_order_id])
-}
-
-model return_order_scan_history {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  scanned_by      Int
-  userRole        String
-  scanResult      String
-  barcode         String
-  scanLocation    String?
-  timestamp       DateTime    @default(now())
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-  User            User        @relation(fields: [scanned_by], references: [id])
-
-  @@index([return_order_id])
-  @@index([scanned_by])
-}
-
-model return_order_timeline {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  status          String
-  remarks         String?
-  updated_at      DateTime    @default(now())
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-
-  @@index([return_order_id])
-}
-
-model CommunityMember {
-  id            String   @id @default(uuid())
-  memberCode    String?  @unique
-  type          String   // SHG, INDIVIDUAL
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt     DateTime @default(now())
-  approvedAt    DateTime?
-  rejectedAt    DateTime?
-
-  // Personal Details
-  profilePhoto      String?
-  fullName          String
-  mobileNumber      String
-  age               Int?
-  occupation        String?
-
-  // SHG Details
-  roleInShg         String?
-  shgName           String?
-  crpName           String?
-  crpMobile         String?
-  crpEmail          String?
-  leaderName        String?
-  leaderMobile      String?
-  groupSize         Int?
-  activeSince       String?
-
-  // Business Details
-  producesProducts  Boolean? @default(false)
-  businessTeamSize  Int?
-  productName       String?
-  productCategory   String?
-  dailyProduction   Float?
-  weeklyProduction  Float?
-  productionUnit    String?
-  pricePerUnit      Float?
-
-  // Address Details
-  houseNo           String?
-  deliveryAddress   String?
-  village           String?
-  taluka            String?
-  district          String?
-  state             String?
-  pincode           String?
-
-  // Document Details
-  aadhaarNumber     String?
-  panNumber         String?
-  aadhaarFrontPhoto String?
-  aadhaarBackPhoto  String?
-  panCardPhoto      String?
-
-  // Bank Details
-  accountHolderName String?
-  accountNumber     String?
-  ifscCode          String?
-  bankName          String?
-  branchName        String?
-  upiId             String?
-
-  // Storage Details
-  storageSpace      String?
-  storageWidth      Float?
-  storageHeight     Float?
-  storageDescription String?
-
-  // Vehicle Details
-  vehicleAvailable          Boolean? @default(false)
-  vehicleType               String?
-  vehicleRegistrationNumber String?
-  drivingLicenseNumber      String?
-  drivingLicensePhoto       String?
-  vehiclePhoto              String?
-}
-
-model TransporterMember {
-  id              String   @id @default(uuid())
-  transporterCode String?  @unique
-  type            String   // ROUTE_PARTNER, PERSONAL
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt       DateTime @default(now())
-  approvedAt      DateTime?
-  rejectedAt      DateTime?
-
-  // Personal Details
-  profilePhoto    String?
-  firstName       String
-  lastName        String
-  mobileNumber    String
-  email           String?
-
-  // Address Details
-  residentialAddress String?
-  village            String?
-  taluka             String?
-  district           String?
-  state              String?
-  pincode            String?
-
-  // Driving Details
-  licenseNumber      String?
-  licensePhoto       String?
-  licenseExpiryDate  DateTime?
-  experienceYears    Int?
-
-  // Bank Details
-  accountHolderName  String?
-  accountNumber      String?
-  ifscCode           String?
-  bankName           String?
-  branchName         String?
-  upiId              String?
-
-  // Vehicle Details
-  vehicleCategory       String?
-  vehicleType           String?
-  vehicleMake           String?
-  vehicleNumber         String?
-  vehicleRcPhoto        String?
-  vehicleInsurancePhoto String?
-
-  // Route Details
-  assignedPincodes   Json?
-  assignedVillages   Json?
-  morningShift       String?
-  eveningShift       String?
-  workingDays        Json?
-
-  // Milk Organization Details
-  milkOrganizationName String?
-  milkCenterName       String?
-}
 
