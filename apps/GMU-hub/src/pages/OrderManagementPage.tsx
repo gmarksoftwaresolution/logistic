@@ -1205,7 +1205,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
           'Intake Time': order.warehouseReceivedDate || 'N/A',
           'Stored Time': order.storedDate || 'N/A',
-          'Status': isHubCompleted ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
+          'Status': (isHubCompleted || order.mainStatus === 'STORED' || order.storedAt) ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
           'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
         }
       },

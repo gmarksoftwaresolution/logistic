@@ -775,7 +775,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const order = pickupAssignedOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) || 
                     pickupWarehouseOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
                     pickupNewOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
-                    inTransitOrdersList.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) as any;
+                    allOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) as any;
       const targetId = order?.uuid || order?.id || id;
       await api.orders.warehouseIntake(targetId);
     }

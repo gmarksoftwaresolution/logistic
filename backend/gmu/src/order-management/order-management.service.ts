@@ -1964,7 +1964,7 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async warehouseIntake(id: string) {
-    const order = await this.getOrderDetails(id);
+    const order = await this.getOrderDetails(id, 'PICKUP');
 
     await this.prisma.order.update({
       where: { id: order.id },
@@ -1981,7 +1981,7 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async storeInventory(id: string) {
-    const order = await this.getOrderDetails(id);
+    const order = await this.getOrderDetails(id, 'PICKUP');
 
     // 1. Update status to STORED
     const updated = await this.prisma.order.update({
@@ -2942,15 +2942,19 @@ export class OrderManagementService implements OnModuleInit {
     // Priority 1: Query ShgServiceArea table for active SHGs serving this exact Village + Pincode
     let serviceAreaShgs: any[] = [];
     if (ov && op) {
-      serviceAreaShgs = await this.prisma.$queryRawUnsafe(`
-        SELECT sa."shgUserId" as id, sa.village, sa.pincode
-        FROM public."ShgServiceArea" sa
-        JOIN public."User" u ON CAST(sa."shgUserId" AS INTEGER) = u.id
-        WHERE sa.status = 'ACTIVE' AND u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL
-          AND LOWER(REGEXP_REPLACE(sa.village, '[^a-zA-Z0-9]', '', 'g')) = $1
-          AND sa.pincode = $2 ${whereExcluded}
-        ORDER BY sa."isPrimary" DESC;
-      `, ov, op) as any[];
+      try {
+        serviceAreaShgs = await this.prisma.$queryRawUnsafe(`
+          SELECT sa."shgUserId" as id, sa.village, sa.pincode
+          FROM public."ShgServiceArea" sa
+          JOIN public."User" u ON sa."shgUserId"::text = u.id::text
+          WHERE sa.status = 'ACTIVE' AND u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL
+            AND LOWER(REGEXP_REPLACE(sa.village, '[^a-zA-Z0-9]', '', 'g')) = $1
+            AND sa.pincode = $2 ${whereExcluded}
+          ORDER BY sa."isPrimary" DESC;
+        `, ov, op) as any[];
+      } catch (err: any) {
+        console.warn(`[getMatchingShgs] Service area query note:`, err.message);
+      }
     }
 
     if (serviceAreaShgs.length > 0) {
@@ -2965,12 +2969,17 @@ export class OrderManagementService implements OnModuleInit {
       ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
       : '';
 
-    const approvedShgs = await this.prisma.$queryRawUnsafe(`
-      SELECT u.id, a.pincode, a.village, a."postOffice"
-      FROM public."User" u
-      JOIN public."Address" a ON u.id = a."userId"
-      WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcludedLegacy};
-    `) as any[];
+    let approvedShgs: any[] = [];
+    try {
+      approvedShgs = await this.prisma.$queryRawUnsafe(`
+        SELECT u.id, a.pincode, a.village, a."postOffice"
+        FROM public."User" u
+        JOIN public."Address" a ON u.id = a."userId"
+        WHERE u.role = 'SHG' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcludedLegacy};
+      `) as any[];
+    } catch (err: any) {
+      console.warn(`[getMatchingShgs] Address query note:`, err.message);
+    }
 
     // 1. Match on Pincode AND Village (Both must match)
     let matchingShgs = approvedShgs.filter(shg =>
@@ -3002,18 +3011,23 @@ export class OrderManagementService implements OnModuleInit {
     excludedIds: string[] = [],
     totalWeight?: number,
   ): Promise<any[]> {
-    const whereExcluded = excludedIds.length > 0
-      ? `AND u.id NOT IN (${excludedIds.map(id => `${id}`).join(', ')})`
-      : '';
+    let approvedTransporters: any[] = [];
+    try {
+      const whereExcluded = excludedIds.length > 0
+        ? `AND u.id::text NOT IN (${excludedIds.map(id => `'${id}'`).join(', ')})`
+        : '';
 
-    const approvedTransporters = await this.prisma.$queryRawUnsafe(`
-      SELECT u.id, a.village as "homeVillage", a.pincode as "homePincode", a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
-      FROM public."User" u
-      LEFT JOIN public."Address" a ON u.id = a."userId"
-      LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
-      LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
-      WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
-    `) as any[];
+      approvedTransporters = await this.prisma.$queryRawUnsafe(`
+        SELECT u.id, a.village as "homeVillage", a.pincode as "homePincode", a."postOffice", rd."operatingArea", rd."pickupLocations", od."minWeight", od."maxWeight", od."ratePerKm"
+        FROM public."User" u
+        LEFT JOIN public."Address" a ON u.id = a."userId"
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        LEFT JOIN public."OtherDetails" od ON u.id = od."userId"
+        WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL ${whereExcluded};
+      `) as any[];
+    } catch (err: any) {
+      console.warn(`[getMatchingTransporters] Raw query note:`, err.message);
+    }
 
     const parseJsonArray = (val: any) => {
       if (Array.isArray(val)) return val;

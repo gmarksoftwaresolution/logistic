@@ -222,9 +222,9 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         dropCount: 0,
         totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
         totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-        status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || '') || o.pickupTransporterStatus === 'DELIVERED_TO_HUB' || o.pickupTransporterStatus === 'DROPPED')
+        status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB'].includes(o.mainStatus || '') || o.pickupTransporterStatus === 'DELIVERED_TO_HUB' || o.pickupTransporterStatus === 'DROPPED' || o.pickupTransporterStatus === 'COMPLETED')
           ? 'DROP_COMPLETED'
-          : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
+          : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
             ? 'PICKUP_COMPLETED'
             : (o.transporterId || o.pickupTransporterId || o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
               ? 'ACCEPTED_PICKUP'
