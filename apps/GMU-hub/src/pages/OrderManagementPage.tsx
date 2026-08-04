@@ -1763,6 +1763,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 onRefresh={() => loadData(true)}
                 hideDateAndRefresh={true}
                 hideSearchAndFilters={true}
+                grabToScroll={true}
               />
             )}
           </div>

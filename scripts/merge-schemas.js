@@ -85,6 +85,10 @@ function merge() {
       '  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")',
       '  return_order_assignments  return_order_assignments[]',
       '  return_order_scan_history return_order_scan_history[]',
+      '  shgPickupOrders           PickupOrder[]               @relation("ShgPickupOrders")',
+      '  transporterPickups        PickupOrder[]               @relation("TransporterPickupOrders")',
+      '  shgDropOrders             DropOrder[]                 @relation("ShgDropOrders")',
+      '  transporterDrops          DropOrder[]                 @relation("TransporterDropOrders")',
     ];
     // check if they are already in userBlock
     fieldsToAdd.forEach(field => {
@@ -118,7 +122,9 @@ function merge() {
   const buyerBlock = mergedBlocks.get('Buyer');
   if (buyerBlock) {
     const fieldsToAdd = [
-      '  returnOrders ReturnOrder[]'
+      '  returnOrders ReturnOrder[]',
+      '  masterOrders MasterOrder[] @relation("BuyerOrders")',
+      '  dropOrders   DropOrder[]'
     ];
     fieldsToAdd.forEach(field => {
       const fieldName = field.trim().split(/\s+/)[0];
@@ -134,7 +140,10 @@ function merge() {
   const productBlock = mergedBlocks.get('Product');
   if (productBlock) {
     const fieldsToAdd = [
-      '  returnOrderItems   ReturnOrderItem[]'
+      '  returnOrderItems   ReturnOrderItem[]',
+      '  masterOrderItems   MasterOrderItem[]',
+      '  pickupOrderItems   PickupOrderItem[]',
+      '  dropOrderItems     DropOrderItem[]'
     ];
     fieldsToAdd.forEach(field => {
       const fieldName = field.trim().split(/\s+/)[0];
@@ -142,6 +151,23 @@ function merge() {
       if (!exists) {
         console.log(`Adding field '${fieldName}' to Product model`);
         productBlock.lines.splice(productBlock.lines.length - 1, 0, field);
+      }
+    });
+  }
+
+  // 5. Seller model updates
+  const sellerBlock = mergedBlocks.get('Seller');
+  if (sellerBlock) {
+    const fieldsToAdd = [
+      '  masterOrderItems  MasterOrderItem[]',
+      '  pickupOrders      PickupOrder[]'
+    ];
+    fieldsToAdd.forEach(field => {
+      const fieldName = field.trim().split(/\s+/)[0];
+      const exists = sellerBlock.lines.some(l => l.trim().startsWith(fieldName));
+      if (!exists) {
+        console.log(`Adding field '${fieldName}' to Seller model`);
+        sellerBlock.lines.splice(sellerBlock.lines.length - 1, 0, field);
       }
     });
   }
