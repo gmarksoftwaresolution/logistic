@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronLeft, ChevronRight, RefreshCcw, ChevronDown, Check } from 'lucide-react';
 import { TimeAgo } from './TimeAgo';
+import { useGrabScroll } from '../hooks/useGrabScroll';
 
 export interface Column<T> {
   header: string;
@@ -24,6 +25,7 @@ interface DataTableProps<T> {
   extraControls?: React.ReactNode;
   hideDateAndRefresh?: boolean;
   hideSearchAndFilters?: boolean;
+  grabToScroll?: boolean;
 }
 
 export function getStatusDisplayLabel(status: string): string {
@@ -212,7 +214,9 @@ export function DataTable<T extends Record<string, any>>({
   extraControls,
   hideDateAndRefresh = false,
   hideSearchAndFilters = false,
+  grabToScroll = true,
 }: DataTableProps<T>) {
+  const grabScrollRef = useGrabScroll(grabToScroll);
   const [searchTerm, setSearchTerm] = useState('');
   const [internalSelectedStatus, setInternalSelectedStatus] = useState<string>('all');
   const [internalSelectedDate, setInternalSelectedDate] = useState('');
@@ -504,7 +508,7 @@ export function DataTable<T extends Record<string, any>>({
 
       {/* Responsive Table Wrapper */}
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
-        <div className="overflow-x-auto min-h-[350px]">
+        <div ref={grabScrollRef} className="overflow-x-auto min-h-[350px]">
           <table className="w-full text-left text-sm border-collapse">
             <thead className="bg-slate-50 text-[#073318] border-b border-slate-200 uppercase tracking-wider text-[10px]">
               <tr>
@@ -525,20 +529,7 @@ export function DataTable<T extends Record<string, any>>({
                 currentItems.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
-                    className={`hover:bg-slate-50/50 transition-colors duration-150 ${onRowDoubleClick ? 'cursor-pointer select-none' : ''}`}
-                    onClick={(e) => {
-                      const target = e.target as HTMLElement;
-                      if (
-                        target.tagName === 'INPUT' ||
-                        target.closest('input') ||
-                        target.closest('button') ||
-                        target.closest('select') ||
-                        target.closest('a')
-                      ) {
-                        return;
-                      }
-                      onRowDoubleClick?.(row);
-                    }}
+                    className="hover:bg-slate-50/50 transition-colors duration-150"
                   >
                     {enrichedColumns.map((col, colIndex) => {
                       let cellContent: React.ReactNode;
