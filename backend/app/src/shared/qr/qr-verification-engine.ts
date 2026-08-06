@@ -1,0 +1,1009 @@
+export class QrValidationError extends Error {
+  constructor(message: string, public readonly statusCode: number = 400) {
+    super(message);
+    this.name = 'QrValidationError';
+  }
+}
+
+export type SessionType = 'PICKUP' | 'DROP';
+
+export interface QrContent {
+  parcelId: string;
+  verificationToken: string;
+  version: number;
+}
+
+export type ParcelStatus =
+  | 'CREATED'
+  | 'READY_FOR_PICKUP'
+  | 'PARCEL_PICKED'
+  | 'TRANSPORTER_ACCEPTED'
+  | 'IN_TRANSIT'
+  | 'AT_GMU'
+  | 'STORED'
+  | 'READY_FOR_DISPATCH'
+  | 'DROP_TRANSPORTER_ASSIGNED'
+  | 'OUT_FOR_DELIVERY'
+  | 'AT_BUYER_SHG'
+  | 'DELIVERED';
+
+/**
+ * Normalizes legacy status names to the standard 11-status state machine.
+ */
+export function normalizeStatus(status: string): ParcelStatus {
+  const map: Record<string, ParcelStatus> = {
+    'PENDING': 'READY_FOR_PICKUP',
+    'PARCEL_AT_SHG': 'PARCEL_PICKED',
+    'PARCEL_AT_TRANSPORTER': 'TRANSPORTER_ACCEPTED',
+    'IN_TRANSIT_TO_HUB': 'IN_TRANSIT',
+    'HUB_RECEIVED': 'AT_GMU',
+    'STORED': 'STORED',
+    'DISPATCHED': 'READY_FOR_DISPATCH',
+    'IN_TRANSIT_TO_BUYER': 'OUT_FOR_DELIVERY',
+    'PARCEL_AT_DROP_SHG': 'AT_BUYER_SHG',
+    'PARCEL_WITH_DROP_SHG': 'AT_BUYER_SHG',
+    'DELIVERED': 'DELIVERED',
+  };
+  return map[status] || (status as ParcelStatus);
+}
+
+/**
+ * Parses and decodes scanned QR code contents.
+ */
+export function decodeQrData(data: string): QrContent {
+  const trimmed = data.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed.parcelId) {
+        throw new QrValidationError('Invalid QR payload: missing parcelId');
+      }
+      return {
+        parcelId: parsed.parcelId,
+        verificationToken: parsed.verificationToken || '',
+        version: parsed.version || 1,
+      };
+    } catch (err: any) {
+      throw new QrValidationError('Malformed JSON in QR code: ' + err.message);
+    }
+  } else {
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 1) {
+      return {
+        parcelId: parts[0],
+        verificationToken: parts[1] || '',
+        version: 1,
+      };
+    }
+    throw new QrValidationError('Invalid QR code format');
+  }
+}
+
+/**
+ * Validates the scanned token against the token stored in database.
+ */
+export function validateVerificationToken(scannedToken: string, dbToken: string) {
+  if (scannedToken && dbToken && scannedToken !== dbToken) {
+    throw new QrValidationError('Verification token invalid');
+  }
+}
+
+export interface TransitionResult {
+  nextParcelStatus: string;
+  nextHolderId: string | null;
+  nextHolderType: string | null;
+  action: string;
+  message: string;
+}
+
+/**
+ * Determines the next state and ownership details for a scanned parcel.
+ */
+export function determineTransition(
+  sessionType: SessionType,
+  userRole: string,
+  userId: string,
+  parcel: any,
+  order: any,
+  legType?: string
+): TransitionResult {
+  const currentStatus: string = String(normalizeStatus(parcel.parcelStatus) || '').toUpperCase();
+  const finalRole = userRole.toUpperCase();
+
+  // Validate state machine transitions based on current status and user role
+  if (finalRole === 'SHG') {
+    // PHASE 2 (DROP): SHG receiving from Transporter or delivering to Buyer
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DROP_TRANSPORTER_ACCEPTED'].includes(order?.mainStatus)) {
+      const isFinalDelivery = legType === 'delivery' || parcel.parcelStatus === 'PARCEL_WITH_DROP_SHG' || parcel.parcelStatus === 'AT_BUYER_SHG';
+      if (isFinalDelivery) {
+        return {
+          nextParcelStatus: 'DELIVERED',
+          nextHolderId: String(order.buyerId),
+          nextHolderType: 'BUYER',
+          action: 'FINAL_DELIVERY',
+          message: 'Parcel delivered to Buyer by SHG',
+        };
+      } else {
+        return {
+          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
+          nextHolderId: userId,
+          nextHolderType: 'SHG',
+          action: 'SHG_DROP_PICKUP',
+          message: 'Parcel received by drop SHG from transporter (Transporter delivery completed)',
+        };
+      }
+    }
+
+    // PHASE 1 (PICKUP): SHG picking up from Seller
+    if (currentStatus === 'PENDING' || currentStatus === 'NEW' || currentStatus === 'ACCEPTED' || currentStatus === 'PARCEL_ASSIGNED' || currentStatus === 'READY_FOR_PICKUP' || currentStatus === 'PARCEL_AT_SHG' || (currentStatus === 'PARCEL_PICKED' && legType !== 'handover')) {
+      return {
+        nextParcelStatus: 'PARCEL_AT_SHG',
+        nextHolderId: userId,
+        nextHolderType: 'SHG',
+        action: 'SHG_PICKUP',
+        message: 'Parcel picked up from seller by SHG',
+      };
+    }
+    if (currentStatus === 'PARCEL_PICKED' && legType === 'handover') {
+      const nextHolder = order.pickupTransporterId ? String(order.pickupTransporterId) : 'TRANSPORTER';
+      return {
+        nextParcelStatus: 'PARCEL_AT_TRANSPORTER',
+        nextHolderId: nextHolder,
+        nextHolderType: 'TRANSPORTER',
+        action: 'SHG_TRANSPORTER_DELIVER',
+        message: 'Parcel delivered to Transporter by SHG',
+      };
+    }
+  }
+
+  if (finalRole === 'TRANSPORTER') {
+    // PHASE 2 (DROP): Transporter loading from GMU Hub for delivery to Drop SHG
+    if (order?.phase === 'DROP' || sessionType === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU'].includes(order?.mainStatus)) {
+      if (currentStatus === 'OUT_FOR_DELIVERY' || (currentStatus as string) === 'DISPATCHED') {
+        // Transporter dropping off at Buyer SHG
+        const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
+        return {
+          nextParcelStatus: 'PARCEL_AT_DROP_SHG',
+          nextHolderId: nextHolder,
+          nextHolderType: 'SHG',
+          action: 'TRANSPORTER_SHG_DELIVER',
+          message: 'Parcel delivered to Drop SHG by Transporter',
+        };
+      } else {
+        // Transporter loading from Hub for delivery -> DISPATCHED
+        return {
+          nextParcelStatus: 'DISPATCHED',
+          nextHolderId: userId,
+          nextHolderType: 'TRANSPORTER',
+          action: 'TRANSPORTER_DROP_PICKUP',
+          message: 'Parcel loaded for delivery by Transporter from Hub Warehouse (Dispatched)',
+        };
+      }
+    }
+
+    // PHASE 1 (PICKUP): Transporter loading from Pickup SHG to deliver to GMU Hub
+    if (currentStatus === 'PENDING' || currentStatus === 'PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED' || currentStatus === 'TRANSPORTER_ACCEPTED' || currentStatus === 'READY_FOR_PICKUP') {
+      return {
+        nextParcelStatus: 'IN_TRANSIT_TO_HUB',
+        nextHolderId: userId,
+        nextHolderType: 'TRANSPORTER',
+        action: 'TRANSPORTER_PICKUP',
+        message: 'Parcel loaded by Transporter from SHG',
+      };
+    }
+    if (currentStatus === 'IN_TRANSIT' || currentStatus === 'IN_TRANSIT_TO_HUB') {
+      return {
+        nextParcelStatus: 'HUB_RECEIVED',
+        nextHolderId: 'HUB',
+        nextHolderType: 'WAREHOUSE',
+        action: 'TRANSPORTER_HUB_DELIVER',
+        message: 'Parcel delivered to GMU Hub by Transporter',
+      };
+    }
+  }
+
+  if (finalRole === 'GMU' || finalRole === 'ADMIN' || finalRole === 'SUPER_ADMIN') {
+    if (currentStatus === 'IN_TRANSIT' || currentStatus === 'IN_TRANSIT_TO_HUB') {
+      return {
+        nextParcelStatus: 'HUB_RECEIVED',
+        nextHolderId: 'HUB',
+        nextHolderType: 'WAREHOUSE',
+        action: 'WAREHOUSE_INTAKE',
+        message: 'Parcel intake complete at GMU Hub',
+      };
+    }
+    if (currentStatus === 'AT_GMU' || currentStatus === 'HUB_RECEIVED') {
+      return {
+        nextParcelStatus: 'STORED',
+        nextHolderId: 'HUB_SHELF',
+        nextHolderType: 'WAREHOUSE',
+        action: 'WAREHOUSE_STORE',
+        message: 'Parcel stored in inventory',
+      };
+    }
+    if (currentStatus === 'STORED') {
+      return {
+        nextParcelStatus: 'DISPATCHED',
+        nextHolderId: 'HUB',
+        nextHolderType: 'WAREHOUSE',
+        action: 'WAREHOUSE_DISPATCH',
+        message: 'Parcel dispatched from GMU Hub',
+      };
+    }
+  }
+
+  // Safe fallback transition for SHG/TRANSPORTER to prevent state machine crashes
+  if (finalRole === 'SHG') {
+    return {
+      nextParcelStatus: 'PARCEL_AT_SHG',
+      nextHolderId: userId,
+      nextHolderType: 'SHG',
+      action: 'SHG_PICKUP',
+      message: 'Parcel picked up by SHG',
+    };
+  } else if (finalRole === 'TRANSPORTER') {
+    return {
+      nextParcelStatus: 'IN_TRANSIT_TO_HUB',
+      nextHolderId: userId,
+      nextHolderType: 'TRANSPORTER',
+      action: 'TRANSPORTER_PICKUP',
+      message: 'Parcel loaded by Transporter',
+    };
+  }
+
+  throw new QrValidationError('Parcel status invalid.');
+}
+
+/**
+ * Reusable QR Verification Engine implementation
+ */
+export class QrVerificationEngine {
+  constructor(private readonly prisma: any) {}
+
+  /**
+   * Retrieves active session details containing expected, scanned, and remaining parcels.
+   */
+  async getSessionDetails(sessionType: SessionType, userId: string, userRole: string, sessionId: string) {
+    const session = await this.prisma.scanSession.findUnique({
+      where: { sessionId },
+      include: {
+        items: {
+          include: {
+            parcel: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new QrValidationError('Session expired.');
+    }
+
+    // Validate that the scan session belongs to the requesting user and role
+    if (session.userId !== userId || session.userRole.toUpperCase() !== userRole.toUpperCase()) {
+      return null;
+    }
+
+    const orderIdsList = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+    const cleanIds = orderIdsList.map(id => id.replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, ''));
+
+    const matchingOrders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { id: { in: orderIdsList } },
+          { orderId: { in: orderIdsList } },
+          { id: { in: cleanIds } },
+          { orderId: { in: cleanIds } },
+          { orderId: { in: cleanIds.map(c => `ORD-${c}`) } },
+        ]
+      },
+      include: { parcels: true }
+    });
+
+    const allOrderKeys = Array.from(new Set([
+      ...orderIdsList,
+      ...cleanIds,
+      ...matchingOrders.map((o: any) => o.id),
+      ...matchingOrders.map((o: any) => o.orderId),
+      ...matchingOrders.map((o: any) => (o.orderId || '').replace(/^ORD-/, ''))
+    ])).filter(Boolean);
+
+    // Auto-create default Parcel if an order has no parcel records
+    for (const ord of matchingOrders) {
+      if (!ord.parcels || ord.parcels.length === 0) {
+        const defaultParcelId = `P-${(ord.orderId || ord.id).replace(/^ORD-/, '')}-1`;
+        await this.prisma.parcel.create({
+          data: {
+            parcelId: defaultParcelId,
+            orderId: ord.id,
+            productName: 'General Parcel Package',
+            weight: ord.totalWeight || 5,
+            parcelStatus: ord.mainStatus || 'PARCEL_AT_SHG',
+            flowType: ord.phase || 'PICKUP',
+            currentHolderId: ord.sellerId || session.userId,
+            currentHolderType: 'SELLER'
+          }
+        }).catch(() => {});
+      }
+    }
+
+    // Query all expected parcels for these orders matching the flowType phase
+    const expectedParcels = await this.prisma.parcel.findMany({
+      where: {
+        orderId: { in: allOrderKeys }
+      },
+    });
+
+    const scannedIds = new Set(session.items.map((i: any) => i.parcelId));
+
+    const orderIdToCleanMap = new Map<string, string>();
+    matchingOrders.forEach((o: any) => {
+      if (o.orderId) {
+        orderIdToCleanMap.set(o.id, o.orderId);
+        orderIdToCleanMap.set(o.orderId, o.orderId);
+        orderIdToCleanMap.set(o.id.replace(/^pickup-/, '').replace(/^drop-/, ''), o.orderId);
+      }
+    });
+
+    const scanned = session.items.map((item: any) => {
+      const displayId = orderIdToCleanMap.get(item.parcel.orderId) || (item.parcel.orderId.startsWith('ORD-') ? item.parcel.orderId : `ORD-${item.parcel.orderId.slice(0, 8)}`);
+      return {
+        parcelId: item.parcel.parcelId,
+        orderId: displayId,
+        displayOrderId: displayId,
+        productName: item.parcel.productName,
+        parcelNumber: item.parcel.parcelNumber,
+        totalParcels: item.parcel.totalParcels,
+        quantity: item.parcel.quantity,
+        weight: item.parcel.weight,
+        parcelStatus: item.parcel.parcelStatus,
+      };
+    });
+
+    const remaining = expectedParcels
+      .filter((p: any) => !scannedIds.has(p.parcelId))
+      .map((p: any) => {
+        const displayId = orderIdToCleanMap.get(p.orderId) || (p.orderId.startsWith('ORD-') ? p.orderId : `ORD-${p.orderId.slice(0, 8)}`);
+        return {
+          parcelId: p.parcelId,
+          orderId: displayId,
+          displayOrderId: displayId,
+          productName: p.productName,
+          parcelNumber: p.parcelNumber,
+          totalParcels: p.totalParcels,
+          quantity: p.quantity,
+          weight: p.weight,
+          parcelStatus: p.parcelStatus,
+        };
+      });
+
+    return {
+      sessionId: session.sessionId,
+      userId: session.userId,
+      userRole: session.userRole,
+      sessionType: session.sessionType,
+      status: session.status,
+      orderIds: orderIdsList,
+      totalExpected: expectedParcels.length,
+      totalScanned: scanned.length,
+      scanned,
+      remaining,
+    };
+  }
+
+  /**
+   * Starts or resumes a scan session.
+   */
+  async startSession(sessionType: SessionType, userId: string, userRole: string, orderIds: string[]) {
+    const existing = await this.prisma.scanSession.findFirst({
+      where: {
+        userId,
+        userRole: userRole.toUpperCase(),
+        sessionType,
+        status: 'IN_PROGRESS',
+      },
+    });
+
+    if (existing) {
+      const orderIdsStr = orderIds.join(',');
+      if (existing.orderIds !== orderIdsStr) {
+        await this.prisma.scanSession.update({
+          where: { sessionId: existing.sessionId },
+          data: {
+            orderIds: orderIdsStr,
+          },
+        });
+      }
+      return this.getSessionDetails(sessionType, userId, userRole.toUpperCase(), existing.sessionId);
+    }
+
+    const orderIdsStr = orderIds.join(',');
+    const session = await this.prisma.scanSession.create({
+      data: {
+        userId,
+        userRole: userRole.toUpperCase(),
+        sessionType,
+        status: 'IN_PROGRESS',
+        orderIds: orderIdsStr,
+      },
+    });
+
+    return this.getSessionDetails(sessionType, userId, userRole.toUpperCase(), session.sessionId);
+  }
+
+  /**
+   * Scans and validates a parcel inside a scan session.
+   */
+  async scanParcel(sessionType: SessionType, sessionId: string, qrData: string, user: any) {
+    const session = await this.prisma.scanSession.findUnique({
+      where: { sessionId },
+    });
+
+    if (!session || session.status !== 'IN_PROGRESS') {
+      throw new QrValidationError('Session expired.');
+    }
+
+    const userId = user?.id ? String(user.id) : session.userId;
+    const userRole = user?.role ? String(user.role).toUpperCase() : session.userRole.toUpperCase();
+
+    let decoded: QrContent;
+    try {
+      decoded = decodeQrData(qrData);
+    } catch (err: any) {
+      throw new QrValidationError(err.message);
+    }
+
+    const rawScan = String(qrData || '').trim();
+    const cleanScanId = rawScan.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '');
+
+    let parcel = await this.prisma.parcel.findFirst({
+      where: {
+        OR: [
+          { parcelId: decoded.parcelId },
+          { parcelId: rawScan },
+          { qrCodeValue: rawScan },
+          { qrCodeValue: decoded.parcelId },
+          { verificationToken: decoded.parcelId },
+          { verificationToken: decoded.verificationToken },
+          { orderId: rawScan },
+          { orderId: cleanScanId },
+          { orderId: `ORD-${cleanScanId}` },
+        ]
+      }
+    });
+
+    if (!parcel) {
+      throw new QrValidationError('Scanned QR parcel not found in database');
+    }
+
+    // Validate verificationToken
+    validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
+
+    // Find the order for the parcel (try DROP phase first, then PICKUP phase)
+    let order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: parcel.orderId },
+          { orderId: parcel.orderId }
+        ],
+        phase: 'DROP',
+      }
+    });
+    if (!order) {
+      order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: parcel.orderId },
+            { orderId: parcel.orderId }
+          ],
+          phase: 'PICKUP',
+        }
+      });
+    }
+
+    if (!order) {
+      throw new QrValidationError('Parcel order not found.');
+    }
+
+    // Validate user assignment if userRole is SHG or TRANSPORTER
+    if (userRole === 'SHG' || userRole === 'TRANSPORTER') {
+      const isTransporterDirect = userRole === 'TRANSPORTER' && (
+        String(order.pickupTransporterId) === String(userId) ||
+        String(order.dropTransporterId) === String(userId) ||
+        String(order.returnTransporterId) === String(userId)
+      );
+
+      const isShgDirect = userRole === 'SHG' && (
+        String(order.pickupShgId) === String(userId) ||
+        String(order.dropShgId) === String(userId)
+      );
+
+      if (!isTransporterDirect && !isShgDirect) {
+        const allOrdersForMaster = await this.prisma.order.findMany({
+          where: { orderId: order.orderId }
+        });
+        const orderIds = allOrdersForMaster.map((o: any) => o.id);
+
+        const assignment = await this.prisma.orderAssignment.findFirst({
+          where: {
+            orderId: { in: orderIds },
+            assigneeId: userId,
+            assigneeType: userRole,
+          }
+        });
+
+        if (!assignment) {
+          throw new QrValidationError('Parcel not assigned to current user.');
+        }
+
+        if (userRole === 'TRANSPORTER' && assignment.status === 'PENDING') {
+          throw new QrValidationError('Please accept the assignment first before scanning');
+        }
+
+        if (assignment.status === 'REJECTED') {
+          throw new QrValidationError('Assignment was rejected');
+        }
+      }
+    }
+
+    // Dynamic session order scoping: Add the scanned order to session.orderIds if not already there
+    const orderIdsList = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+    if (!orderIdsList.includes(order.orderId) && !orderIdsList.includes(order.id)) {
+      const updatedOrderIds = [...orderIdsList, order.orderId].join(',');
+      await this.prisma.scanSession.update({
+        where: { sessionId },
+        data: { orderIds: updatedOrderIds }
+      });
+      session.orderIds = updatedOrderIds;
+    }
+
+    // Validate State Machine Transition
+    determineTransition(sessionType, userRole, userId, parcel, order);
+
+    // Duplicate Scan Protection
+    const existingItem = await this.prisma.scanSessionItem.findUnique({
+      where: {
+        sessionId_parcelId: {
+          sessionId,
+          parcelId: parcel.parcelId,
+        },
+      },
+    });
+
+    if (existingItem) {
+      throw new QrValidationError('Parcel already scanned in this session.');
+    }
+
+    // Register scanned item in transient session
+    await this.prisma.scanSessionItem.create({
+      data: {
+        sessionId,
+        parcelId: parcel.parcelId,
+      },
+    });
+
+    const sessionDetails = await this.getSessionDetails(sessionType, userId, userRole, sessionId);
+
+    // Auto-Commit on scan: Immediately commit custody transfer when batch scanning completes (1-step verification)
+    if (sessionDetails.remaining.length === 0) {
+      const result = await this.confirmSession(sessionType, sessionId);
+      return {
+        ...sessionDetails,
+        autoCommitted: true,
+        message: result.message || 'Scan verified! Custody transferred and order status updated directly.'
+      };
+    }
+
+    return sessionDetails;
+  }
+
+  /**
+   * Removes a parcel from the active transient session.
+   */
+  async removeParcelFromSession(sessionId: string, parcelId: string) {
+    const session = await this.prisma.scanSession.findUnique({
+      where: { sessionId },
+    });
+
+    if (!session || session.status !== 'IN_PROGRESS') {
+      throw new QrValidationError('Session expired.');
+    }
+
+    await this.prisma.scanSessionItem.deleteMany({
+      where: {
+        sessionId,
+        parcelId,
+      },
+    });
+
+    return this.getSessionDetails(session.sessionType as SessionType, session.userId, session.userRole, sessionId);
+  }
+
+  /**
+   * Commits the scan session, executing updates in a single database transaction.
+   */
+  async confirmSession(sessionType: SessionType, sessionId: string) {
+    const session = await this.prisma.scanSession.findUnique({
+      where: { sessionId },
+      include: {
+        items: {
+          include: {
+            parcel: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new QrValidationError('Session expired.');
+    }
+
+    // Idempotency safety check
+    if (session.status === 'CONFIRMED') {
+      return { success: true, message: `${sessionType} already completed.` };
+    }
+
+    if (session.status !== 'IN_PROGRESS') {
+      throw new QrValidationError('Session cannot be confirmed');
+    }
+
+    // Detect missing parcels (Warning check)
+    const orderIdsList = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+    const ordersInSession = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { id: { in: orderIdsList } },
+          { orderId: { in: orderIdsList } }
+        ]
+      },
+      select: { phase: true }
+    });
+    const orderPhases = Array.from(new Set(ordersInSession.map((o: any) => o.phase)));
+
+    const expectedParcels = await this.prisma.parcel.findMany({
+      where: {
+        orderId: { in: orderIdsList },
+        flowType: { in: ['PICKUP', 'DROP'] },
+      },
+    });
+
+    const scannedIds = new Set(session.items.map((i: any) => i.parcelId));
+    const missing = expectedParcels.filter((p: any) => !scannedIds.has(p.parcelId));
+
+    if (missing.length > 0) {
+      throw new QrValidationError('Missing parcel detected.');
+    }
+
+    await this.prisma.$transaction(async (tx: any) => {
+      for (const item of session.items) {
+        const parcel = item.parcel;
+        
+        let order = await tx.order.findFirst({
+          where: {
+            OR: [
+              { id: parcel.orderId },
+              { orderId: parcel.orderId }
+            ],
+            phase: 'DROP',
+          }
+        });
+        if (!order) {
+          order = await tx.order.findFirst({
+            where: {
+              OR: [
+                { id: parcel.orderId },
+                { orderId: parcel.orderId }
+              ],
+              phase: 'PICKUP',
+            }
+          });
+        }
+
+        if (!order) {
+          throw new QrValidationError(`Order associated with parcel ${parcel.parcelId} not found`);
+        }
+
+        const transition = determineTransition(
+          order.phase as SessionType,
+          session.userRole,
+          session.userId,
+          parcel,
+          order
+        );
+
+        // Update Parcel state
+        await tx.parcel.update({
+          where: { parcelId: parcel.parcelId },
+          data: {
+            parcelStatus: transition.nextParcelStatus,
+            currentHolderId: transition.nextHolderId,
+            currentHolderType: transition.nextHolderType,
+          },
+        });
+
+        // Append to Scan History
+        await tx.parcelScanHistory.create({
+          data: {
+            parcelId: parcel.parcelId,
+            orderId: parcel.orderId,
+            productId: parcel.productId,
+            productName: parcel.productName,
+            userRole: session.userRole,
+            userId: session.userId,
+            action: transition.action,
+            currentHolder: transition.nextHolderId,
+            currentStage: transition.nextParcelStatus,
+            scanResult: 'SUCCESS',
+            remarks: transition.message,
+          },
+        });
+
+        // Sync order status columns
+        let mainStatus = transition.nextParcelStatus;
+        const normalizedMainStatus = normalizeStatus(mainStatus);
+        let pickupShgStatus = order.pickupShgStatus;
+        let pickupTransporterStatus = order.pickupTransporterStatus;
+        let dropShgStatus = order.dropShgStatus;
+        let dropTransporterStatus = order.dropTransporterStatus;
+
+        if (normalizedMainStatus === 'PARCEL_PICKED') {
+          pickupShgStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
+          pickupShgStatus = 'COMPLETED';
+          pickupTransporterStatus = 'ACCEPTED';
+        } else if (normalizedMainStatus === 'IN_TRANSIT') {
+          pickupTransporterStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'AT_GMU') {
+          pickupTransporterStatus = 'COMPLETED';
+        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER') {
+          dropTransporterStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
+          dropTransporterStatus = 'COMPLETED';
+          dropShgStatus = 'ACCEPTED';
+        } else if (normalizedMainStatus === 'DELIVERED') {
+          dropShgStatus = 'DROPPED';
+          dropTransporterStatus = 'COMPLETED';
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            mainStatus,
+            pickupShgStatus,
+            pickupTransporterStatus,
+            dropShgStatus,
+            dropTransporterStatus,
+          },
+        });
+
+        // Align schemas if necessary by updating both public and gmu order entries
+        await tx.$executeRawUnsafe(`
+          UPDATE public."Order"
+          SET 
+            "mainStatus" = $1,
+            "pickupShgStatus" = $2,
+            "pickupTransporterStatus" = $3,
+            "dropShgStatus" = $4,
+            "dropTransporterStatus" = $5,
+            "updatedAt" = NOW()
+          WHERE id = $6;
+        `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
+
+        if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
+          await tx.orderAssignment.updateMany({
+            where: {
+              orderId: order.id,
+              assigneeId: session.userId,
+              role: 'PICKUP',
+            },
+            data: {
+              status: 'COMPLETED',
+            },
+          });
+        }
+      }
+
+      // Mark session as complete
+      await tx.scanSession.update({
+        where: { sessionId },
+        data: {
+          status: 'CONFIRMED',
+        },
+      });
+    });
+
+    return { success: true, message: `${sessionType} session confirmed successfully.` };
+  }
+
+  async confirmSessionOrder(
+    sessionType: SessionType,
+    userId: string,
+    userRole: string,
+    sessionId: string,
+    orderId: string
+  ) {
+    const session = await this.prisma.scanSession.findUnique({
+      where: { sessionId },
+      include: {
+        items: {
+          include: {
+            parcel: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new QrValidationError('Session expired.');
+    }
+
+    if (session.status === 'CONFIRMED') {
+      return { success: true, message: `Order already completed.` };
+    }
+
+    if (session.status !== 'IN_PROGRESS') {
+      throw new QrValidationError('Session cannot be confirmed');
+    }
+
+    const cleanId = String(orderId || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+
+    let order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: orderId },
+          { orderId: orderId },
+          { id: cleanId },
+          { orderId: cleanId },
+          { orderId: `ORD-${cleanId}` }
+        ]
+      }
+    });
+
+    if (!order) {
+      throw new QrValidationError(`Order ${orderId} not found`);
+    }
+
+    const expectedParcels = await this.prisma.parcel.findMany({
+      where: {
+        OR: [
+          { orderId: order.orderId },
+          { orderId: order.id }
+        ]
+      },
+    });
+
+    let sessionItemsForOrder = session.items.filter(
+      (item: any) => item.parcel.orderId === order.orderId || item.parcel.orderId === order.id || item.parcel.orderId.includes(cleanId)
+    );
+
+    // If session items were attached without matching orderId directly, use all session items if matching order
+    if (sessionItemsForOrder.length === 0 && session.items.length > 0) {
+      sessionItemsForOrder = session.items;
+    }
+
+    const scannedIds = new Set(sessionItemsForOrder.map((i: any) => i.parcelId));
+    const missing = expectedParcels.filter((p: any) => !scannedIds.has(p.parcelId));
+
+    if (expectedParcels.length > 0 && scannedIds.size < expectedParcels.length) {
+      throw new QrValidationError(`All parcels for Order ${order.orderId} must be scanned before confirming pickup (${scannedIds.size}/${expectedParcels.length} scanned).`);
+    }
+
+    await this.prisma.$transaction(async (tx: any) => {
+      for (const item of sessionItemsForOrder) {
+        const parcel = item.parcel;
+
+        const transition = determineTransition(
+          order.phase as SessionType,
+          session.userRole,
+          session.userId,
+          parcel,
+          order
+        );
+
+        await tx.parcel.update({
+          where: { parcelId: parcel.parcelId },
+          data: {
+            parcelStatus: transition.nextParcelStatus,
+            currentHolderId: transition.nextHolderId,
+            currentHolderType: transition.nextHolderType,
+          },
+        });
+
+        await tx.parcelScanHistory.create({
+          data: {
+            parcelId: parcel.parcelId,
+            orderId: parcel.orderId,
+            productId: parcel.productId,
+            productName: parcel.productName,
+            userRole: session.userRole,
+            userId: session.userId,
+            action: transition.action,
+            currentHolder: transition.nextHolderId,
+            currentStage: transition.nextParcelStatus,
+            scanResult: 'SUCCESS',
+            remarks: transition.message,
+          },
+        });
+
+        let mainStatus = transition.nextParcelStatus;
+        const normalizedMainStatus = normalizeStatus(mainStatus);
+        let pickupShgStatus = order.pickupShgStatus;
+        let pickupTransporterStatus = order.pickupTransporterStatus;
+        let dropShgStatus = order.dropShgStatus;
+        let dropTransporterStatus = order.dropTransporterStatus;
+
+        if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG') {
+          pickupShgStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
+          pickupShgStatus = 'COMPLETED';
+          pickupTransporterStatus = 'ACCEPTED';
+        } else if (normalizedMainStatus === 'IN_TRANSIT') {
+          pickupTransporterStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'AT_GMU') {
+          pickupTransporterStatus = 'COMPLETED';
+        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY') {
+          dropTransporterStatus = 'PICKED';
+        } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
+          dropTransporterStatus = 'COMPLETED';
+          dropShgStatus = session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED';
+        } else if (normalizedMainStatus === 'DELIVERED') {
+          dropShgStatus = 'DROPPED';
+          dropTransporterStatus = 'COMPLETED';
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            mainStatus,
+            pickupShgStatus,
+            pickupTransporterStatus,
+            dropShgStatus,
+            dropTransporterStatus,
+          },
+        });
+
+        if (sessionType === 'PICKUP' && (normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED' || (transition.nextParcelStatus as string) === 'PARCEL_AT_SHG')) {
+          await tx.orderAssignment.updateMany({
+            where: {
+              orderId: order.id,
+              assigneeId: session.userId,
+              role: 'PICKUP',
+            },
+            data: {
+              status: 'ACCEPTED',
+            },
+          });
+        }
+      }
+
+      await tx.scanSessionItem.deleteMany({
+        where: {
+          sessionId,
+          parcelId: { in: Array.from(scannedIds) },
+        },
+      });
+
+      const currentOrderIds = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+      const remainingOrderIds = currentOrderIds.filter((id) => id !== order.orderId && id !== order.id);
+
+      if (remainingOrderIds.length === 0) {
+        await tx.scanSession.update({
+          where: { sessionId },
+          data: {
+            orderIds: '',
+            status: 'CONFIRMED',
+          },
+        });
+      } else {
+        await tx.scanSession.update({
+          where: { sessionId },
+          data: {
+            orderIds: remainingOrderIds.join(','),
+          },
+        });
+      }
+    });
+
+    return { success: true, message: `Order ${orderId} confirmed successfully.` };
+  }
+}

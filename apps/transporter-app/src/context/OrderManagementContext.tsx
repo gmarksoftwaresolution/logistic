@@ -290,7 +290,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             verificationStatus: item.verificationStatus || 'PENDING',
             productId: item.productId,
           };
-        }) : [{
+        }) : (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+          id: String(p.parcelId || p.id || Math.random()),
+          name: p.productName || p.product?.name || 'General Item',
+          qty: p.quantity || 1,
+          weight: `${p.weight || p.weightKg || 1} kg`,
+          legType: 'pickup' as const,
+          status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
+          verificationCode: p.verificationToken || p.verificationCode || '',
+          verificationStatus: p.parcelStatus || 'PENDING',
+          productId: p.productId,
+        })) : [{
           id: `p-${o.id}`,
           name: 'General Parcel Package',
           qty: o.totalQty || 1,
@@ -372,7 +382,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               verificationStatus: item.verificationStatus || 'PENDING',
               productId: item.productId,
             };
-          }) : [{
+          }) : (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+            id: String(p.parcelId || p.id || Math.random()),
+            name: p.productName || p.product?.name || 'General Item',
+            qty: p.quantity || 1,
+            weight: `${p.weight || p.weightKg || 1} kg`,
+            legType: 'drop' as const,
+            status: (o.status === 'COMPLETED' || o.status === 'RETURNED') ? 'completed' : 'pending',
+            verificationCode: p.verificationToken || p.verificationCode || '',
+            verificationStatus: p.parcelStatus || 'PENDING',
+            productId: p.productId,
+          })) : [{
             id: `p-${o.id}`,
             name: 'General Parcel Package',
             qty: o.totalQty || 1,
@@ -443,25 +463,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
           return updated;
         });
-      } else {
-        // Only clean completed cache when no new completed drops arrive
-        setCompletedBatches(prev => {
-          const cleaned = prev.filter(b => liveIds.has(b.id));
-          if (cleaned.length !== prev.length) {
-            AsyncStorage.setItem('completed_batches', JSON.stringify(cleaned)).catch(() => { });
-          }
-          return cleaned;
-        });
       }
-
-      // Reconcile and clean up stale activities whose orders no longer exist on the server
-      setActivities(prev => {
-        const cleaned = prev.filter(act => liveIds.has(act.orderId));
-        if (cleaned.length !== prev.length) {
-          AsyncStorage.setItem('transporter_activities', JSON.stringify(cleaned)).catch(() => { });
-        }
-        return cleaned;
-      });
 
       // Reconcile and clean up stale captured photo references
       setCapturedPhotos(prev => {

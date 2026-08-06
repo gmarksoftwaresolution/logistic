@@ -165,7 +165,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
 
   return {
     id: `${type}-${dbOrder.id}`,
-    orderId: dbOrder.masterOrder?.orderNumber || `ORD-${masterId}`,
+    orderId: dbOrder.orderId
+      ? (dbOrder.orderId.startsWith('ORD-') ? dbOrder.orderId : `ORD-${dbOrder.orderId}`)
+      : (dbOrder.orderNumber ? (dbOrder.orderNumber.startsWith('ORD-') ? dbOrder.orderNumber : `ORD-${dbOrder.orderNumber}`) : (dbOrder.masterOrder?.orderNumber || (String(masterId).length > 20 ? `ORD-${masterId.slice(0, 8)}` : `ORD-${masterId}`))),
     parcelName,
     parcelWeight: dbOrder.parcelWeight,
     recommendedVehicle: dbOrder.recommendedVehicle,

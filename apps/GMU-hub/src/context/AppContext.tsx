@@ -508,22 +508,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       address: dropTransporterMember.address,
     } : undefined);
 
+    const sellerName = o.sellerName || o.seller?.sellerName || o.seller?.fullName || 'N/A';
+    const sellerMobile = o.sellerMobile || o.seller?.mobileNumber || o.seller?.phoneNumber || 'N/A';
+    const sellerAddress = [o.sellerHouseNo, o.sellerAddress || o.seller?.addressLine1, o.sellerVillage || o.seller?.village, o.sellerTaluka || o.seller?.taluka, o.sellerDistrict || o.seller?.district, o.sellerState || o.seller?.state, o.sellerPincode || o.seller?.pincode].filter(Boolean).join(', ') || 'N/A';
+
+    const buyerName = o.buyerName || o.buyer?.buyerName || o.buyer?.fullName || 'N/A';
+    const buyerMobile = o.buyerMobile || o.buyer?.mobileNumber || o.buyer?.phoneNumber || 'N/A';
+    const buyerAddress = [o.buyerHouseNo, o.buyerAddress || o.buyer?.addressLine1, o.buyerVillage || o.buyer?.village, o.buyerTaluka || o.buyer?.taluka, o.buyerDistrict || o.buyer?.district, o.buyerState || o.buyer?.state, o.buyerPincode || o.buyer?.pincode].filter(Boolean).join(', ') || 'N/A';
+
+    const formattedItems = (o.items && o.items.length > 0)
+      ? o.items.map((i: any) => ({
+          name: i.name || i.productName || i.product?.name || 'Agricultural Goods',
+          quantity: i.quantity || 1,
+          weight: i.weight || i.weightKg || i.product?.weight || '2.5',
+          category: i.category || i.product?.category || 'Agriculture',
+          price: i.price || i.declaredValue || i.product?.price || 450,
+        }))
+      : (o.parcels && o.parcels.length > 0)
+        ? o.parcels.map((p: any) => ({
+            name: p.productName || 'Agricultural Goods',
+            quantity: p.quantity || 1,
+            weight: p.weight || p.weightKg || '2.5',
+            category: p.category || 'Agriculture',
+            price: p.declaredValue || 450,
+          }))
+        : [{
+            name: 'Agricultural Goods',
+            quantity: 1,
+            weight: '2.5',
+            category: 'Agriculture',
+            price: 450,
+          }];
+
+    const formattedParcels = (o.parcels && o.parcels.length > 0)
+      ? o.parcels.map((p: any) => {
+          const cleanId = (o.orderId || o.id || '2026').replace(/^ORD-/, '');
+          const qrData = p.qrImage || p.qrCodeValue || p.barcode || p.verificationToken || o.barcode || `QR-${cleanId}-PCL-1`;
+          const qrUri = (qrData && String(qrData).startsWith('http'))
+            ? String(qrData)
+            : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(String(qrData))}`;
+          return {
+            ...p,
+            qrImage: qrUri,
+            productName: p.productName || 'Agricultural Goods',
+            parcelNumber: p.parcelNumber || 1,
+            totalParcels: p.totalParcels || 1,
+            quantity: p.quantity || 1,
+            weight: p.weight || p.weightKg || '2.5',
+          };
+        })
+      : [{
+          orderId: o.orderId || o.id,
+          parcelId: `PCL-${(o.orderId || o.id || '2026').replace(/^ORD-/, '')}-1`,
+          productName: 'Agricultural Goods',
+          parcelNumber: 1,
+          totalParcels: 1,
+          quantity: 1,
+          weight: '2.5',
+          qrImage: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(o.barcode || o.orderId || o.id)}`,
+          parcelStatus: 'PENDING'
+        }];
+
     return {
-      id: o.orderId,
+      id: o.orderId || o.id,
       uuid: o.id,
-      sellerName: o.sellerName,
-      sellerMobile: o.sellerMobile,
-      sellerAddress: [o.sellerHouseNo, o.sellerAddress, o.sellerVillage, o.sellerTaluka, o.sellerDistrict, o.sellerState, o.sellerPincode].filter(Boolean).join(', '),
-      sellerVillage: o.sellerVillage,
-      sellerPincode: o.sellerPincode,
-      buyerName: o.buyerName,
-      buyerMobile: o.buyerMobile,
-      buyerAddress: [o.buyerHouseNo, o.buyerAddress, o.buyerVillage, o.buyerTaluka, o.buyerDistrict, o.buyerState, o.buyerPincode].filter(Boolean).join(', '),
-      buyerVillage: o.buyerVillage,
-      buyerPincode: o.buyerPincode,
-      productCount: o.productCount,
-      totalQty: o.totalQty,
-      totalWeight: o.totalWeight,
+      sellerName,
+      sellerMobile,
+      sellerAddress,
+      sellerVillage: o.sellerVillage || o.seller?.village || '',
+      sellerPincode: o.sellerPincode || o.seller?.pincode || '',
+      buyerName,
+      buyerMobile,
+      buyerAddress,
+      buyerVillage: o.buyerVillage || o.buyer?.village || '',
+      buyerPincode: o.buyerPincode || o.buyer?.pincode || '',
+      productCount: o.productCount || formattedItems.length,
+      totalQty: o.totalQty || formattedItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
+      totalWeight: o.totalWeight || formattedItems.reduce((s: number, i: any) => s + Number(i.weight || 2.5), 0),
       orderDate: o.createdAt ? o.createdAt.split('T')[0] : '-',
       shgStatus: mappedShgStatus,
       transporterStatus: mappedTransporterStatus,
@@ -545,9 +606,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rejectionReason: o.assignments?.find((a: any) => a.status === 'REJECTED')?.rejectionReason || 'Rejected by partner',
       rejectedBy: o.assignments?.find((a: any) => a.status === 'REJECTED')?.assigneeType || 'SHG',
       rescheduledBy: o.rescheduleType || 'SHG',
-      items: o.items,
+      items: formattedItems,
       tracking: o.tracking,
-      parcels: o.parcels,
+      parcels: formattedParcels,
       rawCreatedAt: o.createdAt,
       rawUpdatedAt: o.updatedAt,
       pickupShgDetails,
@@ -741,7 +802,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const readyToStore = async (orderId: string) => {
     const order = pickupWarehouseOrders.find((o) => o.id === orderId) as any;
     await api.orders.store(order?.uuid || orderId);
-    await loadCounts();
+    await Promise.all([
+      loadInventoryStored(),
+      loadInventoryTransporterReturn(),
+      loadInventoryBuyerReturn(),
+      loadData(),
+      loadCounts()
+    ]);
   };
 
   const dispatchInventory = async (orderId: string) => {
@@ -766,7 +833,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
-    await loadCounts();
+    await Promise.all([
+      loadInventoryStored(),
+      loadInventoryTransporterReturn(),
+      loadInventoryBuyerReturn(),
+      loadCounts()
+    ]);
   };
 
   const intakePickupOrders = async (orderIds: string[]) => {
@@ -779,8 +851,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetId = order?.uuid || order?.id || id;
       await api.orders.warehouseIntake(targetId);
     }
-    await loadData();
-    await loadCounts();
+    await Promise.all([
+      loadInventoryStored(),
+      loadInventoryTransporterReturn(),
+      loadInventoryBuyerReturn(),
+      loadData(),
+      loadCounts()
+    ]);
   };
 
   const intakeReturnOrder = async (orderId: string, returnType: 'pickup' | 'drop') => {

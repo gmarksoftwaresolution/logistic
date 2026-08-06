@@ -156,7 +156,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
       const res = await api.auth.login(mobileNum, otpVal);
       if (res.success) {
         localStorage.setItem("gmu_token", res.accessToken);
-        localStorage.setItem("gmu_user", JSON.stringify(res.user));
+        const userInfo = res.userDetails || res.user || { fullName: 'GMU Hub Admin', role: 'ADMIN' };
+        localStorage.setItem("gmu_user", JSON.stringify(userInfo));
 
         setSuccessMsg('Login Successful! Redirecting...');
         setTimeout(() => {

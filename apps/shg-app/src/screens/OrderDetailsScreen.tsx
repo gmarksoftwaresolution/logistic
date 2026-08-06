@@ -966,7 +966,12 @@ const OrderDetailsScreen: React.FC<Props> = ({
       }}>
         {products.map((item: any, index: number) => {
           const isLast = index === products.length - 1;
-          const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
+          const cleanId = (order.orderId || order.id || '2026').replace(/^ORD-/, '');
+          const matchingParcel = orderParcels.find((p: any) => 
+            String(p.productId) === String(item.productId) || 
+            (p.productName && item.name && p.productName.toLowerCase() === item.name.toLowerCase())
+          ) || orderParcels[index] || orderParcels[0];
+          
           const isVerified = isProductVerified(item);
 
           return <View key={item.code || String(index)} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
@@ -983,8 +988,8 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   {item.name}
                 </Text>
                 <View className="flex-row items-center mt-1">
-                  <Text className="text-[11px] font-medium text-[#64748B] mr-2">
-                    {item.details}
+                  <Text className="text-[11px] font-medium text-slate-400 mr-3">
+                    {item.weight} • Qty: {item.quantity}
                   </Text>
                   {/* Status Badge */}
                   <View className={`px-1.5 py-0.5 rounded-md flex-row items-center ${isVerified ? 'bg-emerald-50' : 'bg-amber-50'}`}>
@@ -1006,12 +1011,18 @@ const OrderDetailsScreen: React.FC<Props> = ({
             <View className="flex-row items-center gap-2">
               <TouchableOpacity
                 onPress={() => {
+                  const parcelQrVal = matchingParcel?.qrCodeValue || `QR-${cleanId}-PCL-${index + 1}`;
+                  const finalQrUri = (matchingParcel?.qrImage && String(matchingParcel.qrImage).startsWith('http'))
+                    ? String(matchingParcel.qrImage)
+                    : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(parcelQrVal)}`;
+
                   setSelectedQrParcel({
                     ...(matchingParcel || {}),
                     productName: item.name,
-                    parcelId: matchingParcel?.parcelId || item.code || `PCL-${item.productId}`,
-                    verificationToken: matchingParcel?.verificationToken || item.verificationCode || 'N/A',
-                    qrImage: matchingParcel?.qrImage || null,
+                    parcelId: matchingParcel?.parcelId || `PCL-${cleanId}-${index + 1}`,
+                    verificationToken: matchingParcel?.verificationToken || `V-${cleanId}-0${index + 1}`,
+                    qrImage: finalQrUri,
+                    qrCodeValue: parcelQrVal,
                     parcelStatus: matchingParcel?.parcelStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
                   });
                 }}
@@ -1325,18 +1336,21 @@ const OrderDetailsScreen: React.FC<Props> = ({
             Parcel ID: {selectedQrParcel?.parcelId || 'N/A'}
           </Text>
 
-          {selectedQrParcel?.qrImage ? (
-            <Image
-              source={{ uri: selectedQrParcel.qrImage }}
-              className="w-48 h-48 rounded-xl mb-4 border border-slate-200"
-              resizeMode="contain"
-            />
-          ) : (
-            <View className="w-48 h-48 bg-slate-100 rounded-xl items-center justify-center mb-4 border border-dashed border-slate-300">
-              <Ionicons name="qr-code-outline" size={64} color="#94A3B8" />
-              <Text className="text-[11px] font-bold text-slate-400 mt-2">QR Code Preview</Text>
-            </View>
-          )}
+          {(() => {
+            const cleanId = (order.orderId || order.id || '2026').replace(/^ORD-/, '');
+            const rawQrVal = selectedQrParcel?.qrImage || selectedQrParcel?.qrCodeValue || selectedQrParcel?.barcode || selectedQrParcel?.verificationToken || `QR-${cleanId}-PCL-1`;
+            const qrUri = (rawQrVal && String(rawQrVal).startsWith('http'))
+              ? String(rawQrVal)
+              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(String(rawQrVal))}`;
+
+            return (
+              <Image
+                source={{ uri: qrUri }}
+                className="w-48 h-48 rounded-xl mb-4 border border-slate-200"
+                resizeMode="contain"
+              />
+            );
+          })()}
 
           <View className="bg-slate-50 p-3.5 rounded-xl w-full border border-slate-200 mb-5 items-center">
             <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Verification Code</Text>

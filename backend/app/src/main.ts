@@ -1,0 +1,63 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+const envPaths = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '..', '..', '.env'),
+];
+
+for (const p of envPaths) {
+  if (fs.existsSync(p)) {
+    try {
+      const parsed = dotenv.parse(fs.readFileSync(p));
+      for (const key in parsed) {
+        process.env[key] = parsed[key];
+      }
+    } catch (err) {
+      console.error(`Failed to parse .env at ${p}:`, err);
+    }
+    break;
+  }
+}
+
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.enableCors();
+  app.useGlobalInterceptors(new LoggingInterceptor());
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Set global route prefix to /api for all client apps
+  app.setGlobalPrefix('api');
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: false,
+      transform: true,
+    }),
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle('Unified Logistics Platform API')
+    .setDescription('Consolidated NestJS Backend API Documentation for GMU Hub, SHG App, and Transporter App')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 Unified Logistics Backend is running on: http://localhost:${port}/api`);
+  console.log(`📑 Swagger Documentation: http://localhost:${port}/api/docs`);
+}
+bootstrap();

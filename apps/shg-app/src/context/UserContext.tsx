@@ -79,8 +79,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
               setUser(updatedUser);
               await AsyncStorage.setItem('user_profile', JSON.stringify(updatedUser));
             }
-          } catch (apiError) {
-            console.error("Failed to fetch fresh profile from backend on startup:", apiError);
+          } catch (apiError: any) {
+            if (apiError?.response?.status === 401 || apiError?.status === 401) {
+              await logout();
+            } else {
+              console.log("Offline or initial connection check");
+            }
           }
         } catch (e) {
           console.error("Failed to parse stored user profile:", e);

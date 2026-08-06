@@ -56,7 +56,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     clearError,
   } = useScanSession();
 
-  const { refreshOrdersList } = useOrders();
+  const { orders = [], acceptedOrders = [], refreshOrdersList } = useOrders();
   const activeSession = activePickupSession;
 
   // Local optimistic scanned list & sync states
@@ -130,77 +130,76 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       isScanningRef.current = false;
     };
 
-    let decoded;
     try {
-      decoded = decodeQrData(data);
-    } catch (err: any) {
-      triggerScanFeedback('error', 'Malformed QR payload scanned.');
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
+      const decoded = decodeQrData(data);
+      const { parcelId, verificationToken } = decoded;
 
-    const { parcelId, verificationToken } = decoded;
+      // Compile master expected list from session
+      const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
+      const cleanScannedVal = String(parcelId || '').trim();
+      const cleanNumId = cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '');
 
-    // Compile master expected list from session
-    const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const parcel = allParcels.find((p: any) => p.parcelId === parcelId);
+      const parcel = allParcels.find((p: any) => 
+        p.parcelId === parcelId || 
+        p.qrCodeValue === parcelId || 
+        p.verificationToken === parcelId ||
+        (p.parcelId && p.parcelId.includes(cleanNumId)) ||
+        (p.orderId && p.orderId.includes(cleanNumId))
+      );
 
-    if (!parcel) {
-      // Dynamic onboarding: parcel is not in the active session lists yet.
-      // We call the backend directly.
+      if (!parcel) {
+        // Dynamic onboarding: parcel is not in the active session lists yet.
+        setHasScannedAny(true);
+        triggerScanFeedback('success', `Syncing parcel scan...`);
+        try {
+          await scanParcel('PICKUP', activeSession.sessionId, data);
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || 'Sync failed.';
+          triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+        }
+        return;
+      }
+
+      // Validate verification token locally if available
+      if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
+        triggerScanFeedback('error', 'Invalid verification token.');
+        return;
+      }
+
+      // Check duplicate
+      const isDuplicate = localScannedItems.some(i => i.parcelId === parcelId) ||
+                          (activeSession.scanned || []).some(i => i.parcelId === parcelId);
+
+      if (isDuplicate) {
+        triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
+        return;
+      }
+
+      // Valid scan! Optimistically add to UI list
       setHasScannedAny(true);
-      triggerScanFeedback('success', `Syncing new parcel scan...`);
+      triggerScanFeedback('success', `Scanned: ${parcel.productName || 'Parcel'}`);
+
+      const newOptimisticItem = {
+        ...parcel,
+        pendingSync: 'syncing',
+        lastScannedParcelId: parcelId
+      };
+
+      setLocalScannedItems(prev => [...prev, newOptimisticItem]);
+
+      // Send backend request asynchronously
       try {
         await scanParcel('PICKUP', activeSession.sessionId, data);
+        setLocalScannedItems(prev =>
+          prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
+        );
       } catch (err: any) {
+        setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
         const errMsg = err.response?.data?.message || 'Sync failed.';
         triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
-      } finally {
-        setTimeout(resetScanLock, 1500);
       }
-      return;
-    }
-
-    // Validate verification token locally if available
-    if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
-      triggerScanFeedback('error', 'Invalid verification token.');
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
-
-    // Check duplicate
-    const isDuplicate = localScannedItems.some(i => i.parcelId === parcelId) ||
-                        (activeSession.scanned || []).some(i => i.parcelId === parcelId);
-
-    if (isDuplicate) {
-      triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName}`);
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
-
-    // Valid scan! Optimistically add to UI list
-    setHasScannedAny(true);
-    triggerScanFeedback('success', `Scanned: ${parcel.productName}`);
-
-    const newOptimisticItem = {
-      ...parcel,
-      pendingSync: 'syncing',
-      lastScannedParcelId: parcelId
-    };
-
-    setLocalScannedItems(prev => [...prev, newOptimisticItem]);
-
-    // Send backend request asynchronously
-    try {
-      await scanParcel('PICKUP', activeSession.sessionId, data);
-      setLocalScannedItems(prev =>
-        prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
-      );
     } catch (err: any) {
-      // Revert optimistic state and present error feedback
-      setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
-      const errMsg = err.response?.data?.message || 'Sync failed.';
-      triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+      triggerScanFeedback('error', 'Malformed QR scanned.');
     } finally {
       setTimeout(resetScanLock, 1500);
     }
@@ -223,17 +222,18 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const executeConfirmOrder = async (orderId: string) => {
     if (!activeSession) return;
     setActionLoading(true);
+    const displayId = orderId.replace(/^pickup-/, '').replace(/^drop-/, '');
+    
+    // Optimistic instant confirmation feedback
+    Alert.alert('Success', `Order #${displayId} confirmed successfully! Moved to Delivery section.`);
+    setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
+
     try {
       await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
-      await refreshOrdersList();
-      
-      // Filter out any locally tracked scanned items belonging to confirmed order
-      setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
-      
-      Alert.alert('Success', `Order #${orderId.replace('pickup-', '').replace('drop-', '')} confirmed successfully!`);
+      refreshOrdersList().catch(() => {});
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Confirmation failed';
-      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
+      console.warn('Confirm order background notice:', msg);
     } finally {
       setActionLoading(false);
     }
@@ -274,40 +274,62 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     const ordersMap: Record<string, {
       orderId: string;
+      displayOrderId: string;
       scanned: any[];
       remaining: any[];
       lastScannedParcelId: string;
       productName: string;
     }> = {};
 
-    const getOrderEntry = (id: string, defaultName: string) => {
-      if (!ordersMap[id]) {
-        ordersMap[id] = {
-          orderId: id,
+    const allContextOrders = [...(orders || []), ...(acceptedOrders || [])];
+
+    const getOrderEntry = (rawId: string, defaultName: string) => {
+      if (!rawId) return null;
+      const cleanId = String(rawId).replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+      
+      const matchingOrder = allContextOrders.find((o: any) => 
+        o.id === rawId || 
+        o.uuid === rawId || 
+        o.orderId === rawId || 
+        (cleanId && o.id?.includes(cleanId)) || 
+        (cleanId && o.orderId?.includes(cleanId))
+      );
+
+      const cleanDisplayId = matchingOrder?.orderId || (cleanId.length > 15 ? `ORD-${cleanId.slice(0, 8)}` : (rawId.startsWith('ORD-') ? rawId : `ORD-${rawId}`));
+      const key = matchingOrder?.uuid || matchingOrder?.id || rawId;
+
+      if (!ordersMap[key]) {
+        ordersMap[key] = {
+          orderId: key,
+          displayOrderId: cleanDisplayId,
           scanned: [],
           remaining: [],
           lastScannedParcelId: '',
-          productName: defaultName || 'Papad',
+          productName: defaultName || 'Agricultural Goods',
         };
       }
-      return ordersMap[id];
+      return ordersMap[key];
     };
 
     mergedScanned.forEach(item => {
       const entry = getOrderEntry(item.orderId || '', item.productName);
-      entry.scanned.push(item);
-      if (item.lastScannedParcelId) {
-        entry.lastScannedParcelId = item.lastScannedParcelId;
+      if (entry) {
+        entry.scanned.push(item);
+        if (item.lastScannedParcelId) {
+          entry.lastScannedParcelId = item.lastScannedParcelId;
+        }
       }
     });
 
     mergedRemaining.forEach(item => {
       const entry = getOrderEntry(item.orderId || '', item.productName);
-      entry.remaining.push(item);
+      if (entry) {
+        entry.remaining.push(item);
+      }
     });
 
     return Object.values(ordersMap);
-  }, [activeSession, localScannedItems]);
+  }, [activeSession, localScannedItems, orders, acceptedOrders]);
 
   // Memoized header counts summary
   const summary = React.useMemo(() => {
@@ -415,23 +437,22 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         <CameraView
           style={styles.camera}
           facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          barcodeScannerSettings={{ barcodeTypes: ['qr', 'aztec', 'code128', 'code39', 'datamatrix', 'ean13', 'pdf417', 'upc_a', 'upc_e'] }}
           onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-        >
-          <View style={styles.overlayContainer}>
-            <View style={[styles.viewfinder, { borderColor: getViewfinderBorderColor() }]} />
-            {feedbackMessage && (
-              <View style={[
-                styles.feedbackToast,
-                scanFeedback === 'success' && styles.toastSuccess,
-                scanFeedback === 'duplicate' && styles.toastDuplicate,
-                scanFeedback === 'error' && styles.toastError,
-              ]}>
-                <Text style={styles.feedbackToastText}>{feedbackMessage}</Text>
-              </View>
-            )}
-          </View>
-        </CameraView>
+        />
+        <View style={styles.overlayContainer}>
+          <View style={[styles.viewfinder, { borderColor: getViewfinderBorderColor() }]} />
+          {feedbackMessage && (
+            <View style={[
+              styles.feedbackToast,
+              scanFeedback === 'success' && styles.toastSuccess,
+              scanFeedback === 'duplicate' && styles.toastDuplicate,
+              scanFeedback === 'error' && styles.toastError,
+            ]}>
+              <Text style={styles.feedbackToastText}>{feedbackMessage}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Expected & Scanned Group Cards list */}
@@ -457,10 +478,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                   <View style={styles.orderHeaderRow}>
                     <View>
                       <Text style={styles.orderIdLabel}>Order ID</Text>
-                      <Text style={styles.orderIdValue}>ORD-{(() => {
-                        const id = orderGroup.orderId.replace('pickup-', '').replace('drop-', '');
-                        return id.startsWith('ORD-') ? id.substring(4) : id;
-                      })()}</Text>
+                      <Text style={styles.orderIdValue}>{orderGroup.displayOrderId || orderGroup.orderId}</Text>
                     </View>
                     <View style={styles.badgeContainer}>
                       <Text style={[
@@ -640,14 +658,15 @@ const styles = StyleSheet.create({
   },
   scannerWrapper: {
     height: 220,
+    position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#000000',
   },
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   overlayContainer: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',

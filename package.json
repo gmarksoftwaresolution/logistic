@@ -5,21 +5,18 @@
   "description": "Logistic Monorepo Platform",
   "workspaces": [
     "apps/*",
-    "backend/*",
-    "packages/*"
+    "backend/*"
   ],
   "scripts": {
-    "shg-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --offline",
-    "shg-app:start-tunnel": "node scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --tunnel",
-    "transporter-app:start": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --offline",
-    "transporter-app:start-tunnel": "node scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --tunnel",
-    "shg-backend:dev": "npm run start:dev --workspace=@logistic/shg-backend",
-    "transporter-backend:dev": "npm run start:dev --workspace=@logistic/transporter-backend",
-    "gmu-backend:dev": "npm run start:dev --workspace=@logistic/gmu-backend",
-    "db:generate": "npm run prisma:generate --workspace=@logistic/db && npm run build --workspace=@logistic/db",
-    "db:build": "npm run build --workspace=@logistic/db",
-    "db:push": "npm run prisma:migrate --workspace=@logistic/db",
-    "seed:pincode": "ts-node backend/gmu/prisma/seed-pincode.ts"
+    "backend:dev": "npm run start:dev --workspace=@logistic/backend",
+    "gmu-hub:dev": "npm run dev --workspace=frontend",
+    "shg-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --offline",
+    "shg-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --tunnel",
+    "transporter-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --offline",
+    "transporter-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --tunnel",
+    "db:generate": "prisma generate --schema=backend/app/prisma/schema.prisma",
+    "db:push": "prisma db push --schema=backend/app/prisma/schema.prisma",
+    "seed:pincode": "ts-node backend/app/prisma/seed-pincode.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

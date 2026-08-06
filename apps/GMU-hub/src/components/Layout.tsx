@@ -102,10 +102,17 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
 
   const currentLabel = navItems.find((i) => i.id === currentPage)?.label || 'GMU Hub';
 
-  const userStr = localStorage.getItem('gmu_user');
-  const user = userStr ? JSON.parse(userStr) : null;
-  const userName = user?.name || 'Admin User';
-  const userRole = user?.role || 'Warehouse Head';
+  let user: any = null;
+  try {
+    const userStr = localStorage.getItem('gmu_user');
+    if (userStr && userStr !== 'undefined' && userStr !== 'null') {
+      user = JSON.parse(userStr);
+    }
+  } catch (e) {
+    user = null;
+  }
+  const userName = user?.fullName || user?.name || 'GMU Hub Admin';
+  const userRole = user?.role || user?.userType || 'Warehouse Head';
   const userInitials = userName.substring(0, 1).toUpperCase();
 
   const handleLogout = () => {

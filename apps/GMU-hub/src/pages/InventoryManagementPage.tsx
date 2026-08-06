@@ -100,6 +100,26 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
   const [openUpwards, setOpenUpwards] = useState(false);
 
+  // Live auto-refresh polling for Inventory Management page
+  useEffect(() => {
+    const fetchInventoryData = async () => {
+      try {
+        await Promise.all([
+          loadInventoryStored(),
+          loadInventoryTransporterReturn(),
+          loadInventoryBuyerReturn(),
+          loadCounts()
+        ]);
+      } catch (e) {
+        console.error("Failed to refresh inventory data:", e);
+      }
+    };
+
+    fetchInventoryData();
+    const interval = setInterval(fetchInventoryData, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
   const getNodeTimeAndDate = (order: any, nodeLabel: string) => {
     const lbl = nodeLabel.toLowerCase();
     let timestamp: string | null = null;
