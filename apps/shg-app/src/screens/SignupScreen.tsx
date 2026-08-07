@@ -470,6 +470,7 @@ export default function SignupScreen({
   const [village, setVillage] = useState('');
   const [villageError, setVillageError] = useState('');
   const [villageList, setVillageList] = useState<string[]>([]);
+  const [villageSearch, setVillageSearch] = useState('');
   const [postOffice, setPostOffice] = useState('');
   const [postOfficeError, setPostOfficeError] = useState('');
   const [postOfficeList, setPostOfficeList] = useState<string[]>([]);
@@ -962,16 +963,61 @@ export default function SignupScreen({
           const data = await signupService.getPincodeDetails(pincode);
           if (data) {
             setSelectedData(data);
-            if (data.postOffices && data.postOffices.length > 0) {
-              setPostOfficeList(data.postOffices);
-              setPostOfficeMap(data.postOfficeMap || {});
-              if (data.postOffices.length === 1) {
-                setPostOffice(data.postOffices[0]);
+            setStateName(data.state || '');
+            setDistrict(data.district || '');
+            setTaluka(data.taluka || '');
+            const allVils: string[] = [];
+            if (data.villages && Array.isArray(data.villages)) {
+              allVils.push(...data.villages);
+            }
+            if (data.postOfficeMap) {
+              Object.values(data.postOfficeMap).forEach((list: any) => {
+                if (Array.isArray(list)) allVils.push(...list);
+              });
+            }
+            if (data.postOffices && Array.isArray(data.postOffices)) {
+              allVils.push(...data.postOffices);
+            }
+
+            const getPhoneticKey = (s: string) => {
+              return s.toLowerCase()
+                .replace(/[\s\-_.\(\)]+/g, '')
+                .replace(/\s*(b\.?o\.?|s\.?o\.?|h\.?o\.?|branch office|sub office|head office)\b/gi, '')
+                .replace(/w/g, 'v')
+                .replace(/gh/g, 'g')
+                .replace(/bh/g, 'b')
+                .replace(/dh/g, 'd')
+                .replace(/th/g, 't')
+                .replace(/sh/g, 's')
+                .replace(/ch/g, 'c')
+                .replace(/[aeiouy]/g, '')
+                .replace(/[nm]/g, '');
+            };
+
+            const phoneticMap = new Map<string, string>();
+            allVils.forEach((v: string) => {
+              const c = v
+                .replace(/\s*\(.*?\)/g, '')
+                .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
+                .trim();
+              if (c) {
+                const key = getPhoneticKey(c);
+                if (!phoneticMap.has(key)) {
+                  phoneticMap.set(key, c);
+                } else {
+                  const existing = phoneticMap.get(key)!;
+                  if (c.length > existing.length) {
+                    phoneticMap.set(key, c);
+                  }
+                }
               }
-            } else {
-              setPostOfficeList([]);
-              setPostOfficeMap({});
-              setVillageList([]);
+            });
+
+            const vils = Array.from(phoneticMap.values()).sort();
+            setVillageList(vils);
+            if (vils.length === 1) {
+              setVillage(vils[0]);
+              setVillageError('');
             }
           }
         } catch (err) {
@@ -985,25 +1031,10 @@ export default function SignupScreen({
       };
       fetchPincodeData();
     } else {
-      setPostOfficeList([]);
-      setPostOfficeMap({});
-      setPostOffice('');
       setVillageList([]);
       setVillage('');
     }
   }, [pincode]);
-
-  // Sync villages when postOffice or postOfficeMap updates
-  useEffect(() => {
-    if (postOffice && postOfficeMap[postOffice]) {
-      const vils = postOfficeMap[postOffice] || [];
-      setVillageList(vils);
-      if (vils.length === 1) {
-        setVillage(vils[0]);
-        setVillageError('');
-      }
-    }
-  }, [postOffice, postOfficeMap]);
 
   // IFSC Auto-fetch Effect
   useEffect(() => {
@@ -1752,11 +1783,6 @@ export default function SignupScreen({
       isValid = false;
       if (!firstInvalidRef) firstInvalidRef = houseNoRef;
     }
-    if (locationOption === 'pincode' && !postOffice) {
-      setPostOfficeError('Post office is required');
-      isValid = false;
-      if (!firstInvalidRef) firstInvalidRef = postOfficeRef;
-    }
     if (!isValid) {
       if (firstInvalidRef && firstInvalidRef.current && typeof firstInvalidRef.current.focus === 'function') {
         firstInvalidRef.current.focus();
@@ -1767,7 +1793,7 @@ export default function SignupScreen({
     try {
       await signupService.submitAddress({
         pincode,
-        postOffice,
+        postOffice: village || '',
         village,
         taluka,
         district,
@@ -2640,37 +2666,68 @@ export default function SignupScreen({
                       try {
                         const data = await signupService.getPincodeDetails(cleaned);
                         if (data) {
-                          setStateName(data.state);
-                          setDistrict(data.district);
-                          setTaluka(data.taluka);
-                          if (data.postOffices && data.postOffices.length > 0) {
-                            setPostOfficeList(data.postOffices);
-                            setPostOfficeMap(data.postOfficeMap || {});
-                            if (data.postOffices.length === 1) {
-                              const po = data.postOffices[0];
-                              setPostOffice(po);
-                              const vils = data.postOfficeMap?.[po] || [];
-                              setVillageList(vils);
-                              if (vils.length === 1) {
-                                setVillage(vils[0]);
+                          setStateName(data.state || '');
+                          setDistrict(data.district || '');
+                          setTaluka(data.taluka || '');
+
+                          const allVils: string[] = [];
+                          if (data.villages && Array.isArray(data.villages)) {
+                            allVils.push(...data.villages);
+                          }
+                          if (data.postOfficeMap) {
+                            Object.values(data.postOfficeMap).forEach((list: any) => {
+                              if (Array.isArray(list)) allVils.push(...list);
+                            });
+                          }
+                          if (data.postOffices && Array.isArray(data.postOffices)) {
+                            allVils.push(...data.postOffices);
+                          }
+
+                          const getPhoneticKey = (s: string) => {
+                            return s.toLowerCase()
+                              .replace(/[\s\-_.\(\)]+/g, '')
+                              .replace(/\s*(b\.?o\.?|s\.?o\.?|h\.?O\.?|branch office|sub office|head office)\b/gi, '')
+                              .replace(/w/g, 'v')
+                              .replace(/gh/g, 'g')
+                              .replace(/bh/g, 'b')
+                              .replace(/dh/g, 'd')
+                              .replace(/th/g, 't')
+                              .replace(/sh/g, 's')
+                              .replace(/ch/g, 'c')
+                              .replace(/[aeiouy]/g, '')
+                              .replace(/[nm]/g, '');
+                          };
+
+                          const phoneticMap = new Map<string, string>();
+                          allVils.forEach((v: string) => {
+                            const c = v
+                              .replace(/\s*\(.*?\)/g, '')
+                              .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
+                              .trim();
+                            if (c) {
+                              const key = getPhoneticKey(c);
+                              if (!phoneticMap.has(key)) {
+                                phoneticMap.set(key, c);
                               } else {
-                                setVillage('');
+                                const existing = phoneticMap.get(key)!;
+                                if (c.length > existing.length) {
+                                  phoneticMap.set(key, c);
+                                }
                               }
-                            } else {
-                              setPostOffice('');
-                              setVillageList([]);
-                              setVillage('');
                             }
+                          });
+
+                          const vils = Array.from(phoneticMap.values()).sort();
+                          setVillageList(vils);
+                          if (vils.length === 1) {
+                            setVillage(vils[0]);
                           } else {
-                            setPostOfficeList([]);
-                            setPostOfficeMap({});
-                            setPostOffice('');
-                            setVillageList([]);
                             setVillage('');
                           }
                           setStateNameError('');
                           setDistrictError('');
                           setTalukaError('');
+                          setVillageError('');
                         }
                       } catch (error) {
                         console.error('Pincode fetch error:', error);
@@ -2679,26 +2736,12 @@ export default function SignupScreen({
                     };
                     fetchPincode();
                   } else {
-                    setPostOfficeList([]);
-                    setPostOfficeMap({});
-                    setPostOffice('');
                     setVillageList([]);
                     setVillage('');
                   }
                 }} onBlur={() => {
                   if (!validateRequired(pincode)) setPincodeError(t("val_pincode_required"));else if (!validatePincode(pincode)) setPincodeError(t("su_enter_valid_6_digit__185"));
                 }} returnKeyType="next" />
-
-                {/* Post Office Dropdown */}
-                <View className="mt-4">
-                  <DropdownField label="Post Office" placeholder="Select Post Office" icon="mail-outline" value={postOffice} error={postOfficeError} required={true} onPress={() => {
-                    if (postOfficeList.length > 0) {
-                      setShowPostOfficeMenu(true);
-                    } else if (postOfficeList.length === 0 && pincode.length === 6) {
-                      setPostOfficeError('No post offices found for this pincode');
-                    }
-                  }} />
-                </View>
 
                 {/* Village Dropdown */}
                 <View className="mt-4">
@@ -3596,25 +3639,43 @@ export default function SignupScreen({
         }}>
             <TouchableWithoutFeedback>
               <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
-                <Text className="text-xl font-extrabold text-[#111827] mb-5">{t("su_select_village_297")}</Text>
+                <Text className="text-xl font-extrabold text-[#111827] mb-3">{t("su_select_village_297")}</Text>
+                <View className="mb-4 bg-gray-100 rounded-2xl flex-row items-center px-4 py-2">
+                  <Ionicons name="search-outline" size={20} color="#6B7280" />
+                  <TextInput
+                    placeholder="Search village name..."
+                    placeholderTextColor="#9CA3AF"
+                    value={villageSearch}
+                    onChangeText={setVillageSearch}
+                    className="flex-1 ml-2 text-[15px] text-[#111827]"
+                  />
+                  {villageSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setVillageSearch('')}>
+                      <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <ScrollView style={{
-                maxHeight: 400
+                maxHeight: 350
               }} showsVerticalScrollIndicator={false}>
-                  {villageList.map(opt => {
-                  const isSelected = village === opt;
-                  return <TouchableOpacity key={opt} onPress={() => {
-                    if (locationOption === 'state') {
-                      handleVillageSelect(opt);
-                    } else {
-                      setVillage(opt);
-                      setVillageError('');
-                    }
-                    setShowVillageMenu(false);
-                  }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
-                        <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
-                        {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
-                      </TouchableOpacity>;
-                })}
+                  {villageList
+                    .filter(opt => opt.toLowerCase().includes(villageSearch.toLowerCase()))
+                    .map(opt => {
+                    const isSelected = village === opt;
+                    return <TouchableOpacity key={opt} onPress={() => {
+                      if (locationOption === 'state') {
+                        handleVillageSelect(opt);
+                      } else {
+                        setVillage(opt);
+                        setVillageError('');
+                      }
+                      setShowVillageMenu(false);
+                      setVillageSearch('');
+                    }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
+                          <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>
+                          {isSelected && <Ionicons name="checkmark" size={20} color="#073318" />}
+                        </TouchableOpacity>;
+                  })}
                 </ScrollView>
               </View>
             </TouchableWithoutFeedback>
@@ -3639,14 +3700,15 @@ export default function SignupScreen({
                   return <TouchableOpacity key={opt} onPress={() => {
                     setPostOffice(opt);
                     setPostOfficeError('');
-                    const vils = postOfficeMap[opt] || [];
-                    setVillageList(vils);
-                    if (vils.length === 1) {
-                      setVillage(vils[0]);
+                    const cleanOpt = opt.replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '').trim();
+                    if (cleanOpt) {
+                      setVillage(cleanOpt);
                       setVillageError('');
-                    } else {
-                      setVillage('');
                     }
+                    // Keep all villages under pincode available, prioritizing cleanOpt at the top
+                    const allPincodeVils = selectedData?.villages || villageList;
+                    const sortedVils = Array.from(new Set([cleanOpt, ...allPincodeVils].filter(Boolean)));
+                    setVillageList(sortedVils);
                     setShowPostOfficeMenu(false);
                   }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
                         <Text className={`text-[16px] font-bold ${isSelected ? 'text-[#073318]' : 'text-[#111827]'}`}>{opt}</Text>

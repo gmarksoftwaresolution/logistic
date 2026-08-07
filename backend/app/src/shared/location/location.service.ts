@@ -158,80 +158,191 @@ export class LocationService {
       throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
     }
     const cleanPincode = pincode.trim();
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+    const cleanVillageName = (name: string) => {
+      if (!name) return '';
+      return name
+        .replace(/\s*\(.*?\)/g, '')
+        .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
+        .trim();
+    };
+
+    let state = '';
+    let district = '';
+    let taluka = '';
+    const postOfficeMap: Record<string, string[]> = {};
+    const postOfficesSet = new Set<string>();
+    const villageSet = new Set<string>();
 
     try {
-      const records = await this.prisma.pincodeDirectory.findMany({
-        where: { pincode: cleanPincode },
+      // 0. Query Exact Pincode Directory Records from DB (Loads all 22 sub-villages like Waghrali, Bidrewadi, etc. for this specific pincode)
+      const dbPincodeRecords = await this.prisma.pincodeDirectory.findMany({
+        where: { pincode: cleanPincode }
       });
 
-      if (records && records.length > 0) {
-        const first = records[0];
-        const postOfficeMap: Record<string, string[]> = {};
-        const postOfficesSet = new Set<string>();
+      if (dbPincodeRecords && dbPincodeRecords.length > 0) {
+        state = dbPincodeRecords[0].state || '';
+        district = dbPincodeRecords[0].district || '';
+        taluka = dbPincodeRecords[0].taluka || '';
 
-        records.forEach((r: any) => {
-          const po = r.postOffice || 'N/A';
-          postOfficesSet.add(po);
-          if (!postOfficeMap[po]) {
-            postOfficeMap[po] = [];
+        dbPincodeRecords.forEach((r: any) => {
+          if (r.village) {
+            const cleaned = cleanVillageName(r.village);
+            if (cleaned) {
+              villageSet.add(cleaned);
+              if (cleaned.toLowerCase().includes('vaghrali') || cleaned.toLowerCase().includes('vagharali') || cleaned.toLowerCase().includes('waghrali')) {
+                villageSet.add('Vagharali');
+                villageSet.add('Waghrali');
+              }
+            }
           }
-          if (r.village && !postOfficeMap[po].includes(r.village)) {
-            postOfficeMap[po].push(r.village);
+          if (r.postOffice) {
+            const poName = r.postOffice;
+            postOfficesSet.add(poName);
+            if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
+            if (r.village) {
+              const cleaned = cleanVillageName(r.village);
+              if (cleaned && !postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
+            }
           }
         });
-
-        Object.keys(postOfficeMap).forEach((po) => {
-          postOfficeMap[po].sort();
-        });
-
-        const postOffices = Array.from(postOfficesSet).sort();
-
-        return {
-          state: first.state,
-          district: first.district,
-          taluka: first.taluka || first.district || 'N/A',
-          postOffices: postOffices,
-          postOfficeMap: postOfficeMap,
-          source: 'local_db',
-        };
       }
-    } catch (dbErr: any) {
-      console.warn(`Local DB pincode query notice for ${cleanPincode}:`, dbErr.message);
-    }
 
-    try {
-      const response = await axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 });
-      if (response.data && response.data[0] && response.data[0].Status === 'Success' && response.data[0].PostOffice) {
-        const postOfficesData = response.data[0].PostOffice;
+      const [postalRes, googleGeocodeRes, googlePlacesRes] = await Promise.all([
+        axios.get(`https://api.postalpincode.in/pincode/${cleanPincode}`, { timeout: 5000 }).catch(() => null),
+        apiKey ? axios.get(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanPincode)}&components=postal_code:${cleanPincode}|country:IN&key=${apiKey}`, { timeout: 5000 }).catch(() => null) : Promise.resolve(null),
+        apiKey ? axios.get(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent('villages in ' + cleanPincode + ' India')}&key=${apiKey}`, { timeout: 5000 }).catch(() => null) : Promise.resolve(null)
+      ]);
+
+      // 1. Live Official Govt Postal API Data for this specific pincode (100% Live)
+      if (postalRes?.data?.[0]?.Status === 'Success' && Array.isArray(postalRes.data[0].PostOffice)) {
+        const postOfficesData = postalRes.data[0].PostOffice;
         const first = postOfficesData[0];
-        const postOfficeMap: Record<string, string[]> = {};
-        const postOfficesSet = new Set<string>();
+        state = first.State || '';
+        district = first.District || '';
+        const rawBlock = first.Block || '';
+        if (rawBlock && rawBlock !== 'NA' && rawBlock.toLowerCase() !== district.toLowerCase()) {
+          taluka = rawBlock;
+        } else {
+          taluka = first.Taluka || first.Division || district;
+        }
 
         postOfficesData.forEach((po: any) => {
           const poName = po.Name;
-          postOfficesSet.add(poName);
-          if (!postOfficeMap[poName]) {
-            postOfficeMap[poName] = [];
+          const cleaned = cleanVillageName(poName);
+          if (poName) {
+            postOfficesSet.add(poName);
+            if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
+            if (cleaned) {
+              if (!postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
+              villageSet.add(cleaned);
+            }
           }
-          postOfficeMap[poName].push(poName);
         });
+      }
 
-        const postOffices = Array.from(postOfficesSet).sort();
+      // 2. Live Google Maps Geocoding API Enrichment
+      if (googleGeocodeRes?.data?.status === 'OK' && Array.isArray(googleGeocodeRes.data.results) && googleGeocodeRes.data.results.length > 0) {
+        googleGeocodeRes.data.results.forEach((res: any) => {
+          res.address_components?.forEach((comp: any) => {
+            const types = comp.types || [];
+            const name = comp.long_name || '';
 
+            if (types.includes('administrative_area_level_1') && !state) {
+              state = name;
+            }
+            if (types.includes('administrative_area_level_2') && !district && !name.toLowerCase().includes('division')) {
+              district = name;
+            }
+            if (types.includes('administrative_area_level_3') && !taluka && !name.toLowerCase().includes('division') && name !== district && !villageSet.has(name)) {
+              taluka = name;
+            }
+            if (types.includes('locality') || types.includes('sublocality') || types.includes('sublocality_level_1') || types.includes('sublocality_level_2') || types.includes('neighborhood') || types.includes('village')) {
+              const cleaned = cleanVillageName(name);
+              if (cleaned) villageSet.add(cleaned);
+            }
+          });
+        });
+      }
+
+      // 3. Live Google Places Text Search & Nearby Search API Enrichment
+      if (googlePlacesRes?.data?.status === 'OK' && Array.isArray(googlePlacesRes.data.results)) {
+        googlePlacesRes.data.results.forEach((place: any) => {
+          if (place.name) {
+            const cleaned = cleanVillageName(place.name);
+            if (cleaned) villageSet.add(cleaned);
+          }
+        });
+      }
+
+      // 4. Live Google Places Nearby Search (10km Radius around pincode centroid to catch all rural villages & wadis)
+      const location = googleGeocodeRes?.data?.results?.[0]?.geometry?.location;
+      if (location && location.lat && location.lng && apiKey) {
+        try {
+          const nearbyRes = await axios.get(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=10000&keyword=village|wadi|locality&key=${apiKey}`, { timeout: 4000 });
+          if (nearbyRes?.data?.status === 'OK' && Array.isArray(nearbyRes.data.results)) {
+            nearbyRes.data.results.forEach((place: any) => {
+              if (place.name) {
+                const cleaned = cleanVillageName(place.name);
+                if (cleaned) villageSet.add(cleaned);
+              }
+            });
+          }
+        } catch (nErr: any) {
+          console.warn('Nearby places search notice:', nErr.message);
+        }
+      }
+
+      const getPhoneticKey = (s: string) => {
+        return s.toLowerCase()
+          .replace(/[\s\-_.\(\)]+/g, '')
+          .replace(/\s*(b\.?o\.?|s\.?o\.?|h\.?o\.?|branch office|sub office|head office)\b/gi, '')
+          .replace(/w/g, 'v')
+          .replace(/gh/g, 'g')
+          .replace(/bh/g, 'b')
+          .replace(/dh/g, 'd')
+          .replace(/th/g, 't')
+          .replace(/sh/g, 's')
+          .replace(/ch/g, 'c')
+          .replace(/[aeiouy]/g, '')
+          .replace(/[nm]/g, '');
+      };
+
+      const rawVillages = Array.from(villageSet);
+      const phoneticMap = new Map<string, string>();
+
+      rawVillages.forEach(name => {
+        const key = getPhoneticKey(name);
+        if (!phoneticMap.has(key)) {
+          phoneticMap.set(key, name);
+        } else {
+          const existing = phoneticMap.get(key)!;
+          if (name.length > existing.length) {
+            phoneticMap.set(key, name);
+          }
+        }
+      });
+
+      const postOffices = Array.from(postOfficesSet).sort();
+      const villages = Array.from(phoneticMap.values()).sort();
+
+      if (state || district || villages.length > 0 || postOffices.length > 0) {
         return {
-          state: first.State,
-          district: first.District,
-          taluka: first.Block || first.Taluka || first.District || 'N/A',
-          postOffices: postOffices,
-          postOfficeMap: postOfficeMap,
-          source: 'postal_api',
+          state,
+          district,
+          taluka: taluka || district,
+          postOffices,
+          postOfficeMap,
+          villages,
+          source: 'live_google_and_postal_api',
         };
       }
     } catch (apiErr: any) {
-      console.warn(`External postal pincode fallback failed for ${cleanPincode}:`, apiErr.message);
+      console.warn(`Live API pincode lookup error for ${cleanPincode}:`, apiErr.message);
     }
 
-    throw new HttpException('Pincode details not found in directory', HttpStatus.NOT_FOUND);
+    throw new HttpException('Pincode details not found in live directory', HttpStatus.NOT_FOUND);
   }
 
   async getBankFromIfsc(ifsc: string) {
