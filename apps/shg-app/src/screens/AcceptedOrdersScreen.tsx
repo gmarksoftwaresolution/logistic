@@ -370,7 +370,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
                 isRedirected={isRedirected}
-                onRedirect={() => handleRedirectOrder(item)}
                 transporterName={item.transporterName}
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}

@@ -43,8 +43,42 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const shgIds = orders
+      .map(o => o.pickupShgId ? parseInt(o.pickupShgId, 10) : null)
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const shgUsers = shgIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: shgIds } },
+          include: { address: true }
+        })
+      : [];
+
+    const shgMap = new Map(shgUsers.map(u => [String(u.id), u]));
+
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const shgUser = o.pickupShgId ? shgMap.get(o.pickupShgId) : null;
+      const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
+      
+      const mappedSeller = (!isRedirected && shgUser) ? {
+        id: shgUser.id,
+        sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
+        sellerName: shgUser.fullName || 'SHG Member',
+        mobileNumber: shgUser.phoneNumber,
+        email: shgUser.email,
+        addressLine1: shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine2: shgUser.address?.landmark || '',
+        village: shgUser.address?.village || '',
+        taluka: shgUser.address?.taluka || '',
+        district: shgUser.address?.district || '',
+        state: shgUser.address?.state || '',
+        pincode: shgUser.address?.pincode || '',
+        postOffice: shgUser.address?.postOffice || null,
+        createdAt: shgUser.createdAt,
+        updatedAt: shgUser.updatedAt,
+      } : o.seller;
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -56,7 +90,7 @@ export class OrderService {
         pickupTransporterId: o.pickupTransporterId,
         pickupTransporterStatus: o.pickupTransporterStatus || 'TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        seller: o.seller,
+        seller: mappedSeller,
         buyer: o.buyer,
         parcels: o.parcels || [],
       };

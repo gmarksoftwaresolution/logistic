@@ -170,7 +170,7 @@ export class OrderService {
           phoneNumber: transporterUser.phoneNumber,
           transporterDetail: {
             transporterCode: transporterUser.transporterDetail?.transporterCode || '',
-            vehicleNumber: transporterUser.transporterDetail?.vehicleNumber || transporterUser.transporterDetail?.registrationNumber || '',
+            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
           },
           otherDetails: transporterUser.otherDetails || [],
         } : null,
@@ -280,7 +280,7 @@ export class OrderService {
           phoneNumber: transporterUser.phoneNumber,
           transporterDetail: {
             transporterCode: transporterUser.transporterDetail?.transporterCode || '',
-            vehicleNumber: transporterUser.transporterDetail?.vehicleNumber || transporterUser.transporterDetail?.registrationNumber || '',
+            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
           },
           otherDetails: transporterUser.otherDetails || [],
         } : null,
