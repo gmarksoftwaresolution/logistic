@@ -33,7 +33,7 @@ export class OrderService {
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED'] }
+        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'REDIRECTED'] }
       },
       include: {
         seller: true,
@@ -164,6 +164,15 @@ export class OrderService {
         mainStatus: 'PICKUP_TRANSPORTER_ACCEPTED',
       }
     });
+
+    // Update RedirectedOrder audit record
+    await this.prisma.redirectedOrder.updateMany({
+      where: { orderId: order.id },
+      data: {
+        transporterId: transporterUuid,
+        status: 'ACCEPTED'
+      }
+    }).catch(() => {});
 
     return order;
   }

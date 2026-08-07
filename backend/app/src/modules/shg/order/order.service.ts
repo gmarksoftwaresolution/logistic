@@ -55,7 +55,8 @@ export class OrderService {
             'PICKUP_SHG_ACCEPTED',
             'PARCEL_AT_SHG',
             'TRANSPORTER_ACCEPTED',
-            'PICKUP_TRANSPORTER_ACCEPTED'
+            'PICKUP_TRANSPORTER_ACCEPTED',
+            'REDIRECTED'
           ]
         }
       },
@@ -142,6 +143,13 @@ export class OrderService {
             unit: 'kg'
           }
         }],
+        isPickupRedirected: o.isPickupRedirected,
+        isDropRedirected: o.isDropRedirected,
+        pickupShgStatus: o.pickupShgStatus,
+        pickupTransporterStatus: o.pickupTransporterStatus,
+        dropShgStatus: o.dropShgStatus,
+        dropTransporterStatus: o.dropTransporterStatus,
+        mainStatus: o.mainStatus,
       };
     });
   }
@@ -221,6 +229,13 @@ export class OrderService {
           phoneNumber: o.buyer.mobileNumber,
         } : null,
         items: o.parcels || [],
+        isPickupRedirected: o.isPickupRedirected,
+        isDropRedirected: o.isDropRedirected,
+        pickupShgStatus: o.pickupShgStatus,
+        pickupTransporterStatus: o.pickupTransporterStatus,
+        dropShgStatus: o.dropShgStatus,
+        dropTransporterStatus: o.dropTransporterStatus,
+        mainStatus: o.mainStatus,
       };
     });
 
@@ -368,7 +383,148 @@ export class OrderService {
   }
 
   async redirectOrder(orderId: any, shgId: number | string, legType?: string, reason?: string) {
-    const order = await this.findOrderFlexible(orderId);
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: String(orderId) },
+          { orderId: String(orderId) },
+          { orderId: `ORD-${String(orderId)}` }
+        ]
+      },
+      include: { seller: true }
+    });
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    const seller = order.seller;
+    let selectedTransporterId: string | null = null;
+    
+    if (seller) {
+      // Find matching transporters
+      const transporters = await this.prisma.$queryRawUnsafe(`
+        SELECT u.id, rd."operatingArea", rd."pickupLocations" as "assignedPincodes", mv."assignedVillages"
+        FROM public."User" u
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+        WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+      `) as any[];
+
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch (e) { }
+        }
+        return [];
+      };
+
+      const getTransporterLocations = (tr: any) => {
+        const areas = tr.operatingArea
+          ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+          : [];
+        const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+        const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+        return { areas, villages, pincodes };
+      };
+
+      const p = seller.pincode ? seller.pincode.toLowerCase().trim() : '';
+      const v = seller.village ? seller.village.toLowerCase().trim() : '';
+      const t = seller.taluka ? seller.taluka.toLowerCase().trim() : '';
+      const d = seller.district ? seller.district.toLowerCase().trim() : '';
+
+      let matchedTransporters = [];
+
+      // Priority 1: Pincode
+      if (p) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas, pincodes } = getTransporterLocations(tr);
+          return pincodes.some((po: string) => po.split(' (')[0] === p) || areas.some((a: string) => a.split(' (')[0] === p);
+        });
+      }
+
+      // Priority 2: Village
+      if (matchedTransporters.length === 0 && v) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas, villages } = getTransporterLocations(tr);
+          return villages.some((vi: string) => vi.split(' (')[0] === v) || areas.some((a: string) => a.split(' (')[0] === v);
+        });
+      }
+
+      // Priority 3: Taluka
+      if (matchedTransporters.length === 0 && t) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.some((a: string) => a.split(' (')[0] === t);
+        });
+      }
+
+      // Priority 4: District
+      if (matchedTransporters.length === 0 && d) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.some((a: string) => a.split(' (')[0] === d);
+        });
+      }
+
+      if (matchedTransporters.length > 0) {
+        selectedTransporterId = String(matchedTransporters[0].id);
+      }
+    }
+
+    if (!selectedTransporterId) {
+      const fallbackTransporter = await this.prisma.user.findFirst({
+        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
+      });
+      if (fallbackTransporter) {
+        selectedTransporterId = String(fallbackTransporter.id);
+      }
+    }
+
+    if (selectedTransporterId) {
+      // 1. Create OrderAssignment for transporter
+      await this.prisma.orderAssignment.create({
+        data: {
+          orderId: order.id,
+          assigneeId: selectedTransporterId,
+          assigneeType: 'TRANSPORTER',
+          role: 'PICKUP',
+          status: 'PENDING'
+        }
+      });
+
+      // 2. Insert into RedirectedOrder audit table
+      await this.prisma.redirectedOrder.upsert({
+        where: { orderId: order.id },
+        update: {
+          shgId: String(shgId),
+          transporterId: selectedTransporterId,
+          reason: reason || 'Redirected by SHG',
+          status: 'PENDING'
+        },
+        create: {
+          orderId: order.id,
+          shgId: String(shgId),
+          transporterId: selectedTransporterId,
+          reason: reason || 'Redirected by SHG',
+          status: 'PENDING'
+        }
+      });
+    }
+
+    // 3. Update the Order table
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        isPickupRedirected: true,
+        redirectedPickupAt: new Date(),
+        redirectedPickupShgId: String(shgId),
+        pickupShgStatus: 'REDIRECTED',
+        mainStatus: 'REDIRECTED',
+        pickupTransporterId: selectedTransporterId,
+        pickupTransporterStatus: 'PENDING'
+      }
+    });
+
     return { success: true, message: 'Order redirected to Transporter', orderId: order.id };
   }
 

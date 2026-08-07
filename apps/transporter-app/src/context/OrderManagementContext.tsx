@@ -226,9 +226,9 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           ? 'DROP_COMPLETED'
           : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
             ? 'PICKUP_COMPLETED'
-            : (o.transporterId || o.pickupTransporterId || o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+            : (o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
               ? 'ACCEPTED_PICKUP'
-              : (o.pickupTransporterStatus === 'PENDING' || o.mainStatus === 'PENDING' || o.mainStatus === 'PARCEL_AT_SHG' || o.mainStatus === 'PICKUP_SHG_ACCEPTED')
+              : (o.pickupTransporterStatus === 'PENDING' || o.mainStatus === 'PENDING' || o.mainStatus === 'PARCEL_AT_SHG' || o.mainStatus === 'PICKUP_SHG_ACCEPTED' || o.mainStatus === 'REDIRECTED')
                 ? 'NEW_ORDER'
                 : 'ACCEPTED_PICKUP',
         rejectReason: (() => {

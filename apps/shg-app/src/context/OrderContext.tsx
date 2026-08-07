@@ -69,6 +69,9 @@ export interface Order {
   isRedirected?: boolean;
   pickupShgStatus?: string;
   dropShgStatus?: string;
+  pickupTransporterStatus?: string;
+  mainStatus?: string;
+  uuid?: string;
 }
 
 interface OrderContextType {
@@ -90,6 +93,7 @@ interface OrderContextType {
   refreshOrdersList: () => Promise<void>;
   isOrdersLoading: boolean;
   incomingReturnOrders: Order[];
+  redirectedOrders: Order[];
   acceptReturnOrders: (orderIds: string[]) => void;
   rescheduleOrder: (orderId: string, date: string, time: string, reason: string) => Promise<void>;
 }
@@ -295,12 +299,16 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
     pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
     dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
+    pickupTransporterStatus: dbOrder.pickupTransporterStatus || '',
+    mainStatus: dbOrder.mainStatus || '',
+    uuid: dbOrder.id || '',
   };
 };
 
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
   const [acceptedOrders, setAcceptedOrders] = useState<Order[]>([]);
+  const [redirectedOrders, setRedirectedOrders] = useState<Order[]>([]);
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
   const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
@@ -502,7 +510,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
-      const sortedAccepted = finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').sort((a, b) => {
+      const sortedAccepted = finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isPickupRedirected).sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -514,6 +522,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
       });
       setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
+
+      // Filter redirected orders
+      const sortedRedirected = finalMapped.filter(o => o.isPickupRedirected && o.status !== 'COMPLETED').sort((a, b) => {
+        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
+        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
+        return bNum - aNum;
+      });
+      const uniqueRedirectedMap = new Map<string, Order>();
+      sortedRedirected.forEach(o => {
+        if (!uniqueRedirectedMap.has(o.orderId)) {
+          uniqueRedirectedMap.set(o.orderId, o);
+        }
+      });
+      setRedirectedOrders(Array.from(uniqueRedirectedMap.values()));
 
       const mappedReturns = rawReturns.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType, true);
@@ -586,6 +608,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (!token) {
             setIncomingOrders([]);
             setAcceptedOrders([]);
+            setRedirectedOrders([]);
             setDeliveredOrders([]);
             setPendingOrders([]);
 
@@ -856,6 +879,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       refreshOrdersList,
       isOrdersLoading,
       incomingReturnOrders,
+      redirectedOrders,
       acceptReturnOrders,
       rescheduleOrder,
     }}>

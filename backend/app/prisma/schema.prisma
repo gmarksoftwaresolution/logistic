@@ -118,6 +118,7 @@ model Order {
 
   assignments             OrderAssignment[]
   parcels                 Parcel[]
+  redirectedOrder         RedirectedOrder?
 
   @@index([orderId])
   @@index([barcode])
@@ -983,5 +984,21 @@ model return_order_timeline {
   return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
 
   @@index([return_order_id])
+}
+
+model RedirectedOrder {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shgId         String
+  transporterId String?
+  reason        String?
+  status        String   @default("PENDING") // PENDING, ACCEPTED, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([shgId])
+  @@index([transporterId])
 }
 
