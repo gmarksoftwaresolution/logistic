@@ -189,10 +189,10 @@ export const api = {
     transporterReschedule: (id: string, transporterId: string) => request(`/orders/${id}/transporter-reschedule`, { method: 'POST', body: JSON.stringify({ transporterId }) }),
     transporterPicked: (id: string) => request(`/orders/${id}/transporter-picked`, { method: 'POST' }),
 
-    warehouseIntake: (id: string) => request(`/orders/${id}/warehouse-intake`, { method: 'POST' }),
+    warehouseIntake: (id: string) => request(`/orders/${encodeURIComponent(id)}/warehouse-intake`, { method: 'POST' }),
     generateQr: (orderId: string, regenerate?: boolean) => request('/qr/generate', { method: 'POST', body: JSON.stringify({ orderId, regenerate }) }),
     verifyQr: (parcelId: string, verificationToken: string, userRole: string, scannedByUserId?: string, latitude?: number, longitude?: number, remarks?: string) => request('/qr/verify', { method: 'POST', body: JSON.stringify({ parcelId, verificationToken, userRole, scannedByUserId, latitude, longitude, remarks }) }),
-    store: (id: string) => request(`/orders/${id}/store`, { method: 'POST' }),
+    store: (id: string) => request(`/orders/${encodeURIComponent(id)}/store`, { method: 'POST' }),
 
     dropShgBroadcast: (id: string) => request(`/orders/${id}/drop-shg-broadcast`, { method: 'POST' }),
     dropShgAccept: (id: string, shgId: string) => request(`/orders/${id}/drop-shg-accept`, { method: 'POST', body: JSON.stringify({ shgId }) }),

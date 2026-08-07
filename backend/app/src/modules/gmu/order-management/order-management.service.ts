@@ -1993,7 +1993,7 @@ export class OrderManagementService implements OnModuleInit {
       where: { id: order.id },
       data: {
         mainStatus: 'STORED',
-        pickupTransporterStatus: 'COMPLETED',
+        pickupTransporterStatus: 'DROPPED',
         pickupShgStatus: 'DROPPED',
         warehouseReceivedAt: new Date(),
         storedAt: new Date(),
