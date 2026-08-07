@@ -1,14 +1,15 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
-  FlatList
+  FlatList,
+  ScrollView,
+  Dimensions
 } from 'react-native';
 import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -17,8 +18,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
 import { useOrders } from '../context/OrderContext';
 import { SharedHeader } from '../components/SharedHeader';
-import { HighlightCardWrapper } from '../components/HighlightCardWrapper';
-import { OrderDistance } from '../components/OrderDistance';
+import { OrderCard } from '../components/OrderCard';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { FilterModal } from '../components/FilterModal';
@@ -34,6 +34,8 @@ type Props = CompositeScreenProps<
   >
 >;
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
@@ -43,9 +45,12 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   const PAGE_SIZE = 5;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
+  const [deliveryVisibleCount, setDeliveryVisibleCount] = useState(PAGE_SIZE);
 
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
+  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = async () => {
@@ -57,6 +62,13 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (refreshOrdersList) refreshOrdersList().catch(err => console.log('Error refreshing redirected orders:', err));
+    });
+    return unsubscribe;
+  }, [navigation, refreshOrdersList]);
 
   if (!context || !user) return null;
   const { t } = context;
@@ -81,15 +93,56 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
     return 'Awaiting Transporter';
   };
 
-  const getRedirectStatusStyle = (label: string) => {
-    switch (label) {
-      case 'In Transit to Hub':
-        return { bg: 'bg-blue-50 border border-blue-200', text: 'text-blue-700' };
-      case 'Transporter Accepted':
-        return { bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-700' };
-      default:
-        return { bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' };
+  // Categorize redirected orders
+  const pickupOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) !== 'In Transit to Hub');
+  const deliveryOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) === 'In Transit to Hub');
+
+  const handleTabPress = (tab: 'pickup' | 'drop') => {
+    setActiveTab(tab);
+    scrollViewRef.current?.scrollTo({
+      x: tab === 'pickup' ? 0 : SCREEN_WIDTH,
+      animated: false,
+    });
+  };
+
+  const handleScroll = (event: any) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffsetX / SCREEN_WIDTH);
+    const newTab = index === 0 ? 'pickup' : 'drop';
+    if (newTab !== activeTab) {
+      setActiveTab(newTab);
     }
+  };
+
+  const renderOrderCard = (item: Order) => {
+    const routeStr = getRouteForOrder(item);
+    const routeParts = routeStr.split('>');
+    const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
+    const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
+    const orderIdText = `#${getFormattedOrderId(item)}`;
+    const info = getInfoForOrder(item);
+
+    return (
+      <OrderCard
+        orderIdText={orderIdText}
+        source={source}
+        destination={destination}
+        qty={item.remainingQty || 1}
+        date={info.date}
+        time={info.time}
+        distance={item.distance}
+        showScanner={false}
+        onPressCard={() => navigation.navigate('OrderDetails', { order: item })}
+        onViewAddress={() => setSelectedAddressOrder(item)}
+        isHighlighted={highlightedOrders[item.id]}
+        isRescheduled={false}
+        isRedirected={true}
+        transporterName={item.transporterName}
+        transporterMobile={item.transporterMobile}
+        vehicleNumber={item.vehicleNumber}
+        transporterId={item.transporterId}
+      />
+    );
   };
 
   return (
@@ -115,17 +168,102 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-        className="flex-1 pt-2"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 24 }}
-        data={filteredOrders.length === 0 ? [] : filteredOrders.slice(0, visibleCount)}
-        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
-        ListEmptyComponent={
-          filteredOrders.length === 0 ? (
-            <View className="pt-6">
-              <View 
+      {/* Segment Tab Switcher */}
+      <View
+        className="bg-white border border-[#F1F5F9] rounded-[28px] p-1.5 flex-row mx-6 my-4 gap-2"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.04,
+          shadowRadius: 10,
+          elevation: 3,
+        }}
+      >
+        {/* Pickup Tab Button */}
+        <TouchableOpacity
+          onPress={() => handleTabPress('pickup')}
+          activeOpacity={0.8}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'}`}
+          style={activeTab === 'pickup' ? {
+            shadowColor: '#073318',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
+          } : undefined}
+        >
+          <Ionicons
+            name={activeTab === 'pickup' ? "cube" : "cube-outline"}
+            size={16}
+            color={activeTab === 'pickup' ? "#FFFFFF" : "#64748B"}
+          />
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'}`}>
+            {t("tab_pickup") || "Pickup"}
+          </Text>
+          <View
+            className="px-2.5 py-0.5 rounded-full ml-2"
+            style={activeTab === 'pickup' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'}`}>
+              {pickupOrders.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Drop Tab Button */}
+        <TouchableOpacity
+          onPress={() => handleTabPress('drop')}
+          activeOpacity={0.8}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'}`}
+          style={activeTab === 'drop' ? {
+            shadowColor: '#073318',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
+          } : undefined}
+        >
+          <Ionicons
+            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
+            size={16}
+            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
+          />
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'}`}>
+            Drop
+          </Text>
+          <View
+            className="px-2.5 py-0.5 rounded-full ml-2"
+            style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'}`}>
+              {deliveryOrders.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Swipeable Pager Area */}
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        className="flex-1"
+        contentContainerStyle={{ width: SCREEN_WIDTH * 2 }}
+      >
+        {/* Page 1: Pickup Screen */}
+        <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          style={{ width: SCREEN_WIDTH }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
+          keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+          ListEmptyComponent={
+            pickupOrders.length === 0 ? (
+              <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
               >
@@ -133,95 +271,64 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                   className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
                   style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
                 >
-                  <Ionicons name="swap-horizontal-outline" size={28} color="#94A3B8" />
+                  <Ionicons name="cube-outline" size={28} color="#94A3B8" />
                 </View>
                 <Text className="text-[15px] font-black text-slate-700 text-center">
-                  No redirected orders found
+                  No redirected pickup orders found
                 </Text>
               </View>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => {
-          const orderIdText = `#${getFormattedOrderId(item)}`;
-          const routeStr = getRouteForOrder(item);
-          const routeParts = routeStr.split('>');
-          const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
-          const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
-          const info = getInfoForOrder(item);
-          const redirectStatus = getRedirectStatusLabel(item);
-          const statusStyle = getRedirectStatusStyle(redirectStatus);
+            ) : null
+          }
+          renderItem={({ item }) => renderOrderCard(item)}
+          ListFooterComponent={
+            pickupOrders.length > 0 ? (
+              <ViewMoreButton 
+                totalCount={pickupOrders.length}
+                visibleCount={pickupVisibleCount}
+                onPress={() => setPickupVisibleCount(prev => prev + PAGE_SIZE)}
+              />
+            ) : null
+          }
+        />
 
-          return (
-            <HighlightCardWrapper isHighlighted={highlightedOrders[item.id]}>
-              <View 
-                className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-                style={{ 
-                  elevation: 3,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 10,
-                  backgroundColor: 'rgba(255, 255, 255, 0.85)'
-                }}
+        {/* Page 2: Delivery Screen */}
+        <FlatList
+          refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          style={{ width: SCREEN_WIDTH }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
+          keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+          ListEmptyComponent={
+            deliveryOrders.length === 0 ? (
+              <View
+                className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
+                style={{ borderStyle: 'dashed' }}
               >
-                <BlurView intensity={50} tint="light">
-                  <TouchableOpacity 
-                    onPress={() => navigation.navigate('OrderDetails', { order: item })}
-                    className="p-5 bg-white/70"
-                  >
-                    <View className="flex-row justify-between items-center mb-3">
-                      <Text className="text-[14px] font-black text-[#073318] tracking-wide">{orderIdText}</Text>
-                      <View className={`px-3 py-1 rounded-full ${statusStyle.bg}`}>
-                        <Text className={`text-[10px] font-extrabold ${statusStyle.text}`}>{redirectStatus}</Text>
-                      </View>
-                    </View>
-                    
-                    <View className="flex-row items-center justify-between mb-2 mt-1">
-                      <View className="flex-1 flex-row items-center pr-2">
-                        <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
-                        <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{ marginHorizontal: 6 }} />
-                        <Text className="text-[13px] font-extrabold text-[#111827] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
-                      </View>
-                      <OrderDistance distance={item.distance} />
-                    </View>
-
-                    {/* View Address Button */}
-                    <TouchableOpacity 
-                      onPress={() => setSelectedAddressOrder(item)} 
-                      activeOpacity={0.7}
-                      className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
-                    >
-                      <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
-                      <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
-                        {t("view_address") || "View Address"}
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    <View className="flex-row justify-between items-center">
-                      <Text className="text-[13px] text-[#8792A1] font-medium">
-                        {item.remainingQty || 1} {t("su_products") || "products"} • {item.weight || 2} {t("su_kg") || "kg"}
-                      </Text>
-                      <Text className="text-[12px] text-[#8792A1] font-medium">
-                        {item.time || `${info.date}, ${info.time}`}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </BlurView>
+                <View
+                  className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
+                  style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
+                >
+                  <Ionicons name="bicycle-outline" size={28} color="#94A3B8" />
+                </View>
+                <Text className="text-[15px] font-black text-slate-700 text-center">
+                  No redirected drop orders found
+                </Text>
               </View>
-            </HighlightCardWrapper>
-          );
-        }}
-        ListFooterComponent={
-          filteredOrders.length > 0 ? (
-            <ViewMoreButton 
-              totalCount={filteredOrders.length}
-              visibleCount={visibleCount}
-              onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-            />
-          ) : null
-        }
-      />
+            ) : null
+          }
+          renderItem={({ item }) => renderOrderCard(item)}
+          ListFooterComponent={
+            deliveryOrders.length > 0 ? (
+              <ViewMoreButton 
+                totalCount={deliveryOrders.length}
+                visibleCount={deliveryVisibleCount}
+                onPress={() => setDeliveryVisibleCount(prev => prev + PAGE_SIZE)}
+              />
+            ) : null
+          }
+        />
+      </ScrollView>
 
       <FilterModal
         visible={isFilterModalVisible}

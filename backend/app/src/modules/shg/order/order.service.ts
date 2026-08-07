@@ -85,7 +85,22 @@ export class OrderService {
       return false;
     });
 
+    const transporterIds = matchedOrders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: transporterIds } },
+          include: { transporterDetail: true, otherDetails: true }
+        })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
     return matchedOrders.map((o: any) => {
+      const transId = o.pickupTransporterId || o.dropTransporterId;
+      const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       return {
         id: cleanOrderId,
@@ -150,6 +165,15 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
+        transporter: transporterUser ? {
+          fullName: transporterUser.fullName,
+          phoneNumber: transporterUser.phoneNumber,
+          transporterDetail: {
+            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+            vehicleNumber: transporterUser.transporterDetail?.vehicleNumber || transporterUser.transporterDetail?.registrationNumber || '',
+          },
+          otherDetails: transporterUser.otherDetails || [],
+        } : null,
       };
     });
   }
@@ -211,7 +235,22 @@ export class OrderService {
       return false;
     });
 
+    const transporterIds = matchedOrders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: transporterIds } },
+          include: { transporterDetail: true, otherDetails: true }
+        })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
     const formatted = matchedOrders.map((o: any) => {
+      const transId = o.pickupTransporterId || o.dropTransporterId;
+      const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       return {
         id: cleanOrderId,
@@ -236,6 +275,15 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
+        transporter: transporterUser ? {
+          fullName: transporterUser.fullName,
+          phoneNumber: transporterUser.phoneNumber,
+          transporterDetail: {
+            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+            vehicleNumber: transporterUser.transporterDetail?.vehicleNumber || transporterUser.transporterDetail?.registrationNumber || '',
+          },
+          otherDetails: transporterUser.otherDetails || [],
+        } : null,
       };
     });
 
