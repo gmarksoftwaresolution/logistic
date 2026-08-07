@@ -45,11 +45,11 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   const PAGE_SIZE = 5;
-  const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
-  const [deliveryVisibleCount, setDeliveryVisibleCount] = useState(PAGE_SIZE);
+  const [requestedVisibleCount, setRequestedVisibleCount] = useState(PAGE_SIZE);
+  const [acceptedVisibleCount, setAcceptedVisibleCount] = useState(PAGE_SIZE);
 
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
-  const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
+  const [activeTab, setActiveTab] = useState<'requested' | 'accepted'>('requested');
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -94,13 +94,13 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   // Categorize redirected orders
-  const pickupOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) !== 'In Transit to Hub');
-  const deliveryOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) === 'In Transit to Hub');
+  const requestedOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) === 'Awaiting Transporter');
+  const acceptedOrders = filteredOrders.filter(o => getRedirectStatusLabel(o) !== 'Awaiting Transporter');
 
-  const handleTabPress = (tab: 'pickup' | 'drop') => {
+  const handleTabPress = (tab: 'requested' | 'accepted') => {
     setActiveTab(tab);
     scrollViewRef.current?.scrollTo({
-      x: tab === 'pickup' ? 0 : SCREEN_WIDTH,
+      x: tab === 'requested' ? 0 : SCREEN_WIDTH,
       animated: false,
     });
   };
@@ -108,7 +108,7 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / SCREEN_WIDTH);
-    const newTab = index === 0 ? 'pickup' : 'drop';
+    const newTab = index === 0 ? 'requested' : 'accepted';
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
@@ -137,10 +137,10 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         isHighlighted={highlightedOrders[item.id]}
         isRescheduled={false}
         isRedirected={true}
-        transporterName={item.transporterName}
-        transporterMobile={item.transporterMobile}
-        vehicleNumber={item.vehicleNumber}
-        transporterId={item.transporterId}
+        transporterName={getRedirectStatusLabel(item) !== 'Awaiting Transporter' ? item.transporterName : undefined}
+        transporterMobile={getRedirectStatusLabel(item) !== 'Awaiting Transporter' ? item.transporterMobile : undefined}
+        vehicleNumber={getRedirectStatusLabel(item) !== 'Awaiting Transporter' ? item.vehicleNumber : undefined}
+        transporterId={getRedirectStatusLabel(item) !== 'Awaiting Transporter' ? item.transporterId : undefined}
       />
     );
   };
@@ -179,12 +179,12 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           elevation: 3,
         }}
       >
-        {/* Pickup Tab Button */}
+        {/* Requested Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('pickup')}
+          onPress={() => handleTabPress('requested')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'pickup' ? 'bg-[#073318]' : 'bg-transparent'}`}
-          style={activeTab === 'pickup' ? {
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'requested' ? 'bg-[#073318]' : 'bg-transparent'}`}
+          style={activeTab === 'requested' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -193,29 +193,29 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'pickup' ? "cube" : "cube-outline"}
+            name={activeTab === 'requested' ? "hourglass" : "hourglass-outline"}
             size={16}
-            color={activeTab === 'pickup' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'requested' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'}`}>
-            {t("tab_pickup") || "Pickup"}
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'requested' ? 'text-white' : 'text-slate-500'}`}>
+            Requested
           </Text>
           <View
             className="px-2.5 py-0.5 rounded-full ml-2"
-            style={activeTab === 'pickup' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            style={activeTab === 'requested' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
-            <Text className={`text-[10px] font-extrabold ${activeTab === 'pickup' ? 'text-white' : 'text-slate-500'}`}>
-              {pickupOrders.length}
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'requested' ? 'text-white' : 'text-slate-500'}`}>
+              {requestedOrders.length}
             </Text>
           </View>
         </TouchableOpacity>
 
-        {/* Drop Tab Button */}
+        {/* Accepted Tab Button */}
         <TouchableOpacity
-          onPress={() => handleTabPress('drop')}
+          onPress={() => handleTabPress('accepted')}
           activeOpacity={0.8}
-          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'drop' ? 'bg-[#073318]' : 'bg-transparent'}`}
-          style={activeTab === 'drop' ? {
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${activeTab === 'accepted' ? 'bg-[#073318]' : 'bg-transparent'}`}
+          style={activeTab === 'accepted' ? {
             shadowColor: '#073318',
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.15,
@@ -224,19 +224,19 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           } : undefined}
         >
           <Ionicons
-            name={activeTab === 'drop' ? "bicycle" : "bicycle-outline"}
+            name={activeTab === 'accepted' ? "checkmark-circle" : "checkmark-circle-outline"}
             size={16}
-            color={activeTab === 'drop' ? "#FFFFFF" : "#64748B"}
+            color={activeTab === 'accepted' ? "#FFFFFF" : "#64748B"}
           />
-          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'}`}>
-            Drop
+          <Text className={`font-bold text-[13px] ml-1.5 ${activeTab === 'accepted' ? 'text-white' : 'text-slate-500'}`}>
+            Accepted
           </Text>
           <View
             className="px-2.5 py-0.5 rounded-full ml-2"
-            style={activeTab === 'drop' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+            style={activeTab === 'accepted' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
-            <Text className={`text-[10px] font-extrabold ${activeTab === 'drop' ? 'text-white' : 'text-slate-500'}`}>
-              {deliveryOrders.length}
+            <Text className={`text-[10px] font-extrabold ${activeTab === 'accepted' ? 'text-white' : 'text-slate-500'}`}>
+              {acceptedOrders.length}
             </Text>
           </View>
         </TouchableOpacity>
@@ -253,16 +253,16 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         className="flex-1"
         contentContainerStyle={{ width: SCREEN_WIDTH * 2 }}
       >
-        {/* Page 1: Pickup Screen */}
+        {/* Page 1: Requested Screen */}
         <FlatList
           refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
-          data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
+          data={requestedOrders.length === 0 ? [] : requestedOrders.slice(0, requestedVisibleCount)}
           keyExtractor={(item, index) => item.id?.toString() || index.toString()}
           ListEmptyComponent={
-            pickupOrders.length === 0 ? (
+            requestedOrders.length === 0 ? (
               <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
@@ -271,36 +271,36 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                   className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
                   style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
                 >
-                  <Ionicons name="cube-outline" size={28} color="#94A3B8" />
+                  <Ionicons name="hourglass-outline" size={28} color="#94A3B8" />
                 </View>
                 <Text className="text-[15px] font-black text-slate-700 text-center">
-                  No redirected pickup orders found
+                  No requested redirected orders found
                 </Text>
               </View>
             ) : null
           }
           renderItem={({ item }) => renderOrderCard(item)}
           ListFooterComponent={
-            pickupOrders.length > 0 ? (
+            requestedOrders.length > 0 ? (
               <ViewMoreButton 
-                totalCount={pickupOrders.length}
-                visibleCount={pickupVisibleCount}
-                onPress={() => setPickupVisibleCount(prev => prev + PAGE_SIZE)}
+                totalCount={requestedOrders.length}
+                visibleCount={requestedVisibleCount}
+                onPress={() => setRequestedVisibleCount(prev => prev + PAGE_SIZE)}
               />
             ) : null
           }
         />
 
-        {/* Page 2: Delivery Screen */}
+        {/* Page 2: Accepted Screen */}
         <FlatList
           refreshControl={<SharedRefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
-          data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
+          data={acceptedOrders.length === 0 ? [] : acceptedOrders.slice(0, acceptedVisibleCount)}
           keyExtractor={(item, index) => item.id?.toString() || index.toString()}
           ListEmptyComponent={
-            deliveryOrders.length === 0 ? (
+            acceptedOrders.length === 0 ? (
               <View
                 className="items-center justify-center py-12 px-6 rounded-[24px] bg-white/40 border-2 border-[#CBD5E1]"
                 style={{ borderStyle: 'dashed' }}
@@ -309,21 +309,21 @@ const RedirectedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                   className="w-16 h-16 rounded-full items-center justify-center mb-4 bg-white shadow-sm"
                   style={{ borderWidth: 1, borderColor: '#E2E8F0' }}
                 >
-                  <Ionicons name="bicycle-outline" size={28} color="#94A3B8" />
+                  <Ionicons name="checkmark-circle-outline" size={28} color="#94A3B8" />
                 </View>
                 <Text className="text-[15px] font-black text-slate-700 text-center">
-                  No redirected drop orders found
+                  No accepted redirected orders found
                 </Text>
               </View>
             ) : null
           }
           renderItem={({ item }) => renderOrderCard(item)}
           ListFooterComponent={
-            deliveryOrders.length > 0 ? (
+            acceptedOrders.length > 0 ? (
               <ViewMoreButton 
-                totalCount={deliveryOrders.length}
-                visibleCount={deliveryVisibleCount}
-                onPress={() => setDeliveryVisibleCount(prev => prev + PAGE_SIZE)}
+                totalCount={acceptedOrders.length}
+                visibleCount={acceptedVisibleCount}
+                onPress={() => setAcceptedVisibleCount(prev => prev + PAGE_SIZE)}
               />
             ) : null
           }
