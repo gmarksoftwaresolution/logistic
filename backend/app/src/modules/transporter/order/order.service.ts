@@ -56,20 +56,8 @@ export class OrderService {
         pickupTransporterId: o.pickupTransporterId,
         pickupTransporterStatus: o.pickupTransporterStatus || 'TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
-          village: o.seller.village,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
-          village: o.buyer.village,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: o.seller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -124,20 +112,8 @@ export class OrderService {
         dropTransporterId: o.dropTransporterId,
         dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
-          village: o.seller.village,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
-          village: o.buyer.village,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: o.seller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -155,6 +131,17 @@ export class OrderService {
       },
       data: { status: 'ACCEPTED' }
     });
+
+    // Delete other pending transporter assignments for this pickup leg to prevent leaks
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+        assigneeId: { not: transporterUuid }
+      }
+    }).catch(() => {});
 
     await this.prisma.order.update({
       where: { id: order.id },

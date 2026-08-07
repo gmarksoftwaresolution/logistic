@@ -399,6 +399,7 @@ export class OrderService {
 
     const seller = order.seller;
     let selectedTransporterId: string | null = null;
+    let matchedTransporters: any[] = [];
     
     if (seller) {
       // Find matching transporters
@@ -432,7 +433,7 @@ export class OrderService {
       const t = seller.taluka ? seller.taluka.toLowerCase().trim() : '';
       const d = seller.district ? seller.district.toLowerCase().trim() : '';
 
-      let matchedTransporters = [];
+      matchedTransporters = [];
 
       // Priority 1: Pincode
       if (p) {
@@ -471,28 +472,48 @@ export class OrderService {
       }
     }
 
-    if (!selectedTransporterId) {
-      const fallbackTransporter = await this.prisma.user.findFirst({
-        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
-      });
-      if (fallbackTransporter) {
+    const fallbackTransporter = await this.prisma.user.findFirst({
+      where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
+    });
+
+    const assigneeIds = new Set<string>();
+    if (matchedTransporters.length > 0) {
+      matchedTransporters.forEach(tr => assigneeIds.add(String(tr.id)));
+      selectedTransporterId = String(matchedTransporters[0].id);
+    }
+
+    if (fallbackTransporter) {
+      assigneeIds.add(String(fallbackTransporter.id));
+      if (!selectedTransporterId) {
         selectedTransporterId = String(fallbackTransporter.id);
       }
     }
 
-    if (selectedTransporterId) {
-      // 1. Create OrderAssignment for transporter
-      await this.prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: selectedTransporterId,
-          assigneeType: 'TRANSPORTER',
-          role: 'PICKUP',
-          status: 'PENDING'
-        }
-      });
+    if (assigneeIds.size > 0) {
+      // 1. Create OrderAssignments for all matching transporters
+      for (const assigneeId of assigneeIds) {
+        // Delete any existing pending transporter assignments for this order to avoid duplicates
+        await this.prisma.orderAssignment.deleteMany({
+          where: {
+            orderId: order.id,
+            assigneeId,
+            role: 'PICKUP',
+            assigneeType: 'TRANSPORTER',
+          }
+        }).catch(() => {});
 
-      // 2. Insert into RedirectedOrder audit table
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId,
+            assigneeType: 'TRANSPORTER',
+            role: 'PICKUP',
+            status: 'PENDING'
+          }
+        });
+      }
+
+      // 2. Insert/Upsert into RedirectedOrder audit table
       await this.prisma.redirectedOrder.upsert({
         where: { orderId: order.id },
         update: {

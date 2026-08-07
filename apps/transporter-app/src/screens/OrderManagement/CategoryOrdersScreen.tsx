@@ -48,7 +48,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   };
 
-
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshBatchesList().catch(err => console.log('Error refreshing batches on focus:', err));
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     if (route.params?.triggerRejectBatchId) {

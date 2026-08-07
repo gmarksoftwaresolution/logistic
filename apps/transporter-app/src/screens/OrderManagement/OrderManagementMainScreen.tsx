@@ -32,6 +32,13 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
 
   const [refreshing, setRefreshing] = useState(false);
 
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshBatchesList().catch(err => console.log('Error refreshing batches on focus:', err));
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
