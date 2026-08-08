@@ -2737,12 +2737,20 @@ export default function SignupScreen({
             <FormContainer>
               <FormSection iconName="location-outline" title={t("address_details")} subtitle={t("su_enter_your_location__181")} />
 
+              {/* Production-Level GPS Advisory Note */}
+              <View className="w-full bg-amber-50/90 border border-amber-200/90 rounded-xl p-3.5 mt-1 mb-3 flex-row items-start space-x-2.5">
+                <Ionicons name="information-circle" size={19} color="#d97706" style={{ marginTop: 1 }} />
+                <Text className="flex-1 text-xs text-amber-900 leading-4 font-semibold">
+                  {t("gps_location_note") || "Note: Use 'Use Current Location' only when present at your actual home or delivery location. Otherwise, fill manually below."}
+                </Text>
+              </View>
+
               {/* Use Current GPS Location Button at Top */}
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={handleFetchCurrentLocation}
                 disabled={isLocating}
-                className="w-full mt-2 mb-2 py-3.5 px-4 rounded-xl flex-row items-center justify-center bg-emerald-50 border border-emerald-300 active:bg-emerald-100 shadow-sm"
+                className="w-full mb-3 py-3.5 px-4 rounded-xl flex-row items-center justify-center bg-emerald-50 border border-emerald-300 active:bg-emerald-100 shadow-sm"
               >
                 {isLocating ? (
                   <ActivityIndicator size="small" color="#059669" className="mr-2" />
@@ -2754,10 +2762,12 @@ export default function SignupScreen({
                 </Text>
               </TouchableOpacity>
 
-              <View className="flex-row items-center my-3">
-                <View className="flex-1 h-[1px] bg-gray-200" />
-                <Text className="mx-3 text-xs text-gray-400 font-medium">OR FILL MANUALLY BELOW</Text>
-                <View className="flex-1 h-[1px] bg-gray-200" />
+              <View className="flex-row items-center my-3.5">
+                <View className="flex-1 h-[1px] bg-slate-300" />
+                <Text className="mx-3 text-xs text-slate-700 font-bold tracking-wide">
+                  {t("or_fill_manually") || "OR FILL MANUALLY BELOW"}
+                </Text>
+                <View className="flex-1 h-[1px] bg-slate-300" />
               </View>
 
               <View className="w-full">
