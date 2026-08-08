@@ -33,7 +33,7 @@ export class OrderService {
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED'] }
+        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'REDIRECTED'] }
       },
       include: {
         seller: true,
@@ -43,8 +43,42 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const shgIds = orders
+      .map(o => o.pickupShgId ? parseInt(o.pickupShgId, 10) : null)
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const shgUsers = shgIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: shgIds } },
+          include: { address: true }
+        })
+      : [];
+
+    const shgMap = new Map(shgUsers.map(u => [String(u.id), u]));
+
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const shgUser = o.pickupShgId ? shgMap.get(o.pickupShgId) : null;
+      const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
+      
+      const mappedSeller = (!isRedirected && shgUser) ? {
+        id: shgUser.id,
+        sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
+        sellerName: shgUser.fullName || 'SHG Member',
+        mobileNumber: shgUser.phoneNumber,
+        email: shgUser.email,
+        addressLine1: shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine2: shgUser.address?.landmark || '',
+        village: shgUser.address?.village || '',
+        taluka: shgUser.address?.taluka || '',
+        district: shgUser.address?.district || '',
+        state: shgUser.address?.state || '',
+        pincode: shgUser.address?.pincode || '',
+        postOffice: shgUser.address?.postOffice || null,
+        createdAt: shgUser.createdAt,
+        updatedAt: shgUser.updatedAt,
+      } : o.seller;
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -56,20 +90,8 @@ export class OrderService {
         pickupTransporterId: o.pickupTransporterId,
         pickupTransporterStatus: o.pickupTransporterStatus || 'TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
-          village: o.seller.village,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
-          village: o.buyer.village,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: mappedSeller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -124,20 +146,8 @@ export class OrderService {
         dropTransporterId: o.dropTransporterId,
         dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
-          village: o.seller.village,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
-          village: o.buyer.village,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: o.seller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -156,6 +166,17 @@ export class OrderService {
       data: { status: 'ACCEPTED' }
     });
 
+    // Delete other pending transporter assignments for this pickup leg to prevent leaks
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+        assigneeId: { not: transporterUuid }
+      }
+    }).catch(() => {});
+
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
@@ -164,6 +185,15 @@ export class OrderService {
         mainStatus: 'PICKUP_TRANSPORTER_ACCEPTED',
       }
     });
+
+    // Update RedirectedOrder audit record
+    await this.prisma.redirectedOrder.updateMany({
+      where: { orderId: order.id },
+      data: {
+        transporterId: transporterUuid,
+        status: 'ACCEPTED'
+      }
+    }).catch(() => {});
 
     return order;
   }

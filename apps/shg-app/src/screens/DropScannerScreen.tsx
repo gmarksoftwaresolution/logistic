@@ -220,20 +220,18 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
   };
 
   const executeConfirmOrder = async (orderId: string) => {
-    if (!activeSession) return;
+    if (!activeSession || actionLoading) return;
     setActionLoading(true);
     const displayId = orderId.replace(/^pickup-/, '').replace(/^drop-/, '');
-    
-    // Optimistic instant confirmation feedback
-    Alert.alert('Success', `Order #${displayId} confirmed successfully!`);
-    setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
 
     try {
       await confirmSessionOrder('DROP', activeSession.sessionId, orderId);
+      setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
+      Alert.alert('Success', `Order #${displayId} confirmed successfully!`);
       refreshOrdersList().catch(() => {});
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Confirmation failed';
-      console.warn('Confirm order background notice:', msg);
+      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
     } finally {
       setActionLoading(false);
     }

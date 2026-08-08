@@ -806,7 +806,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       loadInventoryStored(),
       loadInventoryTransporterReturn(),
       loadInventoryBuyerReturn(),
-      loadData(),
+      loadPickupWarehouse(),
+      loadPickupAssigned(),
+      loadDropNew(),
+      loadDropAssigned(),
       loadCounts()
     ]);
   };
@@ -855,7 +858,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       loadInventoryStored(),
       loadInventoryTransporterReturn(),
       loadInventoryBuyerReturn(),
-      loadData(),
+      loadPickupWarehouse(),
+      loadPickupAssigned(),
+      loadDropNew(),
+      loadDropAssigned(),
       loadCounts()
     ]);
   };

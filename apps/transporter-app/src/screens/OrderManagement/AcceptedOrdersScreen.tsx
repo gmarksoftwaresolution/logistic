@@ -28,6 +28,13 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
   const [refreshing, setRefreshing] = useState(false);
 
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshBatchesList().catch(err => console.log('Error refreshing batches on focus:', err));
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
