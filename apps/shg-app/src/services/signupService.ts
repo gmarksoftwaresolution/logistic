@@ -56,6 +56,62 @@ export const signupService = {
     return response.data;
   },
 
+  getReverseGeocodeDetails: async (lat: number, lng: number) => {
+    try {
+      const response = await axiosInstance.get(`/location/reverse-geocode?lat=${lat}&lng=${lng}`);
+      if (response.data) {
+        return response.data;
+      }
+    } catch (err) {
+      console.warn('Backend reverse geocode notice:', err);
+    }
+
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      try {
+        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`).then(r => r.json());
+        if (res?.status === 'OK' && Array.isArray(res.results) && res.results.length > 0) {
+          let pincode = '';
+          let state = '';
+          let district = '';
+          let taluka = '';
+          let village = '';
+          const formattedAddress = res.results[0].formatted_address || '';
+
+          res.results.forEach((r: any) => {
+            r.address_components?.forEach((comp: any) => {
+              const types = comp.types || [];
+              const name = comp.long_name || '';
+              if (types.includes('postal_code') && !pincode) pincode = name;
+              if (types.includes('administrative_area_level_1') && !state) state = name;
+              if (types.includes('administrative_area_level_2') && !district && !name.toLowerCase().includes('division')) district = name;
+              if (types.includes('administrative_area_level_3') && !taluka && !name.toLowerCase().includes('division')) taluka = name;
+              if ((types.includes('locality') || types.includes('sublocality') || types.includes('village')) && !village) village = name;
+            });
+          });
+
+          let extraDetails: any = null;
+          if (pincode) {
+            extraDetails = await signupService.getPincodeDetails(pincode).catch(() => null);
+          }
+
+          return {
+            pincode: pincode || extraDetails?.pincode || '',
+            state: state || extraDetails?.state || '',
+            district: district || extraDetails?.district || '',
+            taluka: taluka || extraDetails?.taluka || district || '',
+            village: village || (extraDetails?.villages?.[0]) || '',
+            formattedAddress,
+            villages: extraDetails?.villages || (village ? [village] : []),
+          };
+        }
+      } catch (fErr) {
+        console.error('Client side reverse geocode error:', fErr);
+      }
+    }
+    return null;
+  },
+
   getPincodeDetails: async (pincode: string) => {
     const cleanVillageName = (name: string) => {
       if (!name) return '';

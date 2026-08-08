@@ -372,4 +372,96 @@ export class LocationService {
       );
     }
   }
+
+  async reverseGeocode(lat: number, lng: number) {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    try {
+      let pincode = '';
+      let state = '';
+      let district = '';
+      let taluka = '';
+      let village = '';
+      let formattedAddress = '';
+
+      if (apiKey) {
+        const res = await axios.get(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`,
+          { timeout: 5000 }
+        );
+        if (res.data?.status === 'OK' && Array.isArray(res.data.results) && res.data.results.length > 0) {
+          formattedAddress = res.data.results[0].formatted_address || '';
+          res.data.results.forEach((r: any) => {
+            r.address_components?.forEach((comp: any) => {
+              const types = comp.types || [];
+              const name = comp.long_name || '';
+              if (types.includes('postal_code') && !pincode) pincode = name;
+              if (types.includes('administrative_area_level_1') && !state) state = name;
+              if (types.includes('administrative_area_level_2') && !district && !name.toLowerCase().includes('division')) district = name;
+              if (types.includes('administrative_area_level_3') && !taluka && !name.toLowerCase().includes('division')) taluka = name;
+              if ((types.includes('locality') || types.includes('sublocality') || types.includes('sublocality_level_1') || types.includes('village')) && !village) village = name;
+            });
+          });
+        }
+      }
+
+      let extraDetails: any = null;
+      if (pincode && pincode.length === 6) {
+        try {
+          extraDetails = await this.getAddressFromPincode(pincode);
+        } catch (_) {}
+      }
+
+      return {
+        pincode: pincode || extraDetails?.pincode || '',
+        state: state || extraDetails?.state || '',
+        district: district || extraDetails?.district || '',
+        taluka: taluka || extraDetails?.taluka || district || '',
+        village: village || (extraDetails?.villages?.[0]) || '',
+        formattedAddress,
+        villages: extraDetails?.villages || (village ? [village] : []),
+        postOffices: extraDetails?.postOffices || [],
+        postOfficeMap: extraDetails?.postOfficeMap || {},
+      };
+    } catch (err: any) {
+      console.error('Reverse Geocode Error:', err.message);
+      throw new HttpException('Failed to reverse geocode location', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async geocodeLocation(village: string, taluka: string, district: string, state: string, pincode: string) {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      try {
+        const addressQuery = `${village || ''}, ${taluka || ''}, ${district || ''}, ${state || ''} ${pincode || ''}, India`;
+        const res = await axios.get(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressQuery)}&key=${apiKey}`,
+          { timeout: 5000 }
+        );
+        if (res.data?.status === 'OK' && Array.isArray(res.data.results) && res.data.results.length > 0) {
+          const loc = res.data.results[0].geometry?.location;
+          if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+            return { latitude: loc.lat, longitude: loc.lng };
+          }
+        }
+      } catch (err: any) {
+        console.warn('Geocode location error:', err.message);
+      }
+    }
+
+    if (village && pincode) {
+      try {
+        const record = await this.prisma.pincodeDirectory.findFirst({
+          where: {
+            pincode: pincode.trim(),
+            village: { equals: village.trim(), mode: 'insensitive' },
+          },
+        });
+        if (record && (record as any).latitude && (record as any).longitude) {
+          return { latitude: (record as any).latitude, longitude: (record as any).longitude };
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
 }

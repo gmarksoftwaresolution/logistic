@@ -4,6 +4,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -482,8 +483,92 @@ export default function SignupScreen({
   const [houseNoError, setHouseNoError] = useState('');
   const [landmark, setLandmark] = useState('');
   const [landmarkError, setLandmarkError] = useState('');
+  const [userLatitude, setUserLatitude] = useState<number | null>(null);
+  const [userLongitude, setUserLongitude] = useState<number | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+
+  const handleFetchCurrentLocation = async () => {
+    try {
+      setIsLocating(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: t("location_permission_denied") || "Permission Denied",
+          text2: t("enable_location_permission") || "Please enable location permission to auto-fill address.",
+        });
+        setIsLocating(false);
+        return;
+      }
+
+      let loc = await Location.getLastKnownPositionAsync({});
+      if (!loc || !loc.coords) {
+        loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
+
+      const { latitude, longitude } = loc.coords;
+      setUserLatitude(latitude);
+      setUserLongitude(longitude);
+      const data = await signupService.getReverseGeocodeDetails(latitude, longitude);
+
+      if (data) {
+        if (data.pincode) {
+          setPincode(data.pincode);
+          setPincodeError('');
+        }
+        if (data.state) {
+          setStateName(data.state);
+          setStateNameError('');
+        }
+        if (data.district) {
+          setDistrict(data.district);
+          setDistrictError('');
+        }
+        if (data.taluka) {
+          setTaluka(data.taluka);
+          setTalukaError('');
+        }
+        if (data.formattedAddress) {
+          setLandmark(data.formattedAddress);
+          setLandmarkError('');
+        }
+        if (data.villages && Array.isArray(data.villages)) {
+          setVillageList(data.villages);
+          if (data.village && data.villages.includes(data.village)) {
+            setVillage(data.village);
+          } else if (data.villages.length > 0) {
+            setVillage(data.villages[0]);
+          }
+          setVillageError('');
+        }
+
+        Toast.show({
+          type: 'success',
+          text1: t("location_fetched") || "Location Fetched!",
+          text2: t("location_autofilled") || "Your current location has been filled automatically.",
+        });
+      } else {
+        Toast.show({
+          type: 'info',
+          text1: t("location_partial") || "Location Detected",
+          text2: t("enter_pincode_manually") || "Please enter your 6-digit pincode.",
+        });
+      }
+    } catch (err: any) {
+      console.error('Fetch location error:', err);
+      Toast.show({
+        type: 'error',
+        text1: t("location_error") || "Location Fetch Error",
+        text2: err.message || "Failed to detect current location.",
+      });
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   // Location Option States for Option 1 / Option 2
   const [locationOption, setLocationOption] = useState<'pincode' | 'state'>('pincode');
@@ -1799,7 +1884,9 @@ export default function SignupScreen({
         district,
         state: stateName,
         houseNo,
-        landmark
+        landmark,
+        latitude: userLatitude || undefined,
+        longitude: userLongitude || undefined,
       });
       setStep(7);
     } catch (error: any) {
@@ -2650,6 +2737,29 @@ export default function SignupScreen({
             <FormContainer>
               <FormSection iconName="location-outline" title={t("address_details")} subtitle={t("su_enter_your_location__181")} />
 
+              {/* Use Current GPS Location Button at Top */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleFetchCurrentLocation}
+                disabled={isLocating}
+                className="w-full mt-2 mb-2 py-3.5 px-4 rounded-xl flex-row items-center justify-center bg-emerald-50 border border-emerald-300 active:bg-emerald-100 shadow-sm"
+              >
+                {isLocating ? (
+                  <ActivityIndicator size="small" color="#059669" className="mr-2" />
+                ) : (
+                  <Ionicons name="navigate-circle-outline" size={22} color="#059669" className="mr-2" />
+                )}
+                <Text className="text-emerald-700 font-bold text-base">
+                  {isLocating ? (t("detecting_location") || "Fetching Current Location...") : (t("use_current_location") || "Use Current GPS Location")}
+                </Text>
+              </TouchableOpacity>
+
+              <View className="flex-row items-center my-3">
+                <View className="flex-1 h-[1px] bg-gray-200" />
+                <Text className="mx-3 text-xs text-gray-400 font-medium">OR FILL MANUALLY BELOW</Text>
+                <View className="flex-1 h-[1px] bg-gray-200" />
+              </View>
+
               <View className="w-full">
                 <InputField ref={pincodeRef} label={t("pincode")} placeholder={t("su_enter_6_digit_pincod_183")} icon="location-outline" error={pincodeError} required={true} keyboardType="numeric" maxLength={6} value={pincode} onChangeText={val => {
                   const cleaned = val.replace(/[^0-9]/g, '');
@@ -2686,7 +2796,7 @@ export default function SignupScreen({
                           const getPhoneticKey = (s: string) => {
                             return s.toLowerCase()
                               .replace(/[\s\-_.\(\)]+/g, '')
-                              .replace(/\s*(b\.?o\.?|s\.?o\.?|h\.?O\.?|branch office|sub office|head office)\b/gi, '')
+                              .replace(/\s*(b\.?o\.?|s\.?o\.?|h\.?o\.?|branch office|sub office|head office)\b/gi, '')
                               .replace(/w/g, 'v')
                               .replace(/gh/g, 'g')
                               .replace(/bh/g, 'b')
@@ -2781,7 +2891,9 @@ export default function SignupScreen({
                 }} returnKeyType="done" />
               </View>
 
-              <PrimaryButton title={t("continue")} onPress={handleNextStep6} loading={isSubmitting} />
+              <View className="mt-6">
+                <PrimaryButton title={t("continue")} onPress={handleNextStep6} loading={isSubmitting} />
+              </View>
             </FormContainer>
           </View>}
 
