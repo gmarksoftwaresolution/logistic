@@ -252,11 +252,17 @@ export class LocationService {
             if (types.includes('administrative_area_level_1') && !state) {
               state = name;
             }
-            if (types.includes('administrative_area_level_2') && !district && !name.toLowerCase().includes('division')) {
-              district = name;
+            if (types.includes('administrative_area_level_2') && !district) {
+              const cleanedDist = name.replace(/\s*Division\b/gi, '').trim();
+              if (cleanedDist) {
+                district = cleanedDist;
+              }
             }
-            if (types.includes('administrative_area_level_3') && !taluka && !name.toLowerCase().includes('division') && name !== district && !villageSet.has(name)) {
-              taluka = name;
+            if (types.includes('administrative_area_level_3') && !taluka) {
+              const cleanedTaluka = name.replace(/\s*Division\b/gi, '').trim();
+              if (cleanedTaluka && !villageSet.has(cleanedTaluka)) {
+                taluka = cleanedTaluka;
+              }
             }
             if (types.includes('locality') || types.includes('sublocality') || types.includes('sublocality_level_1') || types.includes('sublocality_level_2') || types.includes('neighborhood') || types.includes('village')) {
               const cleaned = cleanVillageName(name);
@@ -264,6 +270,13 @@ export class LocationService {
             }
           });
         });
+      }
+
+      if (!district && taluka) {
+        district = taluka;
+      }
+      if (!taluka && district) {
+        taluka = district;
       }
 
       // 3. Live Google Places Text Search & Nearby Search API Enrichment
@@ -327,11 +340,32 @@ export class LocationService {
       const postOffices = Array.from(postOfficesSet).sort();
       const villages = Array.from(phoneticMap.values()).sort();
 
-      if (state || district || villages.length > 0 || postOffices.length > 0) {
+      const finalDistrict = district || taluka;
+      const finalTaluka = taluka || district;
+
+      if (state || finalDistrict || villages.length > 0 || postOffices.length > 0) {
+        // Auto-cache resolved pincode to database in background
+        if (cleanPincode && state && finalDistrict && villages.length > 0) {
+          Promise.all(
+            villages.map(v =>
+              this.prisma.pincodeDirectory.create({
+                data: {
+                  pincode: cleanPincode,
+                  village: v,
+                  postOffice: v,
+                  taluka: finalTaluka,
+                  district: finalDistrict,
+                  state: state,
+                }
+              }).catch(() => null)
+            )
+          ).catch(err => console.warn('Background pincode auto-save notice:', err));
+        }
+
         return {
           state,
-          district,
-          taluka: taluka || district,
+          district: finalDistrict,
+          taluka: finalTaluka,
           postOffices,
           postOfficeMap,
           villages,
