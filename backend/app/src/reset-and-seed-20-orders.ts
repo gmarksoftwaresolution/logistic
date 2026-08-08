@@ -55,6 +55,16 @@ async function resetAndSeed20Orders() {
 
   console.log('✅ Database completely purged!\n');
 
+  // Fetch approved SHGs and Transporters
+  const approvedShgs = await prisma.user.findMany({
+    where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
+  });
+  const approvedTransporters = await prisma.user.findMany({
+    where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
+  });
+
+  console.log(`Found ${approvedShgs.length} approved SHGs and ${approvedTransporters.length} approved Transporters in database.`);
+
   // 3. CREATE EXACTLY 20 NEW FRESH ORDERS (ORD-2026-101 to ORD-2026-120)
   console.log('Creating 20 new fresh orders using Seller, Buyer, and Product tables...');
 
@@ -65,6 +75,10 @@ async function resetAndSeed20Orders() {
     // Select Seller and Buyer deterministically
     const seller = sellers[(i - 1) % sellers.length];
     const buyer = buyers[(i - 1) % buyers.length];
+
+    // Select assigned SHG and Transporter
+    const assignedShg = approvedShgs.length > 0 ? approvedShgs[(i - 1) % approvedShgs.length] : null;
+    const assignedTransporter = approvedTransporters.length > 0 ? approvedTransporters[(i - 1) % approvedTransporters.length] : null;
 
     // Select 2 distinct products from Product table
     const prod1 = products[(i - 1) % products.length];
@@ -93,12 +107,39 @@ async function resetAndSeed20Orders() {
         barcode: `QR-2026-${cleanNum}-PCL-1`,
         phase: 'PICKUP',
         mainStatus: 'PICKUP_ASSIGNED',
+        pickupShgId: assignedShg ? String(assignedShg.id) : null,
         pickupShgStatus: 'ACCEPTED',
+        pickupTransporterId: assignedTransporter ? String(assignedTransporter.id) : null,
         pickupTransporterStatus: 'PENDING',
         dropShgStatus: 'PENDING',
         dropTransporterStatus: 'PENDING',
       }
     });
+
+    // Create OrderAssignment records so user authorization and mobile app workflows never fail
+    if (assignedShg) {
+      await prisma.orderAssignment.create({
+        data: {
+          orderId: createdOrder.id,
+          assigneeId: String(assignedShg.id),
+          assigneeType: 'SHG',
+          role: 'PICKUP',
+          status: 'ACCEPTED',
+        }
+      });
+    }
+
+    if (assignedTransporter) {
+      await prisma.orderAssignment.create({
+        data: {
+          orderId: createdOrder.id,
+          assigneeId: String(assignedTransporter.id),
+          assigneeType: 'TRANSPORTER',
+          role: 'PICKUP',
+          status: 'PENDING',
+        }
+      });
+    }
 
     // Create 2 individual per-product Parcel records with QR codes
     for (let pIdx = 0; pIdx < selectedProds.length; pIdx++) {
@@ -126,12 +167,14 @@ async function resetAndSeed20Orders() {
           createdBy: 'SYSTEM',
           verificationToken: verificationCode,
           qrImage: qrImageUrl,
-          parcelStatus: 'PENDING'
+          parcelStatus: 'PENDING',
+          currentHolderId: String(seller.id),
+          currentHolderType: 'SELLER',
         }
       });
     }
 
-    console.log(`  - Created Order ${orderIdVal} | Seller: ${seller.sellerName} | Buyer: ${buyer.buyerName} | Products: [${prod1.name}, ${prod2.name}]`);
+    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporter: ${assignedTransporter?.authId || assignedTransporter?.id || 'N/A'} | Products: [${prod1.name}, ${prod2.name}]`);
   }
 
   console.log('\n================================================================');

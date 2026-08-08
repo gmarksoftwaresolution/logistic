@@ -408,7 +408,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
         const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
-        if (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED') {
+        if ((o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';
           const pIdx = localPickedUp.indexOf(order.id);
           if (pIdx !== -1) {

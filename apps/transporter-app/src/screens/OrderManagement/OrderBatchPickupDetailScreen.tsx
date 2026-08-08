@@ -823,7 +823,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
             <View style={styles.boxContentPadding}>
               <View style={styles.productsWrapper}>
-              {displayProducts.map((product) => {
+              {displayProducts.map((product, index) => {
                 const isPicked = product.status === 'picked';
                 const isCompleted = product.status === 'completed';
                 const isRejected = product.status === 'rejected';
@@ -833,7 +833,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
                 return (
                   <View
-                    key={product.id}
+                    key={`${product.id}-${index}`}
                     style={[
                       styles.premiumProductCard,
                       (isRejected || isBatchRejected) && { borderColor: '#EF4444' },

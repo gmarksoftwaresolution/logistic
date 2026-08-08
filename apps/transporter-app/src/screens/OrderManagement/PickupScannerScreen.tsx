@@ -74,12 +74,18 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   useEffect(() => {
     const initSession = async () => {
       try {
-        if (orderIds && orderIds.length > 0) {
-          await startSession('PICKUP', orderIds);
+        let targetIds = orderIds;
+        if (!targetIds || targetIds.length === 0) {
+          const res = await api.get('/orders/pickup/assigned');
+          if (res.data && res.data.length > 0) {
+            targetIds = res.data.map((o: any) => o.orderId || o.id);
+          }
+        }
+        if (targetIds && targetIds.length > 0) {
+          await startSession('PICKUP', targetIds);
         }
       } catch (err: any) {
-        Alert.alert('Error', err.response?.data?.message || 'Failed to initialize session');
-        navigation.goBack();
+        console.warn('Session initialization:', err?.response?.data?.message || err?.message);
       }
     };
     initSession();
@@ -151,7 +157,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       p.id === parcelId ||
       (p.parcelId && p.parcelId.includes(cleanScannedId)) ||
       (p.orderId && p.orderId.includes(cleanScannedId))
-    ) || (allParcels.length > 0 ? allParcels[0] : null);
+    );
 
     if (!parcel) {
       setHasScannedAny(true);

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class OrderService {
   constructor(private prisma: PrismaService) {}
@@ -30,21 +32,72 @@ export class OrderService {
       where: {
         OR: [
           { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED'] }
+        mainStatus: { in: ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT'] }
       },
       include: {
         seller: true,
         buyer: true,
         parcels: true,
+        assignments: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
+    const allShgIds = Array.from(new Set(orders.map((o: any) => {
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      return o.pickupShgId || o.dropShgId || shgAssign?.assigneeId;
+    }).filter(Boolean)));
+
+    const numericShgIds = allShgIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0);
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidShgIds = allShgIds.filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
+
+    const shgUsers: any[] = [];
+    if (numericShgIds.length > 0) {
+      const byId = await this.prisma.user.findMany({
+        where: { id: { in: numericShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      shgUsers.push(...byId);
+    }
+    if (uuidShgIds.length > 0) {
+      const byAuth = await this.prisma.user.findMany({
+        where: { authId: { in: uuidShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      shgUsers.push(...byAuth);
+    }
+
+    const shgUserMap = new Map();
+    shgUsers.forEach((u: any) => {
+      shgUserMap.set(String(u.id), u);
+      shgUserMap.set(u.authId, u);
+    });
+
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      const shgId = o.pickupShgId || o.dropShgId || shgAssign?.assigneeId;
+      const shgUser = shgId ? shgUserMap.get(String(shgId)) : null;
+
+      const shgData = shgUser ? {
+        id: shgUser.id,
+        fullName: shgUser.fullName,
+        phoneNumber: shgUser.phoneNumber,
+        shgName: shgUser.shgDetail?.shgName || shgUser.fullName,
+        address: shgUser.address ? {
+          addressLine1: shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
+          village: shgUser.address.village,
+          taluka: shgUser.address.taluka,
+          district: shgUser.address.district,
+          pincode: shgUser.address.pincode,
+        } : null,
+      } : null;
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -54,20 +107,29 @@ export class OrderService {
         status: o.mainStatus,
         transporterId: o.pickupTransporterId,
         pickupTransporterId: o.pickupTransporterId,
-        pickupTransporterStatus: o.pickupTransporterStatus || 'TRANSPORTER_ACCEPTED',
+        pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
+        shg: shgData,
         seller: o.seller ? {
           fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
+          phoneNumber: o.seller.mobileNumber || o.seller.phoneNumber,
+          address: o.seller.addressLine1 ? `${o.seller.addressLine1}, ${o.seller.village || ''}` : (o.seller.address || o.seller.village),
+          addressLine1: o.seller.addressLine1 || o.seller.address,
+          addressLine2: o.seller.addressLine2,
           village: o.seller.village,
+          taluka: o.seller.taluka,
+          district: o.seller.district,
           pincode: o.seller.pincode,
         } : null,
         buyer: o.buyer ? {
           fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
+          phoneNumber: o.buyer.mobileNumber || o.buyer.phoneNumber,
+          address: o.buyer.addressLine1 ? `${o.buyer.addressLine1}, ${o.buyer.village || ''}` : (o.buyer.address || o.buyer.village),
+          addressLine1: o.buyer.addressLine1 || o.buyer.address,
+          addressLine2: o.buyer.addressLine2,
           village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          district: o.buyer.district,
           pincode: o.buyer.pincode,
         } : null,
         parcels: o.parcels || [],
@@ -100,20 +162,70 @@ export class OrderService {
       where: {
         OR: [
           { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
           { dropTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'] }
+        mainStatus: { in: ['STORED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'] }
       },
       include: {
         seller: true,
         buyer: true,
         parcels: true,
+        assignments: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
+    const allDropShgIds = Array.from(new Set(orders.map((o: any) => {
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      return o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
+    }).filter(Boolean)));
+
+    const dropNumericShgIds = allDropShgIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0);
+    const dropUuidShgIds = allDropShgIds.filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
+
+    const dropShgUsers: any[] = [];
+    if (dropNumericShgIds.length > 0) {
+      const byId = await this.prisma.user.findMany({
+        where: { id: { in: dropNumericShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      dropShgUsers.push(...byId);
+    }
+    if (dropUuidShgIds.length > 0) {
+      const byAuth = await this.prisma.user.findMany({
+        where: { authId: { in: dropUuidShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      dropShgUsers.push(...byAuth);
+    }
+
+    const dropShgUserMap = new Map();
+    dropShgUsers.forEach((u: any) => {
+      dropShgUserMap.set(String(u.id), u);
+      dropShgUserMap.set(u.authId, u);
+    });
+
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      const shgId = o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
+      const shgUser = shgId ? dropShgUserMap.get(String(shgId)) : null;
+
+      const shgData = shgUser ? {
+        id: shgUser.id,
+        fullName: shgUser.fullName,
+        phoneNumber: shgUser.phoneNumber,
+        shgName: shgUser.shgDetail?.shgName || shgUser.fullName,
+        address: shgUser.address ? {
+          addressLine1: shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
+          village: shgUser.address.village,
+          taluka: shgUser.address.taluka,
+          district: shgUser.address.district,
+          pincode: shgUser.address.pincode,
+        } : null,
+      } : null;
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -124,18 +236,27 @@ export class OrderService {
         dropTransporterId: o.dropTransporterId,
         dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
+        shg: shgData,
         seller: o.seller ? {
           fullName: o.seller.sellerName,
-          phoneNumber: o.seller.phoneNumber,
-          address: o.seller.address,
+          phoneNumber: o.seller.mobileNumber || o.seller.phoneNumber,
+          address: o.seller.addressLine1 ? `${o.seller.addressLine1}, ${o.seller.village || ''}` : (o.seller.address || o.seller.village),
+          addressLine1: o.seller.addressLine1 || o.seller.address,
+          addressLine2: o.seller.addressLine2,
           village: o.seller.village,
+          taluka: o.seller.taluka,
+          district: o.seller.district,
           pincode: o.seller.pincode,
         } : null,
         buyer: o.buyer ? {
           fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.phoneNumber,
-          address: o.buyer.address,
+          phoneNumber: o.buyer.mobileNumber || o.buyer.phoneNumber,
+          address: o.buyer.addressLine1 ? `${o.buyer.addressLine1}, ${o.buyer.village || ''}` : (o.buyer.address || o.buyer.village),
+          addressLine1: o.buyer.addressLine1 || o.buyer.address,
+          addressLine2: o.buyer.addressLine2,
           village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          district: o.buyer.district,
           pincode: o.buyer.pincode,
         } : null,
         parcels: o.parcels || [],

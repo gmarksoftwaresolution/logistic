@@ -226,11 +226,11 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           ? 'DROP_COMPLETED'
           : (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
             ? 'PICKUP_COMPLETED'
-            : (o.transporterId || o.pickupTransporterId || o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+            : (o.pickupTransporterStatus === 'ACCEPTED' || o.pickupTransporterStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
               ? 'ACCEPTED_PICKUP'
-              : (o.pickupTransporterStatus === 'PENDING' || o.mainStatus === 'PENDING' || o.mainStatus === 'PARCEL_AT_SHG' || o.mainStatus === 'PICKUP_SHG_ACCEPTED')
+              : (o.pickupTransporterStatus === 'PENDING' || o.mainStatus === 'PARCEL_AT_SHG' || o.mainStatus === 'PARCEL_PICKED')
                 ? 'NEW_ORDER'
-                : 'ACCEPTED_PICKUP',
+                : 'NEW_ORDER',
         rejectReason: (() => {
           const rawReason = o.tracking?.[0]?.remarks;
           let reasonVal = rawReason;
@@ -246,9 +246,19 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         handoverCode: o.handoverCode,
         isRTO: o.isRTO || false,
         shgContact: {
-          name: o.shg?.fullName || o.seller?.sellerName || 'SHG Member',
-          phone: o.shg?.phoneNumber || o.seller?.mobileNumber || '',
+          name: o.shg?.fullName || o.shg?.shgName || o.seller?.fullName || 'SHG Member',
+          shgName: o.shg?.shgName || o.shg?.fullName || '',
+          phone: o.shg?.phoneNumber || o.seller?.phoneNumber || '',
           address: (() => {
+            if (o.shg?.address) {
+              const parts = [
+                o.shg.address.addressLine1,
+                o.shg.address.village,
+                o.shg.address.taluka,
+                o.shg.address.pincode
+              ].filter(Boolean);
+              if (parts.length > 0) return parts.join(', ');
+            }
             if (o.seller) {
               const parts = [
                 o.seller.addressLine1,
@@ -260,15 +270,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               ].filter(Boolean);
               if (parts.length > 0) return parts.join(', ');
             }
-            if (o.shg?.address) {
-              return `${o.shg.address.addressLine1 || ''}, ${o.shg.address.village || ''}`.trim();
-            }
             return 'Nesari Stand';
           })(),
           village: o.shg?.address?.village || o.seller?.village || 'Nesari',
           pincode: o.shg?.address?.pincode || o.seller?.pincode || '416504',
-          taluka: o.shg?.address?.taluka || o.seller?.taluka || '',
-          district: o.shg?.address?.district || o.seller?.district || '',
+          taluka: o.shg?.address?.taluka || o.seller?.taluka || 'Gadhinglaj',
+          district: o.shg?.address?.district || o.seller?.district || 'Kolhapur',
         },
         products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
           const pId = String(item.id || item.parcelId || Math.random());
@@ -330,15 +337,21 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropCount: 1,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-          status: (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || !o.transporterId)
-            ? 'NEW_ORDER'
-            : (o.masterOrder?.dropTransporterStatus === 'COMPLETED' || o.masterOrder?.status === 'PARCEL_AT_DROP_SHG' || o.masterOrder?.status === 'PARCEL_WITH_DROP_SHG' || o.masterOrder?.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'RETURNED' || o.status === 'DELIVERED')
-              ? ('DROP_COMPLETED' as const)
-              : (o.status === 'ACCEPTED' || o.status === 'RETURN_ACCEPTED' || o.status === 'DISPATCHED')
-                ? (o.masterOrder?.status === 'IN_TRANSIT_TO_BUYER' || isPickupFinished ? ('PICKUP_COMPLETED' as const) : ('ACCEPTED_PICKUP' as const))
-                : (o.status === 'PICKED_UP' || o.status === 'RETURN_PICKED_UP')
-                  ? ('DROP_COMPLETED' as const) // Since SHG picked it up, Transporter must be done
-                  : ('rejected' as const),
+          status: (() => {
+            const mStatus = o.mainStatus || o.status;
+            const dtStatus = o.dropTransporterStatus;
+
+            if (mStatus === 'PARCEL_AT_DROP_SHG' || dtStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+              return 'DROP_COMPLETED' as const;
+            }
+            if (mStatus === 'DISPATCHED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || isPickupFinished) {
+              return 'PICKUP_COMPLETED' as const;
+            }
+            if (dtStatus === 'DROP_TRANSPORTER_ACCEPTED' || mStatus === 'DROP_TRANSPORTER_ACCEPTED') {
+              return 'ACCEPTED_PICKUP' as const;
+            }
+            return 'NEW_ORDER' as const;
+          })(),
           rejectReason: (() => {
             const rawReason = o.tracking?.[0]?.remarks;
             let reasonVal = rawReason;
@@ -438,7 +451,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
 
 
-      const freshLiveBatches = [...pickupsWithDropId, ...mappedDrops];
+      // Deduplicate: If an order has both a pickup card and a drop card, keep the drop card for Phase 2
+      const dropMasterOrderIds = new Set(mappedDrops.map((d: any) => d.masterOrderId || d.displayId || d.id));
+      const filteredPickups = pickupsWithDropId.filter((p: any) => {
+        if (p.masterOrderId && dropMasterOrderIds.has(p.masterOrderId)) return false;
+        if (p.displayId && dropMasterOrderIds.has(p.displayId)) return false;
+        if (p.id && dropMasterOrderIds.has(p.id)) return false;
+        return true;
+      });
+
+      const freshLiveBatches = [...filteredPickups, ...mappedDrops];
       const liveIds = new Set(freshLiveBatches.map(b => b.id));
 
       // Reconcile persisted rejected/completed caches — remove any IDs

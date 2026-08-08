@@ -847,10 +847,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const intakePickupOrders = async (orderIds: string[]) => {
     for (const id of orderIds) {
       const cleanId = String(id || '').replace(/^ORD-/, '');
-      const order = pickupAssignedOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) || 
-                    pickupWarehouseOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
-                    pickupNewOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) ||
-                    allOrders.find((o) => o.id === id || o.uuid === id || (o as any).orderId === id || (o as any).orderId === cleanId) as any;
+      const order = pickupAssignedOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) || 
+                    pickupWarehouseOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) ||
+                    pickupNewOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) as any;
       const targetId = order?.uuid || order?.id || id;
       await api.orders.warehouseIntake(targetId);
     }

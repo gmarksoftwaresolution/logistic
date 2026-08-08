@@ -42,22 +42,39 @@ export class OrderService {
 
     const orders = await this.prisma.order.findMany({
       where: {
-        phase: 'PICKUP',
-        mainStatus: {
-          in: [
-            'NEW',
-            'ORDER_PLACED',
-            'PENDING',
-            'PENDING_PICKUP',
-            'PICKUP_ASSIGNED',
-            'PICKUP_SHG_PENDING',
-            'ACCEPTED',
-            'PICKUP_SHG_ACCEPTED',
-            'PARCEL_AT_SHG',
-            'TRANSPORTER_ACCEPTED',
-            'PICKUP_TRANSPORTER_ACCEPTED'
-          ]
-        }
+        OR: [
+          {
+            phase: 'PICKUP',
+            mainStatus: {
+              in: [
+                'NEW',
+                'ORDER_PLACED',
+                'PENDING',
+                'PENDING_PICKUP',
+                'PICKUP_ASSIGNED',
+                'PICKUP_SHG_PENDING',
+                'ACCEPTED',
+                'PICKUP_SHG_ACCEPTED',
+                'PARCEL_AT_SHG',
+                'TRANSPORTER_ACCEPTED',
+                'PICKUP_TRANSPORTER_ACCEPTED'
+              ]
+            }
+          },
+          {
+            phase: 'DROP',
+            mainStatus: {
+              in: [
+                'DROP_PENDING',
+                'DROP_ASSIGNED',
+                'DROP_SHG_ACCEPTED',
+                'DROP_TRANSPORTER_ACCEPTED',
+                'PARCEL_AT_DROP_SHG',
+                'IN_TRANSIT_TO_BUYER'
+              ]
+            }
+          }
+        ]
       },
       include: {
         seller: true,
@@ -67,19 +84,25 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // STRICT BUSINESS LOGIC FILTER: (Village + Pincode Match) OR Direct Assignment
+    // STRICT BUSINESS LOGIC FILTER: (Village + Pincode Match) for SHG
     const matchedOrders = orders.filter((o: any) => {
-      // 1. Directly assigned ID or pickupShgId match
-      if (o.pickupShgId === shgUuid || assignedOrderIds.includes(o.id)) {
-        return true;
-      }
-      // 2. Strict matching on BOTH Seller Village AND Seller Pincode
-      if (o.seller) {
+      if (o.seller && (o.phase === 'PICKUP' || !o.phase || o.phase === 'FORWARD')) {
         const sellerVillage = this.normalizeStr(o.seller.village);
         const sellerPincode = o.seller.pincode ? o.seller.pincode.trim().toLowerCase() : '';
         if (userVillage && userPincode && sellerVillage === userVillage && sellerPincode === userPincode) {
           return true;
         }
+      }
+      if (o.buyer && o.phase === 'DROP') {
+        const buyerVillage = this.normalizeStr(o.buyer.village);
+        const buyerPincode = o.buyer.pincode ? o.buyer.pincode.trim().toLowerCase() : '';
+        if (userVillage && userPincode && buyerVillage === userVillage && buyerPincode === userPincode) {
+          return true;
+        }
+      }
+      // Direct Assignment fallback if explicit OrderAssignment exists
+      if (assignedOrderIds.includes(o.id) || assignedOrderIds.includes(o.orderId)) {
+        return true;
       }
       return false;
     });
@@ -93,7 +116,7 @@ export class OrderService {
         orderNumber: cleanOrderId,
         barcode: o.barcode,
         status: o.mainStatus,
-        legType: 'pickup',
+        legType: o.phase === 'DROP' ? 'drop' : 'pickup',
         seller: o.seller ? {
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
@@ -325,6 +348,28 @@ export class OrderService {
         mainStatus: 'PARCEL_AT_SHG',
       }
     });
+
+    // Auto-broadcast to approved transporters (Rahul Patil, etc.)
+    try {
+      const approvedTransporters = await this.prisma.user.findMany({
+        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
+        select: { id: true }
+      });
+
+      for (const t of approvedTransporters) {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: String(t.id),
+            assigneeType: 'TRANSPORTER',
+            role: 'PICKUP',
+            status: 'PENDING',
+          }
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn(`[completePickup] Transporter assignment note:`, err?.message || err);
+    }
 
     return order;
   }

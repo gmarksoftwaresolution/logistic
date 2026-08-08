@@ -11,6 +11,8 @@ import {
   ShieldAlert,
   ClipboardCheck,
   CheckCircle2,
+  Check,
+  AlertTriangle,
   Copy,
   Download,
   X,
@@ -164,6 +166,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [intakeOrder, setIntakeOrder] = useState<any | null>(null);
   const [intakeType, setIntakeType] = useState<'pickup' | 'return-pickup' | 'return-drop' | null>(null);
 
+  // Modern Toast Notification state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
   const [isParcelQrModalOpen, setIsParcelQrModalOpen] = useState(false);
   const [parcelQrList, setParcelQrList] = useState<any[]>([]);
   const [parcelQrOrderId, setParcelQrOrderId] = useState<string | null>(null);
@@ -183,7 +195,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     if (isIntakeModalOpen && intakeOrder) {
       setLoadingIntakeParcels(false);
       const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
-      const initialParcels = orderIds.map((id, index) => ({
+      const initialParcels = orderIds.map((id: any, index: number) => ({
         parcelId: id,
         productName: intakeOrder.fullOrder?.productName || 'Order Package',
         parcelNumber: index + 1,
@@ -797,19 +809,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       if (currentType === 'pickup') {
         const orderIds = currentOrder.isBulk ? currentOrder.selectedIds : [currentOrder.uuid || currentOrder.id];
         await intakePickupOrders(orderIds);
-        await loadData();
-        alert(`Intake Successful! Order ${currentOrder.id} status updated to STORED, added to Hub Inventory, and Phase 2 started.`);
+        showNotification(`Intake Successful! Order #${currentOrder.id} status updated to STORED, added to Hub Inventory, and Phase 2 started.`, 'success');
       } else if (currentType === 'return-pickup') {
         await intakeReturnOrder(currentOrder.id, 'pickup');
-        await loadData();
-        alert(`Buyer Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
+        showNotification(`Buyer Return Intake Successful! Order #${currentOrder.id} added to Inventory.`, 'success');
       } else if (currentType === 'return-drop') {
         await intakeReturnOrder(currentOrder.id, 'drop');
-        await loadData();
-        alert(`Transporter Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
+        showNotification(`Transporter Return Intake Successful! Order #${currentOrder.id} added to Inventory.`, 'success');
       }
     } catch (err: any) {
-      alert(err.message || 'Intake action failed.');
+      showNotification(err.message || 'Intake action failed.', 'error');
     } finally {
       setActionProcessing(false);
       setIsIntakeModalOpen(false);
@@ -3700,6 +3709,25 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </div>
           </form>
         </Modal>
+
+        {/* Floating Toast Notification */}
+        {toastMessage && (
+          <div className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 transition-all transform animate-bounce-in ${
+            toastType === 'success'
+              ? 'bg-[#073318] border-[#B2D534] text-white shadow-[#073318]/40'
+              : 'bg-red-900 border-red-400 text-white shadow-red-900/40'
+          }`}>
+            <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-[#B2D534]/20 text-[#B2D534]' : 'bg-red-700 text-white'}`}>
+              {toastType === 'success' ? <Check className="h-5 w-5 stroke-[3]" /> : <AlertTriangle className="h-5 w-5" />}
+            </div>
+            <div className="flex-1 text-xs font-bold leading-relaxed tracking-wide">
+              {toastMessage}
+            </div>
+            <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white ml-2 p-1 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </Layout>
   );

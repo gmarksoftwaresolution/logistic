@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SendOtpDto, VerifyOtpDto, LoginDto } from './dto/auth.dto';
 
@@ -82,7 +83,7 @@ export class AuthService {
     if (!user) {
       user = await this.prisma.user.create({
         data: {
-          authId: `AUTH-${cleaned}-${Date.now()}`,
+          authId: randomUUID(),
           phoneNumber: cleaned,
           fullName: 'GMU Coordinator',
           role: 'INDIVIDUAL',
@@ -121,7 +122,7 @@ export class AuthService {
     if (!userAny) {
       userAny = await this.prisma.user.create({
         data: {
-          authId: `AUTH-${cleaned}-${Date.now()}`,
+          authId: randomUUID(),
           phoneNumber: cleaned,
           fullName: 'GMU Coordinator',
           role: 'INDIVIDUAL',

@@ -22,7 +22,6 @@ import StockManagementScreen from '../screens/StockManagementScreen';
 import ApplicationStatusScreen from '../screens/ApplicationStatusScreen';
 import OrderHistoryDetailsScreen from '../screens/OrderHistoryDetailsScreen';
 import { PickupScannerScreen } from '../screens/PickupScannerScreen';
-import { DropScannerScreen } from '../screens/DropScannerScreen';
 
 import { RootStackParamList } from './types';
 
@@ -62,7 +61,6 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="ApplicationStatus" component={ApplicationStatusScreen} />
       <Stack.Screen name="OrderHistoryDetails" component={OrderHistoryDetailsScreen} />
       <Stack.Screen name="PickupScanner" component={PickupScannerScreen} />
-      <Stack.Screen name="DropScanner" component={DropScannerScreen} />
     </Stack.Navigator>
   );
 }
