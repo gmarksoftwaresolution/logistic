@@ -316,21 +316,40 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     // Seller: always completed
     const sellerState = 'completed';
 
+    // Check if Phase 1 has concluded or GMU Hub / Phase 2 has started
+    const isPhase1Concluded = [
+      'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED',
+      'DROP_PENDING', 'DROP_CREATED', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED',
+      'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG',
+      'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG',
+      'DELIVERED', 'COMPLETED'
+    ].includes((order.mainStatus || '').toUpperCase()) ||
+      order.phase === 'DROP' ||
+      Boolean(order.dropShgId || order.dropTransporterId || order.warehouseReceivedAt || order.storedAt);
+
     // Pickup SHG: completed if order is picked (or later status)
     let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
-    if (isShgPicked) {
+    const isShgPicked = isPhase1Concluded || [
+      'PICKED', 'DROPPED', 'COMPLETED'
+    ].includes((order.pickupShgStatus || '').toUpperCase()) || [
+      'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'
+    ].includes((order.mainStatus || '').toUpperCase());
+
+    if (isShgPicked || order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED') {
       pickupShgState = 'completed';
-    } else if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
+    } else if (['ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes((order.mainStatus || '').toUpperCase())) {
       pickupShgState = 'active';
     }
 
     // Pickup Transporter: completed if parcel is picked up by transporter (or later status)
     let pickupTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isTransPickupCompleted = ['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isTransPickupCompleted = isPhase1Concluded || [
+      'DROPPED', 'COMPLETED'
+    ].includes((order.pickupTransporterStatus || '').toUpperCase());
+
     if (isTransPickupCompleted) {
       pickupTransporterState = 'completed';
-    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG'].includes(order.mainStatus) || order.pickupTransporterStatus === 'ACCEPTED') {
+    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG'].includes((order.mainStatus || '').toUpperCase()) || ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKED'].includes((order.pickupTransporterStatus || '').toUpperCase())) {
       pickupTransporterState = 'active';
     }
 

@@ -1093,7 +1093,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
       })()}
 
       {/* Buyer Delivery OTP Card (Phase 2 Drop Leg: ONLY when SHG takes parcel from Transporter and drops to Buyer) */}
-      {order.legType === 'drop' && order.status === 'PickedUp' && (
+      {(order.legType === 'drop' || (order as any).phase === 'DROP') && (order.status === 'PickedUp' || (order as any).dropShgStatus === 'PICKED_UP' || (order as any).dropShgStatus === 'PICKED' || ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes((order as any).mainStatus || (order as any).status)) && (
         <View className="bg-white rounded-[28px] p-5 border border-emerald-100 mb-4 shadow-sm mx-2">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-full bg-emerald-50 items-center justify-center mr-3 border border-emerald-200">
@@ -1137,7 +1137,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   }
                   try {
                     setIsOtpSubmitting(true);
-                    await axiosInstance.post(`/shg/orders/new/dilivery/${order.id}/complete`, { code: otpInput.trim() });
+                    const cleanOrderId = (order.orderId || order.id || '').replace(/^drop-/, '').replace(/^pickup-/, '');
+                    await axiosInstance.post(`/orders/new/delivery/${cleanOrderId}/complete`, { code: otpInput.trim() });
+                    if (refreshOrdersList) {
+                      await refreshOrdersList().catch(() => {});
+                    }
                     Toast.show({
                       type: 'success',
                       text1: 'Delivery Completed!',

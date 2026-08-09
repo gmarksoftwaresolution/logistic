@@ -160,7 +160,7 @@ export class OrderController {
     return this.orderService.verifyCodes(id, user.id, codes);
   }
 
-  @Post('new/dilivery/:id/complete')
+  @Post(['new/delivery/:id/complete', 'new/dilivery/:id/complete', 'delivery/:id/complete', 'drop/:id/complete'])
   @ApiOperation({ summary: 'Mark a delivery order as complete' })
   @ApiBody({
     schema: {

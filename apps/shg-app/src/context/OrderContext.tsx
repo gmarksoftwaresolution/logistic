@@ -233,11 +233,17 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
         return 'Accepted';
       } else {
         // Drop leg mapping for SHG (Phase 2)
-        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+        const dShgStatus = (dbOrder.dropShgStatus || dbOrder.drop_shg_status || '').toUpperCase();
+        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED') {
           return 'COMPLETED';
         }
 
-        if (pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG') {
+        if (
+          ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(mStatus) ||
+          ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(pStatus) ||
+          dShgStatus === 'PICKED' ||
+          dShgStatus === 'PICKED_UP'
+        ) {
           return 'PickedUp';
         }
 
@@ -429,7 +435,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
-        const isDropLeg = o.legType === 'drop' || ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus || o.status);
+        const isDropLeg = o.legType === 'drop' || o.phase === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus || o.status);
         const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : (o.legType || 'pickup'), false);
         if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';

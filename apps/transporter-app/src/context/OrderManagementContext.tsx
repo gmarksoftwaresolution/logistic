@@ -364,7 +364,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const mStatus = (o.mainStatus || o.status || '').toUpperCase();
             const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
 
-            if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus) || dtStatus === 'PARCEL_AT_DROP_SHG' || dtStatus === 'COMPLETED' || dtStatus === 'DROPPED') {
+            if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus) || dtStatus === 'PARCEL_AT_DROP_SHG' || dtStatus === 'PARCEL_WITH_DROP_SHG' || dtStatus === 'COMPLETED' || dtStatus === 'DROPPED') {
               return 'DROP_COMPLETED' as const;
             }
             if (['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || dtStatus === 'PICKED' || isPickupFinished) {

@@ -1017,7 +1017,8 @@ export class OrderManagementService implements OnModuleInit {
     const dropActiveStatuses = [
       'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_CREATED',
       'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-      'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG'
+      'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED',
+      'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'
     ];
 
     const where = this.applyFilters(
@@ -1045,9 +1046,15 @@ export class OrderManagementService implements OnModuleInit {
 
   async getDropCompletedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] },
+      {
+        mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'] },
+        OR: [
+          { phase: 'DROP' },
+          { dropShgId: { not: null } },
+          { dropTransporterId: { not: null } }
+        ]
+      },
       filter,
-      // Phase 7-8: Delivered and Completed
       ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']
     );
     const orders = await this.prisma.order.findMany({

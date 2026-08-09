@@ -103,6 +103,8 @@ export class OrderService {
             'IN_TRANSIT_TO_DROP_SHG',
             'DISPATCHED',
             'PARCEL_AT_DROP_SHG',
+            'PARCEL_WITH_DROP_SHG',
+            'AT_BUYER_SHG',
             'OUT_FOR_DELIVERY',
             'REDIRECTED'
           ]
@@ -118,7 +120,7 @@ export class OrderService {
 
     // STRICT BUSINESS LOGIC FILTER: Village + Pincode matching per SHG
     const matchedOrders = orders.filter((o: any) => {
-      const isDropPhase = o.phase === 'DROP' || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
+      const isDropPhase = o.phase === 'DROP' || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
 
       if (isDropPhase) {
         // Phase 2 Drop Leg: Match only if explicitly assigned to this SHG as Drop SHG, or if village + pincode matches
@@ -152,6 +154,7 @@ export class OrderService {
       const transId = o.pickupTransporterId || o.dropTransporterId;
       const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const isDropLeg = (o.phase === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -159,7 +162,7 @@ export class OrderService {
         orderNumber: cleanOrderId,
         barcode: o.barcode,
         status: o.mainStatus,
-        legType: (o.phase === 'DROP' || ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid)) ? 'drop' : 'pickup',
+        legType: isDropLeg ? 'drop' : 'pickup',
         seller: o.seller ? {
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
@@ -548,7 +551,7 @@ export class OrderService {
       throw new BadRequestException('Invalid OTP code. Please enter 1234.');
     }
 
-    await this.prisma.order.update({
+    const updatedOrder = await this.prisma.order.update({
       where: { id: order.id },
       data: {
         dropShgStatus: 'DROPPED',
@@ -557,7 +560,20 @@ export class OrderService {
       }
     });
 
-    return order;
+    await this.prisma.parcel.updateMany({
+      where: { orderId: order.id },
+      data: {
+        parcelStatus: 'DELIVERED',
+        currentHolderType: 'BUYER',
+      }
+    }).catch(() => {});
+
+    await this.prisma.orderAssignment.updateMany({
+      where: { orderId: order.id, role: 'DROP' },
+      data: { status: 'COMPLETED' }
+    }).catch(() => {});
+
+    return updatedOrder;
   }
 
   async generateCode(orderId: any, shgId: number | string) {
