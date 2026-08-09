@@ -5,6 +5,7 @@ export type OrdersStackParamList = {
   ReturnedOrders: undefined;
   Drop: undefined;
   CompletedOrders: undefined;
+  RedirectedOrders: undefined;
   OrderDetails: { order: any };
   CompletedOrderDetails: { order: any };
   VehicleSuggestionDetails: { order: any };

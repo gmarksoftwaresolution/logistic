@@ -27,6 +27,7 @@ import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
 import VehicleSuggestionDetailsScreen from '../screens/VehicleSuggestionDetailsScreen';
 import ReturnedOrdersScreen from '../screens/ReturnedOrdersScreen';
+import RedirectedOrdersScreen from '../screens/RedirectedOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -189,6 +190,7 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="Drop" component={DropRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />
       <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />
+      <OrdersStack.Screen name="RedirectedOrders" component={RedirectedOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
       <OrdersStack.Screen name="VehicleSuggestionDetails" component={VehicleSuggestionDetailsScreen} />

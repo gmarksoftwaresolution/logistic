@@ -1118,7 +1118,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     // 2. Pickup SHG: completed if order is picked (or later status)
     let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
     const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
-    if (isShgPicked) {
+    if (isShgPicked || order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED') {
       pickupShgState = 'completed';
     } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
       pickupShgState = 'active';
@@ -1129,7 +1129,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const isTransPickupCompleted = ['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
     if (isTransPickupCompleted) {
       pickupTransporterState = 'completed';
-    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG'].includes(order.mainStatus) || order.pickupTransporterStatus === 'ACCEPTED') {
+    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG', 'REDIRECTED'].includes(order.mainStatus) || order.pickupTransporterStatus === 'ACCEPTED') {
       pickupTransporterState = 'active';
     }
 
@@ -1868,11 +1868,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                               {/* Stepper Nodes */}
                               {nodes.map((node, idx) => {
+                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
+                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
+                                const isClickable = !!node.details && !isRedirectedSHG;
+
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
                                 let iconContent = null;
                                 let labelColor = 'text-slate-405';
                                 let ringClass = '';
-                                const isClickable = !!node.details;
 
                                 // Node Labels & Icons mapping
                                 const getIconForNode = (label: string) => {
@@ -1886,7 +1889,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                                 const iconElement = getIconForNode(node.label);
 
-                                if (node.state === 'completed') {
+                                if (isRedirectedSHG) {
+                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
+                                  iconContent = iconElement;
+                                  labelColor = 'text-slate-350 opacity-40 font-medium';
+                                } else if (node.state === 'completed') {
                                   nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
                                   iconContent = (
                                     <div className="relative">
@@ -1938,7 +1945,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       )}
                                     </div>
                                     <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
-                                      {node.label}
+                                      {nodeLabel}
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
                                     {node.state === 'active' ? (
@@ -2220,11 +2227,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                               {/* Stepper Nodes */}
                               {nodes.map((node, idx) => {
+                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
+                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
+                                const isClickable = !!node.details && !isRedirectedSHG;
+
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
                                 let iconContent = null;
                                 let labelColor = 'text-slate-405';
                                 let ringClass = '';
-                                const isClickable = !!node.details;
 
                                 // Node Labels & Icons mapping
                                 const getIconForNode = (label: string) => {
@@ -2238,7 +2248,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                                 const iconElement = getIconForNode(node.label);
 
-                                if (node.state === 'completed') {
+                                if (isRedirectedSHG) {
+                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
+                                  iconContent = iconElement;
+                                  labelColor = 'text-slate-350 opacity-40 font-medium';
+                                } else if (node.state === 'completed') {
                                   nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
                                   iconContent = (
                                     <div className="relative">
@@ -2290,7 +2304,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       )}
                                     </div>
                                     <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
-                                      {node.label}
+                                      {nodeLabel}
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
                                     {node.state === 'active' ? (

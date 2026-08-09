@@ -737,5 +737,7 @@
   "orders_other": "Other",
   "filter_apply": "Apply",
   "filter_reset": "Reset",
-  "filter_all": "All"
+  "filter_all": "All",
+  "gps_location_note": "Note: Use 'Use Current Location' only when present at your actual home or delivery address. Otherwise, fill manually below.",
+  "or_fill_manually": "OR FILL MANUALLY BELOW"
 }

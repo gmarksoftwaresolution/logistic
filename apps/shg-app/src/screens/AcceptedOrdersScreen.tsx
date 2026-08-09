@@ -48,8 +48,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   const { t } = context;
 
   // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Drop tab
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
-  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
+  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && !o.isPickupRedirected);
+  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp' && !o.isDropRedirected);
 
   // Swipe & Pager Tab Switcher State
   const initialTabParam = route.params?.initialTab as string | undefined;
@@ -370,7 +370,6 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
                 isRedirected={isRedirected}
-                onRedirect={() => handleRedirectOrder(item)}
                 transporterName={item.transporterName}
                 transporterMobile={item.transporterMobile}
                 vehicleNumber={item.vehicleNumber}

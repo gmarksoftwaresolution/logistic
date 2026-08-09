@@ -5,7 +5,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getAssignedPickups(transporterId: number, mobileNumber?: string) {
     const user = await this.prisma.user.findUnique({
@@ -36,7 +36,7 @@ export class OrderService {
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT'] }
+        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'REDIRECTED'] }
       },
       include: {
         seller: true,
@@ -47,56 +47,41 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const allShgIds = Array.from(new Set(orders.map((o: any) => {
-      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
-      return o.pickupShgId || o.dropShgId || shgAssign?.assigneeId;
-    }).filter(Boolean)));
+    const shgIds = orders
+      .map(o => o.pickupShgId ? parseInt(o.pickupShgId, 10) : null)
+      .filter((id): id is number => id !== null && !isNaN(id));
 
-    const numericShgIds = allShgIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0);
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const uuidShgIds = allShgIds.filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
+    const shgUsers = shgIds.length > 0
+      ? await this.prisma.user.findMany({
+        where: { id: { in: shgIds } },
+        include: { address: true }
+      })
+      : [];
 
-    const shgUsers: any[] = [];
-    if (numericShgIds.length > 0) {
-      const byId = await this.prisma.user.findMany({
-        where: { id: { in: numericShgIds } },
-        include: { address: true, shgDetail: true }
-      });
-      shgUsers.push(...byId);
-    }
-    if (uuidShgIds.length > 0) {
-      const byAuth = await this.prisma.user.findMany({
-        where: { authId: { in: uuidShgIds } },
-        include: { address: true, shgDetail: true }
-      });
-      shgUsers.push(...byAuth);
-    }
-
-    const shgUserMap = new Map();
-    shgUsers.forEach((u: any) => {
-      shgUserMap.set(String(u.id), u);
-      shgUserMap.set(u.authId, u);
-    });
+    const shgMap = new Map(shgUsers.map(u => [String(u.id), u]));
 
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
-      const shgId = o.pickupShgId || o.dropShgId || shgAssign?.assigneeId;
-      const shgUser = shgId ? shgUserMap.get(String(shgId)) : null;
+      const shgUser = o.pickupShgId ? shgMap.get(o.pickupShgId) : null;
+      const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
 
-      const shgData = shgUser ? {
+      const mappedSeller = (!isRedirected && shgUser) ? {
         id: shgUser.id,
-        fullName: shgUser.fullName,
-        phoneNumber: shgUser.phoneNumber,
-        shgName: shgUser.shgDetail?.shgName || shgUser.fullName,
-        address: shgUser.address ? {
-          addressLine1: shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
-          village: shgUser.address.village,
-          taluka: shgUser.address.taluka,
-          district: shgUser.address.district,
-          pincode: shgUser.address.pincode,
-        } : null,
-      } : null;
+        sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
+        sellerName: shgUser.fullName || 'SHG Member',
+        mobileNumber: shgUser.phoneNumber,
+        email: shgUser.email,
+        addressLine1: shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine2: shgUser.address?.landmark || '',
+        village: shgUser.address?.village || '',
+        taluka: shgUser.address?.taluka || '',
+        district: shgUser.address?.district || '',
+        state: shgUser.address?.state || '',
+        pincode: shgUser.address?.pincode || '',
+        postOffice: shgUser.address?.postOffice || null,
+        createdAt: shgUser.createdAt,
+        updatedAt: shgUser.updatedAt,
+      } : o.seller;
 
       return {
         id: cleanOrderId,
@@ -109,29 +94,8 @@ export class OrderService {
         pickupTransporterId: o.pickupTransporterId,
         pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
-        shg: shgData,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.mobileNumber || o.seller.phoneNumber,
-          address: o.seller.addressLine1 ? `${o.seller.addressLine1}, ${o.seller.village || ''}` : (o.seller.address || o.seller.village),
-          addressLine1: o.seller.addressLine1 || o.seller.address,
-          addressLine2: o.seller.addressLine2,
-          village: o.seller.village,
-          taluka: o.seller.taluka,
-          district: o.seller.district,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.mobileNumber || o.buyer.phoneNumber,
-          address: o.buyer.addressLine1 ? `${o.buyer.addressLine1}, ${o.buyer.village || ''}` : (o.buyer.address || o.buyer.village),
-          addressLine1: o.buyer.addressLine1 || o.buyer.address,
-          addressLine2: o.buyer.addressLine2,
-          village: o.buyer.village,
-          taluka: o.buyer.taluka,
-          district: o.buyer.district,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: mappedSeller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -236,29 +200,8 @@ export class OrderService {
         dropTransporterId: o.dropTransporterId,
         dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
         mainStatus: o.mainStatus,
-        shg: shgData,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.mobileNumber || o.seller.phoneNumber,
-          address: o.seller.addressLine1 ? `${o.seller.addressLine1}, ${o.seller.village || ''}` : (o.seller.address || o.seller.village),
-          addressLine1: o.seller.addressLine1 || o.seller.address,
-          addressLine2: o.seller.addressLine2,
-          village: o.seller.village,
-          taluka: o.seller.taluka,
-          district: o.seller.district,
-          pincode: o.seller.pincode,
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.mobileNumber || o.buyer.phoneNumber,
-          address: o.buyer.addressLine1 ? `${o.buyer.addressLine1}, ${o.buyer.village || ''}` : (o.buyer.address || o.buyer.village),
-          addressLine1: o.buyer.addressLine1 || o.buyer.address,
-          addressLine2: o.buyer.addressLine2,
-          village: o.buyer.village,
-          taluka: o.buyer.taluka,
-          district: o.buyer.district,
-          pincode: o.buyer.pincode,
-        } : null,
+        seller: o.seller,
+        buyer: o.buyer,
         parcels: o.parcels || [],
       };
     });
@@ -277,6 +220,17 @@ export class OrderService {
       data: { status: 'ACCEPTED' }
     });
 
+    // Delete other pending transporter assignments for this pickup leg to prevent leaks
+    await this.prisma.orderAssignment.deleteMany({
+      where: {
+        orderId: order.id,
+        role: 'PICKUP',
+        assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+        assigneeId: { not: transporterUuid }
+      }
+    }).catch(() => { });
+
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
@@ -285,6 +239,15 @@ export class OrderService {
         mainStatus: 'PICKUP_TRANSPORTER_ACCEPTED',
       }
     });
+
+    // Update RedirectedOrder audit record
+    await (this.prisma as any).redirectedOrder.updateMany({
+      where: { orderId: order.id },
+      data: {
+        transporterId: transporterUuid,
+        status: 'ACCEPTED'
+      }
+    }).catch(() => { });
 
     return order;
   }
@@ -389,9 +352,9 @@ export class OrderService {
   async bulkAccept(orders: { id: string | number; type: 'pickup' | 'drop' }[], transporterId: number) {
     for (const item of orders) {
       if (item.type === 'pickup') {
-        await this.acceptPickup(item.id, transporterId).catch(() => {});
+        await this.acceptPickup(item.id, transporterId).catch(() => { });
       } else {
-        await this.acceptDrop(item.id, transporterId).catch(() => {});
+        await this.acceptDrop(item.id, transporterId).catch(() => { });
       }
     }
     return { success: true, message: 'Orders accepted in bulk.' };

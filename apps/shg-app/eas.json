@@ -14,7 +14,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://f1384dac68a73b.lhr.life/api"
+        "EXPO_PUBLIC_API_URL": "https://shelter-discounts-addition-billing.trycloudflare.com/api",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDNMv_sau3_koFOtAvkLkwsZgn_Y8iydy0"
       }
     },
     "production": {

@@ -296,6 +296,23 @@ export class SignupService {
       throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
     }
 
+    let latitude = dto.latitude;
+    let longitude = dto.longitude;
+
+    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+      const coords = await this.locationService.geocodeLocation(
+        dto.village,
+        dto.taluka,
+        dto.district,
+        dto.state,
+        dto.pincode,
+      );
+      if (coords) {
+        latitude = coords.latitude;
+        longitude = coords.longitude;
+      }
+    }
+
     await this.prisma.address.upsert({
       where: { userId },
       create: {
@@ -308,6 +325,8 @@ export class SignupService {
         pincode: dto.pincode,
         postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
+        latitude: latitude || null,
+        longitude: longitude || null,
       },
       update: {
         houseNo: dto.houseNo,
@@ -318,6 +337,8 @@ export class SignupService {
         pincode: dto.pincode,
         postOffice: dto.postOffice || null,
         landmark: dto.landmark || null,
+        latitude: latitude || null,
+        longitude: longitude || null,
       },
     });
 

@@ -46,9 +46,9 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
   const { t } = context;
 
   // Pickup orders: Accepted orders (waiting for receipt/pickup)
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
+  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && !o.isPickupRedirected);
   // Delivery orders: PickedUp orders (received and ready for delivery/drop)
-  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
+  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp' && !o.isDropRedirected);
 
   // Swipe & Pager Tab Switcher State
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('drop');

@@ -109,7 +109,7 @@ export class CommunityManagementService {
       ORDER BY u."createdAt" DESC
     `;
 
-    const results = await this.prisma.$queryRawUnsafe<any[]>(query);
+    const results = await this.prisma.$queryRawUnsafe(query) as any[];
     return results.map(item => ({
       ...item,
       type: role === 'SHG' ? 'SHG' : 'INDIVIDUAL'
@@ -145,14 +145,14 @@ export class CommunityManagementService {
       const u = await this.prisma.user.findUnique({ where: { id: parseInt(id, 10) } });
       if (u) return u.id;
     }
-    const userRows = await this.prisma.$queryRawUnsafe<any[]>(
+    const userRows = await this.prisma.$queryRawUnsafe(
       `SELECT u.id 
        FROM public."User" u
        LEFT JOIN public."ShgDetail" sd ON u.id = sd."userId"
        WHERE u."uniqueCode" = $1 OR sd."memberCode" = $1 OR u."phoneNumber" = $1
        LIMIT 1`,
       id
-    );
+    ) as any[];
     if (userRows && userRows.length > 0) {
       return userRows[0].id;
     }
@@ -255,7 +255,7 @@ export class CommunityManagementService {
       LIMIT 1
     `;
 
-    const results = await this.prisma.$queryRawUnsafe<any[]>(query);
+    const results = await this.prisma.$queryRawUnsafe(query) as any[];
     if (!results || results.length === 0) {
       throw new NotFoundException(`Community member with ID ${id} not found`);
     }

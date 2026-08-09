@@ -437,8 +437,31 @@ export class RegistrationService {
 
   async getPincodeInfo(pincode: string) {
     try {
-      const records = await this.locationService.findByPincode(pincode);
+      let records = await this.locationService.findByPincode(pincode);
       if (!records || records.length === 0) {
+        try {
+          const live = await this.locationService.getAddressFromPincode(pincode);
+          if (live && (live.state || live.district || live.villages?.length > 0)) {
+            const finalDist = live.district || live.taluka || '';
+            const finalTaluka = live.taluka || live.district || '';
+            return {
+              success: true,
+              state: live.state || '',
+              district: finalDist,
+              taluka: finalTaluka,
+              talukas: [finalTaluka].filter(Boolean),
+              postOffices: live.postOffices || [],
+              records: (live.villages || []).map((v: string) => ({
+                name: v,
+                village: v,
+                taluka: finalTaluka,
+                postOffice: v,
+                district: finalDist,
+                state: live.state || '',
+              })),
+            };
+          }
+        } catch (e) {}
         return {
           success: false,
           state: '',
@@ -455,7 +478,7 @@ export class RegistrationService {
       return {
         success: true,
         state: data.state || '',
-        district: data.district || '',
+        district: data.district || data.taluka || '',
         taluka: data.taluka || data.district || '',
         talukas,
         postOffices,
@@ -464,7 +487,7 @@ export class RegistrationService {
           village: r.village || '',
           taluka: r.taluka || r.district || '',
           postOffice: r.postOffice || r.village || '',
-          district: r.district || '',
+          district: r.district || r.taluka || '',
           state: r.state || '',
         })),
       };

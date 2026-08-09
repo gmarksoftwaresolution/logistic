@@ -332,6 +332,16 @@ export class AddressDto {
   @Transform(({ value }) => value?.trim())
   @MaxLength(200)
   landmark: string;
+
+  @ApiPropertyOptional({ example: 16.6912, description: 'Latitude (GPS)' })
+  @IsNumber()
+  @IsOptional()
+  latitude?: number;
+
+  @ApiPropertyOptional({ example: 74.2254, description: 'Longitude (GPS)' })
+  @IsNumber()
+  @IsOptional()
+  longitude?: number;
 }
 
 // ─── SCREEN 4 (SHG) / SCREEN 3 (Non-SHG): Documents ─────────────────────────

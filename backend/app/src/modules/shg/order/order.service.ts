@@ -42,39 +42,23 @@ export class OrderService {
 
     const orders = await this.prisma.order.findMany({
       where: {
-        OR: [
-          {
-            phase: 'PICKUP',
-            mainStatus: {
-              in: [
-                'NEW',
-                'ORDER_PLACED',
-                'PENDING',
-                'PENDING_PICKUP',
-                'PICKUP_ASSIGNED',
-                'PICKUP_SHG_PENDING',
-                'ACCEPTED',
-                'PICKUP_SHG_ACCEPTED',
-                'PARCEL_AT_SHG',
-                'TRANSPORTER_ACCEPTED',
-                'PICKUP_TRANSPORTER_ACCEPTED'
-              ]
-            }
-          },
-          {
-            phase: 'DROP',
-            mainStatus: {
-              in: [
-                'DROP_PENDING',
-                'DROP_ASSIGNED',
-                'DROP_SHG_ACCEPTED',
-                'DROP_TRANSPORTER_ACCEPTED',
-                'PARCEL_AT_DROP_SHG',
-                'IN_TRANSIT_TO_BUYER'
-              ]
-            }
-          }
-        ]
+        phase: 'PICKUP',
+        mainStatus: {
+          in: [
+            'NEW',
+            'ORDER_PLACED',
+            'PENDING',
+            'PENDING_PICKUP',
+            'PICKUP_ASSIGNED',
+            'PICKUP_SHG_PENDING',
+            'ACCEPTED',
+            'PICKUP_SHG_ACCEPTED',
+            'PARCEL_AT_SHG',
+            'TRANSPORTER_ACCEPTED',
+            'PICKUP_TRANSPORTER_ACCEPTED',
+            'REDIRECTED'
+          ]
+        }
       },
       include: {
         seller: true,
@@ -107,7 +91,22 @@ export class OrderService {
       return false;
     });
 
+    const transporterIds = matchedOrders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+        where: { id: { in: transporterIds } },
+        include: { transporterDetail: true, otherDetails: true }
+      })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
     return matchedOrders.map((o: any) => {
+      const transId = o.pickupTransporterId || o.dropTransporterId;
+      const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       return {
         id: cleanOrderId,
@@ -165,6 +164,22 @@ export class OrderService {
             unit: 'kg'
           }
         }],
+        isPickupRedirected: o.isPickupRedirected,
+        isDropRedirected: o.isDropRedirected,
+        pickupShgStatus: o.pickupShgStatus,
+        pickupTransporterStatus: o.pickupTransporterStatus,
+        dropShgStatus: o.dropShgStatus,
+        dropTransporterStatus: o.dropTransporterStatus,
+        mainStatus: o.mainStatus,
+        transporter: transporterUser ? {
+          fullName: transporterUser.fullName,
+          phoneNumber: transporterUser.phoneNumber,
+          transporterDetail: {
+            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
+          },
+          otherDetails: transporterUser.otherDetails || [],
+        } : null,
       };
     });
   }
@@ -226,7 +241,22 @@ export class OrderService {
       return false;
     });
 
+    const transporterIds = matchedOrders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+        where: { id: { in: transporterIds } },
+        include: { transporterDetail: true, otherDetails: true }
+      })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
     const formatted = matchedOrders.map((o: any) => {
+      const transId = o.pickupTransporterId || o.dropTransporterId;
+      const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       return {
         id: cleanOrderId,
@@ -244,6 +274,22 @@ export class OrderService {
           phoneNumber: o.buyer.mobileNumber,
         } : null,
         items: o.parcels || [],
+        isPickupRedirected: o.isPickupRedirected,
+        isDropRedirected: o.isDropRedirected,
+        pickupShgStatus: o.pickupShgStatus,
+        pickupTransporterStatus: o.pickupTransporterStatus,
+        dropShgStatus: o.dropShgStatus,
+        dropTransporterStatus: o.dropTransporterStatus,
+        mainStatus: o.mainStatus,
+        transporter: transporterUser ? {
+          fullName: transporterUser.fullName,
+          phoneNumber: transporterUser.phoneNumber,
+          transporterDetail: {
+            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
+          },
+          otherDetails: transporterUser.otherDetails || [],
+        } : null,
       };
     });
 
@@ -365,7 +411,7 @@ export class OrderService {
             role: 'PICKUP',
             status: 'PENDING',
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } catch (err: any) {
       console.warn(`[completePickup] Transporter assignment note:`, err?.message || err);
@@ -413,7 +459,169 @@ export class OrderService {
   }
 
   async redirectOrder(orderId: any, shgId: number | string, legType?: string, reason?: string) {
-    const order = await this.findOrderFlexible(orderId);
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: String(orderId) },
+          { orderId: String(orderId) },
+          { orderId: `ORD-${String(orderId)}` }
+        ]
+      },
+      include: { seller: true }
+    });
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    const seller = order.seller;
+    let selectedTransporterId: string | null = null;
+    let matchedTransporters: any[] = [];
+
+    if (seller) {
+      // Find matching transporters
+      const transporters = await this.prisma.$queryRawUnsafe(`
+        SELECT u.id, rd."operatingArea", rd."pickupLocations" as "assignedPincodes", mv."assignedVillages"
+        FROM public."User" u
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+        WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+      `) as any[];
+
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch (e) { }
+        }
+        return [];
+      };
+
+      const getTransporterLocations = (tr: any) => {
+        const areas = tr.operatingArea
+          ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+          : [];
+        const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+        const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+        return { areas, villages, pincodes };
+      };
+
+      const p = seller.pincode ? seller.pincode.toLowerCase().trim() : '';
+      const v = seller.village ? seller.village.toLowerCase().trim() : '';
+      const t = seller.taluka ? seller.taluka.toLowerCase().trim() : '';
+      const d = seller.district ? seller.district.toLowerCase().trim() : '';
+
+      matchedTransporters = [];
+
+      // Priority 1: Pincode
+      if (p) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas, pincodes } = getTransporterLocations(tr);
+          return pincodes.some((po: string) => po.split(' (')[0] === p) || areas.some((a: string) => a.split(' (')[0] === p);
+        });
+      }
+
+      // Priority 2: Village
+      if (matchedTransporters.length === 0 && v) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas, villages } = getTransporterLocations(tr);
+          return villages.some((vi: string) => vi.split(' (')[0] === v) || areas.some((a: string) => a.split(' (')[0] === v);
+        });
+      }
+
+      // Priority 3: Taluka
+      if (matchedTransporters.length === 0 && t) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.some((a: string) => a.split(' (')[0] === t);
+        });
+      }
+
+      // Priority 4: District
+      if (matchedTransporters.length === 0 && d) {
+        matchedTransporters = transporters.filter(tr => {
+          const { areas } = getTransporterLocations(tr);
+          return areas.some((a: string) => a.split(' (')[0] === d);
+        });
+      }
+
+      if (matchedTransporters.length > 0) {
+        selectedTransporterId = String(matchedTransporters[0].id);
+      }
+    }
+
+    const fallbackTransporter = await this.prisma.user.findFirst({
+      where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
+    });
+
+    const assigneeIds = new Set<string>();
+    if (matchedTransporters.length > 0) {
+      matchedTransporters.forEach(tr => assigneeIds.add(String(tr.id)));
+      selectedTransporterId = String(matchedTransporters[0].id);
+    }
+
+    if (fallbackTransporter) {
+      assigneeIds.add(String(fallbackTransporter.id));
+      if (!selectedTransporterId) {
+        selectedTransporterId = String(fallbackTransporter.id);
+      }
+    }
+
+    if (assigneeIds.size > 0) {
+      // 1. Create OrderAssignments for all matching transporters
+      for (const assigneeId of assigneeIds) {
+        // Delete any existing pending transporter assignments for this order to avoid duplicates
+        await this.prisma.orderAssignment.deleteMany({
+          where: {
+            orderId: order.id,
+            assigneeId,
+            role: 'PICKUP',
+            assigneeType: 'TRANSPORTER',
+          }
+        }).catch(() => { });
+
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId,
+            assigneeType: 'TRANSPORTER',
+            role: 'PICKUP',
+            status: 'PENDING'
+          }
+        });
+      }
+
+      // 2. Insert/Upsert into RedirectedOrder audit table
+      await (this.prisma as any).redirectedOrder.upsert({
+        where: { orderId: order.id },
+        update: {
+          shgId: String(shgId),
+          transporterId: selectedTransporterId,
+          reason: reason || 'Redirected by SHG',
+          status: 'PENDING'
+        },
+        create: {
+          orderId: order.id,
+          shgId: String(shgId),
+          transporterId: selectedTransporterId,
+          reason: reason || 'Redirected by SHG',
+          status: 'PENDING'
+        }
+      });
+    }
+
+    // 3. Update the Order table
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        isPickupRedirected: true,
+        redirectedPickupAt: new Date(),
+        redirectedPickupShgId: String(shgId),
+        pickupShgStatus: 'REDIRECTED',
+        mainStatus: 'REDIRECTED',
+        pickupTransporterId: selectedTransporterId,
+        pickupTransporterStatus: 'PENDING'
+      }
+    });
+
     return { success: true, message: 'Order redirected to Transporter', orderId: order.id };
   }
 
