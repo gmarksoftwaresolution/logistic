@@ -336,37 +336,37 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
     // GMU Hub: completed if dispatched from hub or later status
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED'].includes(order.mainStatus);
     if (isHubCompleted) {
       gmuHubState = 'completed';
-    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
+    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'STORED', 'DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
       gmuHubState = 'active';
     }
 
     // Drop Transporter: completed if parcel is at drop SHG/delivered
     let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED';
+    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DROPPED' || order.dropTransporterStatus === 'COMPLETED';
     if (isDropTransCompleted) {
       dropTransporterState = 'completed';
-    } else if (order.phase === 'DROP' && !['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+    } else if (['DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'DISPATCHED'].includes(order.mainStatus) || order.phase === 'DROP') {
       dropTransporterState = 'active';
     }
 
     // Drop SHG: completed if delivered/completed
     let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropShgCompleted = ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED';
+    const isDropShgCompleted = ['COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DROPPED' || order.dropShgStatus === 'COMPLETED';
     if (isDropShgCompleted) {
       dropShgState = 'completed';
-    } else if (order.phase === 'DROP' && ['PARCEL_AT_DROP_SHG'].includes(order.mainStatus)) {
+    } else if (order.mainStatus === 'PARCEL_AT_DROP_SHG' || (order.phase === 'DROP' && order.dropShgStatus === 'PICKED')) {
       dropShgState = 'active';
     }
 
     // Buyer: completed if delivered
     let buyerState: 'completed' | 'active' | 'pending' = 'pending';
-    const isBuyerCompleted = ['DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+    const isBuyerCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus);
     if (isBuyerCompleted) {
       buyerState = 'completed';
-    } else if (order.phase === 'DROP' && ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+    } else if (order.mainStatus === 'PARCEL_AT_DROP_SHG') {
       buyerState = 'active';
     }
 
@@ -854,59 +854,96 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
           </div>
         )}
 
-        {/* Tab Selection */}
-        <Tabs
-          activeTab={activeSubTab}
-          onChange={setActiveSubTab}
-          tabs={[
-            { id: 'incoming', label: 'Stored Orders', count: counts.inventory.stored },
-            { id: 'returnDrop', label: 'Transpoter return orders', count: counts.inventory.transporterReturn },
-            { id: 'returnPickup', label: 'Buyer return Orders', count: counts.inventory.buyerReturn },
-          ]}
-        />
+        {/* Filter stored vs dispatched items for clear segregation */}
+        {(() => {
+          const isDispatchedStatus = (st?: string) => {
+            if (!st) return false;
+            const s = st.toUpperCase();
+            return ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s);
+          };
 
-        {/* Main Data Tables */}
-        {activeSubTab === 'incoming' && (
-          <DataTable
-            columns={incomingColumns}
-            data={incomingInventory}
-            statusFilterField="status"
-            statusFilterOptions={['Stored', 'Dispatched']}
-            selectedStatus={statusFilter}
-            onStatusChange={setStatusFilter}
-            selectedDate={dateFilter}
-            onDateChange={setDateFilter}
-            onRowDoubleClick={handleViewItem}
-            onRefresh={() => loadData(true)}
-            isRefreshing={isRefreshing}
-          />
-        )}
-        {activeSubTab === 'returnPickup' && (
-          <DataTable
-            columns={returnPickupColumns}
-            data={returnPickupInventory}
-            selectedDate={dateFilter}
-            onDateChange={setDateFilter}
-            onRowDoubleClick={handleViewItem}
-            onRefresh={() => loadData(true)}
-            isRefreshing={isRefreshing}
-          />
-        )}
-        {activeSubTab === 'returnDrop' && (
-          <DataTable
-            columns={returnDropColumns}
-            data={returnDropInventory}
-            statusFilterField="status"
-            statusFilterOptions={['Stored', 'Dispatched']}
-            selectedStatus={statusFilter}
-            onStatusChange={setStatusFilter}
-            selectedDate={dateFilter}
-            onDateChange={setDateFilter}
-            onRowDoubleClick={handleViewItem}
-            onRefresh={() => loadData(true)}
-            isRefreshing={isRefreshing}
-          />
-        )}
+          const storedInventoryList = incomingInventory
+            .filter(item => !isDispatchedStatus(item.status))
+            .map(item => ({ ...item, status: 'STORED' }));
+
+          const dispatchedInventoryList = incomingInventory
+            .filter(item => isDispatchedStatus(item.status))
+            .map(item => ({ ...item, status: 'DISPATCHED' }));
+
+          return (
+            <>
+              {/* Tab Selection */}
+              <Tabs
+                activeTab={activeSubTab}
+                onChange={setActiveSubTab}
+                tabs={[
+                  { id: 'incoming', label: 'Stored Orders', count: storedInventoryList.length },
+                  { id: 'dispatched', label: 'Dispatched Orders', count: dispatchedInventoryList.length },
+                  { id: 'returnDrop', label: 'Transporter Return Orders', count: counts.inventory.transporterReturn },
+                  { id: 'returnPickup', label: 'Buyer Return Orders', count: counts.inventory.buyerReturn },
+                ]}
+              />
+
+              {/* Main Data Tables */}
+              {activeSubTab === 'incoming' && (
+                <DataTable
+                  columns={incomingColumns}
+                  data={storedInventoryList}
+                  statusFilterField="status"
+                  statusFilterOptions={['Stored', 'Dispatched']}
+                  selectedStatus={statusFilter}
+                  onStatusChange={setStatusFilter}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewItem}
+                  onRefresh={() => loadData(true)}
+                  isRefreshing={isRefreshing}
+                />
+              )}
+              {activeSubTab === 'dispatched' && (
+                <DataTable
+                  columns={incomingColumns}
+                  data={dispatchedInventoryList}
+                  statusFilterField="status"
+                  statusFilterOptions={['Dispatched', 'In Transit']}
+                  selectedStatus={statusFilter}
+                  onStatusChange={setStatusFilter}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewItem}
+                  onRefresh={() => loadData(true)}
+                  isRefreshing={isRefreshing}
+                />
+              )}
+              {activeSubTab === 'returnPickup' && (
+                <DataTable
+                  columns={returnPickupColumns}
+                  data={returnPickupInventory}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewItem}
+                  onRefresh={() => loadData(true)}
+                  isRefreshing={isRefreshing}
+                />
+              )}
+              {activeSubTab === 'returnDrop' && (
+                <DataTable
+                  columns={returnDropColumns}
+                  data={returnDropInventory}
+                  statusFilterField="status"
+                  statusFilterOptions={['Stored', 'Dispatched']}
+                  selectedStatus={statusFilter}
+                  onStatusChange={setStatusFilter}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewItem}
+                  onRefresh={() => loadData(true)}
+                  isRefreshing={isRefreshing}
+                />
+              )}
+            </>
+          );
+        })()}
 
         {/* --- VIEW ORDER DETAILS DRAWER --- */}
         <Modal

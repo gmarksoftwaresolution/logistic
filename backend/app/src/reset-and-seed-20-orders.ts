@@ -59,28 +59,43 @@ async function resetAndSeed20Orders() {
   const approvedShgs = await prisma.user.findMany({
     where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
   });
-  const shgAddresses = await prisma.address.findMany({
-    where: { userId: { in: approvedShgs.map(s => s.id) } }
-  });
-  const shgServiceAreas = await prisma.shgServiceArea.findMany({});
-
   const approvedTransporters = await prisma.user.findMany({
     where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
   });
-
+  const shgAddresses = await prisma.address.findMany({
+    where: { userId: { in: approvedShgs.map(s => s.id) } }
+  });
   console.log(`Found ${approvedShgs.length} approved SHGs and ${approvedTransporters.length} approved Transporters in database.`);
 
-  const findMatchingShgForSeller = (sellerVillage: string, sellerPincode: string) => {
-    const vNorm = (sellerVillage || '').trim().toLowerCase();
-    const pNorm = (sellerPincode || '').trim().toLowerCase();
+  // Clean shgServiceArea records so each SHG's service area strictly matches their primary village
+  for (const s of approvedShgs) {
+    const addr = shgAddresses.find(a => a.userId === s.id);
+    if (addr && addr.village) {
+      await prisma.shgServiceArea.deleteMany({
+        where: {
+          OR: [{ shgUserId: String(s.id) }, { shgUserId: s.authId || '' }]
+        }
+      }).catch(() => {});
+      await prisma.shgServiceArea.create({
+        data: {
+          shgUserId: String(s.id),
+          village: addr.village,
+          pincode: addr.pincode || '416501'
+        }
+      }).catch(() => {});
+    }
+  }
+  const shgServiceAreas = await prisma.shgServiceArea.findMany({});
 
-    // 1. Direct address match
+  const findMatchingShgForSeller = (sellerVillage: string, sellerPincode: string) => {
+    const vNorm = (sellerVillage || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+
+    // 1. Direct address match by village name
     const directShgUser = approvedShgs.find(shg => {
       const addr = shgAddresses.find(a => a.userId === shg.id);
       if (addr) {
-        const aV = (addr.village || '').trim().toLowerCase();
-        const aP = (addr.pincode || '').trim().toLowerCase();
-        if (aV === vNorm && aP === pNorm) return true;
+        const aV = (addr.village || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+        if (aV && (aV === vNorm || aV.includes(vNorm) || vNorm.includes(aV))) return true;
       }
       return false;
     });
@@ -88,17 +103,17 @@ async function resetAndSeed20Orders() {
 
     // 2. Service area match
     const saMatch = shgServiceAreas.find(sa => {
-      const sV = (sa.village || '').trim().toLowerCase();
-      const sP = (sa.pincode || '').trim().toLowerCase();
-      return sV === vNorm && sP === pNorm;
+      const sV = (sa.village || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+      return sV && (sV === vNorm || sV.includes(vNorm) || vNorm.includes(sV));
     });
     if (saMatch) {
       const shgUser = approvedShgs.find(s => String(s.id) === String(saMatch.shgUserId) || s.authId === saMatch.shgUserId);
       if (shgUser) return shgUser;
     }
 
-    // 3. Fallback
-    return approvedShgs[0] || null;
+    // 3. Fallback deterministically by village string hash
+    const index = Math.abs(vNorm.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % approvedShgs.length;
+    return approvedShgs[index] || approvedShgs[0];
   };
 
   // 3. CREATE EXACTLY 20 NEW FRESH ORDERS (ORD-2026-101 to ORD-2026-120)

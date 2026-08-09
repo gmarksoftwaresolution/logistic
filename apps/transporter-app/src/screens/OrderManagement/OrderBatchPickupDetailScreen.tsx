@@ -682,8 +682,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             })()}
             {(() => {
               const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
-              const resolvedVillage = (displayContact as any).village || batch.areaName || 'Nesari';
-              const resolvedPincode = (displayContact as any).pincode || addressPincode || '416504';
+              const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
+              const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
                   <View style={styles.contactGridItem}>

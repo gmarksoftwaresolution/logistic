@@ -221,7 +221,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
-                    <Text style={styles.contactTextValue}>{pickupContact?.village || batch.pickupPointName || 'Nesari'}</Text>
+                    <Text style={styles.contactTextValue}>{pickupContact?.village || batch.pickupPointName || 'N/A'}</Text>
                   </View>
                 </View>
 
@@ -316,7 +316,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
-                    <Text style={styles.contactTextValue}>{dropContact?.village || batch.dropPointName || 'Nesari'}</Text>
+                    <Text style={styles.contactTextValue}>{dropContact?.village || batch.dropPointName || 'N/A'}</Text>
                   </View>
                 </View>
 

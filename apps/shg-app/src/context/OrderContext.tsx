@@ -237,7 +237,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           return 'COMPLETED';
         }
 
-        if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
+        if (pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG') {
           return 'PickedUp';
         }
 
@@ -429,8 +429,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
-        const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
-        if ((o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
+        const isDropLeg = o.legType === 'drop' || ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus || o.status);
+        const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : (o.legType || 'pickup'), false);
+        if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';
           const pIdx = localPickedUp.indexOf(order.id);
           if (pIdx !== -1) {
@@ -449,18 +450,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const allMapped = [...mappedPickups, ...mappedDrops];
 
-      // Filter out completed/accepted pickup orders if there is an active/completed drop order for the same master order assigned to us
+      // Filter out pickup leg if an active drop leg exists for the same order
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
-          if (hasDropOrder && (order.status === 'PickedUp' || order.status === 'COMPLETED')) {
-            return false;
-          }
-        } else if (order.legType === 'drop') {
-          const hasIncompletePickup = allMapped.some(
-            o => o.legType === 'pickup' && o.orderId === order.orderId && o.status !== 'PickedUp' && o.status !== 'COMPLETED'
-          );
-          if (hasIncompletePickup) {
+          if (hasDropOrder) {
             return false;
           }
         }
@@ -595,7 +589,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setReturnedOrders(mappedReturned);
 
       // Completed = Everything Completed from Dedicated Endpoints + COMPLETED mapped orders
-      const mappedCompletedNew = (rawCompleted.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
+      const activeOrderIds = new Set(finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').map(o => o.orderId));
+      const mappedCompletedNew = (rawCompleted.newOrders || [])
+        .map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false))
+        .filter((o: any) => !activeOrderIds.has(o.orderId) && o.status === 'COMPLETED');
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
       const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED');
       const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];

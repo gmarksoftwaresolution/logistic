@@ -121,10 +121,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
     mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
 
     const isValidPhone = order.mobile && /^[+]?[0-9\s-]{10,15}$/.test(order.mobile);
-    mobileValue = isValidPhone ? order.mobile : (order.seller?.phoneNumber || "9876500001");
+    mobileValue = isValidPhone ? order.mobile : (order.seller?.phoneNumber || "N/A");
 
     villageLabel = "Village";
-    villageValue = (order as any).sellerVillage || order.seller?.village || order.seller?.address?.village || source || "Dundage";
+    villageValue = (order as any).sellerVillage || order.seller?.village || order.seller?.address?.village || source || "N/A";
 
     fullAddressLabel = "Full Address";
     fullAddressValue = (order as any).sellerAddress || (order.seller as any)?.fullAddress || [
@@ -141,10 +141,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
     nameLabel = t('su_buyer_name') || "Buyer Name";
     nameValue = order.buyerName || destination;
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
-    mobileValue = order.mobile || (order.buyer?.phoneNumber || "+91 9876543210");
+    mobileValue = order.mobile || (order.buyer?.phoneNumber || "N/A");
 
     villageLabel = "Village";
-    villageValue = (order as any).buyerVillage || order.buyer?.village || order.buyer?.address?.village || destination || "Nesari";
+    villageValue = (order as any).buyerVillage || order.buyer?.village || order.buyer?.address?.village || destination || "N/A";
 
     fullAddressLabel = "Full Address";
     fullAddressValue = (order as any).buyerAddress || (order.buyer as any)?.fullAddress || [
@@ -227,6 +227,9 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [scanned, setScanned] = useState(false);
   const [showRedirectModal, setShowRedirectModal] = useState<boolean>(false);
   const [selectedQrParcel, setSelectedQrParcel] = useState<any | null>(null);
+  const [showOtpSection, setShowOtpSection] = useState<boolean>(false);
+  const [otpInput, setOtpInput] = useState<string>('');
+  const [isOtpSubmitting, setIsOtpSubmitting] = useState<boolean>(false);
 
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
@@ -1088,6 +1091,89 @@ const OrderDetailsScreen: React.FC<Props> = ({
           </View>
         ) : null;
       })()}
+
+      {/* Buyer Delivery OTP Card (Phase 2 Drop Leg: ONLY when SHG takes parcel from Transporter and drops to Buyer) */}
+      {order.legType === 'drop' && order.status === 'PickedUp' && (
+        <View className="bg-white rounded-[28px] p-5 border border-emerald-100 mb-4 shadow-sm mx-2">
+          <View className="flex-row items-center mb-3">
+            <View className="w-10 h-10 rounded-full bg-emerald-50 items-center justify-center mr-3 border border-emerald-200">
+              <Ionicons name="key-outline" size={20} color="#059669" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[15px] font-black text-[#111827]">Buyer Delivery via OTP</Text>
+              <Text className="text-[12px] font-medium text-slate-500">Confirm delivery to buyer using OTP code</Text>
+            </View>
+          </View>
+
+          {!showOtpSection ? (
+            <TouchableOpacity
+              onPress={() => setShowOtpSection(true)}
+              className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center w-full active:bg-[#052210]"
+            >
+              <Ionicons name="paper-plane-outline" size={18} color="white" />
+              <Text className="text-[14px] font-bold text-white ml-2">Send OTP to Buyer</Text>
+            </TouchableOpacity>
+          ) : (
+            <View className="space-y-3 mt-2">
+              <Text className="text-[12px] font-bold text-slate-600 mb-1">Enter OTP Code received by Buyer (Default: 1234):</Text>
+              <TextInput
+                value={otpInput}
+                onChangeText={setOtpInput}
+                keyboardType="number-pad"
+                maxLength={4}
+                placeholder="1234"
+                placeholderTextColor="#94A3B8"
+                className="bg-slate-50 border border-slate-200 rounded-[14px] px-4 h-12 text-[16px] font-black text-[#111827] text-center tracking-widest mb-2"
+              />
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!otpInput || otpInput.trim() !== '1234') {
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Invalid OTP',
+                      text2: 'Please enter OTP 1234 to complete delivery.'
+                    });
+                    return;
+                  }
+                  try {
+                    setIsOtpSubmitting(true);
+                    await axiosInstance.post(`/shg/orders/new/dilivery/${order.id}/complete`, { code: otpInput.trim() });
+                    Toast.show({
+                      type: 'success',
+                      text1: 'Delivery Completed!',
+                      text2: 'Order has been successfully delivered to the buyer.'
+                    });
+                    if (navigation.canGoBack()) {
+                      navigation.goBack();
+                    } else {
+                      navigation.navigate('AcceptedOrders', { initialTab: 'drop' });
+                    }
+                  } catch (err: any) {
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Delivery Failed',
+                      text2: err.response?.data?.message || err.message || 'Failed to complete delivery.'
+                    });
+                  } finally {
+                    setIsOtpSubmitting(false);
+                  }
+                }}
+                disabled={isOtpSubmitting}
+                className="bg-[#059669] h-12 rounded-[16px] flex-row items-center justify-center w-full active:bg-[#047857]"
+              >
+                {isOtpSubmitting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="white" />
+                    <Text className="text-[14px] font-bold text-white ml-2">Confirm Delivery to Buyer</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Action Buttons Row */}
       <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">

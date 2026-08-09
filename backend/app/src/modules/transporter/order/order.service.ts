@@ -88,8 +88,8 @@ export class OrderService {
       const mappedSeller = (!isRedirected && shgUser) ? {
         id: shgUser.id,
         sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
-        sellerName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'Reshma Patil',
-        fullName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'Reshma Patil',
+        sellerName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
+        fullName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
         mobileNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
         phoneNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
         shgName: shgUser.shgDetail?.shgName || '',
@@ -177,7 +177,7 @@ export class OrderService {
           { orderId: { in: assignedOrderIds } },
           { dropTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['STORED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'] }
+        mainStatus: { in: ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'] }
       },
       include: {
         seller: true,
@@ -246,11 +246,23 @@ export class OrderService {
         barcode: o.barcode,
         status: o.mainStatus,
         dropTransporterId: o.dropTransporterId,
-        dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
+        dropTransporterStatus: o.dropTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
         seller: o.seller,
         buyer: o.buyer,
+        dropShg: shgData,
+        dropShgDetails: shgData,
+        shg: shgData,
         parcels: o.parcels || [],
+        items: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+          id: p.id || p.parcelId,
+          quantity: p.quantity || 1,
+          weight: p.weight || p.weightKg || 2.5,
+          product: {
+            name: p.productName || 'Agricultural Goods',
+            weight: Number(p.weight || p.weightKg || 2.5)
+          }
+        })) : (o.items || [])
       };
     });
   }
@@ -377,7 +389,17 @@ export class OrderService {
   }
 
   async completePickupDrop(orderId: any, transporterId: number, code?: string) {
-    return this.completePickup(orderId, transporterId, code);
+    const order = await this.findOrderFlexible(orderId);
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        pickupTransporterStatus: 'DELIVERED_TO_HUB',
+        mainStatus: 'HUB_RECEIVED',
+      }
+    });
+
+    return order;
   }
 
   async rejectPickup(orderId: any, transporterId: number, reason?: string) {

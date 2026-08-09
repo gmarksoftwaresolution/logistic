@@ -29,33 +29,16 @@ const STATUS_MAP: Record<string, { colorClasses: string; dotColor: string }> = {
   PARCEL_AT_TRANSPORTER:      { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
 
   // Phase 5 - Hub Receive and Dispatch
-  AT_HUB:                     { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  PARCEL_AT_HUB:              { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  RETURN_PARCEL_AT_HUB:       { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  HUB_RECEIVED:               { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  PARCEL_AT_GMU:              { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
-  RETURN_PARCEL_AT_GMU:       { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
-  BARCODE_GENERATED:          { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   STORED:                     { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  DROP_ASSIGNED:              { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
   DISPATCHED:                 { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
-  PENDING_DROP:               { colorClasses: 'bg-amber-50 text-amber-800 border-amber-200',    dotColor: 'bg-amber-500' },
-  DROP_SHG_PENDING:           { colorClasses: 'bg-amber-50 text-amber-800 border-amber-200',    dotColor: 'bg-amber-500' },
+  DROP_SHG_ACCEPTED:          { colorClasses: 'bg-indigo-50 text-indigo-800 border-indigo-200', dotColor: 'bg-indigo-500' },
 
   // Phase 6 - Drop Leg
   DROP_TRANSPORTER_ACCEPTED:  { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
-  IN_TRANSIT_TO_DROP_SHG:     { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
-  IN_TRANSIT_TO_SHG:          { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
-  PARCEL_AT_DROP_SHG:         { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  IN_TRANSIT_TO_BUYER:        { colorClasses: 'bg-orange-50 text-orange-800 border-orange-200', dotColor: 'bg-orange-500' },
+  PARCEL_AT_DROP_SHG:         { colorClasses: 'bg-amber-50 text-amber-800 border-amber-200',    dotColor: 'bg-amber-500' },
 
-  // Phase 7 - Last Mile Delivery
-  DROP_SHG_ACCEPTED:          { colorClasses: 'bg-blue-50 text-blue-800 border-blue-200',       dotColor: 'bg-blue-500' },
-  DELIVERED:                  { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  DELVIERED_TO_BUYER:         { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  DELIVERED_TO_BUYER:         { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-  PARCEL_AT_BUYER:            { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
-
-  // Phase 8 - Order Completion
+  // Order Completion
   COMPLETED:                  { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
   RETURN_COMPLETED:           { colorClasses: 'bg-emerald-50 text-emerald-800 border-emerald-200', dotColor: 'bg-emerald-500' },
 

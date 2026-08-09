@@ -348,7 +348,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const isDropOrTransporterReturnFlow = flowType
       ? flowType === 'drop' || (flowType === 'return' && (o.returnType === 'TRANSPORTER_RETURN' || ['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus)))
-      : ['PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN', 'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
+      : ['STORED', 'DISPATCHED', 'DROP_ASSIGNED', 'DROP_SHG_PENDING', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'ON_HOLD', 'TRANSPORTER_RETURN', 'TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus) || o.returnType === 'TRANSPORTER_RETURN';
 
     const targetShgId = isBuyerReturnFlow
       ? (o.pickupReturnShgId || o.assignments?.find((a: any) => a.role === 'RETURN_PICKUP' && a.assigneeType === 'SHG' && a.status === 'ACCEPTED')?.assigneeId)
@@ -456,9 +456,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Compute explicit pickup & drop details for the graphical timeline
     // Compute explicit pickup & drop details for the graphical timeline
-    const pickupShgId = o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
+    const pickupShgId = o.pickupShgId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
     const pickupShgMember = shgList.find(s => String(s.id) === String(pickupShgId));
-    const apiPickupShgDetails = o.pickupShgDetails || (flowType === 'pickup' ? o.shgDetails : undefined);
+    const apiPickupShgDetails = o.pickupShgDetails || o.shgDetails;
     const pickupShgDetails = apiPickupShgDetails ? {
       name: apiPickupShgDetails.name,
       mobile: apiPickupShgDetails.mobile,
@@ -469,9 +469,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       address: pickupShgMember.address,
     } : undefined);
 
-    const dropShgId = o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
+    const dropShgId = o.dropShgId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG')?.assigneeId;
     const dropShgMember = shgList.find(s => String(s.id) === String(dropShgId));
-    const apiDropShgDetails = o.dropShgDetails || (flowType === 'drop' ? o.shgDetails : undefined);
+    const apiDropShgDetails = o.dropShgDetails;
     const dropShgDetails = apiDropShgDetails ? {
       name: apiDropShgDetails.name,
       mobile: apiDropShgDetails.mobile,
@@ -482,30 +482,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       address: dropShgMember.address,
     } : undefined);
 
-    const pickupTransporterId = o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
+    const pickupTransporterId = o.pickupTransporterId || o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
     const pickupTransporterMember = transporterList.find(t => String(t.id) === String(pickupTransporterId));
-    const apiPickupTransporterDetails = o.pickupTransporterDetails || (flowType === 'pickup' ? o.transporterDetails : undefined);
+    const apiPickupTransporterDetails = o.pickupTransporterDetails || o.transporterDetails;
     const pickupTransporterDetails = apiPickupTransporterDetails ? {
       name: apiPickupTransporterDetails.name,
       mobile: apiPickupTransporterDetails.mobile,
       address: apiPickupTransporterDetails.address,
+      vehicle: apiPickupTransporterDetails.vehicle,
     } : (pickupTransporterMember ? {
       name: pickupTransporterMember.name,
       mobile: pickupTransporterMember.mobile,
       address: pickupTransporterMember.address,
+      vehicle: pickupTransporterMember.vehicle,
     } : undefined);
 
-    const dropTransporterId = o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && ['ACCEPTED', 'COMPLETED'].includes(a.status))?.assigneeId;
+    const dropTransporterId = o.dropTransporterId || o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
     const dropTransporterMember = transporterList.find(t => String(t.id) === String(dropTransporterId));
-    const apiDropTransporterDetails = o.dropTransporterDetails || (flowType === 'drop' ? o.transporterDetails : undefined);
+    const apiDropTransporterDetails = o.dropTransporterDetails;
     const dropTransporterDetails = apiDropTransporterDetails ? {
       name: apiDropTransporterDetails.name,
       mobile: apiDropTransporterDetails.mobile,
       address: apiDropTransporterDetails.address,
+      vehicle: apiDropTransporterDetails.vehicle,
     } : (dropTransporterMember ? {
       name: dropTransporterMember.name,
       mobile: dropTransporterMember.mobile,
       address: dropTransporterMember.address,
+      vehicle: dropTransporterMember.vehicle,
     } : undefined);
 
     const sellerName = o.sellerName || o.seller?.sellerName || o.seller?.fullName || 'N/A';
@@ -516,32 +520,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const buyerMobile = o.buyerMobile || o.buyer?.mobileNumber || o.buyer?.phoneNumber || 'N/A';
     const buyerAddress = [o.buyerHouseNo, o.buyerAddress || o.buyer?.addressLine1, o.buyerVillage || o.buyer?.village, o.buyerTaluka || o.buyer?.taluka, o.buyerDistrict || o.buyer?.district, o.buyerState || o.buyer?.state, o.buyerPincode || o.buyer?.pincode].filter(Boolean).join(', ') || 'N/A';
 
-    const formattedItems = (o.items && o.items.length > 0)
-      ? o.items.map((i: any) => ({
-          name: i.name || i.productName || i.product?.name || 'Agricultural Goods',
-          quantity: i.quantity || 1,
-          weight: i.weight || i.weightKg || i.product?.weight || '2.5',
-          category: i.category || i.product?.category || 'Agriculture',
-          price: i.price || i.declaredValue || i.product?.price || 450,
-        }))
-      : (o.parcels && o.parcels.length > 0)
-        ? o.parcels.map((p: any) => ({
+    const rawParcels = (o.parcels && o.parcels.length > 0) ? o.parcels : [];
+    const uniqueParcelsMap = new Map();
+    rawParcels.forEach((p: any) => {
+      const key = p.parcelId || p.barcode || p.id || `${p.productName}-${p.weight}`;
+      if (!uniqueParcelsMap.has(key)) {
+        uniqueParcelsMap.set(key, p);
+      }
+    });
+    const uniqueParcels = Array.from(uniqueParcelsMap.values());
+
+    const rawItems = (o.items && o.items.length > 0)
+      ? o.items
+      : (uniqueParcels.length > 0
+        ? uniqueParcels.map((p: any) => ({
             name: p.productName || 'Agricultural Goods',
             quantity: p.quantity || 1,
             weight: p.weight || p.weightKg || '2.5',
             category: p.category || 'Agriculture',
             price: p.declaredValue || 450,
           }))
-        : [{
-            name: 'Agricultural Goods',
-            quantity: 1,
-            weight: '2.5',
-            category: 'Agriculture',
-            price: 450,
-          }];
+        : []);
 
-    const formattedParcels = (o.parcels && o.parcels.length > 0)
-      ? o.parcels.map((p: any) => {
+    const uniqueItemsMap = new Map();
+    rawItems.forEach((i: any) => {
+      const key = `${i.name || i.productName}-${i.quantity}-${i.weight}`;
+      if (!uniqueItemsMap.has(key)) {
+        uniqueItemsMap.set(key, i);
+      }
+    });
+    const formattedItems = Array.from(uniqueItemsMap.values()).map((i: any) => ({
+      name: i.name || i.productName || i.product?.name || 'Agricultural Goods',
+      quantity: i.quantity || 1,
+      weight: i.weight || i.weightKg || i.product?.weight || '2.5',
+      category: i.category || i.product?.category || 'Agriculture',
+      price: i.price || i.declaredValue || i.product?.price || 450,
+    }));
+
+    if (formattedItems.length === 0) {
+      formattedItems.push({
+        name: 'Agricultural Goods',
+        quantity: 1,
+        weight: '2.5',
+        category: 'Agriculture',
+        price: 450,
+      });
+    }
+
+    const formattedParcels = (uniqueParcels.length > 0)
+      ? uniqueParcels.map((p: any) => {
           const cleanId = (o.orderId || o.id || '2026').replace(/^ORD-/, '');
           const qrData = p.qrImage || p.qrCodeValue || p.barcode || p.verificationToken || o.barcode || `QR-${cleanId}-PCL-1`;
           const qrUri = (qrData && String(qrData).startsWith('http'))
@@ -697,6 +724,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const token = localStorage.getItem('gmu_token');
     if (token && currentPage !== 'landing') {
+      fetchPartners();
       loadCounts();
     }
   }, [currentPage]);

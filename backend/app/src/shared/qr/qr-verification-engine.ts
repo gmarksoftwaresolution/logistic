@@ -159,29 +159,17 @@ export function determineTransition(
   }
 
   if (finalRole === 'TRANSPORTER') {
-    const isDropPhase = order?.phase === 'DROP' || sessionType === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'DISPATCHED'].includes(order?.mainStatus);
+    const isDropPhase = order?.phase === 'DROP' || sessionType === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(order?.mainStatus);
 
     if (isDropPhase) {
-      if (currentStatus === 'OUT_FOR_DELIVERY' || currentStatus === 'DISPATCHED' || order?.mainStatus === 'DISPATCHED') {
-        // Transporter dropping off at Buyer SHG
-        const nextHolder = order.dropShgId ? String(order.dropShgId) : 'SHG';
-        return {
-          nextParcelStatus: 'PARCEL_AT_DROP_SHG',
-          nextHolderId: nextHolder,
-          nextHolderType: 'SHG',
-          action: 'TRANSPORTER_SHG_DELIVER',
-          message: 'Parcel delivered to Drop SHG by Transporter',
-        };
-      } else {
-        // Transporter loading from Hub for delivery -> DISPATCHED
-        return {
-          nextParcelStatus: 'DISPATCHED',
-          nextHolderId: userId,
-          nextHolderType: 'TRANSPORTER',
-          action: 'TRANSPORTER_DROP_PICKUP',
-          message: 'Parcel loaded for delivery by Transporter from Hub Warehouse (Dispatched)',
-        };
-      }
+      // Transporter loading parcel from GMU Hub Warehouse for delivery -> IN_TRANSIT_TO_BUYER
+      return {
+        nextParcelStatus: 'IN_TRANSIT_TO_BUYER',
+        nextHolderId: userId,
+        nextHolderType: 'TRANSPORTER',
+        action: 'TRANSPORTER_DROP_PICKUP',
+        message: 'Parcel picked up by Transporter from GMU Hub Warehouse (In Transit to Drop SHG)',
+      };
     }
 
     // PHASE 1 (PICKUP): Transporter loading from Pickup SHG to deliver to GMU Hub

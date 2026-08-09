@@ -51,7 +51,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
   let mobileValue = order.mobile || (order.seller?.phoneNumber || "N/A");
   let villageLabel = "Village";
-  let villageValue = order.sellerVillage || order.seller?.village || source || "Dundage";
+  let villageValue = order.sellerVillage || order.seller?.village || source || "N/A";
   let fullAddressLabel = "Full Address";
   let fullAddressValue = order.sellerAddress || order.seller?.fullAddress || order.address || villageValue;
 
@@ -63,7 +63,7 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
     mobileValue = order.mobile || (order.buyer?.phoneNumber || "N/A");
     villageLabel = "Village";
-    villageValue = order.buyerVillage || order.buyer?.village || destination || "Nesari";
+    villageValue = order.buyerVillage || order.buyer?.village || destination || "N/A";
     fullAddressLabel = "Full Address";
     fullAddressValue = order.buyerAddress || order.buyer?.fullAddress || order.address || villageValue;
   }

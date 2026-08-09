@@ -40,16 +40,30 @@ export class OrderService {
     });
 
     const isVillageMatch = (v?: string | null, p?: string | null) => {
-      if (!v && !p) return false;
+      if (!v) return false;
       const vNorm = this.normalizeStr(v);
-      const pNorm = (p || '').trim().toLowerCase();
-      if (userVillage && userPincode && vNorm === userVillage && pNorm === userPincode) {
+      if (!vNorm) return false;
+
+      const pNorm = p ? (p || '').trim().toLowerCase() : '';
+
+      // 1. Direct village match on user primary address
+      if (userVillage && (userVillage === vNorm || userVillage.includes(vNorm) || vNorm.includes(userVillage))) {
+        if (userPincode && pNorm) {
+          return userPincode === pNorm;
+        }
         return true;
       }
+      // 2. Village match on configured service areas
       return serviceAreas.some(sa => {
         const saV = this.normalizeStr(sa.village);
-        const saP = (sa.pincode || '').trim().toLowerCase();
-        return saV === vNorm && saP === pNorm;
+        const saP = sa.pincode ? (sa.pincode || '').trim().toLowerCase() : '';
+        if (saV && (saV === vNorm || saV.includes(vNorm) || vNorm.includes(saV))) {
+          if (saP && pNorm) {
+            return saP === pNorm;
+          }
+          return true;
+        }
+        return false;
       });
     };
 
@@ -65,7 +79,6 @@ export class OrderService {
 
     const orders = await this.prisma.order.findMany({
       where: {
-        phase: 'PICKUP',
         mainStatus: {
           in: [
             'NEW',
@@ -79,6 +92,18 @@ export class OrderService {
             'PARCEL_AT_SHG',
             'TRANSPORTER_ACCEPTED',
             'PICKUP_TRANSPORTER_ACCEPTED',
+            'IN_TRANSIT_TO_HUB',
+            'STORED',
+            'BARCODE_GENERATED',
+            'DROP_PENDING',
+            'DROP_ASSIGNED',
+            'DROP_SHG_ACCEPTED',
+            'DROP_TRANSPORTER_ACCEPTED',
+            'IN_TRANSIT_TO_BUYER',
+            'IN_TRANSIT_TO_DROP_SHG',
+            'DISPATCHED',
+            'PARCEL_AT_DROP_SHG',
+            'OUT_FOR_DELIVERY',
             'REDIRECTED'
           ]
         }
@@ -91,30 +116,23 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // STRICT BUSINESS LOGIC FILTER: (Village + Pincode Match) for SHG
+    // STRICT BUSINESS LOGIC FILTER: Village + Pincode matching per SHG
     const matchedOrders = orders.filter((o: any) => {
-      // 1. Direct explicit assigned SHG ID on order
-      if (o.pickupShgId && String(o.pickupShgId) === shgUuid) return true;
+      const isDropPhase = o.phase === 'DROP' || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
 
-      // 2. Strict Village + Pincode matching for Seller
-      if (o.seller && (o.phase === 'PICKUP' || !o.phase || o.phase === 'FORWARD')) {
-        if (isVillageMatch(o.seller.village, o.seller.pincode)) {
-          return true;
-        }
+      if (isDropPhase) {
+        // Phase 2 Drop Leg: Match only if explicitly assigned to this SHG as Drop SHG, or if village + pincode matches
+        if (o.dropShgId && String(o.dropShgId) === shgUuid) return true;
+        const dropVillage = o.dropShgDetails?.village || o.buyer?.village;
+        const dropPincode = o.dropShgDetails?.pincode || o.buyer?.pincode;
+        return isVillageMatch(dropVillage, dropPincode);
+      } else {
+        // Phase 1 Pickup Leg: Match only if explicitly assigned to this SHG as Pickup SHG, or if village + pincode matches
+        if (o.pickupShgId && String(o.pickupShgId) === shgUuid) return true;
+        const sellerVillage = o.seller?.village;
+        const sellerPincode = o.seller?.pincode;
+        return isVillageMatch(sellerVillage, sellerPincode);
       }
-
-      // 3. Strict Village + Pincode matching for Buyer (Drop leg)
-      if (o.buyer && o.phase === 'DROP') {
-        if (isVillageMatch(o.buyer.village, o.buyer.pincode)) {
-          return true;
-        }
-      }
-
-      // 4. Direct explicit assignment
-      if (assignedOrderIds.includes(o.id) || assignedOrderIds.includes(o.orderId)) {
-        return true;
-      }
-      return false;
     });
 
     const transporterIds = matchedOrders
@@ -141,7 +159,7 @@ export class OrderService {
         orderNumber: cleanOrderId,
         barcode: o.barcode,
         status: o.mainStatus,
-        legType: o.phase === 'DROP' ? 'drop' : 'pickup',
+        legType: (o.phase === 'DROP' || ['DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid)) ? 'drop' : 'pickup',
         seller: o.seller ? {
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
@@ -274,10 +292,6 @@ export class OrderService {
       where: {
         mainStatus: {
           in: [
-            'IN_TRANSIT_TO_HUB',
-            'HUB_RECEIVED',
-            'STORED',
-            'DISPATCHED',
             'DELIVERED',
             'COMPLETED',
             'RETURN_COMPLETED'
@@ -293,6 +307,10 @@ export class OrderService {
     });
 
     const matchedOrders = orders.filter((o: any) => {
+      const isPhase2ActiveForDropShg = (o.dropShgId && String(o.dropShgId) === shgUuid) && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus);
+      if (isPhase2ActiveForDropShg) {
+        return false;
+      }
       if (o.pickupShgId === shgUuid || o.dropShgId === shgUuid || o.pickupReturnShgId === shgUuid) {
         return true;
       }
@@ -526,12 +544,16 @@ export class OrderService {
 
   async completeDrop(orderId: any, shgId: number | string, code?: string) {
     const order = await this.findOrderFlexible(orderId);
+    if (code && code.trim() !== '1234') {
+      throw new BadRequestException('Invalid OTP code. Please enter 1234.');
+    }
 
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        dropShgStatus: 'DELIVERED',
-        mainStatus: 'DELIVERED',
+        dropShgStatus: 'DROPPED',
+        mainStatus: 'COMPLETED',
+        deliveredAt: new Date(),
       }
     });
 

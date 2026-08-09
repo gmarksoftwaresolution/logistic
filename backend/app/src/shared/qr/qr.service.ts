@@ -308,14 +308,16 @@ export class QrService {
         pickupTransporterStatus = 'PICKED';
       } else if (mainStatus === 'AT_GMU') {
         pickupTransporterStatus = 'COMPLETED';
-      } else if (mainStatus === 'OUT_FOR_DELIVERY') {
-        dropTransporterStatus = 'PICKED';
-      } else if (mainStatus === 'AT_BUYER_SHG') {
-        dropTransporterStatus = 'COMPLETED';
-        dropShgStatus = 'ACCEPTED';
-      } else if (mainStatus === 'DELIVERED') {
+      } else if (mainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'READY_FOR_DISPATCH' || mainStatus === 'IN_TRANSIT_TO_BUYER' || mainStatus === 'DISPATCHED') {
         mainStatus = 'IN_TRANSIT_TO_BUYER';
+        dropTransporterStatus = 'PICKED';
+      } else if (mainStatus === 'AT_BUYER_SHG' || mainStatus === 'PARCEL_AT_DROP_SHG' || mainStatus === 'PARCEL_WITH_DROP_SHG') {
+        mainStatus = 'PARCEL_AT_DROP_SHG';
+        dropTransporterStatus = 'DROPPED';
         dropShgStatus = 'PICKED';
+      } else if (mainStatus === 'DELIVERED' || mainStatus === 'COMPLETED') {
+        mainStatus = 'COMPLETED';
+        dropShgStatus = 'DROPPED';
       }
 
       await tx.order.update({
