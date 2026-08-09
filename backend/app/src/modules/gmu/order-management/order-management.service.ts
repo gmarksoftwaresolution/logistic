@@ -1338,6 +1338,7 @@ export class OrderManagementService implements OnModuleInit {
 
       return tx.order.create({
         data: {
+          id: orderId,
           orderId,
           barcode: null,
           sellerId: seller.id,
@@ -1529,7 +1530,7 @@ export class OrderManagementService implements OnModuleInit {
 
       return tx.order.create({
         data: {
-          id: uuidv4(),
+          id: `${orderId}-DROP`,
           orderId,
           barcode,
           sellerId: seller.id,
@@ -2058,33 +2059,31 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     if (!existingDropOrder) {
-      const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-      dropId = dropOrderUuid();
-      await this.prisma.order.create({
-        data: {
-          id: dropId,
-          orderId: order.orderId,
-          barcode: order.barcode,
-          sellerId: order.sellerId,
-          buyerId: order.buyerId,
-          productCount: order.productCount || 1,
-          totalQty: order.totalQty || 1,
-          totalWeight: order.totalWeight || 5,
-          mainStatus: 'DROP_PENDING',
-          dropShgStatus: 'PENDING',
-          phase: 'DROP',
-        }
-      }).catch(err => {
-        console.warn(`[storeInventory] Phase 2 drop order creation note:`, err.message);
-      });
-
-      // Copy parcels for Phase 2 Drop Order
-      const pickupParcels = await this.prisma.parcel.findMany({
-        where: { OR: [{ orderId: order.orderId }, { orderId: order.id }] }
-      });
-      for (const p of pickupParcels) {
-        await this.prisma.parcel.create({
+      dropId = `${order.orderId}-DROP`;
+      try {
+        await this.prisma.order.create({
           data: {
+            id: dropId,
+            orderId: order.orderId,
+            barcode: order.barcode,
+            sellerId: order.sellerId,
+            buyerId: order.buyerId,
+            productCount: order.productCount || 1,
+            totalQty: order.totalQty || 1,
+            totalWeight: order.totalWeight || 5,
+            mainStatus: 'DROP_PENDING',
+            dropShgStatus: 'PENDING',
+            phase: 'DROP',
+          }
+        });
+
+        // Fast Batch copy parcels for Phase 2 Drop Order
+        const pickupParcels = await this.prisma.parcel.findMany({
+          where: { OR: [{ orderId: order.orderId }, { orderId: order.id }] }
+        });
+
+        if (pickupParcels.length > 0) {
+          const dropParcelData = pickupParcels.map(p => ({
             parcelId: `PCL-DROP-${p.parcelId}`,
             orderId: order.orderId,
             productId: p.productId,
@@ -2099,26 +2098,26 @@ export class OrderManagementService implements OnModuleInit {
             qrImage: p.qrImage,
             parcelStatus: 'PENDING',
             createdBy: 'SYSTEM'
-          }
-        }).catch(() => {});
+          }));
+
+          await this.prisma.parcel.createMany({
+            data: dropParcelData,
+            skipDuplicates: true,
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[storeInventory] Phase 2 drop order creation note:`, err.message);
       }
     } else {
       dropId = existingDropOrder.id;
     }
 
-    // 4. Trigger Phase 2 Partner Matching & Broadcasts (Drop SHG Auto-Allocate + Transporter Broadcast)
+    // 4. Fast Asynchronous Phase 2 Partner Matching & Broadcasts
     if (dropId) {
-      try {
-        await this.broadcastDropShg(dropId);
-      } catch (err: any) {
-        console.error(`[storeInventory] Immediate drop SHG auto-allocation note:`, err.message);
-      }
-
-      try {
-        await this.broadcastDropTransporter(dropId);
-      } catch (err: any) {
-        console.error(`[storeInventory] Immediate drop Transporter broadcast note:`, err.message);
-      }
+      Promise.allSettled([
+        this.broadcastDropShg(dropId),
+        this.broadcastDropTransporter(dropId),
+      ]).catch(err => console.error('[storeInventory] Background broadcast note:', err));
     }
 
     return updated;

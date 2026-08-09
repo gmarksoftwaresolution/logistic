@@ -73,3 +73,4 @@ packages/db/src/generated/
 
 backend/app/backups/
 backend/app/uploads/
+backend/app/.env.old-supabase-backup

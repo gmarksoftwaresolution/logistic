@@ -374,9 +374,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       });
 
       showToast(res.data?.message || 'Product verified successfully via QR!', 'success');
-      await fetchOrderParcels();
+      
+      // Non-blocking background sync
+      fetchOrderParcels().catch(() => {});
       if (refreshBatchesList) {
-        await refreshBatchesList();
+        refreshBatchesList().catch(() => {});
       }
 
       setTimeout(() => {
@@ -384,7 +386,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         setActiveScanningParcel(null);
         setScanned(false);
         isScanningRef.current = false;
-      }, 1200);
+      }, 200);
 
     } catch (err: any) {
       console.error('Verification error:', err);

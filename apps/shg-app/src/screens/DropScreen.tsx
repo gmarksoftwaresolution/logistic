@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useEffect } from 'react';
+import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -40,10 +40,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DropScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder } = useOrders();
+  const { acceptedOrders, receiveOrder, refreshOrdersList, deliverOrder } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
+
+  // Auto-refresh instantly on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshOrdersList) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, [refreshOrdersList])
+  );
 
   // Pickup orders: Accepted orders (waiting for receipt/pickup)
   const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && !o.isPickupRedirected);
@@ -259,7 +268,7 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'pickup'}-${index}`}
           ListEmptyComponent={
             pickupOrders.length === 0 ? (
               <View className="items-center justify-center py-20">
@@ -316,7 +325,7 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'delivery'}-${index}`}
           ListEmptyComponent={
             deliveryOrders.length === 0 ? (
               <View className="items-center justify-center py-20">

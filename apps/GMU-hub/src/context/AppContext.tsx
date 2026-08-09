@@ -845,6 +845,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const intakePickupOrders = async (orderIds: string[]) => {
+    // Optimistic local update: immediately remove from transit/warehouse lists
+    setPickupWarehouseOrders(prev => prev.filter((o: any) => !orderIds.includes(o.id) && !orderIds.includes(o.orderId) && !orderIds.includes(o.uuid)));
+    setPickupAssignedOrders(prev => prev.filter((o: any) => !orderIds.includes(o.id) && !orderIds.includes(o.orderId) && !orderIds.includes(o.uuid)));
+
     for (const id of orderIds) {
       const cleanId = String(id || '').replace(/^ORD-/, '');
       const order = pickupAssignedOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) || 
@@ -853,7 +857,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetId = order?.uuid || order?.id || id;
       await api.orders.warehouseIntake(targetId);
     }
-    await Promise.all([
+
+    // Background non-blocking refresh of all inventory and drop queues
+    Promise.allSettled([
       loadInventoryStored(),
       loadInventoryTransporterReturn(),
       loadInventoryBuyerReturn(),
@@ -862,18 +868,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       loadDropNew(),
       loadDropAssigned(),
       loadCounts()
-    ]);
+    ]).catch(err => console.warn('Background sync after intake failed:', err));
   };
 
   const intakeReturnOrder = async (orderId: string, returnType: 'pickup' | 'drop') => {
     if (returnType === 'drop') {
       const order = returnDropNewOrders.find((o) => o.id === orderId) as any;
+      setReturnDropNewOrders(prev => prev.filter((o: any) => o.id !== orderId));
       await api.orders.transporterReturnIntake(order?.uuid || orderId);
     } else {
       const order = (returnPickupNewOrders.find((o) => o.id === orderId) || returnPickupCompletedOrders.find((o) => o.id === orderId)) as any;
+      setReturnPickupNewOrders(prev => prev.filter((o: any) => o.id !== orderId));
       await api.orders.buyerReturnIntake(order?.uuid || orderId);
     }
-    await loadCounts();
+
+    Promise.allSettled([
+      loadCounts(),
+      loadInventoryStored(),
+      loadInventoryTransporterReturn(),
+      loadInventoryBuyerReturn(),
+      loadReturnsTransporter(),
+      loadReturnsBuyer()
+    ]).catch(err => console.warn('Background sync after return intake failed:', err));
   };
 
   const requestBuyerReturn = async (dropOrderId: string) => {

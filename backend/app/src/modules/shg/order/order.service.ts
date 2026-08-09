@@ -30,6 +30,29 @@ export class OrderService {
     const userVillage = this.normalizeStr(user.address?.village);
     const userPincode = user.address?.pincode ? user.address.pincode.trim().toLowerCase() : '';
 
+    const serviceAreas = await this.prisma.shgServiceArea.findMany({
+      where: {
+        OR: [
+          { shgUserId: String(numericShgId) },
+          { shgUserId: user.authId }
+        ]
+      }
+    });
+
+    const isVillageMatch = (v?: string | null, p?: string | null) => {
+      if (!v && !p) return false;
+      const vNorm = this.normalizeStr(v);
+      const pNorm = (p || '').trim().toLowerCase();
+      if (userVillage && userPincode && vNorm === userVillage && pNorm === userPincode) {
+        return true;
+      }
+      return serviceAreas.some(sa => {
+        const saV = this.normalizeStr(sa.village);
+        const saP = (sa.pincode || '').trim().toLowerCase();
+        return saV === vNorm && saP === pNorm;
+      });
+    };
+
     const assignedOrders = await this.prisma.orderAssignment.findMany({
       where: {
         assigneeId: shgUuid,
@@ -70,21 +93,24 @@ export class OrderService {
 
     // STRICT BUSINESS LOGIC FILTER: (Village + Pincode Match) for SHG
     const matchedOrders = orders.filter((o: any) => {
+      // 1. Direct explicit assigned SHG ID on order
+      if (o.pickupShgId && String(o.pickupShgId) === shgUuid) return true;
+
+      // 2. Strict Village + Pincode matching for Seller
       if (o.seller && (o.phase === 'PICKUP' || !o.phase || o.phase === 'FORWARD')) {
-        const sellerVillage = this.normalizeStr(o.seller.village);
-        const sellerPincode = o.seller.pincode ? o.seller.pincode.trim().toLowerCase() : '';
-        if (userVillage && userPincode && sellerVillage === userVillage && sellerPincode === userPincode) {
+        if (isVillageMatch(o.seller.village, o.seller.pincode)) {
           return true;
         }
       }
+
+      // 3. Strict Village + Pincode matching for Buyer (Drop leg)
       if (o.buyer && o.phase === 'DROP') {
-        const buyerVillage = this.normalizeStr(o.buyer.village);
-        const buyerPincode = o.buyer.pincode ? o.buyer.pincode.trim().toLowerCase() : '';
-        if (userVillage && userPincode && buyerVillage === userVillage && buyerPincode === userPincode) {
+        if (isVillageMatch(o.buyer.village, o.buyer.pincode)) {
           return true;
         }
       }
-      // Direct Assignment fallback if explicit OrderAssignment exists
+
+      // 4. Direct explicit assignment
       if (assignedOrderIds.includes(o.id) || assignedOrderIds.includes(o.orderId)) {
         return true;
       }
@@ -119,22 +145,58 @@ export class OrderService {
         seller: o.seller ? {
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
+          village: o.seller.village,
+          taluka: o.seller.taluka,
+          district: o.seller.district,
+          state: o.seller.state,
+          pincode: o.seller.pincode,
+          addressLine1: o.seller.addressLine1,
+          addressLine2: o.seller.addressLine2,
+          fullAddress: [
+            o.seller.addressLine1,
+            o.seller.addressLine2,
+            o.seller.village,
+            o.seller.taluka,
+            o.seller.district,
+            o.seller.state ? `${o.seller.state} - ${o.seller.pincode}` : o.seller.pincode
+          ].filter(Boolean).join(', '),
           address: {
             houseNo: o.seller.addressLine1 || '',
+            addressLine1: o.seller.addressLine1 || '',
+            addressLine2: o.seller.addressLine2 || '',
             village: o.seller.village,
             taluka: o.seller.taluka,
             district: o.seller.district,
+            state: o.seller.state,
             pincode: o.seller.pincode,
           }
         } : null,
         buyer: o.buyer ? {
           fullName: o.buyer.buyerName,
           phoneNumber: o.buyer.mobileNumber,
+          village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          district: o.buyer.district,
+          state: o.buyer.state,
+          pincode: o.buyer.pincode,
+          addressLine1: o.buyer.addressLine1,
+          addressLine2: o.buyer.addressLine2,
+          fullAddress: [
+            o.buyer.addressLine1,
+            o.buyer.addressLine2,
+            o.buyer.village,
+            o.buyer.taluka,
+            o.buyer.district,
+            o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode
+          ].filter(Boolean).join(', '),
           address: {
             houseNo: o.buyer.addressLine1 || '',
+            addressLine1: o.buyer.addressLine1 || '',
+            addressLine2: o.buyer.addressLine2 || '',
             village: o.buyer.village,
             taluka: o.buyer.taluka,
             district: o.buyer.district,
+            state: o.buyer.state,
             pincode: o.buyer.pincode,
           }
         } : null,
@@ -171,15 +233,25 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
-        transporter: transporterUser ? {
-          fullName: transporterUser.fullName,
-          phoneNumber: transporterUser.phoneNumber,
-          transporterDetail: {
-            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
-            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
-          },
-          otherDetails: transporterUser.otherDetails || [],
-        } : null,
+        transporter: (() => {
+          const isPickupAccepted = ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'COMPLETED'].includes(o.pickupTransporterStatus || '');
+          const isDropAccepted = ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(o.dropTransporterStatus || '');
+          const isTransAccepted = o.phase === 'DROP' ? isDropAccepted : isPickupAccepted;
+
+          if (!isTransAccepted || !transporterUser) {
+            return null;
+          }
+
+          return {
+            fullName: transporterUser.fullName,
+            phoneNumber: transporterUser.phoneNumber,
+            transporterDetail: {
+              transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+              vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
+            },
+            otherDetails: transporterUser.otherDetails || [],
+          };
+        })(),
       };
     });
   }
@@ -268,10 +340,18 @@ export class OrderService {
         seller: o.seller ? {
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
+          village: o.seller.village,
+          pincode: o.seller.pincode,
+          addressLine1: o.seller.addressLine1,
+          fullAddress: [o.seller.addressLine1, o.seller.addressLine2, o.seller.village, o.seller.taluka, o.seller.district, o.seller.state ? `${o.seller.state} - ${o.seller.pincode}` : o.seller.pincode].filter(Boolean).join(', '),
         } : null,
         buyer: o.buyer ? {
           fullName: o.buyer.buyerName,
           phoneNumber: o.buyer.mobileNumber,
+          village: o.buyer.village,
+          pincode: o.buyer.pincode,
+          addressLine1: o.buyer.addressLine1,
+          fullAddress: [o.buyer.addressLine1, o.buyer.addressLine2, o.buyer.village, o.buyer.taluka, o.buyer.district, o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode].filter(Boolean).join(', '),
         } : null,
         items: o.parcels || [],
         isPickupRedirected: o.isPickupRedirected,
@@ -281,15 +361,25 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
-        transporter: transporterUser ? {
-          fullName: transporterUser.fullName,
-          phoneNumber: transporterUser.phoneNumber,
-          transporterDetail: {
-            transporterCode: transporterUser.transporterDetail?.transporterCode || '',
-            vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
-          },
-          otherDetails: transporterUser.otherDetails || [],
-        } : null,
+        transporter: (() => {
+          const isPickupAccepted = ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'COMPLETED'].includes(o.pickupTransporterStatus || '');
+          const isDropAccepted = ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(o.dropTransporterStatus || '');
+          const isTransAccepted = o.phase === 'DROP' ? isDropAccepted : isPickupAccepted;
+
+          if (!isTransAccepted || !transporterUser) {
+            return null;
+          }
+
+          return {
+            fullName: transporterUser.fullName,
+            phoneNumber: transporterUser.phoneNumber,
+            transporterDetail: {
+              transporterCode: transporterUser.transporterDetail?.transporterCode || '',
+              vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
+            },
+            otherDetails: transporterUser.otherDetails || [],
+          };
+        })(),
       };
     });
 

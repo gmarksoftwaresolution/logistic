@@ -49,23 +49,23 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   let nameLabel = t('su_seller_name') || "Seller Name";
   let nameValue = order.sellerName || source;
   let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
-  let mobileValue = order.mobile || "N/A";
-  let addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
-  let addressOrVehicleIcon: any = "location-outline";
-  let addressOrVehicleValue = "";
+  let mobileValue = order.mobile || (order.seller?.phoneNumber || "N/A");
+  let villageLabel = "Village";
+  let villageValue = order.sellerVillage || order.seller?.village || source || "Dundage";
+  let fullAddressLabel = "Full Address";
+  let fullAddressValue = order.sellerAddress || order.seller?.fullAddress || order.address || villageValue;
+
   if (isDelivery) {
     detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
     nameLabel = t('su_buyer_name') || "Buyer Name";
     nameValue = order.buyerName || destination;
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
-    mobileValue = order.mobile || "N/A";
-    addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
-    addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = order.address || destination;
-  } else {
-    // Seller details
-    addressOrVehicleValue = order.address || source;
+    mobileValue = order.mobile || (order.buyer?.phoneNumber || "N/A");
+    villageLabel = "Village";
+    villageValue = order.buyerVillage || order.buyer?.village || destination || "Nesari";
+    fullAddressLabel = "Full Address";
+    fullAddressValue = order.buyerAddress || order.buyer?.fullAddress || order.address || villageValue;
   }
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
@@ -243,13 +243,23 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
             </View>
           </View>
 
-          <View className="flex-row items-start">
+          <View className="flex-row items-start mb-4">
             <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-              <Ionicons name={addressOrVehicleIcon} size={18} color="#073318" />
+              <Ionicons name="map-outline" size={18} color="#073318" />
             </View>
             <View className="flex-1 justify-center mt-0.5">
-              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{addressOrVehicleLabel}</Text>
-              <Text className="text-[14px] font-black text-[#111827]">{addressOrVehicleValue}</Text>
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{villageLabel}</Text>
+              <Text className="text-[14px] font-black text-[#111827]">{villageValue}</Text>
+            </View>
+          </View>
+
+          <View className="flex-row items-start">
+            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+              <Ionicons name="location-outline" size={18} color="#073318" />
+            </View>
+            <View className="flex-1 justify-center mt-0.5">
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{fullAddressLabel}</Text>
+              <Text className="text-[13.5px] font-bold text-[#111827] leading-relaxed">{fullAddressValue}</Text>
             </View>
           </View>
         </View>

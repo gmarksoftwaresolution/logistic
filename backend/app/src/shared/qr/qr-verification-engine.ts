@@ -480,21 +480,28 @@ export class QrVerificationEngine {
     const rawScan = String(qrData || '').trim();
     const cleanScanId = rawScan.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '');
 
-    let parcel = await this.prisma.parcel.findFirst({
-      where: {
-        OR: [
-          { parcelId: decoded.parcelId },
-          { parcelId: rawScan },
-          { qrCodeValue: rawScan },
-          { qrCodeValue: decoded.parcelId },
-          { verificationToken: decoded.parcelId },
-          { verificationToken: decoded.verificationToken },
-          { orderId: rawScan },
-          { orderId: cleanScanId },
-          { orderId: `ORD-${cleanScanId}` },
-        ]
-      }
-    });
+    // Fast indexed primary key lookup first (< 2ms)
+    let parcel = decoded.parcelId ? await this.prisma.parcel.findUnique({
+      where: { parcelId: decoded.parcelId }
+    }) : null;
+
+    if (!parcel) {
+      parcel = await this.prisma.parcel.findFirst({
+        where: {
+          OR: [
+            { parcelId: decoded.parcelId },
+            { parcelId: rawScan },
+            { qrCodeValue: rawScan },
+            { qrCodeValue: decoded.parcelId },
+            { verificationToken: decoded.parcelId },
+            { verificationToken: decoded.verificationToken },
+            { orderId: rawScan },
+            { orderId: cleanScanId },
+            { orderId: `ORD-${cleanScanId}` },
+          ]
+        }
+      });
+    }
 
     if (!parcel) {
       throw new QrValidationError('Scanned QR parcel not found in database');
@@ -503,27 +510,15 @@ export class QrVerificationEngine {
     // Validate verificationToken
     validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
 
-    // Find the order for the parcel (try DROP phase first, then PICKUP phase)
+    // Find the order for the parcel (fast single query matching on phase)
     let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
           { orderId: parcel.orderId }
         ],
-        phase: 'DROP',
       }
     });
-    if (!order) {
-      order = await this.prisma.order.findFirst({
-        where: {
-          OR: [
-            { id: parcel.orderId },
-            { orderId: parcel.orderId }
-          ],
-          phase: 'PICKUP',
-        }
-      });
-    }
 
     if (!order) {
       throw new QrValidationError('Parcel order not found.');
@@ -1098,6 +1093,17 @@ export class QrVerificationEngine {
       }
     });
 
-    return { success: true, message: `Order ${orderId} confirmed successfully.` };
+    let updatedSession: any = null;
+    try {
+      updatedSession = await this.getSessionDetails(sessionType, session.userId, session.userRole, sessionId);
+    } catch (e) {
+      // Session may be CONFIRMED
+    }
+
+    return {
+      success: true,
+      message: `Order ${orderId} confirmed successfully.`,
+      session: updatedSession
+    };
   }
 }

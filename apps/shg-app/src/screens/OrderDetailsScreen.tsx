@@ -108,6 +108,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
     addressOrVehicleValue = order.transporterAddress || "N/A";
   }
 
+  let villageLabel = "Village";
+  let villageValue = "";
+  let fullAddressLabel = "Full Address";
+  let fullAddressValue = "";
+
   if (activeType === 'seller') {
     detailsTitle = t('su_seller_details') || "Seller Details";
     headerIcon = "storefront-outline";
@@ -115,31 +120,41 @@ const OrderDetailsScreen: React.FC<Props> = ({
     nameValue = order.sellerName || source;
     mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
 
-    // Validate mobile number to avoid showing seller IDs
     const isValidPhone = order.mobile && /^[+]?[0-9\s-]{10,15}$/.test(order.mobile);
-    mobileValue = isValidPhone ? order.mobile : "9876543210";
+    mobileValue = isValidPhone ? order.mobile : (order.seller?.phoneNumber || "9876500001");
 
-    addressOrVehicleLabel = t('su_shop_name_seller_address') || "Shop Name / Seller Address";
-    addressOrVehicleIcon = "location-outline";
+    villageLabel = "Village";
+    villageValue = (order as any).sellerVillage || order.seller?.village || order.seller?.address?.village || source || "Dundage";
 
-    // Dynamic detailed address logic
-    let resolvedAddress = order.address || source;
-    if (resolvedAddress.toLowerCase().includes('hifi')) {
-      resolvedAddress = "Hifi Shop, Bramhan galli, Chandgad, kolhapur, Maharastra";
-    } else if (resolvedAddress.toLowerCase().includes('home no')) {
-      resolvedAddress = "Home No. 23, Market Road, Kowad, kolhapur, Maharastra";
-    }
-    addressOrVehicleValue = resolvedAddress;
+    fullAddressLabel = "Full Address";
+    fullAddressValue = (order as any).sellerAddress || (order.seller as any)?.fullAddress || [
+      order.seller?.addressLine1,
+      order.seller?.addressLine2,
+      order.seller?.village || villageValue,
+      order.seller?.taluka,
+      order.seller?.district,
+      order.seller?.state ? `${order.seller?.state} - ${order.seller?.pincode || ''}` : (order.seller?.pincode || '')
+    ].filter(Boolean).join(', ') || order.address || villageValue;
   } else if (activeType === 'buyer') {
     detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
     nameLabel = t('su_buyer_name') || "Buyer Name";
     nameValue = order.buyerName || destination;
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
-    mobileValue = order.mobile || "+91 9876543210";
-    addressOrVehicleLabel = t('su_buyer_address') || "Buyer Address";
-    addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = order.address || `${destination}, Chandgad, kolhapur, Maharastra`;
+    mobileValue = order.mobile || (order.buyer?.phoneNumber || "+91 9876543210");
+
+    villageLabel = "Village";
+    villageValue = (order as any).buyerVillage || order.buyer?.village || order.buyer?.address?.village || destination || "Nesari";
+
+    fullAddressLabel = "Full Address";
+    fullAddressValue = (order as any).buyerAddress || (order.buyer as any)?.fullAddress || [
+      order.buyer?.addressLine1,
+      order.buyer?.addressLine2,
+      order.buyer?.village || villageValue,
+      order.buyer?.taluka,
+      order.buyer?.district,
+      order.buyer?.state ? `${order.buyer?.state} - ${order.buyer?.pincode || ''}` : (order.buyer?.pincode || '')
+    ].filter(Boolean).join(', ') || order.address || villageValue;
   }
 
   const products = order.products || [];
@@ -462,14 +477,15 @@ const OrderDetailsScreen: React.FC<Props> = ({
         );
       }
 
-      await fetchOrderParcels();
-      await refreshOrdersList();
-
       Toast.show({
         type: 'success',
         text1: 'Verification Successful',
         text2: res.data?.message || 'Product verified successfully via QR!'
       });
+
+      // Non-blocking background sync
+      fetchOrderParcels().catch(() => {});
+      refreshOrdersList().catch(() => {});
 
       setTimeout(async () => {
         setScannerModalVisible(false);
@@ -500,7 +516,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
         } catch (e) {
           console.warn("Auto-submit check failed:", e);
         }
-      }, 1200);
+      }, 200);
 
     } catch (err: any) {
       console.error("Verification error:", err);
@@ -852,17 +868,31 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
           </>
         ) : (
-          <View className="flex-row items-start">
-            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-              <Ionicons name={addressOrVehicleIcon} size={18} color="#073318" />
+          <>
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="map-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{villageLabel}</Text>
+                <Text className="text-[14px] font-black text-[#111827]">
+                  {villageValue}
+                </Text>
+              </View>
             </View>
-            <View className="flex-1 justify-center mt-0.5">
-              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{addressOrVehicleLabel}</Text>
-              <Text className="text-[14px] font-black text-[#111827] pr-2">
-                {addressOrVehicleValue}
-              </Text>
+
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="location-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{fullAddressLabel}</Text>
+                <Text className="text-[13.5px] font-bold text-[#111827] leading-relaxed pr-2">
+                  {fullAddressValue}
+                </Text>
+              </View>
             </View>
-          </View>
+          </>
         )}
       </View>
 
@@ -974,7 +1004,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
           
           const isVerified = isProductVerified(item);
 
-          return <View key={item.code || String(index)} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
+          return <View key={`prod-${item.code || item.productId || index}-${index}`} className={`flex-row items-center justify-between p-4 ${!isLast ? 'border-b border-slate-100' : ''}`}>
             {/* LEFT + CENTER Wrapper */}
             <View className="flex-1 flex-row items-center pr-2">
               {/* LEFT: Square Badge */}
@@ -1007,37 +1037,18 @@ const OrderDetailsScreen: React.FC<Props> = ({
               </View>
             </View>
 
-            {/* RIGHT: Scanner Action Button, QR View or checkmark */}
-            <View className="flex-row items-center gap-2">
-              <TouchableOpacity
-                onPress={() => {
-                  const parcelQrVal = matchingParcel?.qrCodeValue || `QR-${cleanId}-PCL-${index + 1}`;
-                  const finalQrUri = (matchingParcel?.qrImage && String(matchingParcel.qrImage).startsWith('http'))
-                    ? String(matchingParcel.qrImage)
-                    : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(parcelQrVal)}`;
-
-                  setSelectedQrParcel({
-                    ...(matchingParcel || {}),
-                    productName: item.name,
-                    parcelId: matchingParcel?.parcelId || `PCL-${cleanId}-${index + 1}`,
-                    verificationToken: matchingParcel?.verificationToken || `V-${cleanId}-0${index + 1}`,
-                    qrImage: finalQrUri,
-                    qrCodeValue: parcelQrVal,
-                    parcelStatus: matchingParcel?.parcelStatus || (isVerified ? 'VERIFIED' : 'PENDING'),
-                  });
-                }}
-                className="flex-row items-center bg-[#ECFDF5] px-2.5 py-1.5 rounded-lg border border-[#A7F3D0]"
-              >
-                <Ionicons name="qr-code-outline" size={14} color="#059669" />
-                <Text className="text-[11px] font-black text-[#059669] ml-1">QR Code</Text>
-              </TouchableOpacity>
+            {/* RIGHT: Status Badge */}
+            <View className="flex-row items-center gap-1.5">
               {isVerified ? (
-                <View className="flex-row items-center gap-1">
-                  <Ionicons name="checkmark-done" size={16} color="#10B981" />
-                  <Text className="text-[11px] font-bold text-[#10B981]">Verified</Text>
+                <View className="flex-row items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                  <Ionicons name="checkmark-done" size={14} color="#10B981" />
+                  <Text className="text-[11px] font-extrabold text-[#10B981]">Verified</Text>
                 </View>
               ) : (
-                <Text className="text-[11px] font-bold text-slate-400">Pending</Text>
+                <View className="flex-row items-center gap-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                  <Ionicons name="time-outline" size={14} color="#F59E0B" />
+                  <Text className="text-[11px] font-extrabold text-amber-700">Pending</Text>
+                </View>
               )}
             </View>
           </View>;
@@ -1186,7 +1197,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
                   <CameraView
                     style={{ width: '100%', height: '100%', position: 'absolute' }}
                     facing="back"
-                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                    onBarcodeScanned={handleBarcodeScanned}
                     barcodeScannerSettings={{
                       barcodeTypes: ["qr"],
                     }}

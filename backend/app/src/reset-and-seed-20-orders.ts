@@ -59,14 +59,50 @@ async function resetAndSeed20Orders() {
   const approvedShgs = await prisma.user.findMany({
     where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
   });
+  const shgAddresses = await prisma.address.findMany({
+    where: { userId: { in: approvedShgs.map(s => s.id) } }
+  });
+  const shgServiceAreas = await prisma.shgServiceArea.findMany({});
+
   const approvedTransporters = await prisma.user.findMany({
     where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
   });
 
   console.log(`Found ${approvedShgs.length} approved SHGs and ${approvedTransporters.length} approved Transporters in database.`);
 
+  const findMatchingShgForSeller = (sellerVillage: string, sellerPincode: string) => {
+    const vNorm = (sellerVillage || '').trim().toLowerCase();
+    const pNorm = (sellerPincode || '').trim().toLowerCase();
+
+    // 1. Direct address match
+    const directShgUser = approvedShgs.find(shg => {
+      const addr = shgAddresses.find(a => a.userId === shg.id);
+      if (addr) {
+        const aV = (addr.village || '').trim().toLowerCase();
+        const aP = (addr.pincode || '').trim().toLowerCase();
+        if (aV === vNorm && aP === pNorm) return true;
+      }
+      return false;
+    });
+    if (directShgUser) return directShgUser;
+
+    // 2. Service area match
+    const saMatch = shgServiceAreas.find(sa => {
+      const sV = (sa.village || '').trim().toLowerCase();
+      const sP = (sa.pincode || '').trim().toLowerCase();
+      return sV === vNorm && sP === pNorm;
+    });
+    if (saMatch) {
+      const shgUser = approvedShgs.find(s => String(s.id) === String(saMatch.shgUserId) || s.authId === saMatch.shgUserId);
+      if (shgUser) return shgUser;
+    }
+
+    // 3. Fallback
+    return approvedShgs[0] || null;
+  };
+
   // 3. CREATE EXACTLY 20 NEW FRESH ORDERS (ORD-2026-101 to ORD-2026-120)
-  console.log('Creating 20 new fresh orders using Seller, Buyer, and Product tables...');
+  console.log('Creating 20 new fresh orders matching village + pincode for each SHG...');
 
   for (let i = 1; i <= 20; i++) {
     const cleanNum = 100 + i; // 101 to 120
@@ -76,8 +112,8 @@ async function resetAndSeed20Orders() {
     const seller = sellers[(i - 1) % sellers.length];
     const buyer = buyers[(i - 1) % buyers.length];
 
-    // Select assigned SHG and Transporter
-    const assignedShg = approvedShgs.length > 0 ? approvedShgs[(i - 1) % approvedShgs.length] : null;
+    // Select strictly matching SHG based on Seller Village + Pincode
+    const assignedShg = findMatchingShgForSeller(seller.village, seller.pincode);
     const assignedTransporter = approvedTransporters.length > 0 ? approvedTransporters[(i - 1) % approvedTransporters.length] : null;
 
     // Select 2 distinct products from Product table
@@ -95,9 +131,10 @@ async function resetAndSeed20Orders() {
       totalWeight += w * qty;
     });
 
-    // Create Order record
+    // Create Order record with identical primary key (id) and business ID (orderId)
     const createdOrder = await prisma.order.create({
       data: {
+        id: orderIdVal,
         orderId: orderIdVal,
         sellerId: seller.id,
         buyerId: buyer.id,
@@ -109,14 +146,14 @@ async function resetAndSeed20Orders() {
         mainStatus: 'PICKUP_ASSIGNED',
         pickupShgId: assignedShg ? String(assignedShg.id) : null,
         pickupShgStatus: 'ACCEPTED',
-        pickupTransporterId: assignedTransporter ? String(assignedTransporter.id) : null,
+        pickupTransporterId: null,
         pickupTransporterStatus: 'PENDING',
         dropShgStatus: 'PENDING',
         dropTransporterStatus: 'PENDING',
       }
     });
 
-    // Create OrderAssignment records so user authorization and mobile app workflows never fail
+    // Create OrderAssignment ONLY for the strictly matching SHG
     if (assignedShg) {
       await prisma.orderAssignment.create({
         data: {
@@ -129,28 +166,36 @@ async function resetAndSeed20Orders() {
       });
     }
 
-    if (assignedTransporter) {
-      await prisma.orderAssignment.create({
-        data: {
-          orderId: createdOrder.id,
-          assigneeId: String(assignedTransporter.id),
-          assigneeType: 'TRANSPORTER',
-          role: 'PICKUP',
-          status: 'PENDING',
-        }
-      });
-    }
-
-    // Create 2 individual per-product Parcel records with QR codes
+    // Create 2 individual per-product Parcel records with full JSON QR codes
     for (let pIdx = 0; pIdx < selectedProds.length; pIdx++) {
       const prod = selectedProds[pIdx];
       const parcelNum = pIdx + 1;
       const parcelIdVal = `PCL-2026-${cleanNum}-${parcelNum}`;
-      const barcodeValue = `QR-2026-${cleanNum}-PCL-${parcelNum}`;
       const verificationCode = `V-2026-${cleanNum}-0${parcelNum}`;
-      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
       const qtyVal = pIdx + 1;
       const weightVal = Number(prod.weight || 2.5);
+
+      const qrContent = {
+        parcelId: parcelIdVal,
+        orderId: createdOrder.id,
+        orderNo: createdOrder.orderId,
+        productId: prod.id,
+        productName: prod.name,
+        quantity: qtyVal,
+        weight: `${weightVal} KG`,
+        token: verificationCode,
+        verificationToken: verificationCode,
+        sellerName: seller.sellerName || 'Seller',
+        sellerMobileNumber: seller.mobileNumber || '',
+        sellerVillage: seller.village || '',
+        sellerPincode: seller.pincode || '',
+        buyerName: buyer.buyerName || 'Buyer',
+        buyerMobileNumber: buyer.mobileNumber || '',
+        buyerVillage: buyer.village || '',
+        buyerPincode: buyer.pincode || '',
+      };
+      const jsonQrString = JSON.stringify(qrContent);
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(jsonQrString)}`;
 
       await prisma.parcel.create({
         data: {
@@ -163,7 +208,7 @@ async function resetAndSeed20Orders() {
           weight: String(weightVal),
           quantity: qtyVal,
           flowType: 'FORWARD',
-          qrCodeValue: barcodeValue,
+          qrCodeValue: jsonQrString,
           createdBy: 'SYSTEM',
           verificationToken: verificationCode,
           qrImage: qrImageUrl,
@@ -174,7 +219,7 @@ async function resetAndSeed20Orders() {
       });
     }
 
-    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporter: ${assignedTransporter?.authId || assignedTransporter?.id || 'N/A'} | Products: [${prod1.name}, ${prod2.name}]`);
+    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporters Broadcasted: ${approvedTransporters.length} | Products: [${prod1.name}, ${prod2.name}]`);
   }
 
   console.log('\n================================================================');

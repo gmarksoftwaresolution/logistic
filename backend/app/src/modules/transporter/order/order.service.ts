@@ -36,7 +36,27 @@ export class OrderService {
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'REDIRECTED'] }
+        mainStatus: {
+          in: [
+            'PENDING',
+            'ACCEPTED',
+            'PICKUP_SHG_ACCEPTED',
+            'PARCEL_AT_SHG',
+            'RETURN_PARCEL_AT_SHG',
+            'TRANSPORTER_ACCEPTED',
+            'IN_TRANSIT_TO_HUB',
+            'PICKUP_TRANSPORTER_ACCEPTED',
+            'PARCEL_PICKED',
+            'REDIRECTED',
+            'HUB_RECEIVED',
+            'PARCEL_AT_GMU',
+            'PARCEL_AT_HUB',
+            'STORED',
+            'DISPATCHED',
+            'DELIVERED',
+            'COMPLETED'
+          ]
+        }
       },
       include: {
         seller: true,
@@ -54,7 +74,7 @@ export class OrderService {
     const shgUsers = shgIds.length > 0
       ? await this.prisma.user.findMany({
         where: { id: { in: shgIds } },
-        include: { address: true }
+        include: { address: true, shgDetail: true }
       })
       : [];
 
@@ -68,11 +88,14 @@ export class OrderService {
       const mappedSeller = (!isRedirected && shgUser) ? {
         id: shgUser.id,
         sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
-        sellerName: shgUser.fullName || 'SHG Member',
-        mobileNumber: shgUser.phoneNumber,
+        sellerName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'Reshma Patil',
+        fullName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'Reshma Patil',
+        mobileNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
+        phoneNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
+        shgName: shgUser.shgDetail?.shgName || '',
         email: shgUser.email,
-        addressLine1: shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
-        addressLine2: shgUser.address?.landmark || '',
+        addressLine1: shgUser.address?.landmark || shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine2: shgUser.address?.houseNo || '',
         village: shgUser.address?.village || '',
         taluka: shgUser.address?.taluka || '',
         district: shgUser.address?.district || '',
@@ -82,6 +105,30 @@ export class OrderService {
         createdAt: shgUser.createdAt,
         updatedAt: shgUser.updatedAt,
       } : o.seller;
+
+      const fullAddr = mappedSeller ? [
+        mappedSeller.addressLine1,
+        mappedSeller.addressLine2,
+        mappedSeller.village,
+        mappedSeller.taluka,
+        mappedSeller.district,
+        mappedSeller.state ? `${mappedSeller.state} - ${mappedSeller.pincode}` : mappedSeller.pincode
+      ].filter(Boolean).join(', ') : '';
+
+      if (mappedSeller) {
+        (mappedSeller as any).fullAddress = fullAddr;
+      }
+
+      if (o.buyer) {
+        o.buyer.fullAddress = [
+          o.buyer.addressLine1,
+          o.buyer.addressLine2,
+          o.buyer.village,
+          o.buyer.taluka,
+          o.buyer.district,
+          o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode
+        ].filter(Boolean).join(', ');
+      }
 
       return {
         id: cleanOrderId,
@@ -95,6 +142,7 @@ export class OrderService {
         pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
         seller: mappedSeller,
+        shg: mappedSeller,
         buyer: o.buyer,
         parcels: o.parcels || [],
       };

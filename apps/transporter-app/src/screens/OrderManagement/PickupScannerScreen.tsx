@@ -14,6 +14,7 @@ import { Check, Trash2, AlertTriangle, X, ChevronLeft, RefreshCw } from 'lucide-
 import { useScanSession } from '../../context/ScanSessionContext';
 import { useOrderManagement } from '../../context/OrderManagementContext';
 import { Colors, Fonts } from '../../constants/Colors';
+import api from '../../services/api';
 
 function decodeQrData(data: string) {
   const trimmed = data.trim();
@@ -215,7 +216,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       const errMsg = err.response?.data?.message || 'Sync failed.';
       triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
     } finally {
-      setTimeout(resetScanLock, 1500);
+      setTimeout(resetScanLock, 350);
     }
   };
 
@@ -237,11 +238,11 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     if (!activeSession) return;
     setActionLoading(true);
     try {
-      await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
-      await refreshBatchesList();
-      
-      // Filter out any locally tracked scanned items belonging to confirmed order
+      // Filter out locally tracked scanned items immediately (< 1ms)
       setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
+      
+      await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
+      refreshBatchesList().catch(() => {});
       
       Alert.alert('Success', `Order #${orderId.replace('pickup-', '').replace('drop-', '')} confirmed successfully!`);
     } catch (err: any) {
@@ -429,7 +430,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
           style={styles.camera}
           facing="back"
           barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          onBarcodeScanned={handleBarcodeScanned}
         >
           <View style={styles.overlayContainer}>
             <View style={[styles.viewfinder, { borderColor: getViewfinderBorderColor() }]} />
@@ -460,12 +461,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
           </View>
         ) : (
           <View style={{ gap: 16, marginTop: 12, paddingBottom: 32 }}>
-            {scannedGroupedOrders.map((orderGroup) => {
+            {scannedGroupedOrders.map((orderGroup, groupIdx) => {
               const totalItems = orderGroup.scanned.length + orderGroup.remaining.length;
               const isCompleted = orderGroup.remaining.length === 0;
 
               return (
-                <View key={orderGroup.orderId} style={styles.orderGroupCard}>
+                <View key={`group-${orderGroup.orderId || groupIdx}-${groupIdx}`} style={styles.orderGroupCard}>
                   {/* Card Header */}
                   <View style={styles.orderHeaderRow}>
                     <View>
@@ -516,8 +517,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                   {/* Parcel List inside Order Card */}
                   <View style={styles.parcelList}>
                     {/* Scanned items */}
-                    {orderGroup.scanned.map((item) => (
-                      <View key={item.parcelId} style={styles.parcelRow}>
+                    {orderGroup.scanned.map((item, itemIdx) => (
+                      <View key={`scanned-${item.parcelId || itemIdx}-${itemIdx}`} style={styles.parcelRow}>
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
                         <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
@@ -541,8 +542,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                     ))}
 
                     {/* Remaining items */}
-                    {orderGroup.remaining.map((item) => (
-                      <View key={item.parcelId} style={[styles.parcelRow, styles.parcelRowRemaining]}>
+                    {orderGroup.remaining.map((item, remIdx) => (
+                      <View key={`remaining-${item.parcelId || remIdx}-${remIdx}`} style={[styles.parcelRow, styles.parcelRowRemaining]}>
                         <RefreshCw size={14} color="#F59E0B" />
                         <Text style={[styles.parcelRowName, styles.remainingText]} numberOfLines={1}>{item.productName}</Text>
                         <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>

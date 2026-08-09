@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, TouchableOpacity, Platform, AppState, AppStateStatus } from 'react-native';
 import { CheckCircle, XCircle, Info, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -246,10 +246,10 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         handoverCode: o.handoverCode,
         isRTO: o.isRTO || false,
         shgContact: {
-          name: o.shg?.fullName || o.shg?.shgName || o.seller?.fullName || 'SHG Member',
-          shgName: o.shg?.shgName || o.shg?.fullName || '',
-          phone: o.shg?.phoneNumber || o.seller?.phoneNumber || '',
-          address: (() => {
+          name: o.shg?.fullName || o.seller?.sellerName || o.seller?.fullName || o.shg?.shgName || 'Reshma Patil',
+          shgName: o.shg?.shgName || o.seller?.shgName || o.shg?.fullName || '',
+          phone: o.shg?.phoneNumber || o.shg?.mobileNumber || o.seller?.mobileNumber || o.seller?.phoneNumber || '',
+          address: o.shg?.fullAddress || o.seller?.fullAddress || (() => {
             if (o.shg?.address) {
               const parts = [
                 o.shg.address.addressLine1,
@@ -270,12 +270,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               ].filter(Boolean);
               if (parts.length > 0) return parts.join(', ');
             }
-            return 'Nesari Stand';
+            return 'Dundage';
           })(),
-          village: o.shg?.address?.village || o.seller?.village || 'Nesari',
-          pincode: o.shg?.address?.pincode || o.seller?.pincode || '416504',
+          village: o.shg?.address?.village || o.seller?.village || 'Dundage',
+          pincode: o.shg?.address?.pincode || o.seller?.pincode || '416501',
           taluka: o.shg?.address?.taluka || o.seller?.taluka || 'Gadhinglaj',
-          district: o.shg?.address?.district || o.seller?.district || 'Kolhapur',
+          district: o.shg?.address?.district || o.seller?.district || 'KOLHAPUR',
         },
         products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
           const pId = String(item.id || item.parcelId || Math.random());
@@ -579,6 +579,29 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     const interval = setInterval(checkTokenAndRefresh, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Real-time AppState change listener (refreshes immediately when user switches back to transporter app)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && lastTokenRef.current) {
+        refreshBatchesList().catch(() => {});
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [refreshBatchesList]);
+
+  // Real-time Background Polling Heartbeat (every 4 seconds when app is active and user is logged in)
+  useEffect(() => {
+    const poller = setInterval(() => {
+      if (AppState.currentState === 'active' && lastTokenRef.current) {
+        refreshBatchesList().catch(() => {});
+      }
+    }, 4000);
+
+    return () => clearInterval(poller);
+  }, [refreshBatchesList]);
 
   const activeBatches = batches.filter(
     b => !rejectedBatches.some(rb => rb.id === b.id) && !completedBatches.some(cb => cb.id === b.id)

@@ -746,7 +746,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     loadData();
     const timer = setInterval(() => {
       loadData(false, true);
-    }, 1000);
+    }, 4000);
     return () => clearInterval(timer);
   }, [
     activeTopTab,
@@ -778,7 +778,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         setSelectedOrderDetails(mapped);
       }
     } catch (e) {
-      console.error("Failed to load fresh order details on view click:", e);
+      console.warn('Failed to load fresh order details:', e);
     }
   };
 
@@ -787,13 +787,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setIntakeOrder({
       id: order.id,
       uuid: order.uuid,
-      qty: order.totalQty || order.quantity || 0,
-      weight: order.totalWeight || order.weight || 0,
-      sellerName: order.sellerName || 'N/A',
-      buyerName: order.buyerName || 'N/A',
-      shgName: order.shgDetails?.name || 'N/A',
-      transporterName: order.transporterDetails?.name || 'N/A',
+      orderId: order.orderId,
       fullOrder: order,
+      isBulk: false,
+      sellerName: order.sellerName,
+      buyerName: order.buyerName,
+      shgName: order.pickupShgDetails?.name || order.shgDetails?.name,
+      transporterName: order.pickupTransporterDetails?.name || order.transporterDetails?.name,
+      qty: order.totalQty || order.quantity || 1,
+      weight: order.totalWeight || order.weight || 0,
     });
     setIntakeType(type);
     setIsIntakeModalOpen(true);
@@ -804,7 +806,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const currentOrder = intakeOrder;
     const currentType = intakeType;
 
+    // Instant modal close for 0ms visual responsiveness
+    setIsIntakeModalOpen(false);
+    setIntakeOrder(null);
+    setIntakeType(null);
     setActionProcessing(true);
+
     try {
       if (currentType === 'pickup') {
         const orderIds = currentOrder.isBulk ? currentOrder.selectedIds : [currentOrder.uuid || currentOrder.id];
@@ -817,13 +824,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         await intakeReturnOrder(currentOrder.id, 'drop');
         showNotification(`Transporter Return Intake Successful! Order #${currentOrder.id} added to Inventory.`, 'success');
       }
+      // Re-trigger live page reload without requiring manual refresh
+      await loadData(false, true);
     } catch (err: any) {
       showNotification(err.message || 'Intake action failed.', 'error');
     } finally {
       setActionProcessing(false);
-      setIsIntakeModalOpen(false);
-      setIntakeOrder(null);
-      setIntakeType(null);
     }
   };
 

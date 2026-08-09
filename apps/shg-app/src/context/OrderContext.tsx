@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { STORAGE_KEYS } from '../utils/storage';
@@ -57,6 +58,12 @@ export interface Order {
   isReturn?: boolean;
   buyerName?: string;
   sellerName?: string;
+  sellerVillage?: string;
+  sellerAddress?: string;
+  buyerVillage?: string;
+  buyerAddress?: string;
+  seller?: any;
+  buyer?: any;
   products?: any[];
   handoverCode?: string;
   parcelWeight?: number;
@@ -96,6 +103,7 @@ interface OrderContextType {
   redirectedOrders: Order[];
   acceptReturnOrders: (orderIds: string[]) => void;
   rescheduleOrder: (orderId: string, date: string, time: string, reason: string) => Promise<void>;
+  markOrderAsPickedUp: (orderId: string) => void;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
@@ -272,6 +280,12 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
     buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
     sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
+    sellerVillage: dbOrder.seller?.village || dbOrder.seller?.address?.village || '',
+    sellerAddress: dbOrder.seller?.fullAddress || actualPickupAddress || '',
+    buyerVillage: dbOrder.buyer?.village || dbOrder.buyer?.address?.village || '',
+    buyerAddress: dbOrder.buyer?.fullAddress || actualDropAddress || '',
+    seller: dbOrder.seller,
+    buyer: dbOrder.buyer,
     products: orderItems.map((item: any) => ({
       code: `#P-${item.productId || item.id}`,
       tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
@@ -627,6 +641,29 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => clearInterval(interval);
   }, [refreshOrdersList]);
 
+  // Real-time AppState change listener (refreshes immediately when user switches back to app)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && lastTokenRef.current) {
+        refreshOrdersList().catch(() => {});
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [refreshOrdersList]);
+
+  // Real-time Background Polling Heartbeat (every 4 seconds when app is active and user is logged in)
+  useEffect(() => {
+    const poller = setInterval(() => {
+      if (AppState.currentState === 'active' && lastTokenRef.current) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, 4000);
+
+    return () => clearInterval(poller);
+  }, [refreshOrdersList]);
+
   const getStockItems = () => {
     return orders.filter(o => o.currentHolder === 'SHG');
   };
@@ -859,6 +896,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const markOrderAsPickedUp = (orderId: string) => {
+    const cleanId = String(orderId || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+    setAcceptedOrders(prev =>
+      prev.map(o => {
+        const oClean = String(o.id || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+        const oIdClean = String(o.orderId || '').replace(/^ORD-/, '');
+        if (o.id === orderId || o.orderId === orderId || oClean === cleanId || oIdClean === cleanId) {
+          return { ...o, status: 'PickedUp', mainStatus: 'PARCEL_PICKED', pickupShgStatus: 'PICKED' };
+        }
+        return o;
+      })
+    );
+  };
+
   return (
     <OrderContext.Provider value={{
       incomingOrders,
@@ -882,6 +933,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       redirectedOrders,
       acceptReturnOrders,
       rescheduleOrder,
+      markOrderAsPickedUp,
     }}>
       {children}
     </OrderContext.Provider>

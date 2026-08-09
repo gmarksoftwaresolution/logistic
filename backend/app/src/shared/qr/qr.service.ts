@@ -341,7 +341,7 @@ export class QrService {
         let dropOrder = existingDropOrder;
 
         if (!dropOrder) {
-          const dropId = '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
+          const dropId = `${order.orderId}-DROP`;
           dropOrder = await this.prisma.order.create({
             data: {
               id: dropId,

@@ -45,20 +45,20 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const restoreSessions = async () => {
-    setLoading(true);
     try {
-      const storedPickup = await AsyncStorage.getItem(SESSION_PICKUP_KEY);
-      if (storedPickup) {
-        const parsed = JSON.parse(storedPickup) as ScanSessionData;
+      const pickupData = await AsyncStorage.getItem(SESSION_PICKUP_KEY);
+      if (pickupData) {
+        const parsed = JSON.parse(pickupData);
         try {
-          const response = await axiosInstance.get(`/qr/pickup/session?sessionId=${parsed.sessionId}`);
-          if (response.data) {
-            setActivePickupSession(response.data);
-            await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(response.data));
+          const res = await axiosInstance.get(`/qr/pickup/session?sessionId=${parsed.sessionId}`);
+          if (res.data && res.data.status === 'IN_PROGRESS') {
+            setActivePickupSession(res.data);
           } else {
+            setActivePickupSession(null);
             await AsyncStorage.removeItem(SESSION_PICKUP_KEY);
           }
         } catch {
+          setActivePickupSession(null);
           await AsyncStorage.removeItem(SESSION_PICKUP_KEY);
         }
       }
@@ -98,7 +98,15 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to scan parcel';
-      setError(Array.isArray(msg) ? msg[0] : msg);
+      const errMsgStr = Array.isArray(msg) ? msg[0] : msg;
+
+      // Auto self-healing if backend was reset
+      if (errMsgStr.toLowerCase().includes('session expired') || err.response?.status === 404) {
+        setActivePickupSession(null);
+        await AsyncStorage.removeItem(SESSION_PICKUP_KEY);
+      }
+
+      setError(errMsgStr);
       throw err;
     } finally {
       setLoading(false);
@@ -143,15 +151,16 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setLoading(true);
     setError(null);
     try {
-      await axiosInstance.post('/qr/pickup/confirm-order', { sessionId, orderId });
-      const response = await axiosInstance.get(`/qr/pickup/session?sessionId=${sessionId}`);
-      if (response.data) {
-        setActivePickupSession(response.data);
-        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(response.data));
+      const res = await axiosInstance.post('/qr/pickup/confirm-order', { sessionId, orderId });
+      const sessionData = res.data?.session;
+      if (sessionData) {
+        setActivePickupSession(sessionData);
+        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(sessionData));
       } else {
         setActivePickupSession(null);
         await AsyncStorage.removeItem(SESSION_PICKUP_KEY);
       }
+      return res.data;
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to confirm order';
       setError(Array.isArray(msg) ? msg[0] : msg);
