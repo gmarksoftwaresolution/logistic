@@ -32,6 +32,24 @@ export class OrderController {
     return this.orderService.getCompletedOrders(user.id, user.phoneNumber);
   }
 
+  @Get('inventory')
+  @ApiOperation({ summary: 'Get live inventory summary (counts, storage weight, breakdown) for the logged-in SHG' })
+  async getInventorySummary(@GetUser() user: User) {
+    return this.orderService.getInventorySummary(user.id);
+  }
+
+  @Get('inventory/in-stock')
+  @ApiOperation({ summary: 'Get all in-stock orders currently held at the SHG home center' })
+  async getInStockOrders(@GetUser() user: User) {
+    return this.orderService.getInStockOrders(user.id);
+  }
+
+  @Get('inventory/out-stock')
+  @ApiOperation({ summary: 'Get all out-stock orders dispatched to transporter or delivered to buyer' })
+  async getOutStockOrders(@GetUser() user: User) {
+    return this.orderService.getOutStockOrders(user.id);
+  }
+
 
 
   @Post('new/:id/accept')

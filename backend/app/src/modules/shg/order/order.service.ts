@@ -761,6 +761,409 @@ export class OrderService {
     return { success: true, message: 'Delivery rescheduled successfully' };
   }
 
+  //////////////////////////////////////////////////////
+  // SHG INVENTORY / STOCK MANAGEMENT METHODS
+  //////////////////////////////////////////////////////
+
+  async getInventorySummary(shgId: number | string) {
+    const inStock = await this.getInStockOrders(shgId);
+    const outStock = await this.getOutStockOrders(shgId);
+
+    const totalInStockWeight = inStock.reduce((acc: number, o: any) => acc + Number(o.totalWeight || o.weight || 0), 0);
+    const totalOutStockWeight = outStock.reduce((acc: number, o: any) => acc + Number(o.totalWeight || o.weight || 0), 0);
+
+    const waitingForTransporterCount = inStock.filter((o: any) => o.stockType === 'WAITING_FOR_TRANSPORTER').length;
+    const readyForBuyerCount = inStock.filter((o: any) => o.stockType === 'READY_FOR_BUYER').length;
+    const returnAtShgCount = inStock.filter((o: any) => o.stockType === 'RETURN_AT_SHG').length;
+
+    const handedToTransporterCount = outStock.filter((o: any) => o.stockType === 'HANDED_TO_TRANSPORTER').length;
+    const deliveredToBuyerCount = outStock.filter((o: any) => o.stockType === 'DELIVERED_TO_BUYER').length;
+
+    return {
+      success: true,
+      inStockCount: inStock.length,
+      inStockWeight: Math.round(totalInStockWeight * 100) / 100,
+      outStockCount: outStock.length,
+      outStockWeight: Math.round(totalOutStockWeight * 100) / 100,
+      breakdown: {
+        inStock: {
+          waitingForTransporter: waitingForTransporterCount,
+          readyForBuyer: readyForBuyerCount,
+          returns: returnAtShgCount,
+        },
+        outStock: {
+          handedToTransporter: handedToTransporterCount,
+          deliveredToBuyer: deliveredToBuyerCount,
+        }
+      }
+    };
+  }
+
+  async getInStockOrders(shgId: number | string) {
+    const parsedId = typeof shgId === 'number' ? shgId : parseInt(String(shgId), 10);
+    const rawIdStr = String(shgId || '').trim();
+    const cleanPhone = rawIdStr.replace(/\D/g, '').slice(-10);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        role: 'SHG',
+        OR: [
+          ...(!isNaN(parsedId) && parsedId < 2147483647 ? [{ id: parsedId }] : []),
+          ...(cleanPhone ? [{ phoneNumber: { endsWith: cleanPhone } }] : []),
+          { phoneNumber: rawIdStr }
+        ]
+      },
+      include: { address: true }
+    });
+    if (!user) {
+      return [];
+    }
+
+    const shgUuid = String(user.id);
+
+    const userVillage = (user.address?.village || '').toLowerCase().trim();
+    const userPincode = (user.address?.pincode || '').toLowerCase().trim();
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          // 1. Pickup leg orders at SHG - ONLY when physically picked up from seller & still at center!
+          {
+            pickupShgId: shgUuid,
+            OR: [
+              {
+                pickupShgStatus: 'PICKED',
+                mainStatus: {
+                  notIn: [
+                    'IN_TRANSIT_TO_HUB',
+                    'DELIVERED_TO_HUB',
+                    'HUB_RECEIVED',
+                    'HUB_STORED',
+                    'STORED',
+                    'DISPATCHED',
+                    'IN_TRANSIT_TO_DROP_SHG',
+                    'IN_TRANSIT_TO_BUYER',
+                    'PARCEL_AT_DROP_SHG',
+                    'PARCEL_WITH_DROP_SHG',
+                    'DELIVERED',
+                    'COMPLETED',
+                    'CANCELLED',
+                    'REJECTED'
+                  ]
+                }
+              },
+              {
+                mainStatus: {
+                  in: [
+                    'PARCEL_AT_SHG',
+                    'PARCEL_PICKED',
+                    'SHG_PICKED',
+                    'PICKED',
+                    'PICKUP_TRANSPORTER_PENDING',
+                    'PICKUP_TRANSPORTER_ASSIGNED',
+                    'PICKUP_TRANSPORTER_ACCEPTED',
+                    'TRANSPORTER_ASSIGNED',
+                    'TRANSPORTER_ACCEPTED',
+                    'READY_FOR_TRANSPORTER',
+                    'PICKUP_TRANSPORTER_ARRIVED'
+                  ]
+                }
+              }
+            ]
+          },
+          // 2. Drop leg orders at SHG
+          {
+            dropShgId: shgUuid,
+            mainStatus: {
+              in: [
+                'PARCEL_AT_DROP_SHG',
+                'PARCEL_WITH_DROP_SHG',
+                'AT_BUYER_SHG',
+                'OUT_FOR_DELIVERY'
+              ]
+            }
+          },
+          // 3. Return leg orders at SHG
+          {
+            OR: [{ pickupReturnShgId: shgUuid }, { dropShgId: shgUuid }],
+            mainStatus: {
+              in: ['RETURN_PARCEL_AT_SHG', 'RETURN_PICKED_BY_SHG']
+            }
+          }
+        ]
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
+        assignments: true
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const transporterIds = orders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: transporterIds } },
+          include: { transporterDetail: true, otherDetails: true }
+        })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
+    return orders.map((o: any) => {
+      const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const isDropLeg = (o.phase === 'DROP' || ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
+      const isReturn = (o.mainStatus || '').includes('RETURN');
+
+      let stockType: 'WAITING_FOR_TRANSPORTER' | 'READY_FOR_BUYER' | 'RETURN_AT_SHG' = 'WAITING_FOR_TRANSPORTER';
+      let stockStatusLabel = 'Waiting for Transporter Pickup';
+      let stockBadgeColor = '#EAB308'; // Amber
+
+      if (isReturn) {
+        stockType = 'RETURN_AT_SHG';
+        stockStatusLabel = 'Return Item at Center';
+        stockBadgeColor = '#EF4444'; // Red
+      } else if (isDropLeg) {
+        stockType = 'READY_FOR_BUYER';
+        stockStatusLabel = 'Ready for Buyer Doorstep Delivery';
+        stockBadgeColor = '#0284C7'; // Blue
+      } else {
+        stockType = 'WAITING_FOR_TRANSPORTER';
+        stockStatusLabel = 'In-Stock: Waiting for Transporter';
+        stockBadgeColor = '#10B981'; // Green
+      }
+
+      const transId = isDropLeg ? o.dropTransporterId : o.pickupTransporterId;
+      const transUser = transId ? transporterMap.get(transId) : null;
+
+      return {
+        id: cleanOrderId,
+        uuid: o.id,
+        orderId: cleanOrderId,
+        orderNumber: cleanOrderId,
+        barcode: o.barcode || `QR-2026-${cleanOrderId}-PCL-1`,
+        mainStatus: o.mainStatus,
+        stockCategory: 'IN_STOCK',
+        stockType,
+        stockStatusLabel,
+        stockBadgeColor,
+        legType: isDropLeg ? 'drop' : 'pickup',
+        totalWeight: o.totalWeight || 2.5,
+        totalQty: o.totalQty || o.productCount || 1,
+        productCount: o.productCount || 1,
+        storedSince: o.updatedAt || o.createdAt,
+        seller: o.seller ? {
+          fullName: o.seller.sellerName,
+          phoneNumber: o.seller.mobileNumber,
+          village: o.seller.village,
+          taluka: o.seller.taluka,
+          pincode: o.seller.pincode,
+          addressLine1: o.seller.addressLine1,
+          fullAddress: `${o.seller.addressLine1 || ''} ${o.seller.village || ''} ${o.seller.taluka || ''} (${o.seller.pincode || ''})`.trim()
+        } : null,
+        buyer: o.buyer ? {
+          fullName: o.buyer.buyerName,
+          phoneNumber: o.buyer.mobileNumber,
+          village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          pincode: o.buyer.pincode,
+          addressLine1: o.buyer.addressLine1,
+          fullAddress: `${o.buyer.addressLine1 || ''} ${o.buyer.village || ''} ${o.buyer.taluka || ''} (${o.buyer.pincode || ''})`.trim()
+        } : null,
+        transporter: transUser ? {
+          fullName: transUser.fullName,
+          phoneNumber: transUser.phoneNumber,
+          vehicleNumber: (transUser.transporterDetail as any)?.vehicleNumber || (transUser.otherDetails?.[0] as any)?.registrationNumber || 'Vehicle Assigned'
+        } : null,
+        parcels: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+          id: p.id,
+          parcelId: p.parcelId,
+          productName: p.productName || 'Agricultural Goods',
+          weight: p.weight || 2.5,
+          parcelStatus: p.parcelStatus,
+        })) : [{
+          id: 1,
+          parcelId: `PCL-${cleanOrderId}-1`,
+          productName: 'Agricultural Goods',
+          weight: o.totalWeight || 2.5,
+          parcelStatus: o.mainStatus,
+        }]
+      };
+    });
+  }
+
+  async getOutStockOrders(shgId: number | string) {
+    const parsedId = typeof shgId === 'number' ? shgId : parseInt(String(shgId), 10);
+    const rawIdStr = String(shgId || '').trim();
+    const cleanPhone = rawIdStr.replace(/\D/g, '').slice(-10);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        role: 'SHG',
+        OR: [
+          ...(!isNaN(parsedId) && parsedId < 2147483647 ? [{ id: parsedId }] : []),
+          ...(cleanPhone ? [{ phoneNumber: { endsWith: cleanPhone } }] : []),
+          { phoneNumber: rawIdStr }
+        ]
+      },
+      include: { address: true }
+    });
+    if (!user) {
+      return [];
+    }
+
+    const shgUuid = String(user.id);
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          // 1. Handed over to Transporter (Phase 1 dispatched)
+          {
+            pickupShgId: shgUuid,
+            mainStatus: {
+              in: [
+                'IN_TRANSIT_TO_HUB',
+                'DELIVERED_TO_HUB',
+                'HUB_RECEIVED',
+                'STORED',
+                'DISPATCHED',
+                'IN_TRANSIT_TO_DROP_SHG',
+                'IN_TRANSIT_TO_BUYER',
+                'PARCEL_AT_DROP_SHG',
+                'PARCEL_WITH_DROP_SHG',
+                'DELIVERED',
+                'COMPLETED'
+              ]
+            }
+          },
+          // 2. Delivered to Buyer (Phase 2 completed)
+          {
+            dropShgId: shgUuid,
+            mainStatus: {
+              in: [
+                'DELIVERED',
+                'COMPLETED',
+                'BUYER_DELIVERED'
+              ]
+            }
+          },
+          // 3. Completed Returns
+          {
+            OR: [{ pickupReturnShgId: shgUuid }, { dropShgId: shgUuid }],
+            mainStatus: {
+              in: ['RETURN_IN_TRANSIT_TO_HUB', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED']
+            }
+          }
+        ]
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const transporterIds = orders
+      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    const transporters = transporterIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: transporterIds } },
+          include: { transporterDetail: true, otherDetails: true }
+        })
+      : [];
+
+    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
+
+    return orders.map((o: any) => {
+      const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const isDeliveredToBuyer = ['DELIVERED', 'COMPLETED', 'BUYER_DELIVERED'].includes(o.mainStatus) && (o.dropShgId && String(o.dropShgId) === shgUuid);
+      const isReturn = (o.mainStatus || '').includes('RETURN');
+
+      let stockType: 'HANDED_TO_TRANSPORTER' | 'DELIVERED_TO_BUYER' | 'COMPLETED_RETURN' = 'HANDED_TO_TRANSPORTER';
+      let stockStatusLabel = 'Handed Over to Transporter (Dispatched)';
+      let stockBadgeColor = '#059669'; // Emerald
+
+      if (isReturn) {
+        stockType = 'COMPLETED_RETURN';
+        stockStatusLabel = 'Return Handed Over';
+        stockBadgeColor = '#64748B'; // Slate
+      } else if (isDeliveredToBuyer) {
+        stockType = 'DELIVERED_TO_BUYER';
+        stockStatusLabel = 'Successfully Delivered to Buyer';
+        stockBadgeColor = '#047857'; // Deep Green
+      } else {
+        stockType = 'HANDED_TO_TRANSPORTER';
+        stockStatusLabel = 'Transferred to Transporter ➔ Hub';
+        stockBadgeColor = '#0284C7'; // Blue
+      }
+
+      const transId = o.pickupTransporterId || o.dropTransporterId;
+      const transUser = transId ? transporterMap.get(transId) : null;
+
+      return {
+        id: cleanOrderId,
+        uuid: o.id,
+        orderId: cleanOrderId,
+        orderNumber: cleanOrderId,
+        barcode: o.barcode || `QR-2026-${cleanOrderId}-PCL-1`,
+        mainStatus: o.mainStatus,
+        stockCategory: 'OUT_STOCK',
+        stockType,
+        stockStatusLabel,
+        stockBadgeColor,
+        legType: o.phase === 'DROP' ? 'drop' : 'pickup',
+        totalWeight: o.totalWeight || 2.5,
+        totalQty: o.totalQty || o.productCount || 1,
+        productCount: o.productCount || 1,
+        dispatchedAt: o.dispatchedAt || o.updatedAt,
+        deliveredAt: o.deliveredAt || o.updatedAt,
+        seller: o.seller ? {
+          fullName: o.seller.sellerName,
+          phoneNumber: o.seller.mobileNumber,
+          village: o.seller.village,
+          taluka: o.seller.taluka,
+          pincode: o.seller.pincode,
+          addressLine1: o.seller.addressLine1,
+          fullAddress: `${o.seller.addressLine1 || ''} ${o.seller.village || ''} ${o.seller.taluka || ''} (${o.seller.pincode || ''})`.trim()
+        } : null,
+        buyer: o.buyer ? {
+          fullName: o.buyer.buyerName,
+          phoneNumber: o.buyer.mobileNumber,
+          village: o.buyer.village,
+          taluka: o.buyer.taluka,
+          pincode: o.buyer.pincode,
+          addressLine1: o.buyer.addressLine1,
+          fullAddress: `${o.buyer.addressLine1 || ''} ${o.buyer.village || ''} ${o.buyer.taluka || ''} (${o.buyer.pincode || ''})`.trim()
+        } : null,
+        transporter: transUser ? {
+          fullName: transUser.fullName,
+          phoneNumber: transUser.phoneNumber,
+          vehicleNumber: (transUser.transporterDetail as any)?.vehicleNumber || (transUser.otherDetails?.[0] as any)?.registrationNumber || 'Vehicle Assigned'
+        } : null,
+        parcels: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+          id: p.id,
+          parcelId: p.parcelId,
+          productName: p.productName || 'Agricultural Goods',
+          weight: p.weight || 2.5,
+          parcelStatus: p.parcelStatus,
+        })) : [{
+          id: 1,
+          parcelId: `PCL-${cleanOrderId}-1`,
+          productName: 'Agricultural Goods',
+          weight: o.totalWeight || 2.5,
+          parcelStatus: o.mainStatus,
+        }]
+      };
+    });
+  }
+
   private async findOrderFlexible(orderId: any) {
     const strId = String(orderId);
     let order = await this.prisma.order.findUnique({ where: { id: strId } });

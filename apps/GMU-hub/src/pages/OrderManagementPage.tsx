@@ -186,11 +186,109 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [activeNodeTitle, setActiveNodeTitle] = useState('');
   const [activeNodeDetails, setActiveNodeDetails] = useState<Record<string, any> | null>(null);
 
-  const handleNodeClick = (nodeLabel: string, nodeDetails: any) => {
+  const handleNodeClick = async (nodeLabel: string, nodeDetails: any, parentOrder?: any) => {
     if (!nodeDetails) return;
     setActiveNodeTitle(nodeLabel);
     setActiveNodeDetails(nodeDetails);
     setIsNodeDrawerOpen(true);
+
+    if (parentOrder) {
+      const initialMerged = getMergedOrder(parentOrder.id || parentOrder.orderId || '', {
+        pickupNew: pickupNewOrders,
+        pickupAssigned: pickupAssignedOrders,
+        pickupWarehouse: pickupWarehouseOrders,
+        pickupRejected: pickupRejectedOrders,
+        pickupRescheduled: pickupRescheduledOrders,
+        dropNew: dropNewOrders,
+        dropAssigned: dropAssignedOrders,
+        dropRejected: dropRejectedOrders,
+        dropRescheduled: dropRescheduledOrders,
+        dropCompleted: dropCompletedOrders,
+        returnPickupNew: returnPickupNewOrders,
+        returnPickupCompleted: returnPickupCompletedOrders,
+        returnDropNew: returnDropNewOrders,
+        returnDropCompleted: returnDropCompletedOrders,
+      }) || parentOrder;
+
+      setSelectedOrderDetails(initialMerged);
+
+      try {
+        const fresh = await api.orders.getDetails(parentOrder.uuid || parentOrder.id);
+        if (fresh) {
+          const flowType = (fresh.phase === 'DROP' || parentOrder.phase === 'DROP') ? 'drop' : 'pickup';
+          const mapped = mapOrder(fresh, flowType);
+
+          const allTrackingEvents = [
+            ...(initialMerged.tracking || []),
+            ...(fresh.tracking || []),
+            ...(mapped.tracking || []),
+          ];
+
+          const uniqueTrackingMap = new Map();
+          allTrackingEvents.forEach((t) => {
+            const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+            const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+            if (canonicalTitle) {
+              const key = canonicalTitle.toLowerCase().trim();
+              if (!uniqueTrackingMap.has(key)) {
+                uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+              }
+            }
+          });
+
+          const mergedTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+            const rankA = STAGE_ORDER[a.status] || 99;
+            const rankB = STAGE_ORDER[b.status] || 99;
+            if (rankA !== rankB) return rankA - rankB;
+            const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+            return timeA - timeB;
+          });
+
+          setSelectedOrderDetails({
+            ...initialMerged,
+            ...mapped,
+            tracking: mergedTracking.length > 0 ? mergedTracking : (mapped.tracking || initialMerged.tracking),
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load fresh order details in handleNodeClick:', e);
+      }
+    }
+  };
+
+  // Helper to extract person-specific timeline events from selectedOrderDetails
+  const getPersonHistoryTimeline = (nodeTitle: string, orderDetails: any) => {
+    if (!orderDetails || !orderDetails.tracking || !Array.isArray(orderDetails.tracking)) {
+      return [];
+    }
+
+    const titleUpper = (nodeTitle || '').toUpperCase();
+
+    return orderDetails.tracking.filter((t: any) => {
+      const statusStr = (t.status || t.action || '').toString();
+      const statusLower = statusStr.toLowerCase();
+
+      if (titleUpper.includes('SELLER')) {
+        return statusLower.includes('order placed');
+      }
+      if (titleUpper.includes('PICKUP SHG')) {
+        return statusLower.includes('pickup shg') || statusLower.includes('collected') || statusLower.includes('shg pickup') || statusLower.includes('shg accepted');
+      }
+      if (titleUpper.includes('PICKUP TRANSPORTER')) {
+        return statusLower.includes('transporter route') || statusLower.includes('picked up by transporter') || statusLower.includes('transporter pickup') || statusLower.includes('transporter accepted');
+      }
+      if (titleUpper.includes('HUB') || titleUpper.includes('GMU')) {
+        return statusLower.includes('gmu hub') || statusLower.includes('hub inventory') || statusLower.includes('hub intake') || statusLower.includes('stored');
+      }
+      if (titleUpper.includes('DROP TRANSPORTER')) {
+        return statusLower.includes('drop transporter') || statusLower.includes('dispatched from hub');
+      }
+      if (titleUpper.includes('DROP SHG') || titleUpper.includes('BUYER')) {
+        return statusLower.includes('destination shg') || statusLower.includes('delivered') || statusLower.includes('drop shg');
+      }
+      return true;
+    });
   };
 
   // Intake QR Verification state
@@ -655,6 +753,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const primary = tempPrimary;
 
     const allTracking = [
+      ...(primary?.tracking || []),
       ...(pNew?.tracking || []),
       ...(pAssigned?.tracking || []),
       ...(pWh?.tracking || []),
@@ -671,16 +770,75 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       ...(retDComp?.tracking || []),
     ];
 
+    const CANONICAL_STATUS_MAP: Record<string, string> = {
+      'order placed & registered': 'Order Placed & Registered',
+      'order placed': 'Order Placed & Registered',
+      'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
+      'shg accepted': 'Pickup SHG Assigned & Accepted',
+      'collected & scanned by shg': 'Collected & Scanned by SHG',
+      'shg pickup': 'Collected & Scanned by SHG',
+      'shg_pickup': 'Collected & Scanned by SHG',
+      'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
+      'transporter accepted': 'Transporter Route Assigned & Accepted',
+      'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+      'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
+      'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
+      'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
+      'hub intake': 'Received & Quality Checked at GMU Hub',
+      'hub_received': 'Received & Quality Checked at GMU Hub',
+      'stored in hub inventory': 'Stored in Hub Inventory',
+      'stored_in_hub': 'Stored in Hub Inventory',
+      'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
+      'drop shg accepted': 'Drop SHG Assigned & Accepted',
+      'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
+      'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
+      'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
+      'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'received at destination shg center': 'Received at Destination SHG Center',
+      'drop shg pickup': 'Received at Destination SHG Center',
+      'shg drop pickup': 'Received at Destination SHG Center',
+      'shg_drop_pickup': 'Received at Destination SHG Center',
+      'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
+      'delivered': 'Delivered & Handed Over to Buyer',
+    };
+
+    const STAGE_ORDER: Record<string, number> = {
+      'Order Placed & Registered': 1,
+      'Pickup SHG Assigned & Accepted': 2,
+      'Collected & Scanned by SHG': 3,
+      'Transporter Route Assigned & Accepted': 4,
+      'Picked up by Transporter (In Transit to Hub)': 5,
+      'Received & Quality Checked at GMU Hub': 6,
+      'Stored in Hub Inventory': 7,
+      'Drop SHG Assigned & Accepted': 8,
+      'Drop Transporter Route Assigned & Accepted': 9,
+      'Dispatched from Hub (In Transit to Drop Center)': 10,
+      'Received at Destination SHG Center': 11,
+      'Delivered & Handed Over to Buyer': 12,
+    };
+
     const uniqueTrackingMap = new Map();
     allTracking.forEach((t) => {
-      const key = t.id || t.updatedAt || t.remarks || t.status;
-      if (!uniqueTrackingMap.has(key)) {
-        uniqueTrackingMap.set(key, t);
+      const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+      const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+      if (canonicalTitle) {
+        const key = canonicalTitle.toLowerCase().trim();
+        if (!uniqueTrackingMap.has(key)) {
+          uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+        }
       }
     });
-    const uniqueTracking = Array.from(uniqueTrackingMap.values()).sort(
-      (a: any, b: any) => new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime()
-    );
+
+    const uniqueTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+      const rankA = STAGE_ORDER[a.status] || 99;
+      const rankB = STAGE_ORDER[b.status] || 99;
+      if (rankA !== rankB) return rankA - rankB;
+      const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
 
     const pickupShgDetails = pAssigned?.shgDetails || pWh?.shgDetails || pRej?.shgDetails || pRes?.shgDetails || pNew?.shgDetails || tempPrimary.pickupShgDetails;
     const dropShgDetails = dAssigned?.shgDetails || dRej?.shgDetails || dRes?.shgDetails || dComp?.shgDetails || dNew?.shgDetails || tempPrimary.dropShgDetails;
@@ -809,13 +967,63 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Handle View Action
   const handleViewOrder = async (order: any) => {
-    setSelectedOrderDetails(order);
+    const initialMerged = getMergedOrder(order.id || order.orderId || '', {
+      pickupNew: pickupNewOrders,
+      pickupAssigned: pickupAssignedOrders,
+      pickupWarehouse: pickupWarehouseOrders,
+      pickupRejected: pickupRejectedOrders,
+      pickupRescheduled: pickupRescheduledOrders,
+      dropNew: dropNewOrders,
+      dropAssigned: dropAssignedOrders,
+      dropRejected: dropRejectedOrders,
+      dropRescheduled: dropRescheduledOrders,
+      dropCompleted: dropCompletedOrders,
+      returnPickupNew: returnPickupNewOrders,
+      returnPickupCompleted: returnPickupCompletedOrders,
+      returnDropNew: returnDropNewOrders,
+      returnDropCompleted: returnDropCompletedOrders,
+    }) || order;
+
+    setSelectedOrderDetails(initialMerged);
     setIsViewModalOpen(true);
     try {
       const fresh = await api.orders.getDetails(order.uuid || order.id);
       if (fresh) {
-        const mapped = mapOrder(fresh, 'pickup');
-        setSelectedOrderDetails(mapped);
+        const flowType = (fresh.phase === 'DROP' || order.phase === 'DROP') ? 'drop' : 'pickup';
+        const mapped = mapOrder(fresh, flowType);
+
+        const allTrackingEvents = [
+          ...(initialMerged.tracking || []),
+          ...(fresh.tracking || []),
+          ...(mapped.tracking || []),
+        ];
+
+        const uniqueTrackingMap = new Map();
+        allTrackingEvents.forEach((t) => {
+          const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+          const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+          if (canonicalTitle) {
+            const key = canonicalTitle.toLowerCase().trim();
+            if (!uniqueTrackingMap.has(key)) {
+              uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+            }
+          }
+        });
+
+        const mergedTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+          const rankA = STAGE_ORDER[a.status] || 99;
+          const rankB = STAGE_ORDER[b.status] || 99;
+          if (rankA !== rankB) return rankA - rankB;
+          const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+          const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+          return timeA - timeB;
+        });
+
+        setSelectedOrderDetails({
+          ...initialMerged,
+          ...mapped,
+          tracking: mergedTracking.length > 0 ? mergedTracking : (mapped.tracking || initialMerged.tracking),
+        });
       }
     } catch (e) {
       console.warn('Failed to load fresh order details:', e);
@@ -1054,15 +1262,56 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     });
   };
 
+  // Universal Indian Standard Time (IST) Formatter
+  const formatIndianDateTime = (isoDateString?: string | Date | null) => {
+    if (!isoDateString) return '-';
+    const d = new Date(isoDateString);
+    if (isNaN(d.getTime())) return String(isoDateString);
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  const splitIndianDateTime = (isoDateString?: string | Date | null) => {
+    if (!isoDateString) return { date: '-', time: '-', full: '-' };
+    const d = new Date(isoDateString);
+    if (isNaN(d.getTime())) return { date: String(isoDateString), time: '', full: String(isoDateString) };
+    const date = d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const time = d.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return { date, time, full: `${date} • ${time}` };
+  };
+
   // Graphical tracking nodes calculator
   const getTimelineNodes = (order: any) => {
     const getLogsForStage = (stageKeywords: string[]) => {
       if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
       const matching = order.tracking.filter((t: any) =>
-        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw))
+        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw) || t.action?.toUpperCase().includes(kw))
       );
       if (matching.length === 0) return 'No scan events logged yet for this stage.';
-      return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
+      return matching.map((t: any) => {
+        const timeStr = formatIndianDateTime(t.scanTime || t.updatedAt || t.createdAt || t.time);
+        const actionStr = t.remarks || t.action || t.status || 'Verified';
+        const roleStr = t.userRole ? ` (${t.userRole})` : '';
+        return `• [${timeStr}] ${actionStr}${roleStr}`;
+      }).join('\n');
     };
 
     const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
@@ -1111,8 +1360,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile Number': order.buyerMobile || 'N/A',
             'Address': order.buyerAddress || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.createdAt),
             'Status': 'RETURN_INITIATED',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING'])
           }
         },
         {
@@ -1125,8 +1375,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
             'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || order.pickupShgDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || order.pickupShgDetails?.pickedAt),
             'Status': order.shgStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
           } : null
         },
         {
@@ -1139,8 +1391,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
             'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || order.pickupTransporterDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || order.pickupTransporterDetails?.pickedAt),
             'Status': order.transporterStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
+            'History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
           } : null
         },
         {
@@ -1150,9 +1404,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           details: {
             'Warehouse': 'GMU Hub Central Warehouse',
             'Order ID': order.id,
-            'Stored Time': order.storedDate || 'N/A',
+            'Pickup (Intake Date & Time)': formatIndianDateTime(order.warehouseReceivedAt || order.warehouseReceivedDate),
+            'Drop (Stored Date & Time)': formatIndianDateTime(order.storedAt || order.storedDate),
             'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
-            'Full Scan History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+            'History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
           }
         }
       ];
@@ -1296,10 +1551,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Address': order.sellerAddress || order.seller?.address || 'N/A',
           'Order ID': order.id,
           'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-          'Order Placed Date': order.orderDate || 'N/A',
+          'Accepted (Date & Time)': formatIndianDateTime(order.orderDate || order.createdAt),
           'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
           'Status': 'PLACED',
-          'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
+          'History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
         }
       },
       {
@@ -1309,8 +1564,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Mobile': foundPickupShg?.mobile || foundPickupShg?.phone || order.shgDetails?.mobile || 'N/A',
           'Address': foundPickupShg?.address || order.shgDetails?.address || 'N/A',
           'Order ID': order.id,
+          'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || (pickupShgState === 'completed' || pickupShgState === 'active' ? (order.createdAt || order.orderDate) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || (pickupShgState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
           'Status': getExactPickupShgStatus(),
-          'Full Scan History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
+          'History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
         }
       },
       {
@@ -1321,8 +1578,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Address': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.address || order.pickupTransporterDetails?.address || 'N/A') : 'N/A',
           'Vehicle': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.vehicle || foundPickupTransporter?.vehicleNumber || order.pickupTransporterDetails?.vehicle || 'N/A') : 'N/A',
           'Order ID': order.id,
+          'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || (pickupTransporterState === 'completed' || pickupTransporterState === 'active' ? (order.createdAt || order.orderDate) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || (pickupTransporterState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
           'Status': getExactPickupTransporterStatus(),
-          'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
+          'History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
         }
       },
       {
@@ -1330,10 +1589,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Warehouse': 'GMU Hub Central Warehouse',
           'Order ID': order.id,
           'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-          'Intake Time': order.warehouseReceivedDate || 'N/A',
-          'Stored Time': order.storedDate || 'N/A',
+          'Pickup (Intake Date & Time)': formatIndianDateTime(order.gmuHubIntakeAt || order.warehouseReceivedDate || order.warehouseReceivedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
+          'Drop (Stored Date & Time)': formatIndianDateTime(order.gmuHubStoredAt || order.storedDate || order.storedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
           'Status': (isHubCompleted || order.mainStatus === 'STORED' || order.storedAt) ? 'STORED IN GMU HUB' : 'PENDING HUB INTAKE',
-          'Full Scan History': getLogsForStage(['WAREHOUSE', 'STORED'])
+          'History': getLogsForStage(['WAREHOUSE', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU'])
         }
       },
       {
@@ -1344,8 +1603,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Address': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? (foundDropTransporter?.address || order.dropTransporterDetails?.address || 'N/A') : 'N/A',
           'Vehicle': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? (foundDropTransporter?.vehicle || foundDropTransporter?.vehicleNumber || order.dropTransporterDetails?.vehicle || 'N/A') : 'N/A',
           'Order ID': order.id,
+          'Accepted (Date & Time)': formatIndianDateTime(order.dropTransporterAcceptedAt || (dropTransporterState === 'completed' || dropTransporterState === 'active' ? (order.dispatchedAt || order.storedAt || order.updatedAt) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.dropTransporterPickedAt || (dropTransporterState === 'completed' ? (order.dispatchedAt || order.updatedAt) : null)),
           'Status': getExactDropTransporterStatus(),
-          'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
+          'History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER', 'DISPATCHED'])
         }
       },
       {
@@ -1355,8 +1616,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Mobile': foundDropShg?.mobile || foundDropShg?.phone || order.dropShgDetails?.mobile || 'N/A',
           'Address': foundDropShg?.address || order.dropShgDetails?.address || 'N/A',
           'Order ID': order.id,
+          'Accepted (Date & Time)': formatIndianDateTime(order.dropShgAcceptedAt || (dropShgState === 'completed' || dropShgState === 'active' ? (order.dispatchedAt || order.updatedAt) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.dropShgPickedAt || (dropShgState === 'completed' ? order.updatedAt : null)),
           'Status': getExactDropShgStatus(),
-          'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
+          'History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'SHG_DROP_PICKUP'])
         }
       },
       {
@@ -1366,9 +1629,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
           'Address': order.buyerAddress || order.buyer?.address || 'N/A',
           'Order ID': order.id,
-          'Delivery Completed Date': order.deliveredAt || 'N/A',
+          'Receive (Date & Time)': formatIndianDateTime(order.buyerDeliveredAt || order.deliveredAt || (isBuyerCompleted ? order.updatedAt : null)),
           'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
-          'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
+          'History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER', 'FINAL_DELIVERY'])
         }
       }
     ];
@@ -2034,7 +2297,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 return (
                                   <div
                                     key={idx}
-                                    onClick={() => isClickable && handleNodeClick(node.label, node.details)}
+                                    onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
                                     className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
                                   >
                                     {/* Current Location floating badge above active node */}
@@ -2616,7 +2879,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 {Object.entries(activeNodeDetails).map(([key, val]) => (
                   <div key={key} className="space-y-1">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{key}</span>
-                    <span className="text-sm font-semibold text-slate-800 block leading-relaxed break-words">{val?.toString() || '-'}</span>
+                    {key === 'History' ? (
+                      (() => {
+                        const personTimeline = getPersonHistoryTimeline(activeNodeTitle, selectedOrderDetails);
+                        if (!personTimeline || personTimeline.length === 0) {
+                          return (
+                            <div className="p-4 bg-[#073318]/[0.02] border border-dashed border-slate-200 rounded-2xl text-center">
+                              <p className="text-xs font-semibold text-slate-400 italic">No scan events logged yet for this stage.</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="bg-[#073318] rounded-2xl p-4 text-white space-y-4 shadow-sm border border-[#073318]">
+                            <div className="flex items-center gap-1.5 border-b border-white/10 pb-2">
+                              <Layers className="h-3.5 w-3.5 text-[#B2D534]" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-[#B2D534]">Partner Audit Log</span>
+                            </div>
+                            <div className="relative border-l-2 border-[#B2D534]/30 pl-4 space-y-3 ml-2 text-left">
+                              {personTimeline.map((t: any, idx: number) => {
+                                const timeObj = splitIndianDateTime(t.timestamp || t.updatedAt || t.scanTime || t.createdAt);
+                                return (
+                                  <div key={idx} className="relative group">
+                                    <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[10px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                      <span className="text-[9px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                    </div>
+                                    <p className="text-xs font-black text-white mt-0.5 leading-snug">
+                                      {t.status ? String(t.status).replace(/[-_]/g, ' ') : (t.action || 'Status Update')}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-800 block leading-relaxed break-words">{val?.toString() || '-'}</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -3185,38 +3487,50 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                   <div className="bg-[#073318] rounded-3xl p-6 text-white flex flex-col justify-between space-y-6 shadow-lg min-h-[300px]">
                     <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-white">
-                        <Layers className="h-4 w-4 text-[#B2D534]" />
-                        <span className="font-extrabold text-sm uppercase tracking-wider">Tracking Audit History</span>
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <div className="flex items-center gap-2 text-white">
+                          <Layers className="h-4 w-4 text-[#B2D534]" />
+                          <span className="font-extrabold text-sm uppercase tracking-wider">Tracking Audit History</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-white/10 text-[#B2D534] border border-white/10">
+                          Live Indian Time (IST)
+                        </span>
                       </div>
 
-                      <div className="relative border-l border-white/20 pl-4 space-y-4 ml-2.5 py-1 text-left">
+                      <div className="relative border-l-2 border-[#B2D534]/30 pl-5 space-y-5 ml-2.5 py-1 text-left max-h-[380px] overflow-y-auto pr-2">
                         {selectedOrderDetails.tracking && selectedOrderDetails.tracking.length > 0 ? (
                           selectedOrderDetails.tracking.map((t: any, idx: number) => {
-                            const timeStr = t.updatedAt
-                              ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: true
-                              })
-                              : '08:30 AM';
+                            const timeObj = splitIndianDateTime(t.timestamp || t.updatedAt || t.scanTime || t.createdAt);
                             return (
-                              <div key={idx} className="relative">
-                                <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                                <p className="text-xs font-black text-[#B2D534]">{timeStr}</p>
-                                <p className="text-xs font-semibold text-slate-200 mt-0.5">
-                                  {t.remarks || t.status.replace(/[-_]/g, ' ')}
+                              <div key={idx} className="relative group">
+                                <span className="absolute -left-[27px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318] shadow-sm" />
+                                
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[11px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                  <span className="text-[10px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                </div>
+
+                                <p className="text-xs font-black text-white mt-1">
+                                  {t.status ? String(t.status).replace(/[-_]/g, ' ') : (t.action || 'Status Update')}
                                 </p>
                               </div>
                             );
                           })
                         ) : (
                           <div className="relative">
-                            <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                            <p className="text-xs font-black text-[#B2D534]">
-                              {selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ').pop() : '08:30 AM'}
-                            </p>
-                            <p className="text-xs font-semibold text-slate-200 mt-0.5">Order Created</p>
+                            <span className="absolute -left-[27px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
+                            {(() => {
+                              const timeObj = splitIndianDateTime(selectedOrderDetails.orderDate || selectedOrderDetails.created_at || selectedOrderDetails.createdAt);
+                              return (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                    <span className="text-[10px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                  </div>
+                                  <p className="text-xs font-black text-white mt-1">Order Placed & Registered</p>
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>

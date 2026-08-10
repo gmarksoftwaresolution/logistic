@@ -63,14 +63,15 @@ export class RegistrationService {
     const payload = {
       sub: user.id,
       phoneNumber: user.phoneNumber,
+      mobile: user.phoneNumber,
       role: user.role,
       status: user.applicationStatus,
       // Only include uniqueCode if it exists (i.e., after full registration)
       ...(user.uniqueCode ? { transporterUniqueId: user.uniqueCode } : {})
     };
 
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '3650d' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '30d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '90d' });
 
     // In a real app we might store refresh token somewhere or in a dedicated field
     // For now we omit storing it since refreshToken field is not in new User schema
@@ -280,28 +281,37 @@ export class RegistrationService {
       },
     });
 
-    await this.prisma.address.upsert({
+    const existingAddress = await this.prisma.address.findFirst({
       where: { userId: user.id },
-      update: {
-        houseNo: dto.residentialAddress,
-        state: dto.state,
-        district: dto.district,
-        taluka: dto.taluka,
-        village: dto.village,
-        pincode: dto.pinCode,
-        postOffice: dto.postOffice || null,
-      },
-      create: {
-        userId: user.id,
-        houseNo: dto.residentialAddress,
-        state: dto.state,
-        district: dto.district,
-        taluka: dto.taluka,
-        village: dto.village,
-        pincode: dto.pinCode,
-        postOffice: dto.postOffice || null,
-      },
     });
+
+    if (existingAddress) {
+      await this.prisma.address.update({
+        where: { id: existingAddress.id },
+        data: {
+          houseNo: dto.residentialAddress,
+          state: dto.state,
+          district: dto.district,
+          taluka: dto.taluka,
+          village: dto.village,
+          pincode: dto.pinCode,
+          postOffice: dto.postOffice || null,
+        },
+      });
+    } else {
+      await this.prisma.address.create({
+        data: {
+          userId: user.id,
+          houseNo: dto.residentialAddress,
+          state: dto.state,
+          district: dto.district,
+          taluka: dto.taluka,
+          village: dto.village,
+          pincode: dto.pinCode,
+          postOffice: dto.postOffice || null,
+        },
+      });
+    }
 
     await this.trackStep(user.id, 1, dto);
 

@@ -32,10 +32,17 @@ export interface HistoryGroup {
 }
 
 export interface HistoryResponse {
-  success: boolean;
-  stats: HistoryStats;
-  groupedOrders: HistoryGroup[];
-  meta: {
+  success?: boolean;
+  stats?: HistoryStats;
+  groupedOrders?: HistoryGroup[];
+  items?: HistoryItem[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  meta?: {
     total: number;
     page: number;
     limit: number;

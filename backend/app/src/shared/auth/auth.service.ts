@@ -80,7 +80,20 @@ export class AuthService {
       },
     });
 
+    if (user && dto.appType) {
+      if (dto.appType === 'SHG' && user.role === 'TRANSPORTER') {
+        throw new BadRequestException('This mobile number is registered as a Transporter. Please log in using the Transporter App.');
+      }
+      if (dto.appType === 'TRANSPORTER' && (user.role === 'SHG' || user.role === 'INDIVIDUAL')) {
+        throw new BadRequestException('This mobile number is registered as an SHG / Community Member. Please log in using the SHG App.');
+      }
+    }
+
     if (!user) {
+      if (dto.appType === 'TRANSPORTER') {
+        throw new BadRequestException('This mobile number is not registered as a Transporter. Please sign up first.');
+      }
+      // GMU Admin or default fallback
       user = await this.prisma.user.create({
         data: {
           authId: randomUUID(),
@@ -120,6 +133,9 @@ export class AuthService {
     });
 
     if (!userAny) {
+      if (dto.appType === 'TRANSPORTER') {
+        throw new BadRequestException('This account is not registered. Please register as a Transporter first.');
+      }
       userAny = await this.prisma.user.create({
         data: {
           authId: randomUUID(),
@@ -138,6 +154,14 @@ export class AuthService {
           },
         }
       });
+    }
+
+    // Role Enforcement:
+    if (dto.appType === 'SHG' && userAny.role === 'TRANSPORTER') {
+      throw new BadRequestException('This account is registered as a Transporter. Please log in using the Transporter App.');
+    }
+    if (dto.appType === 'TRANSPORTER' && (userAny.role === 'SHG' || userAny.role === 'INDIVIDUAL')) {
+      throw new BadRequestException('This account is registered as an SHG / Community Member. Please log in using the SHG App.');
     }
 
     const tokens = await this.getTokens(userAny.id, userAny.phoneNumber);
@@ -192,16 +216,16 @@ export class AuthService {
   }
 
   async getTokens(userId: number, mobile: string) {
-    const payload = { sub: userId, mobile };
+    const payload = { sub: userId, mobile, phoneNumber: mobile };
     
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_SECRET || 'logistic-platform-jwt-secret-key-2026',
-        expiresIn: '1d',
+        expiresIn: '30d',
       }),
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_REFRESH_SECRET || 'logistic-platform-jwt-refresh-secret-2026',
-        expiresIn: '7d',
+        expiresIn: '90d',
       }),
     ]);
 

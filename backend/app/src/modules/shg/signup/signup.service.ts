@@ -313,34 +313,43 @@ export class SignupService {
       }
     }
 
-    await this.prisma.address.upsert({
+    const existingAddress = await this.prisma.address.findFirst({
       where: { userId },
-      create: {
-        userId,
-        houseNo: dto.houseNo,
-        village: dto.village,
-        taluka: dto.taluka,
-        district: dto.district,
-        state: dto.state,
-        pincode: dto.pincode,
-        postOffice: dto.postOffice || null,
-        landmark: dto.landmark || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-      },
-      update: {
-        houseNo: dto.houseNo,
-        village: dto.village,
-        taluka: dto.taluka,
-        district: dto.district,
-        state: dto.state,
-        pincode: dto.pincode,
-        postOffice: dto.postOffice || null,
-        landmark: dto.landmark || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-      },
     });
+
+    if (existingAddress) {
+      await this.prisma.address.update({
+        where: { id: existingAddress.id },
+        data: {
+          houseNo: dto.houseNo,
+          village: dto.village,
+          taluka: dto.taluka,
+          district: dto.district,
+          state: dto.state,
+          pincode: dto.pincode,
+          postOffice: dto.postOffice || null,
+          landmark: dto.landmark || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
+        },
+      });
+    } else {
+      await this.prisma.address.create({
+        data: {
+          userId,
+          houseNo: dto.houseNo,
+          village: dto.village,
+          taluka: dto.taluka,
+          district: dto.district,
+          state: dto.state,
+          pincode: dto.pincode,
+          postOffice: dto.postOffice || null,
+          landmark: dto.landmark || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
+        },
+      });
+    }
 
     await this.prisma.user.update({
       where: { id: userId },

@@ -224,13 +224,24 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     setActionLoading(true);
     const displayId = orderId.replace(/^pickup-/, '').replace(/^drop-/, '');
 
-    // Optimistically update order status and clear local item cache immediately (< 1ms)
-    if (markOrderAsPickedUp) {
-      markOrderAsPickedUp(orderId);
-    }
-    setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
-
     try {
+      // Ensure any pending background parcel syncs finish before calling server confirm
+      let retries = 0;
+      while (retries < 15) {
+        const isSyncing = localScannedItems.some(
+          item => (item.orderId === orderId || item.orderId?.includes(orderId)) && item.pendingSync === 'syncing'
+        );
+        if (!isSyncing) break;
+        await new Promise(res => setTimeout(res, 200));
+        retries++;
+      }
+
+      // Optimistically update order status and clear local item cache
+      if (markOrderAsPickedUp) {
+        markOrderAsPickedUp(orderId);
+      }
+      setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
+
       await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
       Alert.alert('Success', `Order #${displayId} confirmed successfully! Moved to Delivery section.`);
       refreshOrdersList().catch(() => {});
@@ -561,19 +572,28 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                   </View>
 
                   {/* Inline Confirmation button */}
-                  {isCompleted && (
-                    <TouchableOpacity
-                      style={[styles.inlineConfirmBtn, actionLoading && styles.disabledBtn]}
-                      onPress={() => executeConfirmOrder(orderGroup.orderId)}
-                      disabled={actionLoading}
-                    >
-                      {actionLoading ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.inlineConfirmBtnText}>Confirm Pickup</Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  {isCompleted && (() => {
+                    const isSyncing = orderGroup.scanned.some((item: any) => item.pendingSync === 'syncing');
+                    const isDisabled = actionLoading || isSyncing;
+                    return (
+                      <TouchableOpacity
+                        style={[styles.inlineConfirmBtn, isDisabled && styles.disabledBtn]}
+                        onPress={() => executeConfirmOrder(orderGroup.orderId)}
+                        disabled={isDisabled}
+                      >
+                        {isDisabled ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <Text style={styles.inlineConfirmBtnText}>
+                              {isSyncing ? 'Syncing Parcels...' : 'Confirming...'}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.inlineConfirmBtnText}>Confirm Pickup</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               );
             })}

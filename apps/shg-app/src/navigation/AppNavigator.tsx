@@ -21,6 +21,7 @@ import MainTabNavigator from './MainTabNavigator';
 import StockManagementScreen from '../screens/StockManagementScreen';
 import ApplicationStatusScreen from '../screens/ApplicationStatusScreen';
 import OrderHistoryDetailsScreen from '../screens/OrderHistoryDetailsScreen';
+import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 import { PickupScannerScreen } from '../screens/PickupScannerScreen';
 
 import { RootStackParamList } from './types';
@@ -54,6 +55,7 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Terms" component={TermsScreen} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} />
       <Stack.Screen name="Stock" component={StockManagementScreen} />
+      <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />

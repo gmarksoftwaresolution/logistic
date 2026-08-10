@@ -56,7 +56,15 @@ export class TransporterManagementService {
         COALESCE(v."insuranceUrl", st5.data->>'insuranceUpload', st5.data->>'insurancePhoto', st7.data->>'insuranceUpload', st7.data->>'insurancePhoto') as "vehicleInsurancePhoto",
         COALESCE(mv."sangathanName", st5.data->>'sangathanName') as "milkOrganizationName",
         COALESCE(mv."centerName", st5.data->>'centerName') as "milkCenterName",
-        COALESCE(mv."assignedVillages", st6.data->'assignedVillages') as "assignedVillages",
+        COALESCE(
+          mv."assignedVillages", 
+          st6.data->'assignedVillages',
+          CASE 
+            WHEN rd."operatingArea" IS NOT NULL AND rd."operatingArea" != '' THEN to_jsonb(string_to_array(rd."operatingArea", ','))
+            WHEN st6.data->>'operatingArea' IS NOT NULL THEN to_jsonb(string_to_array(st6.data->>'operatingArea', ','))
+            ELSE NULL 
+          END
+        ) as "assignedVillages",
         COALESCE(rd."pickupLocations", st6.data->'pickupLocations') as "assignedPincodes",
         null as "tmAssignedVillages",
         null as "tmAssignedPincodes",
@@ -124,37 +132,28 @@ export class TransporterManagementService {
     const rawVillages = item.tmAssignedVillages || item.assignedVillages;
     const rawPincodes = item.tmAssignedPincodes || item.assignedPincodes;
 
-    let villages = parseJsonArray(rawVillages);
-    let pincodes = parseJsonArray(rawPincodes);
-
-    let pickupLocs: string[] = [];
-    if (item.pickupLocations) {
-      if (typeof item.pickupLocations === 'string') {
-        pickupLocs = item.pickupLocations.split(',').map((v: string) => v.trim());
-      } else if (Array.isArray(item.pickupLocations)) {
-        pickupLocs = item.pickupLocations.map((v: any) => String(v).trim());
-      }
+    let villages: string[] = [];
+    if (item.operatingArea && typeof item.operatingArea === 'string' && item.operatingArea.trim() !== '') {
+      villages = item.operatingArea.split(',').map((v: string) => v.trim()).filter(Boolean);
+    } else if (rawVillages) {
+      villages = parseJsonArray(rawVillages).map((v: string) => v.trim()).filter(Boolean);
+    } else if (item.village) {
+      villages = [item.village];
+    } else {
+      villages = ['Nesari'];
     }
 
-    if (villages.length === 0) {
-      if (pickupLocs.length > 0) {
-        villages = pickupLocs;
-      } else if (item.operatingArea) {
-        villages = item.operatingArea.split(',').map((v: string) => v.trim());
-      } else if (item.village) {
-        villages = [item.village];
-      } else {
-        villages = ['Nesari'];
-      }
+    // If villages accidentally contain only 6-digit numeric pincodes, fallback to operatingArea
+    if (villages.length > 0 && villages.every(v => /^\d{6}$/.test(v)) && item.operatingArea) {
+      villages = item.operatingArea.split(',').map((v: string) => v.trim()).filter(Boolean);
     }
 
+    let pincodes: string[] = [];
+    if (rawPincodes) {
+      pincodes = parseJsonArray(rawPincodes).map(p => String(p).trim()).filter(Boolean);
+    }
     if (pincodes.length === 0) {
-      if (pickupLocs.length > 0) {
-        pincodes = pickupLocs.map((v: string) => {
-          const match = v.match(/\d{6}/);
-          return match ? match[0] : (item.pincode || '416504');
-        });
-      } else if (item.pincode) {
+      if (item.pincode) {
         pincodes = [item.pincode];
       } else {
         pincodes = ['416504'];

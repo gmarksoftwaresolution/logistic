@@ -211,14 +211,36 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     }
   };
 
+  // Universal Indian Standard Time (IST) Formatter
+  const formatIndianDateTime = (isoDateString?: string | Date | null) => {
+    if (!isoDateString) return '-';
+    const d = new Date(isoDateString);
+    if (isNaN(d.getTime())) return String(isoDateString);
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
   const getTimelineNodes = (order: any) => {
     const getLogsForStage = (stageKeywords: string[]) => {
       if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
       const matching = order.tracking.filter((t: any) => 
-        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw))
+        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw) || t.action?.toUpperCase().includes(kw))
       );
       if (matching.length === 0) return 'No scan events logged yet for this stage.';
-      return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
+      return matching.map((t: any) => {
+        const timeStr = formatIndianDateTime(t.scanTime || t.updatedAt || t.createdAt || t.time);
+        const actionStr = t.remarks || t.action || t.status || 'Verified';
+        const roleStr = t.userRole ? ` (${t.userRole})` : '';
+        return `• [${timeStr}] ${actionStr}${roleStr}`;
+      }).join('\n');
     };
 
     const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
@@ -266,8 +288,9 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             'Mobile Number': order.buyerMobile || 'N/A',
             'Address': order.buyerAddress || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.createdAt),
             'Status': 'RETURN_INITIATED',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING'])
           }
         },
         {
@@ -280,8 +303,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
             'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || order.pickupShgDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || order.pickupShgDetails?.pickedAt),
             'Status': order.shgStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
           } : null
         },
         {
@@ -294,8 +319,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
             'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
             'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || order.pickupTransporterDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || order.pickupTransporterDetails?.pickedAt),
             'Status': order.transporterStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
+            'History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
           } : null
         },
         {
@@ -305,9 +332,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
           details: {
             'Warehouse': 'GMU Hub Central Warehouse',
             'Order ID': order.id,
-            'Stored Time': order.storedDate || 'N/A',
+            'Pickup (Intake Date & Time)': formatIndianDateTime(order.warehouseReceivedAt || order.warehouseReceivedDate),
+            'Drop (Stored Date & Time)': formatIndianDateTime(order.storedAt || order.storedDate),
             'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
-            'Full Scan History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+            'History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
           }
         }
       ];
@@ -355,7 +383,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
     // GMU Hub: completed if dispatched from hub or later status
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED'].includes(order.mainStatus);
+    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus);
     if (isHubCompleted) {
       gmuHubState = 'completed';
     } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'STORED', 'DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
@@ -364,7 +392,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
     // Drop Transporter: completed if parcel is at drop SHG/delivered
     let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DROPPED' || order.dropTransporterStatus === 'COMPLETED';
+    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DROPPED' || order.dropTransporterStatus === 'COMPLETED';
     if (isDropTransCompleted) {
       dropTransporterState = 'completed';
     } else if (['DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'DISPATCHED'].includes(order.mainStatus) || order.phase === 'DROP') {
@@ -373,10 +401,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
 
     // Drop SHG: completed if delivered/completed
     let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropShgCompleted = ['COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DROPPED' || order.dropShgStatus === 'COMPLETED';
+    const isDropShgCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus) || order.dropShgStatus === 'DROPPED' || order.dropShgStatus === 'COMPLETED';
     if (isDropShgCompleted) {
       dropShgState = 'completed';
-    } else if (order.mainStatus === 'PARCEL_AT_DROP_SHG' || (order.phase === 'DROP' && order.dropShgStatus === 'PICKED')) {
+    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus) || (order.phase === 'DROP' && (order.dropShgStatus === 'PICKED' || order.dropShgStatus === 'PICKED_UP'))) {
       dropShgState = 'active';
     }
 
@@ -385,7 +413,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     const isBuyerCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus);
     if (isBuyerCompleted) {
       buyerState = 'completed';
-    } else if (order.mainStatus === 'PARCEL_AT_DROP_SHG') {
+    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus)) {
       buyerState = 'active';
     }
 
@@ -397,10 +425,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Address': order.sellerAddress || order.seller?.address || 'N/A',
         'Order ID': order.id,
         'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Order Placed Date': order.orderDate || 'N/A',
+        'Accepted (Date & Time)': formatIndianDateTime(order.orderDate || order.createdAt),
         'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
         'Status': 'PLACED',
-        'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
+        'History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
       } },
       { id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: (order.pickupShgDetails) ? {
         'Person Name': order.pickupShgDetails.name || 'N/A',
@@ -408,8 +436,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Mobile': order.pickupShgDetails.mobile || 'N/A',
         'Address': order.pickupShgDetails.address || 'N/A',
         'Order ID': order.id,
+        'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || (pickupShgState === 'completed' || pickupShgState === 'active' ? (order.createdAt || order.orderDate) : null)),
+        'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || (pickupShgState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
         'Status': order.pickupShgStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
+        'History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
       } : null },
       { id: 'pickup_transporter', label: 'Pickup Transporter', state: pickupTransporterState, details: (order.pickupTransporterDetails) ? {
         'Person Name': order.pickupTransporterDetails.name || 'N/A',
@@ -418,17 +448,19 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Address': order.pickupTransporterDetails.address || 'N/A',
         'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
         'Order ID': order.id,
+        'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || (pickupTransporterState === 'completed' || pickupTransporterState === 'active' ? (order.createdAt || order.orderDate) : null)),
+        'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || (pickupTransporterState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
         'Status': order.pickupTransporterStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
+        'History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
       } : null },
       { id: 'gmu_hub', label: 'GMU Hub', state: gmuHubState, details: {
         'Warehouse': 'GMU Hub Central Warehouse',
         'Order ID': order.id,
         'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-        'Intake Time': order.warehouseReceivedDate || 'N/A',
-        'Stored Time': order.storedDate || 'N/A',
+        'Pickup (Intake Date & Time)': formatIndianDateTime(order.gmuHubIntakeAt || order.warehouseReceivedDate || order.warehouseReceivedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
+        'Drop (Stored Date & Time)': formatIndianDateTime(order.gmuHubStoredAt || order.storedDate || order.storedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
         'Status': isHubCompleted ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
-        'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
+        'History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
       } },
       { id: 'drop_transporter', label: 'Drop Transporter', state: dropTransporterState, details: (order.dropTransporterDetails) ? {
         'Person Name': order.dropTransporterDetails.name || 'N/A',
@@ -437,8 +469,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Address': order.dropTransporterDetails.address || 'N/A',
         'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
         'Order ID': order.id,
+        'Accepted (Date & Time)': formatIndianDateTime(order.dropTransporterAcceptedAt || (dropTransporterState === 'completed' || dropTransporterState === 'active' ? (order.dispatchedAt || order.storedAt || order.updatedAt) : null)),
+        'Pickup (Date & Time)': formatIndianDateTime(order.dropTransporterPickedAt || (dropTransporterState === 'completed' ? (order.dispatchedAt || order.updatedAt) : null)),
         'Status': order.dropTransporterStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
+        'History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER', 'DISPATCHED'])
       } : null },
       { id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: (order.dropShgDetails) ? {
         'Person Name': order.dropShgDetails.name || 'N/A',
@@ -446,8 +480,10 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Mobile': order.dropShgDetails.mobile || 'N/A',
         'Address': order.dropShgDetails.address || 'N/A',
         'Order ID': order.id,
+        'Accepted (Date & Time)': formatIndianDateTime(order.dropShgAcceptedAt || (dropShgState === 'completed' || dropShgState === 'active' ? (order.dispatchedAt || order.updatedAt) : null)),
+        'Pickup (Date & Time)': formatIndianDateTime(order.dropShgPickedAt || (dropShgState === 'completed' ? order.updatedAt : null)),
         'Status': order.dropShgStatus || 'PENDING',
-        'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
+        'History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'SHG_DROP_PICKUP'])
       } : null },
       { id: 'buyer', label: 'Buyer', state: buyerState, details: {
         'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
@@ -455,9 +491,9 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
         'Address': order.buyerAddress || order.buyer?.address || 'N/A',
         'Order ID': order.id,
-        'Delivery Completed Date': order.deliveredAt || 'N/A',
+        'Receive (Date & Time)': formatIndianDateTime(order.buyerDeliveredAt || order.deliveredAt || (isBuyerCompleted ? order.updatedAt : null)),
         'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
-        'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
+        'History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER', 'FINAL_DELIVERY'])
       } }
     ];
 

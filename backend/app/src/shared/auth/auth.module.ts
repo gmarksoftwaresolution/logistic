@@ -11,7 +11,7 @@ import { JwtStrategy } from './guards/jwt.strategy';
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET || 'logistic-platform-jwt-secret-key-2026',
-        signOptions: { expiresIn: '1d' },
+        signOptions: { expiresIn: '30d' },
       }),
     }),
   ],
