@@ -100,6 +100,7 @@ interface OrderManagementContextType {
   acceptedOrdersCount: number;
   rejectedOrdersCount: number;
   completedOrdersCount: number;
+  vehicleDetails?: any;
 
   acceptBatch: (batchId: string, skipToast?: boolean) => Promise<void>;
   rejectBatch: (batchId: string, reason: string) => Promise<void>;
@@ -150,6 +151,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const [activitiesState, setActivities] = useState<ActivityEntry[]>([]);
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, { pickupPhoto?: string; pickupPhotoTime?: number; dropPhoto?: string; dropPhotoTime?: number }>>({});
   const [completedDropPickups, setCompletedDropPickups] = useState<string[]>([]);
+  const [vehicleDetails, setVehicleDetails] = useState<any>(null);
 
   // Always-fresh ref so async functions avoid stale closures on batches and photos
   const batchesRef = useRef<BatchOrder[]>(batches);
@@ -157,6 +159,33 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   useEffect(() => { batchesRef.current = batches; }, [batches]);
   useEffect(() => { capturedPhotosRef.current = capturedPhotos; }, [capturedPhotos]);
+
+  // Fetch logged in transporter vehicle details
+  const fetchVehicleDetails = async () => {
+    try {
+      const cached = await AsyncStorage.getItem('cached-profile-data');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.vehicleDetails || parsed.otherDetails?.[0]) {
+          setVehicleDetails(parsed.vehicleDetails || parsed.otherDetails?.[0]);
+        }
+      }
+      const response = await api.get('/registration/me');
+      if (response.data) {
+        const vDetails = response.data.vehicleDetails || response.data.otherDetails?.[0];
+        if (vDetails) {
+          setVehicleDetails(vDetails);
+          await AsyncStorage.setItem('cached-profile-data', JSON.stringify(response.data));
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching vehicle details in context:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchVehicleDetails();
+  }, []);
 
   // Notification State
   const [toastVisible, setToastVisible] = useState(false);
@@ -192,6 +221,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   const refreshBatchesList = async () => {
     try {
+      fetchVehicleDetails();
       // Check if user is logged in
       const token = await AsyncStorage.getItem('access_token');
       if (!token) {
@@ -1113,7 +1143,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   return (
     <OrderManagementContext.Provider value={{
-      batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount,
+      batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount, vehicleDetails,
       acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
       finalizePickup, finalizeDrop, generateDropHandoverCode,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],

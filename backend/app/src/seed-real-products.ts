@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 const prisma = new PrismaClient();
 
 async function seedRealProducts() {
@@ -11,7 +12,7 @@ async function seedRealProducts() {
   if (!defaultUserId) {
     const newUser = await prisma.user.create({
       data: {
-        authId: 'auth-seller-' + Date.now(),
+        authId: randomUUID(),
         phoneNumber: '9999999999',
         role: 'SELLER'
       }

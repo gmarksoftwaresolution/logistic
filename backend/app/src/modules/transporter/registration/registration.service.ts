@@ -32,20 +32,29 @@ export class RegistrationService {
   ) { }
 
   private async trackStep(userId: number, step: number, data: any) {
-    await this.prisma.stepTracking.upsert({
-      where: { userId_step: { userId, step } },
-      create: {
-        userId,
-        step,
-        status: 'COMPLETED',
-        data: data || {},
-      },
-      update: {
-        status: 'COMPLETED',
-        data: data || {},
-        updatedAt: new Date(),
-      },
+    const existing = await this.prisma.stepTracking.findFirst({
+      where: { userId, step },
     });
+
+    if (existing) {
+      await this.prisma.stepTracking.update({
+        where: { id: existing.id },
+        data: {
+          status: 'COMPLETED',
+          data: data || {},
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await this.prisma.stepTracking.create({
+        data: {
+          userId,
+          step,
+          status: 'COMPLETED',
+          data: data || {},
+        },
+      });
+    }
   }
 
   private async generateTransporterUniqueId(): Promise<string> {
@@ -184,9 +193,34 @@ export class RegistrationService {
     };
   }
 
-  async getRegistrationStatus(phoneNumber: string): Promise<any> {
-    const user = await this.prisma.user.findUnique({
-      where: { phoneNumber },
+  private buildUserWhereClause(userIdentifier: string | number) {
+    const strVal = String(userIdentifier).trim();
+    const isIntId = typeof userIdentifier === 'number' || (!isNaN(Number(strVal)) && strVal.length < 9);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strVal);
+
+    if (isIntId) {
+      return { id: Number(strVal) };
+    }
+    if (isUuid) {
+      return { authId: strVal };
+    }
+    const cleaned = strVal.replace(/\D/g, '').slice(-10);
+    return {
+      OR: [
+        { phoneNumber: cleaned },
+        { phoneNumber: `+91${cleaned}` },
+        { phoneNumber: strVal },
+      ],
+    };
+  }
+
+  async getRegistrationStatus(userIdentifier: string | number): Promise<any> {
+    if (!userIdentifier) {
+      throw new NotFoundException('Transporter identifier not provided');
+    }
+
+    const user: any = await this.prisma.user.findFirst({
+      where: this.buildUserWhereClause(userIdentifier),
       include: {
         address: true,
         drivingDetail: true,
@@ -207,14 +241,18 @@ export class RegistrationService {
     const [firstName, ...lastNameParts] = (user.fullName || '').split(' ');
 
     let vehicleCategory = null;
-    if (user.transporterDetail?.vehicleCategory) {
-      vehicleCategory = user.transporterDetail.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
-    } else {
-      const st4 = user.stepTracking?.find((st) => st.step === 4);
-      if (st4 && st4.data) {
-        const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
-        vehicleCategory = st4Data.vehicleCategory === 'MILK_VAN' ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+    try {
+      if (user.transporterDetail?.vehicleCategory) {
+        vehicleCategory = user.transporterDetail.vehicleCategory === VehicleType.MILK_VAN ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+      } else {
+        const st4 = user.stepTracking?.find((st: any) => st.step === 4);
+        if (st4 && st4.data) {
+          const st4Data = typeof st4.data === 'string' ? JSON.parse(st4.data) : st4.data;
+          vehicleCategory = st4Data?.vehicleCategory === 'MILK_VAN' ? VehicleCategory.MILK_VAN : VehicleCategory.PERSONAL;
+        }
       }
+    } catch (e) {
+      // Safe fallback on invalid JSON format
     }
 
     // Map back to frontend expected structure
@@ -234,7 +272,18 @@ export class RegistrationService {
         residentialAddress: user.address.houseNo,
         pinCode: user.address.pincode,
         profilePhoto: user.profilePhoto,
-      } : null,
+      } : {
+        firstName: firstName || '',
+        lastName: lastNameParts.join(' ') || '',
+        email: user.email,
+        state: '',
+        district: '',
+        taluka: '',
+        village: '',
+        residentialAddress: '',
+        pinCode: '',
+        profilePhoto: user.profilePhoto,
+      },
       drivingDetails: user.drivingDetail ? {
         ...user.drivingDetail,
         licensePhoto: user.drivingDetail.drivingLicenseUrl || null,
@@ -280,28 +329,37 @@ export class RegistrationService {
       },
     });
 
-    await this.prisma.address.upsert({
+    const existingAddr = await this.prisma.address.findFirst({
       where: { userId: user.id },
-      update: {
-        houseNo: dto.residentialAddress,
-        state: dto.state,
-        district: dto.district,
-        taluka: dto.taluka,
-        village: dto.village,
-        pincode: dto.pinCode,
-        postOffice: dto.postOffice || null,
-      },
-      create: {
-        userId: user.id,
-        houseNo: dto.residentialAddress,
-        state: dto.state,
-        district: dto.district,
-        taluka: dto.taluka,
-        village: dto.village,
-        pincode: dto.pinCode,
-        postOffice: dto.postOffice || null,
-      },
     });
+
+    if (existingAddr) {
+      await this.prisma.address.update({
+        where: { id: existingAddr.id },
+        data: {
+          houseNo: dto.residentialAddress,
+          state: dto.state,
+          district: dto.district,
+          taluka: dto.taluka,
+          village: dto.village,
+          pincode: dto.pinCode,
+          postOffice: dto.postOffice || null,
+        },
+      });
+    } else {
+      await this.prisma.address.create({
+        data: {
+          userId: user.id,
+          houseNo: dto.residentialAddress,
+          state: dto.state,
+          district: dto.district,
+          taluka: dto.taluka,
+          village: dto.village,
+          pincode: dto.pinCode,
+          postOffice: dto.postOffice || null,
+        },
+      });
+    }
 
     await this.trackStep(user.id, 1, dto);
 
@@ -523,12 +581,16 @@ export class RegistrationService {
   }
 
   private async validateStep(
-    phoneNumber: string,
+    userIdentifier: string | number,
     step: number,
     category?: VehicleCategory,
   ) {
-    const user = await this.prisma.user.findUnique({
-      where: { phoneNumber },
+    if (!userIdentifier) {
+      throw new NotFoundException('Transporter identifier not provided.');
+    }
+
+    const user: any = await this.prisma.user.findFirst({
+      where: this.buildUserWhereClause(userIdentifier),
     });
 
     if (!user) {
@@ -618,65 +680,83 @@ export class RegistrationService {
       // 3. Driving Detail (Step 2)
       const s2 = stepData[2];
       if (s2) {
-        await tx.drivingDetail.upsert({
-          where: { userId: id },
-          update: {
-            licenseNumber: s2.licenseNumber,
-            expiryDate: new Date(s2.expiryDate),
-            drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-            drivingLicenseUrl: s2.licensePhoto || null,
-          },
-          create: {
-            userId: id,
-            licenseNumber: s2.licenseNumber,
-            expiryDate: new Date(s2.expiryDate),
-            drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-            drivingLicenseUrl: s2.licensePhoto || null,
-          },
-        });
+        const existingDriving = await tx.drivingDetail.findFirst({ where: { userId: id } });
+        if (existingDriving) {
+          await tx.drivingDetail.update({
+            where: { id: existingDriving.id },
+            data: {
+              licenseNumber: s2.licenseNumber,
+              expiryDate: new Date(s2.expiryDate),
+              drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+              drivingLicenseUrl: s2.licensePhoto || null,
+            },
+          });
+        } else {
+          await tx.drivingDetail.create({
+            data: {
+              userId: id,
+              licenseNumber: s2.licenseNumber,
+              expiryDate: new Date(s2.expiryDate),
+              drivingExperience: s2.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+              drivingLicenseUrl: s2.licensePhoto || null,
+            },
+          });
+        }
       }
 
       // 4. Transporter Detail (Step 4 & Step 2 driving experience)
       const s4 = stepData[4];
       const vehicleCategory = (s4 && s4.vehicleCategory === 'MILK_VAN') ? 'MILK_VAN' : 'OTHER';
 
-      await tx.transporterDetail.upsert({
-        where: { userId: id },
-        update: {
-          transporterCode: transporterUniqueId,
-          vehicleCategory: vehicleCategory as any,
-          experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-        },
-        create: {
-          userId: id,
-          transporterCode: transporterUniqueId,
-          vehicleCategory: vehicleCategory as any,
-          experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
-        },
-      });
+      const existingTransporter = await tx.transporterDetail.findFirst({ where: { userId: id } });
+      if (existingTransporter) {
+        await tx.transporterDetail.update({
+          where: { id: existingTransporter.id },
+          data: {
+            transporterCode: transporterUniqueId,
+            vehicleCategory: vehicleCategory as any,
+            experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+          },
+        });
+      } else {
+        await tx.transporterDetail.create({
+          data: {
+            userId: id,
+            transporterCode: transporterUniqueId,
+            vehicleCategory: vehicleCategory as any,
+            experienceYears: s2?.experienceYears ? parseInt(String(s2.experienceYears), 10) : null,
+          },
+        });
+      }
 
       // 5. Milk Van Detail (Step 5 Milk Van & Step 6 Milk Van)
       const s5mv = stepData[5];
       const s6mv = stepData[6];
       if (vehicleCategory === 'MILK_VAN' && (s5mv || s6mv)) {
-        await tx.milkVanDetail.upsert({
-          where: { userId: id },
-          update: {
-            sangathanName: s5mv?.sangathanName || '',
-            centerName: s5mv?.centerName || '',
-            assignedVillages: s6mv?.assignedVillages || null,
-            morningShiftTime: s6mv?.morningShiftTime || null,
-            eveningShiftTime: s6mv?.eveningShiftTime || null,
-          },
-          create: {
-            userId: id,
-            sangathanName: s5mv?.sangathanName || '',
-            centerName: s5mv?.centerName || '',
-            assignedVillages: s6mv?.assignedVillages || null,
-            morningShiftTime: s6mv?.morningShiftTime || null,
-            eveningShiftTime: s6mv?.eveningShiftTime || null,
-          },
-        });
+        const existingMilkVan = await tx.milkVanDetail.findFirst({ where: { userId: id } });
+        if (existingMilkVan) {
+          await tx.milkVanDetail.update({
+            where: { id: existingMilkVan.id },
+            data: {
+              sangathanName: s5mv?.sangathanName || '',
+              centerName: s5mv?.centerName || '',
+              assignedVillages: s6mv?.assignedVillages || null,
+              morningShiftTime: s6mv?.morningShiftTime || null,
+              eveningShiftTime: s6mv?.eveningShiftTime || null,
+            },
+          });
+        } else {
+          await tx.milkVanDetail.create({
+            data: {
+              userId: id,
+              sangathanName: s5mv?.sangathanName || '',
+              centerName: s5mv?.centerName || '',
+              assignedVillages: s6mv?.assignedVillages || null,
+              morningShiftTime: s6mv?.morningShiftTime || null,
+              eveningShiftTime: s6mv?.eveningShiftTime || null,
+            },
+          });
+        }
       }
 
       // Helper to resolve pincodes for a list of villages (optimized batch query)
@@ -699,51 +779,65 @@ export class RegistrationService {
 
       // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
       const s6p = stepData[6];
+      const existingRoute = await tx.routeDetail.findFirst({ where: { userId: id } });
+
       if (vehicleCategory === 'MILK_VAN' && s6mv) {
         const operatingAreaVal = Array.isArray(s6mv.assignedVillages)
           ? s6mv.assignedVillages.join(', ')
           : 'Milk Van Route';
         const villages = Array.isArray(s6mv.assignedVillages) ? s6mv.assignedVillages : [];
         const resolvedPincodes = await resolvePincodesForVillages(villages);
-        await tx.routeDetail.upsert({
-          where: { userId: id },
-          update: {
-            operatingArea: operatingAreaVal,
-            pickupLocations: resolvedPincodes,
-            dropLocations: resolvedPincodes,
-            workingDays: s6mv.workingDays || null,
-            workingSchedule: s6mv.workingSchedule || null,
-          },
-          create: {
-            userId: id,
-            operatingArea: operatingAreaVal,
-            pickupLocations: resolvedPincodes,
-            dropLocations: resolvedPincodes,
-            workingDays: s6mv.workingDays || null,
-            workingSchedule: s6mv.workingSchedule || null,
-          },
-        });
+
+        if (existingRoute) {
+          await tx.routeDetail.update({
+            where: { id: existingRoute.id },
+            data: {
+              operatingArea: operatingAreaVal,
+              pickupLocations: resolvedPincodes,
+              dropLocations: resolvedPincodes,
+              workingDays: s6mv.workingDays || null,
+              workingSchedule: s6mv.workingSchedule || null,
+            },
+          });
+        } else {
+          await tx.routeDetail.create({
+            data: {
+              userId: id,
+              operatingArea: operatingAreaVal,
+              pickupLocations: resolvedPincodes,
+              dropLocations: resolvedPincodes,
+              workingDays: s6mv.workingDays || null,
+              workingSchedule: s6mv.workingSchedule || null,
+            },
+          });
+        }
       } else if (vehicleCategory !== 'MILK_VAN' && s6p) {
         const villages = s6p.operatingArea ? s6p.operatingArea.split(',').map((s: string) => s.trim()) : [];
         const resolvedPincodes = await resolvePincodesForVillages(villages);
-        await tx.routeDetail.upsert({
-          where: { userId: id },
-          update: {
-            operatingArea: s6p.operatingArea || '',
-            pickupLocations: resolvedPincodes,
-            dropLocations: resolvedPincodes,
-            workingDays: s6p.workingDays || null,
-            workingSchedule: s6p.workingSchedule || null,
-          },
-          create: {
-            userId: id,
-            operatingArea: s6p.operatingArea || '',
-            pickupLocations: resolvedPincodes,
-            dropLocations: resolvedPincodes,
-            workingDays: s6p.workingDays || null,
-            workingSchedule: s6p.workingSchedule || null,
-          },
-        });
+
+        if (existingRoute) {
+          await tx.routeDetail.update({
+            where: { id: existingRoute.id },
+            data: {
+              operatingArea: s6p.operatingArea || '',
+              pickupLocations: resolvedPincodes,
+              dropLocations: resolvedPincodes,
+              workingDays: s6p.workingDays || null,
+              workingSchedule: s6p.workingSchedule || null,
+            },
+          });
+        } else {
+          await tx.routeDetail.create({
+            data: {
+              userId: id,
+              operatingArea: s6p.operatingArea || '',
+              pickupLocations: resolvedPincodes,
+              dropLocations: resolvedPincodes,
+              workingDays: s6p.workingDays || null,
+              workingSchedule: s6p.workingSchedule || null,
+            },
+          });
+        }
       }
 
       // 7. Other Details / Vehicle details (Step 5 Personal or Step 7 Milk Van)

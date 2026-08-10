@@ -153,9 +153,62 @@ export class OrderService {
     });
   }
 
+  private async checkToleranceCapacity(transporterId: number, incomingOrderWeight: number) {
+    const transporterUuid = String(transporterId);
+
+    const vehicleDetail = await this.prisma.otherDetails.findFirst({
+      where: { userId: transporterId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!vehicleDetail || !vehicleDetail.maxWeight) {
+      return;
+    }
+
+    const baseMaxW = Number(vehicleDetail.maxWeight);
+    if (isNaN(baseMaxW) || baseMaxW <= 0) return;
+
+    let bufferPercent = 0.03;
+    if (baseMaxW <= 50) bufferPercent = 0.05;
+    else if (baseMaxW > 500) bufferPercent = 0.03;
+
+    const effectiveMaxW = Math.round(baseMaxW * (1 + bufferPercent));
+
+    const acceptedOrders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { pickupTransporterId: transporterUuid, pickupTransporterStatus: { in: ['TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'] } },
+          { dropTransporterId: transporterUuid, dropTransporterStatus: { in: ['DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP'] } },
+        ],
+      },
+      include: {
+        parcels: true,
+      },
+    });
+
+    let currentLoadWeight = 0;
+    for (const o of acceptedOrders) {
+      if (o.totalWeight && !isNaN(Number(o.totalWeight))) {
+        currentLoadWeight += Number(o.totalWeight);
+      } else if (o.parcels && o.parcels.length > 0) {
+        currentLoadWeight += o.parcels.reduce((s: number, p: any) => s + (Number(p.weight) || 1), 0);
+      }
+    }
+
+    const projectedWeight = currentLoadWeight + incomingOrderWeight;
+    if (projectedWeight > effectiveMaxW) {
+      throw new BadRequestException(
+        `Cannot accept order. Total load weight (${projectedWeight.toFixed(1)} kg) exceeds your vehicle capacity with tolerance limit (${effectiveMaxW} kg).`
+      );
+    }
+  }
+
   async acceptPickup(pickupOrderId: any, transporterId: number) {
     const order = await this.findOrderFlexible(pickupOrderId);
     const transporterUuid = String(transporterId);
+
+    const orderWeight = order.totalWeight ? Number(order.totalWeight) : 5;
+    await this.checkToleranceCapacity(transporterId, orderWeight);
 
     await this.prisma.orderAssignment.updateMany({
       where: {
@@ -215,6 +268,9 @@ export class OrderService {
   async acceptDrop(dropOrderId: any, transporterId: number) {
     const order = await this.findOrderFlexible(dropOrderId);
     const transporterUuid = String(transporterId);
+
+    const orderWeight = order.totalWeight ? Number(order.totalWeight) : 5;
+    await this.checkToleranceCapacity(transporterId, orderWeight);
 
     await this.prisma.orderAssignment.updateMany({
       where: {

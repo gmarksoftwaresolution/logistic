@@ -17,13 +17,54 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info } from 'lucide-react-native';
+import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info, Truck, Scale, AlertCircle, Gauge } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useTranslation } from 'react-i18next';
 
 const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList } = useOrderManagement();
+  const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList, vehicleDetails, showToast } = useOrderManagement();
+
+  // Helper to parse numerical weight from weight string e.g. "5 kg" or 5
+  const parseWeightKg = (weightStr?: string | number): number => {
+    if (!weightStr) return 0;
+    if (typeof weightStr === 'number') return weightStr;
+    const match = String(weightStr).match(/([\d.]+)/);
+    return match ? parseFloat(match[1]) : 0;
+  };
+
+  // Transporter registered vehicle capacity details & tier-based tolerance buffer calculation
+  const maxCapacity = vehicleDetails?.maxWeight ? Number(vehicleDetails.maxWeight) : (vehicleDetails?.maxCapacity ? Number(vehicleDetails.maxCapacity) : 1000);
+  const minCapacity = vehicleDetails?.minWeight ? Number(vehicleDetails.minWeight) : (vehicleDetails?.minCapacity ? Number(vehicleDetails.minCapacity) : 0);
+  const vehicleTitle = vehicleDetails?.vehicleName || vehicleDetails?.make || vehicleDetails?.vehicleType || 'Vehicle';
+  const vehicleWheeler = vehicleDetails?.wheeler || '';
+
+  // Tier-based effective max weight tolerance calculation
+  const getEffectiveMaxWeight = (baseW: number): number => {
+    let bufferPercent = 0.03;
+    if (baseW <= 50) bufferPercent = 0.05;
+    else if (baseW > 500) bufferPercent = 0.03;
+    return Math.round(baseW * (1 + bufferPercent));
+  };
+  const effectiveMaxCapacity = getEffectiveMaxWeight(maxCapacity);
+  const toleranceBufferKg = effectiveMaxCapacity - maxCapacity;
+
+  // Calculate currently accepted orders total weight
+  const acceptedBatches = batches.filter(b => b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED');
+  const currentAcceptedWeight = acceptedBatches.reduce((sum, b) => sum + parseWeightKg(b.totalWeight), 0);
+
+  // Live remaining capacity & usage percentage
+  const remainingCapacity = Math.max(0, maxCapacity - currentAcceptedWeight);
+  const remainingToleranceCapacity = Math.max(0, effectiveMaxCapacity - currentAcceptedWeight);
+  const usagePercent = Math.min(100, Math.max(0, Math.round((currentAcceptedWeight / (effectiveMaxCapacity || 1)) * 100)));
+
+  // Gauge bar color
+  const getCapacityStatusColor = (percent: number) => {
+    if (percent >= 90) return '#EF4444';
+    if (percent >= 75) return '#F59E0B';
+    return '#10B981';
+  };
+  const statusColor = getCapacityStatusColor(usagePercent);
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
   const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
   const [activeSubStep, setActiveSubStep] = useState<'none' | 'shg_gmu_not_available' | 'unsufficient_details'>('none');
@@ -63,6 +104,14 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   }, [route.params?.triggerRejectBatchId]);
 
   const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
+    const targetBatch = batches.find(b => b.id === batchId);
+    const orderWeight = targetBatch ? parseWeightKg(targetBatch.totalWeight) : 0;
+
+    if (currentAcceptedWeight + orderWeight > effectiveMaxCapacity) {
+      showToast(`Cannot accept: Total weight (${(currentAcceptedWeight + orderWeight).toFixed(1)} kg) exceeds vehicle tolerance limit (${effectiveMaxCapacity} kg).`, 'error');
+      return;
+    }
+
     try {
       await acceptBatch(batchId);
       navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
@@ -72,6 +121,14 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   };
 
   const handleAcceptBulk = async (ids: string[], areaName: string) => {
+    const areaBatches = batches.filter(b => ids.includes(b.id));
+    const totalAreaWeight = areaBatches.reduce((sum, b) => sum + parseWeightKg(b.totalWeight), 0);
+
+    if (currentAcceptedWeight + totalAreaWeight > effectiveMaxCapacity) {
+      showToast(`Cannot accept bulk orders: Exceeds vehicle tolerance limit (${effectiveMaxCapacity} kg).`, 'error');
+      return;
+    }
+
     setAcceptingArea(areaName);
     try {
       await acceptBatchIds(ids);
@@ -189,7 +246,59 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         showHelp={true}
       />
 
-      <View style={{ height: verticalScale(14) }} />
+      <View style={{ height: verticalScale(10) }} />
+
+      {/* 🚛 Fixed / Frozen Vehicle Capacity Summary Card */}
+      <View style={styles.fixedCapacityWrapper}>
+        <View style={styles.capacityCard}>
+          <View style={styles.capacityCardHeader}>
+            <View style={styles.capacityHeaderLeft}>
+              <View style={styles.truckIconBadge}>
+                <Truck size={scale(18)} color="#059669" strokeWidth={2.2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.capacityVehicleTitle} numberOfLines={1}>
+                  {vehicleTitle} {vehicleWheeler ? `• ${vehicleWheeler}` : ''}
+                </Text>
+                <Text style={styles.capacityVehicleSubtitle}>
+                  {minCapacity > 0 ? `${t('orders.vehicle_capacity', { defaultValue: 'Cap.' })}: ${minCapacity} - ${maxCapacity} kg` : `${t('orders.vehicle_capacity', { defaultValue: 'Max Cap.' })}: ${maxCapacity} kg`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.capacityPercentageBadge, { backgroundColor: `${statusColor}18` }]}>
+              <Gauge size={scale(13)} color={statusColor} style={{ marginRight: scale(4) }} />
+              <Text style={[styles.capacityPercentageText, { color: statusColor }]}>{usagePercent}%</Text>
+            </View>
+          </View>
+
+          {/* Metrics Grid: Total | Accepted | Remaining */}
+          <View style={styles.capacityMetricsGrid}>
+            <View style={styles.metricColumn}>
+              <Text style={styles.metricLabel}>{t('orders.vehicle_capacity', { defaultValue: 'Max Cap.' })}</Text>
+              <Text style={styles.metricValue}>{maxCapacity} kg</Text>
+            </View>
+
+            <View style={styles.metricDivider} />
+
+            <View style={styles.metricColumn}>
+              <Text style={styles.metricLabel}>{t('orders.accepted_load', { defaultValue: 'Accepted' })}</Text>
+              <Text style={[styles.metricValue, { color: currentAcceptedWeight > 0 ? '#2563EB' : Colors.textPrimary }]}>
+                {currentAcceptedWeight.toFixed(1)} kg
+              </Text>
+            </View>
+
+            <View style={styles.metricDivider} />
+
+            <View style={styles.metricColumn}>
+              <Text style={styles.metricLabel}>{t('orders.remaining_capacity', { defaultValue: 'Remaining' })}</Text>
+              <Text style={[styles.metricValue, { color: remainingCapacity <= 0 ? '#EF4444' : '#059669' }]}>
+                {remainingCapacity.toFixed(1)} kg
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.container}
@@ -260,6 +369,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                           {pickupEntries.map((entry, index) => {
                             const { batch, type } = entry;
                             const routeText = getRouteDisplayText(batch, type, areaName);
+                            const itemWeight = parseWeightKg(batch.totalWeight);
+                            const isExceedingTolerance = (currentAcceptedWeight + itemWeight) > effectiveMaxCapacity;
+
                             return (
                               <View key={`${batch.id}-pickup-${index}`} style={styles.notificationWidgetCard}>
                                 <TouchableOpacity
@@ -273,7 +385,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                                   </View>
                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                                     <Text style={styles.widgetTotalsText}>{batch.pickupCount} {t('orders.items')} • {batch.totalWeight}</Text>
                                     <View style={[styles.legTagBox, { backgroundColor: '#EFF6FF' }]}>
                                       <Text style={[styles.legTagText, { color: '#2563EB' }]}>{t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}</Text>
@@ -284,8 +396,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
-                                        style={styles.modernAcceptBtn} 
+                                        style={[styles.modernAcceptBtn, isExceedingTolerance && { opacity: 0.5, backgroundColor: '#64748B' }]} 
                                         onPress={async () => {
+                                          if (isExceedingTolerance) {
+                                            showToast(`Cannot accept: Weight (${(currentAcceptedWeight + itemWeight).toFixed(1)} kg) exceeds vehicle tolerance limit (${effectiveMaxCapacity} kg).`, 'error');
+                                            return;
+                                          }
                                           try {
                                             await acceptBatch(batch.id);
                                             navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
@@ -298,7 +414,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
+                                    <TouchableOpacity 
+                                      style={[styles.modernAcceptBtn, isExceedingTolerance && { opacity: 0.5, backgroundColor: '#64748B' }]} 
+                                      onPress={() => handleAcceptSingle(batch.id, 'pickup')}
+                                    >
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
@@ -320,6 +439,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                           {dropEntries.map((entry, index) => {
                             const { batch, type } = entry;
                             const routeText = getRouteDisplayText(batch, type, areaName);
+                            const itemWeight = parseWeightKg(batch.totalWeight);
+                            const isExceedingTolerance = (currentAcceptedWeight + itemWeight) > effectiveMaxCapacity;
+
                             return (
                               <View key={`${batch.id}-drop-${index}`} style={styles.notificationWidgetCard}>
                                 <TouchableOpacity
@@ -333,7 +455,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                       <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                                     </View>
                                    <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
-                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                                      <Text style={styles.widgetTotalsText}>{batch.dropCount} {t('orders.items')} • {batch.totalWeight}</Text>
                                      <View style={[styles.legTagBox, { backgroundColor: '#ECFDF5' }]}>
                                        <Text style={[styles.legTagText, { color: '#059669' }]}>{t('orders.drop_orders', { defaultValue: 'Drop Order' })}</Text>
@@ -344,8 +466,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                   {batch.id === displayEntries[0]?.batch.id && type === displayEntries[0]?.type ? (
                                     <WalkthroughElement stepId="accept_task">
                                       <TouchableOpacity 
-                                        style={styles.modernAcceptBtn} 
+                                        style={[styles.modernAcceptBtn, isExceedingTolerance && { opacity: 0.5, backgroundColor: '#64748B' }]} 
                                         onPress={async () => {
+                                          if (isExceedingTolerance) {
+                                            showToast(`Cannot accept: Weight (${(currentAcceptedWeight + itemWeight).toFixed(1)} kg) exceeds vehicle tolerance limit (${effectiveMaxCapacity} kg).`, 'error');
+                                            return;
+                                          }
                                           try {
                                             await acceptBatch(batch.id);
                                             navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: 'pickup' });
@@ -358,7 +484,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                       </TouchableOpacity>
                                     </WalkthroughElement>
                                   ) : (
-                                    <TouchableOpacity style={styles.modernAcceptBtn} onPress={() => handleAcceptSingle(batch.id, 'pickup')}>
+                                    <TouchableOpacity 
+                                      style={[styles.modernAcceptBtn, isExceedingTolerance && { opacity: 0.5, backgroundColor: '#64748B' }]} 
+                                      onPress={() => handleAcceptSingle(batch.id, 'drop')}
+                                    >
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
@@ -1296,6 +1425,153 @@ const styles = StyleSheet.create({
   timePlaceholderText: {
     fontFamily: Fonts.medium,
     color: Colors.textPlaceholder,
+  },
+  // Vehicle Capacity Summary Card Styles
+  fixedCapacityWrapper: {
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(4),
+    paddingBottom: verticalScale(6),
+    backgroundColor: Colors.background,
+    zIndex: 10,
+  },
+  capacityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: moderateScale(16),
+    padding: scale(14),
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  capacityCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(10),
+  },
+  capacityHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    flex: 1,
+  },
+  truckIconBadge: {
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  capacityVehicleTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: Colors.textPrimary,
+  },
+  capacityVehicleSubtitle: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(11.5),
+    color: Colors.textSecondary,
+    marginTop: verticalScale(1),
+  },
+  capacityPercentageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(20),
+  },
+  capacityPercentageText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(11.5),
+  },
+  capacityMetricsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: moderateScale(12),
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(8),
+    marginBottom: 0,
+  },
+  metricColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(10.5),
+    color: Colors.textSecondary,
+    marginBottom: verticalScale(2),
+  },
+  metricValue: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13.5),
+    color: Colors.textPrimary,
+  },
+  metricDivider: {
+    width: 1,
+    height: verticalScale(24),
+    backgroundColor: '#E2E8F0',
+  },
+  progressBarWrapper: {
+    marginTop: verticalScale(2),
+  },
+  progressBarTrack: {
+    height: verticalScale(7),
+    backgroundColor: '#E2E8F0',
+    borderRadius: scale(4),
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: scale(4),
+  },
+  progressSummaryText: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(10.5),
+    color: Colors.textSecondary,
+  },
+  // Order Level Capacity Suggestion Pill
+  capacitySuggestionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(5),
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(6),
+    marginTop: verticalScale(6),
+    alignSelf: 'flex-start',
+  },
+  capacitySuggestionBoxSafe: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  capacitySuggestionBoxExceeded: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  capacitySuggestionText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(10.5),
+  },
+  capacitySuggestionTextSafe: {
+    color: '#047857',
+  },
+  capacitySuggestionTextExceeded: {
+    color: '#B91C1C',
   },
 });
 
