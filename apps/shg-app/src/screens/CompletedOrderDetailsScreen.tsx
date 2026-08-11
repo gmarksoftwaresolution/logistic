@@ -266,8 +266,6 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
               <Text className="text-[13.5px] font-bold text-[#111827] leading-relaxed">{fullAddressValue}</Text>
             </View>
           </View>
-            </View>
-          </View>
         ) : (
           /* Three Cards for Redirected Orders */
           <>
