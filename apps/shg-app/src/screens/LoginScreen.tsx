@@ -171,6 +171,13 @@ export default function LoginScreen({ navigation }: Props) {
       const response = await authService.verifyLoginOtp(mobile, otpString, languageMap[locale] || 'English');
       
       if (response.accessToken) {
+        if (response.userDetails?.role === 'TRANSPORTER') {
+          setOtpError('This account is registered as a Transporter. Please open the Transporter app to log in.');
+          Toast.show({ type: 'error', text1: 'Role Mismatch', text2: 'Please log in using the Transporter App' });
+          setLoading(false);
+          return;
+        }
+
         // Map backend fields to frontend UserProfile interface
         const mappedUser = {
           ...response.userDetails,

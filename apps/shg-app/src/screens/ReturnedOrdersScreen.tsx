@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useEffect } from 'react';
+import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -60,6 +60,15 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       setIsRefreshing(false);
     }
   };
+
+  // Auto-refresh instantly on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshOrdersList) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, [refreshOrdersList])
+  );
 
   const PAGE_SIZE = 5;
   const [pickupVisibleCount, setPickupVisibleCount] = useState(PAGE_SIZE);
@@ -251,7 +260,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'pickup'}-${index}`}
           ListEmptyComponent={
             pickupOrders.length === 0 ? (
               <View 
@@ -319,7 +328,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'delivery'}-${index}`}
           ListEmptyComponent={
             deliveryOrders.length === 0 ? (
               <View 

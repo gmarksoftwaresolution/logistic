@@ -39,6 +39,10 @@ import { ApplicationModule as TransporterApplicationModule } from './modules/tra
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
+      serveStaticOptions: {
+        index: false,
+        fallthrough: true,
+      },
     }),
     PrismaModule,
     LocationModule,

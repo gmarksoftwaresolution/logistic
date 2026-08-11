@@ -12,8 +12,8 @@ export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
   orderIds,
   navigation,
 }) => {
-  const { activePickupSession, activeDropSession } = useScanSession();
-  const activeSession = module === 'PICKUP' ? activePickupSession : activeDropSession;
+  const { activePickupSession } = useScanSession();
+  const activeSession = activePickupSession;
   const insets = useSafeAreaInsets();
 
   // Tab Bar height = verticalScale(76) + Math.max(insets.bottom, verticalScale(16)) + verticalScale(14)
@@ -53,26 +53,18 @@ export const FloatingScannerButton: React.FC<FloatingScannerButtonProps> = ({
       })
     ]).start(() => {
       if (activeSession) {
-        if (activeSession.sessionType === 'PICKUP') {
-          navigation.navigate('PickupScanner', { sessionId: activeSession.sessionId, orderIds });
-        } else {
-          navigation.navigate('DropScanner', { sessionId: activeSession.sessionId, orderIds });
-        }
+        navigation.navigate('PickupScanner', { sessionId: activeSession.sessionId, orderIds });
       } else {
         if (!orderIds || orderIds.length === 0) {
           Alert.alert('No Orders', `There are no active ${module.toLowerCase()} orders to scan.`);
           return;
         }
-        if (module === 'PICKUP') {
-          navigation.navigate('PickupScanner', { orderIds });
-        } else {
-          navigation.navigate('DropScanner', { orderIds });
-        }
+        navigation.navigate('PickupScanner', { orderIds });
       }
     });
   };
 
-  const hasActiveSession = activeSession && activeSession.sessionType === module;
+  const hasActiveSession = activeSession && activeSession.sessionType === 'PICKUP';
   const badgeText = hasActiveSession
     ? `${activeSession.totalScanned}/${activeSession.totalExpected}`
     : null;

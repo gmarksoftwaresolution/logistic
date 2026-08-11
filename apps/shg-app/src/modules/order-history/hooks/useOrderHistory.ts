@@ -40,16 +40,47 @@ export const useOrderHistory = () => {
         dateRange.toDate
       );
 
+      const rawItems = Array.isArray(response?.groupedOrders)
+        ? response.groupedOrders
+        : (Array.isArray(response?.items) ? response.items : []);
+
+      const rawStats = response?.stats || {
+        totalOrders: response?.pagination?.total || rawItems.length || 0,
+        completedOrders: rawItems.filter((i: any) => i.status === 'COMPLETED' || i.mainStatus === 'COMPLETED' || i.mainStatus === 'DELIVERED').length || 0,
+      };
+
+      // Construct grouped sections for SectionList
+      let formattedGroups: HistoryGroup[] = [];
+      if (Array.isArray(response?.groupedOrders)) {
+        formattedGroups = response.groupedOrders;
+      } else if (rawItems.length > 0) {
+        const groupMap: Record<string, any[]> = {};
+        rawItems.forEach((item: any) => {
+          const dateObj = new Date(item.createdAt || Date.now());
+          const groupTitle = !isNaN(dateObj.getTime())
+            ? dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            : 'Order History';
+          if (!groupMap[groupTitle]) {
+            groupMap[groupTitle] = [];
+          }
+          groupMap[groupTitle].push(item);
+        });
+
+        formattedGroups = Object.entries(groupMap).map(([title, data]) => ({
+          title,
+          data,
+        }));
+      }
+
       if (isRefresh || currentPage === 1) {
-        setGroupedOrders(response.groupedOrders);
+        setGroupedOrders(formattedGroups);
       } else {
-        // Merge the new groupedOrders with the existing ones intelligently
         setGroupedOrders(prev => {
-          const newGroups = [...prev];
-          response.groupedOrders.forEach(incomingGroup => {
+          const newGroups = Array.isArray(prev) ? [...prev] : [];
+          formattedGroups.forEach(incomingGroup => {
             const existingGroupIndex = newGroups.findIndex(g => g.title === incomingGroup.title);
             if (existingGroupIndex !== -1) {
-              newGroups[existingGroupIndex].data = [...newGroups[existingGroupIndex].data, ...incomingGroup.data];
+              newGroups[existingGroupIndex].data = [...(newGroups[existingGroupIndex].data || []), ...(incomingGroup.data || [])];
             } else {
               newGroups.push(incomingGroup);
             }
@@ -57,9 +88,10 @@ export const useOrderHistory = () => {
           return newGroups;
         });
       }
-      
-      setStats(response.stats);
-      setHasMore(currentPage < response.meta.totalPages);
+
+      setStats(rawStats);
+      const totalPages = response?.meta?.totalPages || response?.pagination?.totalPages || 1;
+      setHasMore(currentPage < totalPages);
       setPage(currentPage + 1);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch order history');

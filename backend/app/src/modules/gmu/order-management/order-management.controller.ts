@@ -55,6 +55,27 @@ export class OrderManagementController {
     return this.service.getDropCompletedOrders(filter);
   }
 
+  @Get('inventory')
+  @ApiOperation({ summary: 'Get SHG live inventory summary' })
+  async getShgInventorySummary(@Request() req: any) {
+    const shgId = req.user?.sub || req.user?.id;
+    return this.shgOrderService.getInventorySummary(shgId);
+  }
+
+  @Get('inventory/in-stock')
+  @ApiOperation({ summary: 'Get SHG in-stock inventory orders' })
+  async getShgInStockOrders(@Request() req: any) {
+    const shgId = req.user?.sub || req.user?.id;
+    return this.shgOrderService.getInStockOrders(shgId);
+  }
+
+  @Get('inventory/out-stock')
+  @ApiOperation({ summary: 'Get SHG out-stock inventory orders' })
+  async getShgOutStockOrders(@Request() req: any) {
+    const shgId = req.user?.sub || req.user?.id;
+    return this.shgOrderService.getOutStockOrders(shgId);
+  }
+
   @Get('rejected')
   @ApiOperation({ summary: 'Get rejected orders' })
   async getRejectedOrders(@Query() filter: OrderFilterDto) {

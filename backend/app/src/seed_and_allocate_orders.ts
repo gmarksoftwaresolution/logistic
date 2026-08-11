@@ -1,26 +1,25 @@
 import { PrismaClient } from '@prisma/client';
+
 const prisma = new PrismaClient();
 
-async function resetAndSeed20Orders() {
+async function seedAndAllocateOrders() {
   console.log('================================================================');
-  console.log('=== PURGING OLD ORDERS AND SEEDING EXACTLY 20 FRESH ORDERS ===');
+  console.log('=== ALLOCATING ORDERS TO APPROVED SHGs & TRANSPORTERS ===');
   console.log('================================================================\n');
 
-  // 1. Fetch Sellers, Buyers, and Products catalog from DB
+  // 1. Fetch Sellers, Buyers, Products
   const sellers = await prisma.seller.findMany();
   const buyers = await prisma.buyer.findMany();
   let products = await prisma.product.findMany();
-
-  console.log(`Found ${sellers.length} Sellers, ${buyers.length} Buyers, and ${products.length} Products in database.`);
 
   if (sellers.length === 0 || buyers.length === 0) {
     console.error('Error: Sellers or Buyers missing in database.');
     process.exit(1);
   }
 
-  // Ensure products catalog is available
+  // Ensure products catalog
   if (products.length < 4) {
-    console.log('Seeding baseline products into Product table...');
+    console.log('Seeding baseline products...');
     const users = await prisma.user.findMany();
     const defaultUserId = users[0]?.id || 1;
 
@@ -39,106 +38,107 @@ async function resetAndSeed20Orders() {
     products = await prisma.product.findMany();
   }
 
-  // 2. PURGE ALL OLD ORDERS AND DEPENDENCIES
-  console.log('Deleting old scan session items...');
+  // 2. Clean old orders
+  console.log('Purging old orders and parcels...');
   await prisma.scanSessionItem.deleteMany({}).catch(() => {});
-  console.log('Deleting old scan sessions...');
   await prisma.scanSession.deleteMany({}).catch(() => {});
-  console.log('Deleting old parcel scan histories...');
   await prisma.parcelScanHistory.deleteMany({}).catch(() => {});
-  console.log('Deleting old parcels...');
   await prisma.parcel.deleteMany({}).catch(() => {});
-  console.log('Deleting old order assignments...');
   await prisma.orderAssignment.deleteMany({}).catch(() => {});
-  console.log('Deleting old orders...');
   await prisma.order.deleteMany({}).catch(() => {});
 
-  console.log('✅ Database completely purged!\n');
-
-  // Fetch approved SHGs and Transporters
+  // 3. Fetch Approved SHGs and Transporters
   const approvedShgs = await prisma.user.findMany({
-    where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
+    where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null },
+    include: { address: true, shgDetail: true },
   });
-  const approvedTransporters = await prisma.user.findMany({
-    where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null }
-  });
-  const shgAddresses = await prisma.address.findMany({
-    where: { userId: { in: approvedShgs.map(s => s.id) } }
-  });
-  console.log(`Found ${approvedShgs.length} approved SHGs and ${approvedTransporters.length} approved Transporters in database.`);
 
-  // Clean shgServiceArea records so each SHG's service area strictly matches their primary village
+  const approvedTransporters = await prisma.user.findMany({
+    where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null },
+    include: { address: true, transporterDetail: true, routeDetail: true, milkVanDetail: true },
+  });
+
+  console.log(`Found ${approvedShgs.length} Approved SHGs:`);
+  approvedShgs.forEach(s => console.log(`  • [SHG] ${s.fullName} (${s.uniqueCode}) | Village: ${s.address?.village} (${s.address?.pincode})`));
+
+  console.log(`\nFound ${approvedTransporters.length} Approved Transporters:`);
+  approvedTransporters.forEach(t => {
+    const villages = t.milkVanDetail?.assignedVillages || (t.routeDetail?.operatingArea ? t.routeDetail.operatingArea.split(',').map((v: string) => v.trim()) : []);
+    console.log(`  • [Transporter] ${t.fullName} (${t.uniqueCode}) | Route Villages:`, villages);
+  });
+
+  // Sync SHG Service Areas
   for (const s of approvedShgs) {
-    const addr = shgAddresses.find(a => a.userId === s.id);
-    if (addr && addr.village) {
+    if (s.address?.village) {
       await prisma.shgServiceArea.deleteMany({
-        where: {
-          OR: [{ shgUserId: String(s.id) }, { shgUserId: s.authId || '' }]
-        }
+        where: { OR: [{ shgUserId: String(s.id) }, { shgUserId: s.authId || '' }] }
       }).catch(() => {});
       await prisma.shgServiceArea.create({
         data: {
           shgUserId: String(s.id),
-          village: addr.village,
-          pincode: addr.pincode || '416501'
+          village: s.address.village,
+          pincode: s.address.pincode || '416501'
         }
       }).catch(() => {});
     }
   }
-  const shgServiceAreas = await prisma.shgServiceArea.findMany({});
 
-  const findMatchingShgForSeller = (sellerVillage: string, sellerPincode: string) => {
-    const vNorm = (sellerVillage || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+  const normalizeStr = (str?: string | null) => (str || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
 
-    // 1. Direct address match by village name
-    const directShgUser = approvedShgs.find(shg => {
-      const addr = shgAddresses.find(a => a.userId === shg.id);
-      if (addr) {
-        const aV = (addr.village || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
-        if (aV && (aV === vNorm || aV.includes(vNorm) || vNorm.includes(aV))) return true;
-      }
-      return false;
-    });
-    if (directShgUser) return directShgUser;
-
-    // 2. Service area match
-    const saMatch = shgServiceAreas.find(sa => {
-      const sV = (sa.village || '').replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+  // Function to find matching SHG for a village
+  const findMatchingShg = (village: string, pincode: string) => {
+    const vNorm = normalizeStr(village);
+    const match = approvedShgs.find(s => {
+      const sV = normalizeStr(s.address?.village);
       return sV && (sV === vNorm || sV.includes(vNorm) || vNorm.includes(sV));
     });
-    if (saMatch) {
-      const shgUser = approvedShgs.find(s => String(s.id) === String(saMatch.shgUserId) || s.authId === saMatch.shgUserId);
-      if (shgUser) return shgUser;
-    }
-
-    // 3. Fallback deterministically by village string hash
-    const index = Math.abs(vNorm.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % approvedShgs.length;
-    return approvedShgs[index] || approvedShgs[0];
+    if (match) return match;
+    return approvedShgs[0];
   };
 
-  // 3. CREATE EXACTLY 20 NEW FRESH ORDERS (ORD-2026-101 to ORD-2026-120)
-  console.log('Creating 20 new fresh orders matching village + pincode for each SHG...');
+  // Function to find matching Transporter for a village route
+  const findMatchingTransporter = (village: string, orderIndex: number) => {
+    const vNorm = normalizeStr(village);
+    const matchingTransporters = approvedTransporters.filter(t => {
+      let routeVillages: string[] = [];
+      if (Array.isArray(t.milkVanDetail?.assignedVillages)) {
+        routeVillages = t.milkVanDetail.assignedVillages.map(String);
+      } else if (t.routeDetail?.operatingArea) {
+        routeVillages = t.routeDetail.operatingArea.split(',').map(s => s.trim());
+      }
+      return routeVillages.some(rv => {
+        const rvNorm = normalizeStr(rv);
+        return rvNorm && (rvNorm === vNorm || rvNorm.includes(vNorm) || vNorm.includes(rvNorm));
+      });
+    });
 
+    if (matchingTransporters.length > 0) {
+      return matchingTransporters[orderIndex % matchingTransporters.length];
+    }
+    return approvedTransporters.length > 0 ? approvedTransporters[orderIndex % approvedTransporters.length] : null;
+  };
+
+  // 4. Create 20 Fresh Orders
+  console.log('\nCreating and allocating 20 Orders...');
   for (let i = 1; i <= 20; i++) {
-    const cleanNum = 100 + i; // 101 to 120
+    const cleanNum = 100 + i;
     const orderIdVal = `ORD-2026-${cleanNum}`;
 
-    // Select Seller and Buyer deterministically
     const seller = sellers[(i - 1) % sellers.length];
     const buyer = buyers[(i - 1) % buyers.length];
 
-    // Select strictly matching SHG based on Seller Village + Pincode
-    const assignedShg = findMatchingShgForSeller(seller.village, seller.pincode);
-    const assignedTransporter = approvedTransporters.length > 0 ? approvedTransporters[(i - 1) % approvedTransporters.length] : null;
+    const pickupShg = findMatchingShg(seller.village, seller.pincode);
+    const dropShg = findMatchingShg(buyer.village, buyer.pincode);
 
-    // Select 2 distinct products from Product table
+    const pickupTransporter = findMatchingTransporter(seller.village, i - 1);
+    const dropTransporter = findMatchingTransporter(buyer.village, i - 1);
+
     const prod1 = products[(i - 1) % products.length];
     const prod2 = products[i % products.length];
     const selectedProds = [prod1, prod2];
 
     let totalWeight = 0;
     let totalQty = 0;
-
     selectedProds.forEach((p, idx) => {
       const qty = idx + 1;
       const w = Number(p.weight || 2.5);
@@ -146,42 +146,48 @@ async function resetAndSeed20Orders() {
       totalWeight += w * qty;
     });
 
-    // Create Order record with identical primary key (id) and business ID (orderId)
+    // Create Order in True Starting Live State (Only Pickup SHG allocated)
     const createdOrder = await prisma.order.create({
       data: {
         id: orderIdVal,
         orderId: orderIdVal,
         sellerId: seller.id,
         buyerId: buyer.id,
-        totalWeight: totalWeight,
-        totalQty: totalQty,
+        totalWeight,
+        totalQty,
         productCount: selectedProds.length,
         barcode: `QR-2026-${cleanNum}-PCL-1`,
         phase: 'PICKUP',
         mainStatus: 'PICKUP_ASSIGNED',
-        pickupShgId: assignedShg ? String(assignedShg.id) : null,
+        
+        pickupShgId: pickupShg ? String(pickupShg.id) : null,
         pickupShgStatus: 'ACCEPTED',
+
+        dropShgId: null,
+        dropShgStatus: 'PENDING',
+
         pickupTransporterId: null,
         pickupTransporterStatus: 'PENDING',
-        dropShgStatus: 'PENDING',
+
+        dropTransporterId: null,
         dropTransporterStatus: 'PENDING',
-      }
+      },
     });
 
-    // Create OrderAssignment ONLY for the strictly matching SHG
-    if (assignedShg) {
+    // Create SHG Pickup Assignment ONLY
+    if (pickupShg) {
       await prisma.orderAssignment.create({
         data: {
           orderId: createdOrder.id,
-          assigneeId: String(assignedShg.id),
+          assigneeId: String(pickupShg.id),
           assigneeType: 'SHG',
           role: 'PICKUP',
           status: 'ACCEPTED',
-        }
+        },
       });
     }
 
-    // Create 2 individual per-product Parcel records with full JSON QR codes
+    // Create Parcels with QR codes
     for (let pIdx = 0; pIdx < selectedProds.length; pIdx++) {
       const prod = selectedProds[pIdx];
       const parcelNum = pIdx + 1;
@@ -230,21 +236,21 @@ async function resetAndSeed20Orders() {
           parcelStatus: 'PENDING',
           currentHolderId: String(seller.id),
           currentHolderType: 'SELLER',
-        }
+        },
       });
     }
 
-    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporters Broadcasted: ${approvedTransporters.length} | Products: [${prod1.name}, ${prod2.name}]`);
+    console.log(`✅ Order ${orderIdVal} allocated:`);
+    console.log(`   - Seller: ${seller.sellerName} (${seller.village}) -> Pickup SHG: ${pickupShg.fullName}`);
+    console.log(`   - Buyer: ${buyer.buyerName} (${buyer.village}) -> Drop SHG: ${dropShg.fullName}`);
+    console.log(`   - Transporter: ${pickupTransporter?.fullName || 'None'} (Pickup & Drop Assigned)`);
   }
 
   console.log('\n================================================================');
-  console.log('🎉 SUCCESSFULLY RESET DATABASE WITH EXACTLY 20 FRESH ORDERS!');
+  console.log('🎉 20 ORDERS SUCCESSFULLY ALLOCATED TO SHGs & TRANSPORTERS!');
   console.log('================================================================\n');
-
-  await prisma.$disconnect();
 }
 
-resetAndSeed20Orders().catch(e => {
-  console.error('Error resetting orders:', e);
-  process.exit(1);
-});
+seedAndAllocateOrders()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());

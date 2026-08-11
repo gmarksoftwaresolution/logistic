@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,7 @@ import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -63,6 +63,15 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       setIsRefreshing(false);
     }
   };
+
+  // Auto-refresh instantly on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshOrdersList) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, [refreshOrdersList])
+  );
 
   if (!context || !user) return null;
   const { t } = context;
@@ -183,7 +192,7 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 24 }}
             data={filteredOrders.length === 0 ? [] : filteredOrders.slice(0, visibleCount)}
-            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+            keyExtractor={(item, index) => `${item.id}-${item.legType || 'comp'}-${index}`}
             ListEmptyComponent={
               filteredOrders.length === 0 ? (
                 <View className="pt-6">

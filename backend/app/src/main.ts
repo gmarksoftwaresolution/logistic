@@ -1,8 +1,10 @@
+// Unified Logistics Backend Main Entrypoint - Phase 2 Finalized
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
 const envPaths = [
+  path.join(process.cwd(), 'backend', 'app', '.env'),
   path.join(process.cwd(), '.env'),
   path.join(__dirname, '..', '.env'),
   path.join(__dirname, '..', '..', '.env'),
@@ -13,12 +15,13 @@ for (const p of envPaths) {
     try {
       const parsed = dotenv.parse(fs.readFileSync(p));
       for (const key in parsed) {
-        process.env[key] = parsed[key];
+        if (!process.env[key] || process.env[key] === '') {
+          process.env[key] = parsed[key];
+        }
       }
     } catch (err) {
       console.error(`Failed to parse .env at ${p}:`, err);
     }
-    break;
   }
 }
 
@@ -30,6 +33,11 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
   const app = await NestFactory.create(AppModule);
 
   app.enableCors();

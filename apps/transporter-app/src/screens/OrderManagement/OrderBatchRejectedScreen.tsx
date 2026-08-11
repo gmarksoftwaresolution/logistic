@@ -17,7 +17,16 @@ import { useTranslation } from 'react-i18next';
 
 const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
-  const { batches } = useOrderManagement();
+  const { batches, refreshBatchesList } = useOrderManagement();
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (refreshBatchesList) {
+        refreshBatchesList().catch(() => {});
+      }
+    });
+    return unsubscribe;
+  }, [navigation, refreshBatchesList]);
 
   // Track accordion expansion states per area.
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({

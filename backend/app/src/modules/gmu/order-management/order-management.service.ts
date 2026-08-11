@@ -14,18 +14,8 @@ export class OrderManagementService implements OnModuleInit {
   private isLoopRunning = false;
 
   onModuleInit() {
-    // Start background auto-broadcast polling loop
-    setInterval(async () => {
-      if (this.isLoopRunning) return;
-      this.isLoopRunning = true;
-      try {
-        await this.runAutoBroadcastLoop();
-      } catch (err: any) {
-        console.error('[AutoBroadcastLoop] Error running loop:', err.message);
-      } finally {
-        this.isLoopRunning = false;
-      }
-    }, 30000); // Check every 30 seconds
+    // Automatic broadcast loop disabled to prevent mass-assigning historical seed orders on startup.
+    // Live workflows broadcast on demand when orders change status.
   }
 
   async runAutoBroadcastLoop() {
@@ -55,17 +45,24 @@ export class OrderManagementService implements OnModuleInit {
     });
 
     for (const order of ordersPlaced) {
+      if (order.pickupShgId && order.pickupShgStatus === 'ACCEPTED' && order.assignments.length > 0) {
+        continue;
+      }
+      const sVillage = order.seller?.village || (order as any).sellerVillage || '';
+      const sPincode = order.seller?.pincode || (order as any).sellerPincode || '';
+      const sPostOffice = order.seller?.postOffice || (order as any).sellerPostOffice || '';
+
       const matchingShgs = await this.getMatchingShgs(
-        order.seller?.village || '',
-        order.seller?.pincode || '',
-        order.seller?.postOffice || ''
+        sVillage,
+        sPincode,
+        sPostOffice
       );
       const existingAssigneeIds = new Set(
         order.assignments.filter(a => a.assigneeType === 'SHG').map(a => String(a.assigneeId))
       );
       const isMissingPartner = matchingShgs.some(s => !existingAssigneeIds.has(String(s.id)));
 
-      if (order.assignments.length === 0 || isMissingPartner) {
+      if (order.assignments.length === 0 || isMissingPartner || !order.pickupShgId) {
         console.log(`[AutoBroadcastLoop] Automatically triggering SHG broadcast for order ${order.orderId} (${order.id})`);
         try {
           await this.broadcastShg(order.id);
@@ -719,7 +716,7 @@ export class OrderManagementService implements OnModuleInit {
       price: p.declaredValue || p.price || 450,
     }));
 
-    return {
+    const rawResult = {
       ...order,
       parcels,
       items: formattedItems,
@@ -734,7 +731,10 @@ export class OrderManagementService implements OnModuleInit {
       buyerPincode: order.buyer?.pincode || null,
       buyerVillage: order.buyer?.village || null,
       buyerPostOffice: order.buyer?.postOffice || null,
-    } as any;
+    };
+
+    const [enriched] = await this.enrichOrdersWithPickupAssignments([rawResult]);
+    return enriched as any;
   }
 
   async getPickupNewOrders(filter?: OrderFilterDto) {
@@ -753,11 +753,12 @@ export class OrderManagementService implements OnModuleInit {
       buyer: true,
       parcels: true,
     };
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async getPickupAssignedOrders(filter?: OrderFilterDto) {
@@ -781,19 +782,19 @@ export class OrderManagementService implements OnModuleInit {
       buyer: true,
       parcels: true,
     };
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async getPickupWarehouseOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       { phase: 'PICKUP', returnType: null },
       filter,
-      // Phase 5: hub received (AT_HUB new canonical + legacy HUB_RECEIVED, BARCODE_GENERATED, STORED, DROP_PENDING)
-      ['AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED']
+      ['STORED', 'DROP_PENDING', 'DROP_CREATED']
     );
     const defaultInclude = {
       assignments: true,
@@ -801,11 +802,12 @@ export class OrderManagementService implements OnModuleInit {
       buyer: true,
       parcels: true,
     };
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async getPickupRejectedOrders(filter?: OrderFilterDto) {
@@ -833,11 +835,12 @@ export class OrderManagementService implements OnModuleInit {
       buyer: true,
       parcels: true,
     };
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async getPickupRescheduledOrders(filter?: OrderFilterDto) {
@@ -856,44 +859,440 @@ export class OrderManagementService implements OnModuleInit {
       buyer: true,
       parcels: true,
     };
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async enrichOrdersWithPickupAssignments(orders: any[]) {
-    const dropOrders = orders.filter(o => o.phase === 'DROP');
-    if (dropOrders.length === 0) return orders;
+    if (!orders || orders.length === 0) return orders;
 
-    const orderIds = dropOrders.map(o => o.orderId);
-    const pickupOrders = await this.prisma.order.findMany({
-      where: {
-        orderId: { in: orderIds },
-        phase: 'PICKUP',
-      },
-      include: { assignments: true },
+    // Pre-fetch Phase 1 PICKUP orders for any Phase 2 DROP orders to merge full timeline
+    const dropOrderIds = orders
+      .map((o: any) => o.orderId || o.id)
+      .filter(Boolean);
+
+    const relatedPickupOrders = dropOrderIds.length > 0
+      ? await this.prisma.order.findMany({
+          where: {
+            OR: [
+              { orderId: { in: dropOrderIds }, phase: 'PICKUP' },
+              { id: { in: dropOrderIds }, phase: 'PICKUP' }
+            ]
+          },
+          include: {
+            assignments: true,
+            seller: true,
+            parcels: { include: { scanHistories: true } }
+          }
+        })
+      : [];
+
+    const pickupOrderMap = new Map(relatedPickupOrders.map(p => [p.orderId || p.id, p]));
+
+    // Collect all unique assignee / partner user IDs across all orders
+    const userIds = new Set<number>();
+
+    orders.forEach((o: any) => {
+      const pOrder = pickupOrderMap.get(o.orderId || o.id);
+      const allAssigns = [...(o.assignments || []), ...(pOrder?.assignments || [])];
+
+      const pShg = o.pickupShgId || pOrder?.pickupShgId || allAssigns.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
+      const dShg = o.dropShgId || pOrder?.dropShgId || allAssigns.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG')?.assigneeId;
+      const pTrans = o.pickupTransporterId || pOrder?.pickupTransporterId || allAssigns.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
+      const dTrans = o.dropTransporterId || pOrder?.dropTransporterId || allAssigns.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
+
+      [pShg, dShg, pTrans, dTrans].forEach(rawId => {
+        if (rawId) {
+          const id = parseInt(rawId, 10);
+          if (!isNaN(id)) userIds.add(id);
+        }
+      });
     });
 
-    const pickupMap = new Map(pickupOrders.map(p => [p.orderId, p.assignments]));
+    const userList = userIds.size > 0
+      ? await this.prisma.user.findMany({
+        where: { id: { in: Array.from(userIds) } },
+        include: { address: true, shgDetail: true, transporterDetail: true }
+      })
+      : [];
 
-    return orders.map(o => {
-      if (o.phase === 'DROP') {
-        const extra = pickupMap.get(o.orderId) || [];
-        return {
-          ...o,
-          assignments: [...(o.assignments || []), ...extra],
-        };
+    const userMap = new Map<string, any>(userList.map(u => [String(u.id), u]));
+
+    return orders.map((o: any) => {
+      const pOrder = pickupOrderMap.get(o.orderId || o.id);
+      const effectiveAssignments = [...(o.assignments || []), ...(pOrder?.assignments || [])];
+      const orderPlacedTime = pOrder?.createdAt || o.createdAt;
+
+      // Extract all scan histories across parcels (including Phase 1 parcels)
+      const allScans: any[] = [];
+      const combinedParcels = [
+        ...(Array.isArray(o.parcels) ? o.parcels : []),
+        ...(Array.isArray(pOrder?.parcels) ? pOrder.parcels : [])
+      ];
+
+      combinedParcels.forEach((p: any) => {
+        if (Array.isArray(p.scanHistories)) {
+          p.scanHistories.forEach((sh: any) => {
+            allScans.push({
+              status: sh.action,
+              action: sh.action,
+              userRole: sh.userRole,
+              userId: sh.userId,
+              currentHolder: sh.currentHolder,
+              currentStage: sh.currentStage,
+              scanResult: sh.scanResult,
+              remarks: sh.remarks,
+              latitude: sh.latitude,
+              longitude: sh.longitude,
+              scanTime: sh.scanTime,
+              updatedAt: sh.scanTime,
+              createdAt: sh.scanTime,
+              productName: sh.productName,
+              parcelId: sh.parcelId,
+            });
+          });
+        }
+      });
+
+      // Sort scans chronologically
+      allScans.sort((a, b) => new Date(a.scanTime).getTime() - new Date(b.scanTime).getTime());
+
+      // Helper to find specific scan time
+      const findScanTime = (actions: string[]) => {
+        const match = allScans.find(s => actions.some(act => s.action === act || s.status === act));
+        return match ? match.scanTime : null;
+      };
+
+      // Milestone timestamps
+      const pickupShgAssign = effectiveAssignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && (a.status === 'ACCEPTED' || a.status === 'COMPLETED'));
+      const pickupShgAcceptedAt = pickupShgAssign?.updatedAt || pickupShgAssign?.createdAt || o.pickupShgDetails?.acceptedAt || (pOrder as any)?.pickupShgDetails?.acceptedAt || (['PICKED', 'DROPPED', 'COMPLETED'].includes(o.pickupShgStatus || pOrder?.pickupShgStatus) ? orderPlacedTime : null);
+      const pickupShgPickedAt = findScanTime(['SHG_PICKUP', 'PARCEL_AT_SHG']) || (['PICKED', 'DROPPED', 'COMPLETED'].includes(o.pickupShgStatus || pOrder?.pickupShgStatus) ? (pickupShgAssign?.updatedAt || pOrder?.updatedAt || o.updatedAt) : null);
+
+      const pickupTransAssign = effectiveAssignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && (a.status === 'ACCEPTED' || a.status === 'COMPLETED'));
+      const pickupTransporterAcceptedAt = pickupTransAssign?.updatedAt || pickupTransAssign?.createdAt || o.pickupTransporterDetails?.acceptedAt || (pOrder as any)?.pickupTransporterDetails?.acceptedAt || null;
+      const pickupTransporterPickedAt = findScanTime(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB']) || (['PICKED', 'DROPPED', 'COMPLETED'].includes(o.pickupTransporterStatus || pOrder?.pickupTransporterStatus) ? (pickupTransAssign?.updatedAt || pOrder?.updatedAt || o.updatedAt) : null);
+
+      const gmuHubIntakeAt = o.warehouseReceivedAt || pOrder?.warehouseReceivedAt || findScanTime(['HUB_RECEIVE', 'WAREHOUSE_RECEIVED']) || (['STORED', 'DISPATCHED', 'COMPLETED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG'].includes(o.mainStatus) ? (o.storedAt || o.updatedAt) : null);
+      const gmuHubStoredAt = o.storedAt || pOrder?.storedAt || findScanTime(['STORE', 'STORED']) || (['STORED', 'DISPATCHED', 'COMPLETED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG'].includes(o.mainStatus) ? (o.storedAt || o.updatedAt) : null);
+
+      const dropTransAssign = effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && (a.status === 'ACCEPTED' || a.status === 'COMPLETED'));
+      const dropTransporterAcceptedAt = dropTransAssign?.updatedAt || dropTransAssign?.createdAt || o.dropTransporterDetails?.acceptedAt || null;
+      const dropTransporterPickedAt = findScanTime(['TRANSPORTER_DROP_PICKUP', 'DISPATCHED', 'IN_TRANSIT_TO_BUYER']) || o.dispatchedAt || (['PICKED', 'DROPPED', 'COMPLETED'].includes(o.dropTransporterStatus) ? (dropTransAssign?.updatedAt || o.updatedAt) : null);
+
+      const dropShgAssign = effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && (a.status === 'ACCEPTED' || a.status === 'COMPLETED'));
+      const dropShgAcceptedAt = dropShgAssign?.updatedAt || dropShgAssign?.createdAt || o.dropShgDetails?.acceptedAt || null;
+      const dropShgPickedAt = findScanTime(['SHG_DROP_PICKUP', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG']) || (['PICKED', 'PICKED_UP', 'DROPPED', 'COMPLETED'].includes(o.dropShgStatus) ? (dropShgAssign?.updatedAt || o.updatedAt) : null);
+
+      const buyerDeliveredAt = o.deliveredAt || findScanTime(['FINAL_DELIVERY', 'DELIVERED', 'COMPLETED']) || (o.mainStatus === 'COMPLETED' ? o.updatedAt : null);
+
+      // Find Pickup SHG user
+      const pShgId = o.pickupShgId || pOrder?.pickupShgId || effectiveAssignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
+      const pShgUser = pShgId ? userMap.get(String(pShgId)) : null;
+
+      // Find Pickup Transporter user
+      const pTransId = o.pickupTransporterId || pOrder?.pickupTransporterId || effectiveAssignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+      const pTransUser = pTransId ? userMap.get(String(pTransId)) : null;
+
+      // Find Drop SHG user
+      const dShgId = o.dropShgId || pOrder?.dropShgId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG')?.assigneeId;
+      const dShgUser = dShgId ? userMap.get(String(dShgId)) : null;
+
+      // Find Drop Transporter user
+      const dTransId = o.dropTransporterId || pOrder?.dropTransporterId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+      const dTransUser = dTransId ? userMap.get(String(dTransId)) : null;
+
+      const formatAddr = (u: any) => {
+        if (!u?.address) return u?.shgDetail?.village || '';
+        return [
+          u.address.houseNo || u.address.landmark,
+          u.address.village,
+          u.address.taluka,
+          u.address.district,
+          u.address.pincode
+        ].filter(Boolean).join(', ');
+      };
+
+      const pickupShgDetails = pShgUser ? {
+        id: pShgUser.id,
+        name: pShgUser.fullName || pShgUser.shgDetail?.crpName || pShgUser.shgDetail?.shgName || 'Pickup SHG Member',
+        mobile: pShgUser.phoneNumber || pShgUser.shgDetail?.crpMobile || '',
+        address: formatAddr(pShgUser) || pShgUser.address?.village || 'N/A',
+        shgName: pShgUser.shgDetail?.shgName || '',
+        acceptedAt: pickupShgAcceptedAt,
+        pickedAt: pickupShgPickedAt,
+      } : (o.pickupShgDetails ? { ...o.pickupShgDetails, acceptedAt: pickupShgAcceptedAt, pickedAt: pickupShgPickedAt } : null);
+
+      const pickupTransporterDetails = pTransUser ? {
+        id: pTransUser.id,
+        name: pTransUser.fullName || 'Transporter',
+        mobile: pTransUser.phoneNumber || '',
+        address: formatAddr(pTransUser) || 'Service Route',
+        vehicle: pTransUser.transporterDetail?.vehicleNumber || (pTransUser.transporterDetail as any)?.registrationNumber || '',
+        acceptedAt: pickupTransporterAcceptedAt,
+        pickedAt: pickupTransporterPickedAt,
+      } : (o.pickupTransporterDetails ? { ...o.pickupTransporterDetails, acceptedAt: pickupTransporterAcceptedAt, pickedAt: pickupTransporterPickedAt } : null);
+
+      const dropShgDetails = dShgUser ? {
+        id: dShgUser.id,
+        name: dShgUser.fullName || dShgUser.shgDetail?.crpName || dShgUser.shgDetail?.shgName || 'Drop SHG Member',
+        mobile: dShgUser.phoneNumber || dShgUser.shgDetail?.crpMobile || '',
+        address: formatAddr(dShgUser) || dShgUser.address?.village || 'Mahagaon',
+        shgName: dShgUser.shgDetail?.shgName || '',
+        acceptedAt: dropShgAcceptedAt,
+        pickedAt: dropShgPickedAt,
+      } : (o.dropShgDetails ? { ...o.dropShgDetails, acceptedAt: dropShgAcceptedAt, pickedAt: dropShgPickedAt } : null);
+
+      const dropTransporterDetails = dTransUser ? {
+        id: dTransUser.id,
+        name: dTransUser.fullName || 'Transporter',
+        mobile: dTransUser.phoneNumber || '',
+        address: formatAddr(dTransUser) || 'Service Route',
+        vehicle: dTransUser.transporterDetail?.vehicleNumber || (dTransUser.transporterDetail as any)?.registrationNumber || '',
+        acceptedAt: dropTransporterAcceptedAt,
+        pickedAt: dropTransporterPickedAt,
+      } : (o.dropTransporterDetails ? { ...o.dropTransporterDetails, acceptedAt: dropTransporterAcceptedAt, pickedAt: dropTransporterPickedAt } : null);
+
+      // Build unified Tracking Audit History from Phase 1 to Phase 2
+      const auditTimeline: any[] = [];
+
+      // 1. Order Placed
+      if (o.createdAt) {
+        auditTimeline.push({
+          timestamp: o.createdAt,
+          stage: 'ORDER PLACED',
+          status: 'Order Placed & Registered',
+          statusType: 'COMPLETED',
+          actorName: o.seller?.sellerName || 'Seller',
+          actorRole: 'SELLER',
+          location: o.seller?.village ? `${o.seller.village} (${o.seller.pincode || ''})` : 'Seller Center',
+          remarks: `Total ${o.productCount || 1} Products (${o.totalWeight || 0} KG) registered`,
+        });
       }
-      return o;
+
+      // 2. Pickup SHG Assigned & Accepted
+      if (pickupShgAcceptedAt) {
+        auditTimeline.push({
+          timestamp: pickupShgAcceptedAt,
+          stage: 'PHASE 1: PICKUP',
+          status: 'Pickup SHG Assigned & Accepted',
+          statusType: 'COMPLETED',
+          actorName: pickupShgDetails?.name || 'Pickup SHG Member',
+          actorRole: 'SHG',
+          location: pickupShgDetails?.address || o.seller?.village || 'Pickup Center',
+          remarks: 'SHG Member accepted pickup request from seller',
+        });
+      }
+
+      // 3. Collected / Scanned by Pickup SHG
+      if (pickupShgPickedAt) {
+        auditTimeline.push({
+          timestamp: pickupShgPickedAt,
+          stage: 'PHASE 1: PICKUP',
+          status: 'Collected & Scanned by SHG',
+          statusType: 'COMPLETED',
+          actorName: pickupShgDetails?.name || 'Pickup SHG Member',
+          actorRole: 'SHG',
+          location: o.seller?.village || 'Seller Location',
+          remarks: 'Parcels collected and verified from seller',
+        });
+      }
+
+      // 4. Pickup Transporter Assigned & Accepted
+      if (pickupTransporterAcceptedAt) {
+        auditTimeline.push({
+          timestamp: pickupTransporterAcceptedAt,
+          stage: 'PHASE 1: PICKUP',
+          status: 'Transporter Route Assigned & Accepted',
+          statusType: 'COMPLETED',
+          actorName: pickupTransporterDetails?.name || 'Transporter',
+          actorRole: 'TRANSPORTER',
+          location: pickupTransporterDetails?.address || 'Service Route',
+          remarks: pickupTransporterDetails?.vehicle ? `Vehicle: ${pickupTransporterDetails.vehicle}` : 'Pickup route confirmed',
+        });
+      }
+
+      // 5. Transporter Pickup / In Transit to GMU Hub
+      if (pickupTransporterPickedAt) {
+        auditTimeline.push({
+          timestamp: pickupTransporterPickedAt,
+          stage: 'PHASE 1: PICKUP',
+          status: 'Picked up by Transporter (In Transit to Hub)',
+          statusType: 'COMPLETED',
+          actorName: pickupTransporterDetails?.name || 'Transporter',
+          actorRole: 'TRANSPORTER',
+          location: o.seller?.village || 'Collection Point',
+          remarks: 'Parcels in transit to GMU Central Hub',
+        });
+      }
+
+      // 6. GMU Hub Intake Received
+      if (gmuHubIntakeAt) {
+        auditTimeline.push({
+          timestamp: gmuHubIntakeAt,
+          stage: 'GMU HUB WAREHOUSE',
+          status: 'Received & Quality Checked at GMU Hub',
+          statusType: 'COMPLETED',
+          actorName: 'GMU Hub Intake Dock',
+          actorRole: 'HUB_COORDINATOR',
+          location: 'GMU Central Hub',
+          remarks: 'Intake verification completed & barcode validated',
+        });
+      }
+
+      // 7. GMU Hub Stored in Inventory
+      if (gmuHubStoredAt) {
+        auditTimeline.push({
+          timestamp: gmuHubStoredAt,
+          stage: 'GMU HUB WAREHOUSE',
+          status: 'Stored in Hub Inventory',
+          statusType: 'COMPLETED',
+          actorName: 'GMU Hub Inventory',
+          actorRole: 'HUB_COORDINATOR',
+          location: 'GMU Central Warehouse',
+          remarks: 'Ready for outbound route dispatch',
+        });
+      }
+
+      // 8. Dispatched & Handed to Drop Transporter
+      if (dropTransporterPickedAt || o.dispatchedAt) {
+        auditTimeline.push({
+          timestamp: dropTransporterPickedAt || o.dispatchedAt,
+          stage: 'PHASE 2: DROP',
+          status: 'Dispatched from Hub (In Transit to Drop Center)',
+          statusType: 'COMPLETED',
+          actorName: dropTransporterDetails?.name || 'Drop Transporter',
+          actorRole: 'TRANSPORTER',
+          location: 'GMU Central Hub Outbound',
+          remarks: dropTransporterDetails?.vehicle ? `Vehicle: ${dropTransporterDetails.vehicle}` : 'Outbound transport started',
+        });
+      }
+
+      // 9. Drop SHG Accepted / Received
+      if (dropShgPickedAt || dropShgAcceptedAt) {
+        auditTimeline.push({
+          timestamp: dropShgPickedAt || dropShgAcceptedAt,
+          stage: 'PHASE 2: DROP',
+          status: 'Received at Destination SHG Center',
+          statusType: 'COMPLETED',
+          actorName: dropShgDetails?.name || 'Drop SHG Member',
+          actorRole: 'SHG',
+          location: dropShgDetails?.address || o.buyer?.village || 'Drop Village Center',
+          remarks: 'Parcels received by destination SHG for buyer handover',
+        });
+      }
+
+      // 10. Delivered to Buyer
+      if (buyerDeliveredAt) {
+        auditTimeline.push({
+          timestamp: buyerDeliveredAt,
+          stage: 'COMPLETED',
+          status: 'Delivered & Handed Over to Buyer',
+          statusType: 'COMPLETED',
+          actorName: o.buyer?.buyerName || 'Buyer',
+          actorRole: 'BUYER',
+          location: o.buyer?.village ? `${o.buyer.village} (${o.buyer.pincode || ''})` : 'Buyer Address',
+          remarks: 'Final delivery completed and verified',
+        });
+      }
+
+      // Map raw actions to canonical titles & sort strictly by stage rank
+      const CANONICAL_STATUS_MAP: Record<string, string> = {
+        'order placed & registered': 'Order Placed & Registered',
+        'order placed': 'Order Placed & Registered',
+        'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
+        'shg accepted': 'Pickup SHG Assigned & Accepted',
+        'collected & scanned by shg': 'Collected & Scanned by SHG',
+        'shg pickup': 'Collected & Scanned by SHG',
+        'shg_pickup': 'Collected & Scanned by SHG',
+        'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
+        'transporter accepted': 'Transporter Route Assigned & Accepted',
+        'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+        'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
+        'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
+        'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
+        'hub intake': 'Received & Quality Checked at GMU Hub',
+        'hub_received': 'Received & Quality Checked at GMU Hub',
+        'stored in hub inventory': 'Stored in Hub Inventory',
+        'stored_in_hub': 'Stored in Hub Inventory',
+        'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
+        'drop shg accepted': 'Drop SHG Assigned & Accepted',
+        'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
+        'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
+        'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
+        'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+        'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+        'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+        'received at destination shg center': 'Received at Destination SHG Center',
+        'drop shg pickup': 'Received at Destination SHG Center',
+        'shg drop pickup': 'Received at Destination SHG Center',
+        'shg_drop_pickup': 'Received at Destination SHG Center',
+        'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
+        'delivered': 'Delivered & Handed Over to Buyer',
+      };
+
+      const STAGE_ORDER: Record<string, number> = {
+        'Order Placed & Registered': 1,
+        'Pickup SHG Assigned & Accepted': 2,
+        'Collected & Scanned by SHG': 3,
+        'Transporter Route Assigned & Accepted': 4,
+        'Picked up by Transporter (In Transit to Hub)': 5,
+        'Received & Quality Checked at GMU Hub': 6,
+        'Stored in Hub Inventory': 7,
+        'Drop SHG Assigned & Accepted': 8,
+        'Drop Transporter Route Assigned & Accepted': 9,
+        'Dispatched from Hub (In Transit to Drop Center)': 10,
+        'Received at Destination SHG Center': 11,
+        'Delivered & Handed Over to Buyer': 12,
+      };
+
+      const uniqueAuditMap = new Map();
+      auditTimeline.forEach((t) => {
+        const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+        const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+        if (canonicalTitle) {
+          const key = canonicalTitle.toLowerCase().trim();
+          if (!uniqueAuditMap.has(key)) {
+            uniqueAuditMap.set(key, { ...t, status: canonicalTitle });
+          }
+        }
+      });
+
+      const cleanAuditTimeline = Array.from(uniqueAuditMap.values()).sort((a: any, b: any) => {
+        const rankA = STAGE_ORDER[a.status] || 99;
+        const rankB = STAGE_ORDER[b.status] || 99;
+        if (rankA !== rankB) return rankA - rankB;
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      });
+
+      return {
+        ...o,
+        pickupShgDetails,
+        pickupTransporterDetails,
+        dropShgDetails,
+        dropTransporterDetails,
+        pickupShgAcceptedAt,
+        pickupShgPickedAt,
+        pickupTransporterAcceptedAt,
+        pickupTransporterPickedAt,
+        gmuHubIntakeAt,
+        gmuHubStoredAt,
+        dropTransporterAcceptedAt,
+        dropTransporterPickedAt,
+        dropShgAcceptedAt,
+        dropShgPickedAt,
+        buyerDeliveredAt,
+        tracking: cleanAuditTimeline,
+      };
     });
   }
 
   async getDropNewOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        phase: 'DROP',
         AND: [
           {
             OR: [
@@ -916,7 +1315,11 @@ export class OrderManagementService implements OnModuleInit {
       assignments: true,
       seller: true,
       buyer: true,
-      parcels: true,
+      parcels: {
+        include: {
+          scanHistories: true
+        }
+      },
     };
 
     const orders = await this.prisma.order.findMany({
@@ -928,39 +1331,37 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getDropAssignedOrders(filter?: OrderFilterDto) {
+    const dropActiveStatuses = [
+      'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_CREATED',
+      'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
+      'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED',
+      'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'
+    ];
+
     const where = this.applyFilters(
       {
-        phase: 'DROP',
-        AND: [
-          {
-            OR: [
-              { returnType: null },
-              { returnType: 'TRANSPORTER_RETURN' }
-            ]
-          },
-          {
-            OR: [
-              { mainStatus: { in: ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT_TO_SHG', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER', 'RETURN_PARCEL_AT_SHG'] } }
-            ]
-          }
+        mainStatus: { in: dropActiveStatuses },
+        OR: [
+          { returnType: null },
+          { returnType: 'TRANSPORTER_RETURN' }
         ]
       },
       filter,
-      [
-        'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-        'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT_TO_SHG',
-        'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER',
-        'IN_TRANSIT_TO_BUYER', 'RETURN_IN_TRANSIT_TO_BUYER',
-        'RETURN_PARCEL_AT_SHG'
-      ]
+      dropActiveStatuses
     );
+    const defaultInclude = {
+      assignments: true,
+      seller: true,
+      buyer: true,
+      parcels: {
+        include: {
+          scanHistories: true
+        }
+      },
+    };
     const orders = await this.prisma.order.findMany({
       where,
-      include: {
-        assignments: true,
-        seller: true,
-        buyer: true,
-      },
+      include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -968,18 +1369,30 @@ export class OrderManagementService implements OnModuleInit {
 
   async getDropCompletedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] },
+      {
+        mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'] },
+        OR: [
+          { phase: 'DROP' },
+          { dropShgId: { not: null } },
+          { dropTransporterId: { not: null } }
+        ]
+      },
       filter,
-      // Phase 7-8: Delivered and Completed
       ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']
     );
+    const defaultInclude = {
+      assignments: true,
+      seller: true,
+      buyer: true,
+      parcels: {
+        include: {
+          scanHistories: true
+        }
+      },
+    };
     const orders = await this.prisma.order.findMany({
       where,
-      include: {
-        assignments: true,
-        seller: true,
-        buyer: true,
-      },
+      include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -1002,13 +1415,19 @@ export class OrderManagementService implements OnModuleInit {
         'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'IN_TRANSIT_TO_SHG',
       ]
     );
+    const defaultInclude = {
+      assignments: true,
+      seller: true,
+      buyer: true,
+      parcels: {
+        include: {
+          scanHistories: true
+        }
+      },
+    };
     const orders = await this.prisma.order.findMany({
       where,
-      include: {
-        assignments: true,
-        seller: true,
-        buyer: true,
-      },
+      include: defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
     return this.enrichOrdersWithPickupAssignments(orders);
@@ -1077,11 +1496,11 @@ export class OrderManagementService implements OnModuleInit {
 
   async getInventoryStoredOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
-      { phase: 'PICKUP', returnType: null },
+      { returnType: null },
       filter,
-      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'DROP_ASSIGNED', 'DISPATCHED', 'PARCEL_AT_HUB']
+      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_HUB', 'DELIVERED', 'COMPLETED']
     );
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where,
       include: {
         assignments: true,
@@ -1090,6 +1509,7 @@ export class OrderManagementService implements OnModuleInit {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return this.enrichOrdersWithPickupAssignments(orders);
   }
 
   async getInventoryTransporterReturnOrders(filter?: OrderFilterDto) {
@@ -1331,6 +1751,7 @@ export class OrderManagementService implements OnModuleInit {
 
       return tx.order.create({
         data: {
+          id: orderId,
           orderId,
           barcode: null,
           sellerId: seller.id,
@@ -1522,7 +1943,7 @@ export class OrderManagementService implements OnModuleInit {
 
       return tx.order.create({
         data: {
-          id: uuidv4(),
+          id: `${orderId}-DROP`,
           orderId,
           barcode,
           sellerId: seller.id,
@@ -1558,20 +1979,24 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastShg(id: string) {
     const order = await this.getOrderDetails(id);
 
+    const sVillage = order.seller?.village || (order as any).sellerVillage || '';
+    const sPincode = order.seller?.pincode || (order as any).sellerPincode || '';
+    const sPostOffice = order.seller?.postOffice || (order as any).sellerPostOffice || '';
+
     const matchingShgs = await this.getMatchingShgs(
-      order.sellerVillage,
-      order.sellerPincode,
-      order.sellerPostOffice || ''
+      sVillage,
+      sPincode,
+      sPostOffice
     );
 
     if (matchingShgs.length === 0) {
       console.log(`[SHG Broadcast]
         Order ID: ${order.orderId} (${order.id})
-        Seller Village: ${order.sellerVillage}
-        Seller Pincode: ${order.sellerPincode}
+        Seller Village: ${sVillage}
+        Seller Pincode: ${sPincode}
         Matching SHG IDs: []
         Number of assignments created: 0
-        Reason: No approved and active SHG matches Seller Pincode or Village.
+        Reason: No approved and active SHG found in system.
       `);
       return this.prisma.order.update({
         where: { id: order.id },
@@ -1785,10 +2210,14 @@ export class OrderManagementService implements OnModuleInit {
   async broadcastTransporter(id: string) {
     const order = await this.getOrderDetails(id);
 
+    const sVillage = order.seller?.village || (order as any).sellerVillage || '';
+    const sPincode = order.seller?.pincode || (order as any).sellerPincode || '';
+    const sPostOffice = order.seller?.postOffice || (order as any).sellerPostOffice || '';
+
     const matchingTransporters = await this.getMatchingTransporters(
-      order.sellerVillage,
-      order.sellerPincode,
-      order.sellerPostOffice || '',
+      sVillage,
+      sPincode,
+      sPostOffice,
       [],
       Number(order.totalWeight || 0),
     );
@@ -1796,8 +2225,8 @@ export class OrderManagementService implements OnModuleInit {
     if (matchingTransporters.length === 0) {
       console.log(`[Transporter Broadcast]
         Order ID: ${order.orderId} (${order.id})
-        Seller Village: ${order.sellerVillage}
-        Seller Pincode: ${order.sellerPincode}
+        Seller Village: ${sVillage}
+        Seller Pincode: ${sPincode}
         Matching Transporter IDs: []
         Number of assignments created: 0
         Reason: No approved and active transporter matches Seller Pincode and Village.
@@ -1919,9 +2348,9 @@ export class OrderManagementService implements OnModuleInit {
     const rejectedIds = rejections.map((r) => r.assigneeId);
 
     const matchingTransporters = await this.getMatchingTransporters(
-      order.sellerVillage,
-      order.sellerPincode,
-      order.sellerPostOffice || '',
+      order.seller?.village || (order as any).sellerVillage || '',
+      order.seller?.pincode || (order as any).sellerPincode || '',
+      order.seller?.postOffice || (order as any).sellerPostOffice || '',
       rejectedIds,
       Number(order.totalWeight || 0),
     );
@@ -2033,74 +2462,12 @@ export class OrderManagementService implements OnModuleInit {
       console.warn(`[storeInventory] Warehouse creation note:`, wErr.message);
     }
 
-    // 3. Create or find Phase 2 Drop Order
-    let dropId: string = '';
-    const existingDropOrder = await this.prisma.order.findFirst({
-      where: {
-        orderId: order.orderId,
-        phase: 'DROP',
-      }
-    });
-
-    if (!existingDropOrder) {
-      const dropOrderUuid = () => '00000000-0000-4000-8000-' + Math.floor(100000000000 + Math.random() * 900000000000).toString();
-      dropId = dropOrderUuid();
-      await this.prisma.order.create({
-        data: {
-          id: dropId,
-          orderId: order.orderId,
-          barcode: order.barcode,
-          sellerId: order.sellerId,
-          buyerId: order.buyerId,
-          productCount: order.productCount || 1,
-          totalQty: order.totalQty || 1,
-          totalWeight: order.totalWeight || 5,
-          mainStatus: 'DROP_PENDING',
-          dropShgStatus: 'PENDING',
-          phase: 'DROP',
-        }
-      }).catch(err => {
-        console.warn(`[storeInventory] Phase 2 drop order creation note:`, err.message);
-      });
-
-      // Copy parcels for Phase 2 Drop Order
-      const pickupParcels = await this.prisma.parcel.findMany({
-        where: { OR: [{ orderId: order.orderId }, { orderId: order.id }] }
-      });
-      for (const p of pickupParcels) {
-        await this.prisma.parcel.create({
-          data: {
-            parcelId: `PCL-DROP-${p.parcelId}`,
-            orderId: order.orderId,
-            productId: p.productId,
-            productName: p.productName,
-            parcelNumber: p.parcelNumber,
-            totalParcels: p.totalParcels,
-            weight: p.weight,
-            quantity: p.quantity,
-            flowType: 'FORWARD',
-            qrCodeValue: p.qrCodeValue,
-            verificationToken: p.verificationToken,
-            qrImage: p.qrImage,
-            parcelStatus: 'PENDING',
-            createdBy: 'SYSTEM'
-          }
-        }).catch(() => {});
-      }
-    } else {
-      dropId = existingDropOrder.id;
-    }
-
-    // 4. Trigger Phase 2 Partner Matching & Broadcasts asynchronously
-    if (dropId) {
-      this.broadcastDropShg(dropId).catch(err => {
-        console.error(`[storeInventory] Immediate drop SHG broadcast failed:`, err.message);
-      });
-
-      this.broadcastDropTransporter(dropId).catch(err => {
-        console.error(`[storeInventory] Immediate drop Transporter broadcast failed:`, err.message);
-      });
-    }
+    // 3. Fast Asynchronous Phase 2 Partner Matching & Broadcasts on the SAME order
+    const dropId = order.id;
+    Promise.allSettled([
+      this.broadcastDropShg(dropId),
+      this.broadcastDropTransporter(dropId),
+    ]).catch(err => console.error('[storeInventory] Background broadcast note:', err));
 
     return updated;
   }
@@ -2292,20 +2659,24 @@ export class OrderManagementService implements OnModuleInit {
       });
 
       await this.prisma.orderAssignment.createMany({
-        data: matchingShgs.map((shg) => ({
+        data: matchingShgs.map((shg, idx) => ({
           orderId: order.id,
           assigneeId: shg.id,
           assigneeType: 'SHG',
           role: 'DROP',
-          status: 'PENDING',
+          status: idx === 0 ? 'ACCEPTED' : 'PENDING',
         })),
       });
+
+      const autoShgId = matchingShgs[0]?.id;
 
       return this.prisma.order.update({
         where: { id: order.id },
         data: {
-          mainStatus: 'DROP_ASSIGNED',
-          dropShgStatus: 'PENDING',
+          mainStatus: 'DROP_SHG_ACCEPTED',
+          dropShgStatus: 'ACCEPTED',
+          dropShgId: autoShgId ? String(autoShgId) : order.dropShgId,
+          dropTransporterStatus: 'PENDING',
         },
       });
     } else {
@@ -2345,23 +2716,55 @@ export class OrderManagementService implements OnModuleInit {
       Number(order.totalWeight || 0),
     );
 
+    // Fallback 1: Include Phase 1 pickup transporter so they receive Phase 2 request
+    const pickupOrder = await this.prisma.order.findFirst({
+      where: { orderId: order.orderId, phase: 'PICKUP' }
+    });
+
+    if (pickupOrder && pickupOrder.pickupTransporterId) {
+      if (!matchingTransporters.some(t => String(t.id) === String(pickupOrder.pickupTransporterId))) {
+        matchingTransporters.push({ id: String(pickupOrder.pickupTransporterId) });
+      }
+    }
+
+    // Fallback 2: If matching list is empty, broadcast to all approved transporters
     if (matchingTransporters.length === 0) {
-      console.warn(`[broadcastDropTransporter] No matching approved transporters found for buyer village ${order.buyerVillage || 'N/A'} or pincode ${order.buyerPincode || 'N/A'}`);
+      const allTransporters = await this.prisma.user.findMany({
+        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
+        select: { id: true }
+      });
+      allTransporters.forEach(t => {
+        matchingTransporters.push({ id: String(t.id) });
+      });
+    }
+
+    if (matchingTransporters.length === 0) {
+      console.warn(`[broadcastDropTransporter] No active transporters found in system.`);
       return order;
     }
 
     await this.prisma.orderAssignment.deleteMany({
-      where: { orderId: order.id, role: 'DROP', assigneeType: 'TRANSPORTER', status: 'PENDING' },
+      where: {
+        OR: [
+          { orderId: order.id, role: 'DROP', assigneeType: 'TRANSPORTER', status: 'PENDING' },
+          { orderId: order.orderId, role: 'DROP', assigneeType: 'TRANSPORTER', status: 'PENDING' }
+        ]
+      },
     });
 
-    await this.prisma.orderAssignment.createMany({
-      data: matchingTransporters.map((t) => ({
+    const assignmentData: any[] = [];
+    matchingTransporters.forEach((t) => {
+      assignmentData.push({
         orderId: order.id,
-        assigneeId: t.id,
+        assigneeId: String(t.id),
         assigneeType: 'TRANSPORTER',
         role: 'DROP',
         status: 'PENDING',
-      })),
+      });
+    });
+
+    await this.prisma.orderAssignment.createMany({
+      data: assignmentData,
     });
 
     return this.prisma.order.update({
@@ -2369,6 +2772,7 @@ export class OrderManagementService implements OnModuleInit {
       data: {
         mainStatus: order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED',
         dropTransporterStatus: 'PENDING',
+        dropTransporterId: null,
       },
       include: { assignments: true },
     }); // DROP_ASSIGNED stays — transporter broadcast doesn't change displayed status
@@ -3049,6 +3453,11 @@ export class OrderManagementService implements OnModuleInit {
       );
     }
 
+    // 3. Fallback 2: Match to all active approved SHGs so seeded/test orders are never orphaned
+    if (matchingShgs.length === 0 && approvedShgs.length > 0) {
+      matchingShgs = approvedShgs;
+    }
+
     return matchingShgs.map(shg => ({
       ...shg,
       id: String(shg.id)
@@ -3156,6 +3565,11 @@ export class OrderManagementService implements OnModuleInit {
       });
     }
 
+    // Fallback: If no route capacity match for test address, fallback to all approved transporters
+    if (weightEligibleTransporters.length === 0 && approvedTransporters.length > 0) {
+      weightEligibleTransporters = approvedTransporters;
+    }
+
     if (weightEligibleTransporters.length === 0) {
       console.log(`[Transporter Broadcast Matching]
         Total Shipment Weight: ${weightNum !== null ? `${weightNum} kg` : 'N/A'}
@@ -3163,7 +3577,7 @@ export class OrderManagementService implements OnModuleInit {
         Weight Eligible Transporters: 0
         Lowest Rate Selected: N/A
         Selected Transporter IDs: []
-        Reason: No location-matched transporter covers weight range (${weightNum} kg).
+        Reason: No approved transporter found in system.
       `);
       return [];
     }

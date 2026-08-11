@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { STORAGE_KEYS } from '../utils/storage';
@@ -57,6 +58,12 @@ export interface Order {
   isReturn?: boolean;
   buyerName?: string;
   sellerName?: string;
+  sellerVillage?: string;
+  sellerAddress?: string;
+  buyerVillage?: string;
+  buyerAddress?: string;
+  seller?: any;
+  buyer?: any;
   products?: any[];
   handoverCode?: string;
   parcelWeight?: number;
@@ -96,6 +103,7 @@ interface OrderContextType {
   redirectedOrders: Order[];
   acceptReturnOrders: (orderIds: string[]) => void;
   rescheduleOrder: (orderId: string, date: string, time: string, reason: string) => Promise<void>;
+  markOrderAsPickedUp: (orderId: string) => void;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
@@ -225,11 +233,17 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
         return 'Accepted';
       } else {
         // Drop leg mapping for SHG (Phase 2)
-        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+        const dShgStatus = (dbOrder.dropShgStatus || dbOrder.drop_shg_status || '').toUpperCase();
+        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED') {
           return 'COMPLETED';
         }
 
-        if (pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_DROP_SHG' || pStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_BUYER') {
+        if (
+          ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(mStatus) ||
+          ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(pStatus) ||
+          dShgStatus === 'PICKED' ||
+          dShgStatus === 'PICKED_UP'
+        ) {
           return 'PickedUp';
         }
 
@@ -272,6 +286,12 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
     buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
     sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
+    sellerVillage: dbOrder.seller?.village || dbOrder.seller?.address?.village || '',
+    sellerAddress: dbOrder.seller?.fullAddress || actualPickupAddress || '',
+    buyerVillage: dbOrder.buyer?.village || dbOrder.buyer?.address?.village || '',
+    buyerAddress: dbOrder.buyer?.fullAddress || actualDropAddress || '',
+    seller: dbOrder.seller,
+    buyer: dbOrder.buyer,
     products: orderItems.map((item: any) => ({
       code: `#P-${item.productId || item.id}`,
       tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
@@ -415,8 +435,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
-        const order = mapDbOrderToUi(o, o.legType || 'pickup', false);
-        if (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED') {
+        const isDropLeg = o.legType === 'drop' || o.phase === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus || o.status);
+        const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : (o.legType || 'pickup'), false);
+        if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';
           const pIdx = localPickedUp.indexOf(order.id);
           if (pIdx !== -1) {
@@ -435,18 +456,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const allMapped = [...mappedPickups, ...mappedDrops];
 
-      // Filter out completed/accepted pickup orders if there is an active/completed drop order for the same master order assigned to us
+      // Filter out pickup leg if an active drop leg exists for the same order
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
-          if (hasDropOrder && (order.status === 'PickedUp' || order.status === 'COMPLETED')) {
-            return false;
-          }
-        } else if (order.legType === 'drop') {
-          const hasIncompletePickup = allMapped.some(
-            o => o.legType === 'pickup' && o.orderId === order.orderId && o.status !== 'PickedUp' && o.status !== 'COMPLETED'
-          );
-          if (hasIncompletePickup) {
+          if (hasDropOrder) {
             return false;
           }
         }
@@ -581,7 +595,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setReturnedOrders(mappedReturned);
 
       // Completed = Everything Completed from Dedicated Endpoints + COMPLETED mapped orders
-      const mappedCompletedNew = (rawCompleted.newOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false));
+      const activeOrderIds = new Set(finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').map(o => o.orderId));
+      const mappedCompletedNew = (rawCompleted.newOrders || [])
+        .map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false))
+        .filter((o: any) => !activeOrderIds.has(o.orderId) && o.status === 'COMPLETED');
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
       const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED');
       const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
@@ -625,6 +642,29 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     checkTokenAndRefresh();
     const interval = setInterval(checkTokenAndRefresh, 1000);
     return () => clearInterval(interval);
+  }, [refreshOrdersList]);
+
+  // Real-time AppState change listener (refreshes immediately when user switches back to app)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && lastTokenRef.current) {
+        refreshOrdersList().catch(() => {});
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [refreshOrdersList]);
+
+  // Real-time Background Polling Heartbeat (every 4 seconds when app is active and user is logged in)
+  useEffect(() => {
+    const poller = setInterval(() => {
+      if (AppState.currentState === 'active' && lastTokenRef.current) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, 4000);
+
+    return () => clearInterval(poller);
   }, [refreshOrdersList]);
 
   const getStockItems = () => {
@@ -859,6 +899,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const markOrderAsPickedUp = (orderId: string) => {
+    const cleanId = String(orderId || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+    setAcceptedOrders(prev =>
+      prev.map(o => {
+        const oClean = String(o.id || '').replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
+        const oIdClean = String(o.orderId || '').replace(/^ORD-/, '');
+        if (o.id === orderId || o.orderId === orderId || oClean === cleanId || oIdClean === cleanId) {
+          return { ...o, status: 'PickedUp', mainStatus: 'PARCEL_PICKED', pickupShgStatus: 'PICKED' };
+        }
+        return o;
+      })
+    );
+  };
+
   return (
     <OrderContext.Provider value={{
       incomingOrders,
@@ -882,6 +936,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       redirectedOrders,
       acceptReturnOrders,
       rescheduleOrder,
+      markOrderAsPickedUp,
     }}>
       {children}
     </OrderContext.Provider>

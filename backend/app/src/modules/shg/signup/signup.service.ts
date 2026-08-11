@@ -337,13 +337,13 @@ export class SignupService {
       }
     }
 
-    const existingAddr = await this.prisma.address.findFirst({
+    const existingAddress = await this.prisma.address.findFirst({
       where: { userId },
     });
 
-    if (existingAddr) {
+    if (existingAddress) {
       await this.prisma.address.update({
-        where: { id: existingAddr.id },
+        where: { id: existingAddress.id },
         data: {
           houseNo: dto.houseNo,
           village: dto.village,
@@ -540,7 +540,7 @@ export class SignupService {
         // 4. Mark signup as completed and update user fields
         const updatedUser = await tx.user.update({
           where: { id: userId },
-          data: { 
+          data: {
             currentStep: 7,
             uniqueCode: requestId,
             applicationStatus: 'PENDING'

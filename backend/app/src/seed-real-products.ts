@@ -105,7 +105,9 @@ async function seedRealProducts() {
           createdBy: 'SYSTEM',
           verificationToken: verificationCode,
           qrImage: qrImageUrl,
-          parcelStatus: 'PENDING'
+          parcelStatus: 'PENDING',
+          currentHolderId: order.sellerId ? String(order.sellerId) : null,
+          currentHolderType: 'SELLER',
         }
       });
     }

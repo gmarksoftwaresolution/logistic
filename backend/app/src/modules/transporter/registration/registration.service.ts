@@ -72,14 +72,15 @@ export class RegistrationService {
     const payload = {
       sub: user.id,
       phoneNumber: user.phoneNumber,
+      mobile: user.phoneNumber,
       role: user.role,
       status: user.applicationStatus,
       // Only include uniqueCode if it exists (i.e., after full registration)
       ...(user.uniqueCode ? { transporterUniqueId: user.uniqueCode } : {})
     };
 
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '3650d' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '30d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '90d' });
 
     // In a real app we might store refresh token somewhere or in a dedicated field
     // For now we omit storing it since refreshToken field is not in new User schema
@@ -158,8 +159,8 @@ export class RegistrationService {
 
     if (existingUser.applicationStatus === ApplicationStatus.REJECTED) {
       throw new ForbiddenException(
-        existingUser.rejectionReason 
-          ? `Your application has been rejected: ${existingUser.rejectionReason}` 
+        existingUser.rejectionReason
+          ? `Your application has been rejected: ${existingUser.rejectionReason}`
           : 'Your application has been rejected.'
       );
     }
@@ -329,13 +330,13 @@ export class RegistrationService {
       },
     });
 
-    const existingAddr = await this.prisma.address.findFirst({
+    const existingAddress = await this.prisma.address.findFirst({
       where: { userId: user.id },
     });
 
-    if (existingAddr) {
+    if (existingAddress) {
       await this.prisma.address.update({
-        where: { id: existingAddr.id },
+        where: { id: existingAddress.id },
         data: {
           houseNo: dto.residentialAddress,
           state: dto.state,
@@ -519,7 +520,7 @@ export class RegistrationService {
               })),
             };
           }
-        } catch (e) {}
+        } catch (e) { }
         return {
           success: false,
           state: '',
@@ -632,11 +633,11 @@ export class RegistrationService {
     if (cleanType.includes('3') || cleanType.includes('three')) {
       return VehicleType.THREE_WHEELER;
     }
-    if (cleanType.includes('4') || cleanType.includes('four') || 
-        cleanType.includes('pickup') || cleanType.includes('bolero') || 
-        cleanType.includes('mini') || cleanType.includes('tempo') || 
-        cleanType.includes('tractor') || cleanType.includes('container') || 
-        cleanType.includes('truck')) {
+    if (cleanType.includes('4') || cleanType.includes('four') ||
+      cleanType.includes('pickup') || cleanType.includes('bolero') ||
+      cleanType.includes('mini') || cleanType.includes('tempo') ||
+      cleanType.includes('tractor') || cleanType.includes('container') ||
+      cleanType.includes('truck')) {
       return VehicleType.FOUR_WHEELER;
     }
     return VehicleType.OTHER;

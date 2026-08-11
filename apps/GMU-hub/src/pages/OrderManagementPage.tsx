@@ -11,6 +11,8 @@ import {
   ShieldAlert,
   ClipboardCheck,
   CheckCircle2,
+  Check,
+  AlertTriangle,
   Copy,
   Download,
   X,
@@ -164,6 +166,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [intakeOrder, setIntakeOrder] = useState<any | null>(null);
   const [intakeType, setIntakeType] = useState<'pickup' | 'return-pickup' | 'return-drop' | null>(null);
 
+  // Modern Toast Notification state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
   const [isParcelQrModalOpen, setIsParcelQrModalOpen] = useState(false);
   const [parcelQrList, setParcelQrList] = useState<any[]>([]);
   const [parcelQrOrderId, setParcelQrOrderId] = useState<string | null>(null);
@@ -174,6 +186,111 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [activeNodeTitle, setActiveNodeTitle] = useState('');
   const [activeNodeDetails, setActiveNodeDetails] = useState<Record<string, any> | null>(null);
 
+  const handleNodeClick = async (nodeLabel: string, nodeDetails: any, parentOrder?: any) => {
+    if (!nodeDetails) return;
+    setActiveNodeTitle(nodeLabel);
+    setActiveNodeDetails(nodeDetails);
+    setIsNodeDrawerOpen(true);
+
+    if (parentOrder) {
+      const initialMerged = getMergedOrder(parentOrder.id || parentOrder.orderId || '', {
+        pickupNew: pickupNewOrders,
+        pickupAssigned: pickupAssignedOrders,
+        pickupWarehouse: pickupWarehouseOrders,
+        pickupRejected: pickupRejectedOrders,
+        pickupRescheduled: pickupRescheduledOrders,
+        dropNew: dropNewOrders,
+        dropAssigned: dropAssignedOrders,
+        dropRejected: dropRejectedOrders,
+        dropRescheduled: dropRescheduledOrders,
+        dropCompleted: dropCompletedOrders,
+        returnPickupNew: returnPickupNewOrders,
+        returnPickupCompleted: returnPickupCompletedOrders,
+        returnDropNew: returnDropNewOrders,
+        returnDropCompleted: returnDropCompletedOrders,
+      }) || parentOrder;
+
+      setSelectedOrderDetails(initialMerged);
+
+      try {
+        const fresh = await api.orders.getDetails(parentOrder.uuid || parentOrder.id);
+        if (fresh) {
+          const flowType = (fresh.phase === 'DROP' || parentOrder.phase === 'DROP') ? 'drop' : 'pickup';
+          const mapped = mapOrder(fresh, flowType);
+
+          const allTrackingEvents = [
+            ...(initialMerged.tracking || []),
+            ...(fresh.tracking || []),
+            ...(mapped.tracking || []),
+          ];
+
+          const uniqueTrackingMap = new Map();
+          allTrackingEvents.forEach((t) => {
+            const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+            const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+            if (canonicalTitle) {
+              const key = canonicalTitle.toLowerCase().trim();
+              if (!uniqueTrackingMap.has(key)) {
+                uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+              }
+            }
+          });
+
+          const mergedTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+            const rankA = STAGE_ORDER[a.status] || 99;
+            const rankB = STAGE_ORDER[b.status] || 99;
+            if (rankA !== rankB) return rankA - rankB;
+            const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+            return timeA - timeB;
+          });
+
+          setSelectedOrderDetails({
+            ...initialMerged,
+            ...mapped,
+            tracking: mergedTracking.length > 0 ? mergedTracking : (mapped.tracking || initialMerged.tracking),
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load fresh order details in handleNodeClick:', e);
+      }
+    }
+  };
+
+  // Helper to extract person-specific timeline events from selectedOrderDetails
+  const getPersonHistoryTimeline = (nodeTitle: string, orderDetails: any) => {
+    if (!orderDetails || !orderDetails.tracking || !Array.isArray(orderDetails.tracking)) {
+      return [];
+    }
+
+    const titleUpper = (nodeTitle || '').toUpperCase();
+
+    return orderDetails.tracking.filter((t: any) => {
+      const statusStr = (t.status || t.action || '').toString();
+      const statusLower = statusStr.toLowerCase();
+
+      if (titleUpper.includes('SELLER')) {
+        return statusLower.includes('order placed');
+      }
+      if (titleUpper.includes('PICKUP SHG')) {
+        return statusLower.includes('pickup shg') || statusLower.includes('collected') || statusLower.includes('shg pickup') || statusLower.includes('shg accepted');
+      }
+      if (titleUpper.includes('PICKUP TRANSPORTER')) {
+        return statusLower.includes('transporter route') || statusLower.includes('picked up by transporter') || statusLower.includes('transporter pickup') || statusLower.includes('transporter accepted');
+      }
+      if (titleUpper.includes('HUB') || titleUpper.includes('GMU')) {
+        return statusLower.includes('gmu hub') || statusLower.includes('hub inventory') || statusLower.includes('hub intake') || statusLower.includes('stored');
+      }
+      if (titleUpper.includes('DROP TRANSPORTER')) {
+        return statusLower.includes('drop transporter') || statusLower.includes('dispatched from hub');
+      }
+      if (titleUpper.includes('DROP SHG') || titleUpper.includes('BUYER')) {
+        return statusLower.includes('destination shg') || statusLower.includes('delivered') || statusLower.includes('drop shg');
+      }
+      return true;
+    });
+  };
+
   // Intake QR Verification state
   const [intakeParcels, setIntakeParcels] = useState<any[]>([]);
   const [loadingIntakeParcels, setLoadingIntakeParcels] = useState(false);
@@ -183,7 +300,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     if (isIntakeModalOpen && intakeOrder) {
       setLoadingIntakeParcels(false);
       const orderIds = intakeOrder.isBulk ? intakeOrder.selectedIds : [intakeOrder.id];
-      const initialParcels = orderIds.map((id, index) => ({
+      const initialParcels = orderIds.map((id: any, index: number) => ({
         parcelId: id,
         productName: intakeOrder.fullOrder?.productName || 'Order Package',
         parcelNumber: index + 1,
@@ -636,6 +753,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const primary = tempPrimary;
 
     const allTracking = [
+      ...(primary?.tracking || []),
       ...(pNew?.tracking || []),
       ...(pAssigned?.tracking || []),
       ...(pWh?.tracking || []),
@@ -652,16 +770,75 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       ...(retDComp?.tracking || []),
     ];
 
+    const CANONICAL_STATUS_MAP: Record<string, string> = {
+      'order placed & registered': 'Order Placed & Registered',
+      'order placed': 'Order Placed & Registered',
+      'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
+      'shg accepted': 'Pickup SHG Assigned & Accepted',
+      'collected & scanned by shg': 'Collected & Scanned by SHG',
+      'shg pickup': 'Collected & Scanned by SHG',
+      'shg_pickup': 'Collected & Scanned by SHG',
+      'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
+      'transporter accepted': 'Transporter Route Assigned & Accepted',
+      'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+      'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
+      'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
+      'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
+      'hub intake': 'Received & Quality Checked at GMU Hub',
+      'hub_received': 'Received & Quality Checked at GMU Hub',
+      'stored in hub inventory': 'Stored in Hub Inventory',
+      'stored_in_hub': 'Stored in Hub Inventory',
+      'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
+      'drop shg accepted': 'Drop SHG Assigned & Accepted',
+      'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
+      'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
+      'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
+      'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+      'received at destination shg center': 'Received at Destination SHG Center',
+      'drop shg pickup': 'Received at Destination SHG Center',
+      'shg drop pickup': 'Received at Destination SHG Center',
+      'shg_drop_pickup': 'Received at Destination SHG Center',
+      'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
+      'delivered': 'Delivered & Handed Over to Buyer',
+    };
+
+    const STAGE_ORDER: Record<string, number> = {
+      'Order Placed & Registered': 1,
+      'Pickup SHG Assigned & Accepted': 2,
+      'Collected & Scanned by SHG': 3,
+      'Transporter Route Assigned & Accepted': 4,
+      'Picked up by Transporter (In Transit to Hub)': 5,
+      'Received & Quality Checked at GMU Hub': 6,
+      'Stored in Hub Inventory': 7,
+      'Drop SHG Assigned & Accepted': 8,
+      'Drop Transporter Route Assigned & Accepted': 9,
+      'Dispatched from Hub (In Transit to Drop Center)': 10,
+      'Received at Destination SHG Center': 11,
+      'Delivered & Handed Over to Buyer': 12,
+    };
+
     const uniqueTrackingMap = new Map();
     allTracking.forEach((t) => {
-      const key = t.id || t.updatedAt || t.remarks || t.status;
-      if (!uniqueTrackingMap.has(key)) {
-        uniqueTrackingMap.set(key, t);
+      const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+      const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+      if (canonicalTitle) {
+        const key = canonicalTitle.toLowerCase().trim();
+        if (!uniqueTrackingMap.has(key)) {
+          uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+        }
       }
     });
-    const uniqueTracking = Array.from(uniqueTrackingMap.values()).sort(
-      (a: any, b: any) => new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime()
-    );
+
+    const uniqueTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+      const rankA = STAGE_ORDER[a.status] || 99;
+      const rankB = STAGE_ORDER[b.status] || 99;
+      if (rankA !== rankB) return rankA - rankB;
+      const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
 
     const pickupShgDetails = pAssigned?.shgDetails || pWh?.shgDetails || pRej?.shgDetails || pRes?.shgDetails || pNew?.shgDetails || tempPrimary.pickupShgDetails;
     const dropShgDetails = dAssigned?.shgDetails || dRej?.shgDetails || dRes?.shgDetails || dComp?.shgDetails || dNew?.shgDetails || tempPrimary.dropShgDetails;
@@ -671,8 +848,41 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const dropTransporterDetails = dAssigned?.transporterDetails || dRej?.transporterDetails || dRes?.transporterDetails || dComp?.transporterDetails || tempPrimary.dropTransporterDetails;
     const returnTransporterDetails = retPNew?.transporterDetails || retPComp?.transporterDetails || retDNew?.transporterDetails || retDComp?.transporterDetails || tempPrimary.returnTransporterDetails;
 
+    const allParcels = [
+      ...(primary?.parcels || []),
+      ...(pWh?.parcels || []),
+      ...(dAssigned?.parcels || []),
+      ...(dComp?.parcels || []),
+    ];
+    const uniqueParcelsMap = new Map();
+    allParcels.forEach((p: any) => {
+      const key = p.parcelId || p.barcode || p.id || `${p.productName}-${p.weight}`;
+      if (!uniqueParcelsMap.has(key)) {
+        uniqueParcelsMap.set(key, p);
+      }
+    });
+    const deduplicatedParcels = Array.from(uniqueParcelsMap.values());
+
+    const allItems = [
+      ...(primary?.items || []),
+      ...(pWh?.items || []),
+      ...(dAssigned?.items || []),
+      ...(dComp?.items || []),
+    ];
+    const uniqueItemsMap = new Map();
+    allItems.forEach((i: any) => {
+      const key = `${i.name || i.productName}-${i.quantity}-${i.weight}`;
+      if (!uniqueItemsMap.has(key)) {
+        uniqueItemsMap.set(key, i);
+      }
+    });
+    const deduplicatedItems = Array.from(uniqueItemsMap.values());
+
     return {
       ...primary,
+      items: deduplicatedItems.length > 0 ? deduplicatedItems : primary?.items,
+      parcels: deduplicatedParcels.length > 0 ? deduplicatedParcels : primary?.parcels,
+
       pickupShgStatus: pNew?.shgStatus || pAssigned?.shgStatus || pWh?.shgStatus || pRej?.shgStatus || pRes?.shgStatus,
       pickupTransporterStatus: pAssigned?.transporterStatus || pWh?.transporterStatus || pRej?.transporterStatus || pRes?.transporterStatus,
       dropShgStatus: dNew?.shgStatus || dAssigned?.shgStatus || dRej?.shgStatus || dRes?.shgStatus || dComp?.shgStatus,
@@ -734,7 +944,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     loadData();
     const timer = setInterval(() => {
       loadData(false, true);
-    }, 1000);
+    }, 4000);
     return () => clearInterval(timer);
   }, [
     activeTopTab,
@@ -757,16 +967,66 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   // Handle View Action
   const handleViewOrder = async (order: any) => {
-    setSelectedOrderDetails(order);
+    const initialMerged = getMergedOrder(order.id || order.orderId || '', {
+      pickupNew: pickupNewOrders,
+      pickupAssigned: pickupAssignedOrders,
+      pickupWarehouse: pickupWarehouseOrders,
+      pickupRejected: pickupRejectedOrders,
+      pickupRescheduled: pickupRescheduledOrders,
+      dropNew: dropNewOrders,
+      dropAssigned: dropAssignedOrders,
+      dropRejected: dropRejectedOrders,
+      dropRescheduled: dropRescheduledOrders,
+      dropCompleted: dropCompletedOrders,
+      returnPickupNew: returnPickupNewOrders,
+      returnPickupCompleted: returnPickupCompletedOrders,
+      returnDropNew: returnDropNewOrders,
+      returnDropCompleted: returnDropCompletedOrders,
+    }) || order;
+
+    setSelectedOrderDetails(initialMerged);
     setIsViewModalOpen(true);
     try {
       const fresh = await api.orders.getDetails(order.uuid || order.id);
       if (fresh) {
-        const mapped = mapOrder(fresh, 'pickup');
-        setSelectedOrderDetails(mapped);
+        const flowType = (fresh.phase === 'DROP' || order.phase === 'DROP') ? 'drop' : 'pickup';
+        const mapped = mapOrder(fresh, flowType);
+
+        const allTrackingEvents = [
+          ...(initialMerged.tracking || []),
+          ...(fresh.tracking || []),
+          ...(mapped.tracking || []),
+        ];
+
+        const uniqueTrackingMap = new Map();
+        allTrackingEvents.forEach((t) => {
+          const rawTitle = String(t.status || t.action || '').toLowerCase().trim();
+          const canonicalTitle = CANONICAL_STATUS_MAP[rawTitle] || t.status || t.action;
+          if (canonicalTitle) {
+            const key = canonicalTitle.toLowerCase().trim();
+            if (!uniqueTrackingMap.has(key)) {
+              uniqueTrackingMap.set(key, { ...t, status: canonicalTitle });
+            }
+          }
+        });
+
+        const mergedTracking = Array.from(uniqueTrackingMap.values()).sort((a: any, b: any) => {
+          const rankA = STAGE_ORDER[a.status] || 99;
+          const rankB = STAGE_ORDER[b.status] || 99;
+          if (rankA !== rankB) return rankA - rankB;
+          const timeA = new Date(a.timestamp || a.scanTime || a.updatedAt || a.createdAt || 0).getTime();
+          const timeB = new Date(b.timestamp || b.scanTime || b.updatedAt || b.createdAt || 0).getTime();
+          return timeA - timeB;
+        });
+
+        setSelectedOrderDetails({
+          ...initialMerged,
+          ...mapped,
+          tracking: mergedTracking.length > 0 ? mergedTracking : (mapped.tracking || initialMerged.tracking),
+        });
       }
     } catch (e) {
-      console.error("Failed to load fresh order details on view click:", e);
+      console.warn('Failed to load fresh order details:', e);
     }
   };
 
@@ -775,13 +1035,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setIntakeOrder({
       id: order.id,
       uuid: order.uuid,
-      qty: order.totalQty || order.quantity || 0,
-      weight: order.totalWeight || order.weight || 0,
-      sellerName: order.sellerName || 'N/A',
-      buyerName: order.buyerName || 'N/A',
-      shgName: order.shgDetails?.name || 'N/A',
-      transporterName: order.transporterDetails?.name || 'N/A',
+      orderId: order.orderId,
       fullOrder: order,
+      isBulk: false,
+      sellerName: order.sellerName,
+      buyerName: order.buyerName,
+      shgName: order.pickupShgDetails?.name || order.shgDetails?.name,
+      transporterName: order.pickupTransporterDetails?.name || order.transporterDetails?.name,
+      qty: order.totalQty || order.quantity || 1,
+      weight: order.totalWeight || order.weight || 0,
     });
     setIntakeType(type);
     setIsIntakeModalOpen(true);
@@ -792,29 +1054,30 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const currentOrder = intakeOrder;
     const currentType = intakeType;
 
+    // Instant modal close for 0ms visual responsiveness
+    setIsIntakeModalOpen(false);
+    setIntakeOrder(null);
+    setIntakeType(null);
     setActionProcessing(true);
+
     try {
       if (currentType === 'pickup') {
         const orderIds = currentOrder.isBulk ? currentOrder.selectedIds : [currentOrder.uuid || currentOrder.id];
         await intakePickupOrders(orderIds);
-        await loadData();
-        alert(`Intake Successful! Order ${currentOrder.id} status updated to STORED, added to Hub Inventory, and Phase 2 started.`);
+        showNotification(`Intake Successful! Order #${currentOrder.id} status updated to STORED, added to Hub Inventory, and Phase 2 started.`, 'success');
       } else if (currentType === 'return-pickup') {
         await intakeReturnOrder(currentOrder.id, 'pickup');
-        await loadData();
-        alert(`Buyer Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
+        showNotification(`Buyer Return Intake Successful! Order #${currentOrder.id} added to Inventory.`, 'success');
       } else if (currentType === 'return-drop') {
         await intakeReturnOrder(currentOrder.id, 'drop');
-        await loadData();
-        alert(`Transporter Return Intake Successful! Order ${currentOrder.id} added to Inventory.`);
+        showNotification(`Transporter Return Intake Successful! Order #${currentOrder.id} added to Inventory.`, 'success');
       }
+      // Re-trigger live page reload without requiring manual refresh
+      await loadData(false, true);
     } catch (err: any) {
-      alert(err.message || 'Intake action failed.');
+      showNotification(err.message || 'Intake action failed.', 'error');
     } finally {
       setActionProcessing(false);
-      setIsIntakeModalOpen(false);
-      setIntakeOrder(null);
-      setIntakeType(null);
     }
   };
 
@@ -999,15 +1262,56 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     });
   };
 
+  // Universal Indian Standard Time (IST) Formatter
+  const formatIndianDateTime = (isoDateString?: string | Date | null) => {
+    if (!isoDateString) return '-';
+    const d = new Date(isoDateString);
+    if (isNaN(d.getTime())) return String(isoDateString);
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  const splitIndianDateTime = (isoDateString?: string | Date | null) => {
+    if (!isoDateString) return { date: '-', time: '-', full: '-' };
+    const d = new Date(isoDateString);
+    if (isNaN(d.getTime())) return { date: String(isoDateString), time: '', full: String(isoDateString) };
+    const date = d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const time = d.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return { date, time, full: `${date} • ${time}` };
+  };
+
   // Graphical tracking nodes calculator
   const getTimelineNodes = (order: any) => {
     const getLogsForStage = (stageKeywords: string[]) => {
       if (!order.tracking || order.tracking.length === 0) return 'No scan events logged.';
       const matching = order.tracking.filter((t: any) =>
-        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw))
+        stageKeywords.some(kw => t.status?.toUpperCase().includes(kw) || t.remarks?.toUpperCase().includes(kw) || t.action?.toUpperCase().includes(kw))
       );
       if (matching.length === 0) return 'No scan events logged yet for this stage.';
-      return matching.map((t: any) => `[${t.time || t.date || ''}] ${t.remarks || t.status}`).join('\n');
+      return matching.map((t: any) => {
+        const timeStr = formatIndianDateTime(t.scanTime || t.updatedAt || t.createdAt || t.time);
+        const actionStr = t.remarks || t.action || t.status || 'Verified';
+        const roleStr = t.userRole ? ` (${t.userRole})` : '';
+        return `• [${timeStr}] ${actionStr}${roleStr}`;
+      }).join('\n');
     };
 
     const isBuyerReturn = order.returnType === 'BUYER_RETURN' || [
@@ -1056,8 +1360,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile Number': order.buyerMobile || 'N/A',
             'Address': order.buyerAddress || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.createdAt),
             'Status': 'RETURN_INITIATED',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING'])
           }
         },
         {
@@ -1070,8 +1375,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
             'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || order.pickupShgDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || order.pickupShgDetails?.pickedAt),
             'Status': order.shgStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
+            'History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
           } : null
         },
         {
@@ -1084,8 +1391,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
             'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
             'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || order.pickupTransporterDetails?.acceptedAt),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || order.pickupTransporterDetails?.pickedAt),
             'Status': order.transporterStatus || 'PENDING',
-            'Full Scan History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
+            'History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
           } : null
         },
         {
@@ -1095,9 +1404,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           details: {
             'Warehouse': 'GMU Hub Central Warehouse',
             'Order ID': order.id,
-            'Stored Time': order.storedDate || 'N/A',
+            'Pickup (Intake Date & Time)': formatIndianDateTime(order.warehouseReceivedAt || order.warehouseReceivedDate),
+            'Drop (Stored Date & Time)': formatIndianDateTime(order.storedAt || order.storedDate),
             'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
-            'Full Scan History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+            'History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
           }
         }
       ];
@@ -1106,131 +1416,211 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     // 1. Seller: always completed
     const sellerState = 'completed';
 
-    // 2. Pickup SHG: completed if order is picked (or later status)
+    // Check if Phase 1 has concluded or GMU Hub / Phase 2 has started
+    const isPhase1Concluded = [
+      'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED',
+      'DROP_PENDING', 'DROP_CREATED', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED',
+      'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG',
+      'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG',
+      'DELIVERED', 'COMPLETED'
+    ].includes((order.mainStatus || '').toUpperCase()) ||
+      order.phase === 'DROP' ||
+      Boolean(order.dropShgId || order.dropTransporterId || order.warehouseReceivedAt || order.storedAt);
+
+    // 2. Pickup SHG: completed if order is picked or Phase 1 concluded
     let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isShgPicked = order.pickupShgStatus === 'PICKED' || ['PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isShgPicked = isPhase1Concluded || [
+      'PICKED', 'DROPPED', 'COMPLETED'
+    ].includes((order.pickupShgStatus || '').toUpperCase()) || [
+      'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'
+    ].includes((order.mainStatus || '').toUpperCase());
+
     if (isShgPicked || order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED') {
       pickupShgState = 'completed';
-    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(order.mainStatus)) {
+    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes((order.mainStatus || '').toUpperCase())) {
       pickupShgState = 'active';
     }
 
-    // 3. Pickup Transporter: completed if parcel is picked up by transporter (or later status)
+    // 3. Pickup Transporter: completed if parcel is delivered to hub or Phase 1 concluded
     let pickupTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isTransPickupCompleted = ['PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_GMU', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'DROP_ASSIGNED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.phase === 'DROP';
+    const isTransPickupCompleted = isPhase1Concluded || [
+      'DROPPED', 'COMPLETED'
+    ].includes((order.pickupTransporterStatus || '').toUpperCase());
+
     if (isTransPickupCompleted) {
       pickupTransporterState = 'completed';
-    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG', 'REDIRECTED'].includes(order.mainStatus) || order.pickupTransporterStatus === 'ACCEPTED') {
+    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG', 'REDIRECTED', 'IN_TRANSIT_TO_HUB'].includes((order.mainStatus || '').toUpperCase()) || ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKED'].includes((order.pickupTransporterStatus || '').toUpperCase())) {
       pickupTransporterState = 'active';
     }
 
     // 4. GMU Hub: completed if dispatched from hub or later status
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus);
     if (isHubCompleted) {
       gmuHubState = 'completed';
-    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'HUB_RECEIVED', 'BARCODE_GENERATED', 'AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_CREATED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
+    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'STORED', 'DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
       gmuHubState = 'active';
     }
 
     // 5. Drop Transporter: completed if parcel is at drop SHG/delivered
     let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DELIVERED';
+    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DROPPED' || order.dropTransporterStatus === 'COMPLETED';
     if (isDropTransCompleted) {
       dropTransporterState = 'completed';
-    } else if (order.phase === 'DROP' && !['DELIVERED', 'COMPLETED'].includes(order.mainStatus)) {
+    } else if (['DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'DISPATCHED'].includes(order.mainStatus) || order.phase === 'DROP') {
       dropTransporterState = 'active';
     }
 
     // 6. Drop SHG: completed if delivered/completed
     let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropShgCompleted = ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus) || order.dropShgStatus === 'DELIVERED' || order.dropShgStatus === 'DROPPED';
+    const isDropShgCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus) || order.dropShgStatus === 'DROPPED' || order.dropShgStatus === 'COMPLETED';
     if (isDropShgCompleted) {
       dropShgState = 'completed';
-    } else if (order.phase === 'DROP' && ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG'].includes(order.mainStatus)) {
+    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus) || (order.phase === 'DROP' && (order.dropShgStatus === 'PICKED' || order.dropShgStatus === 'PICKED_UP'))) {
       dropShgState = 'active';
     }
 
     // 7. Buyer: completed if delivered
     let buyerState: 'completed' | 'active' | 'pending' = 'pending';
-    const isBuyerCompleted = ['DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+    const isBuyerCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus);
     if (isBuyerCompleted) {
       buyerState = 'completed';
-    } else if (order.phase === 'DROP' && ['OUT_FOR_DELIVERY', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_BUYER'].includes(order.mainStatus)) {
+    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus)) {
       buyerState = 'active';
     }
+
+    const foundPickupShg = order.pickupShgDetails || (order.pickupShgId ? shgList.find((s: any) => String(s.id) === String(order.pickupShgId) || String(s.userId) === String(order.pickupShgId)) : null);
+    const foundPickupTransporter = order.pickupTransporterDetails || (order.pickupTransporterId ? transporterList.find((t: any) => String(t.id) === String(order.pickupTransporterId) || String(t.userId) === String(order.pickupTransporterId)) : null);
+    const foundDropShg = order.dropShgDetails || (order.dropShgId ? shgList.find((s: any) => String(s.id) === String(order.dropShgId) || String(s.userId) === String(order.dropShgId)) : null);
+    const isDropTransporterAccepted = ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED', 'DELIVERED'].includes((order.dropTransporterStatus || '').toUpperCase());
+    const foundDropTransporter = isDropTransporterAccepted ? (order.dropTransporterDetails || (order.dropTransporterId ? transporterList.find((t: any) => String(t.id) === String(order.dropTransporterId) || String(t.userId) === String(order.dropTransporterId)) : null)) : null;
+
+    const cleanPersonName = (rawName?: string, defaultFallback: string = 'N/A') => {
+      if (!rawName) return defaultFallback;
+      return String(rawName).replace(/\s*\([^)]*\)/g, '').trim() || defaultFallback;
+    };
+
+    const getExactPickupShgStatus = () => {
+      const st = (order.pickupShgStatus || '').toUpperCase();
+      const main = (order.mainStatus || '').toUpperCase();
+      if (['STORED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'DISPATCHED', 'COMPLETED'].includes(main) || ['PICKED', 'DELIVERED_TO_HUB', 'HANDED_OVER'].includes(st)) {
+        return 'SHG Picked & Dropped to Transporter';
+      }
+      if (st === 'PICKED') return 'Parcel Picked from Seller';
+      if (st === 'ACCEPTED' || main === 'PICKUP_SHG_ACCEPTED') return 'SHG Accepted';
+      return 'SHG Pending';
+    };
+
+    const getExactPickupTransporterStatus = () => {
+      const st = (order.pickupTransporterStatus || '').toUpperCase();
+      const main = (order.mainStatus || '').toUpperCase();
+      if (['STORED', 'DISPATCHED', 'COMPLETED'].includes(main) || st === 'DELIVERED_TO_HUB') {
+        return 'Transporter Dropped to Hub';
+      }
+      if (st === 'PARCEL_PICKED' || main === 'IN_TRANSIT_TO_HUB') return 'In Transit to Hub';
+      if (st === 'ACCEPTED' || st === 'TRANSPORTER_ACCEPTED') return 'Transporter Accepted';
+      return 'Transporter Broadcast Pending';
+    };
+
+    const getExactDropTransporterStatus = () => {
+      const st = (order.dropTransporterStatus || '').toUpperCase();
+      const main = (order.mainStatus || '').toUpperCase();
+      if (['PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(main) || st === 'DELIVERED_TO_DROP_SHG') {
+        return 'Transporter Dropped to Drop SHG';
+      }
+      if (['IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED'].includes(main) || st === 'IN_TRANSIT_TO_DROP_SHG') return 'In Transit to Drop SHG';
+      if (st === 'ACCEPTED' || st === 'DROP_TRANSPORTER_ACCEPTED') return 'Transporter Accepted';
+      return 'Transporter Broadcast Pending';
+    };
+
+    const getExactDropShgStatus = () => {
+      const st = (order.dropShgStatus || '').toUpperCase();
+      const main = (order.mainStatus || '').toUpperCase();
+      if (['DELIVERED', 'COMPLETED'].includes(main) || st === 'DELIVERED_TO_BUYER') return 'Delivered to Buyer';
+      if (main === 'PARCEL_AT_DROP_SHG' || st === 'PARCEL_RECEIVED_AT_SHG') return 'Parcel Received at Drop SHG';
+      if (st === 'ACCEPTED' || st === 'DROP_SHG_ACCEPTED') return 'Drop SHG Accepted';
+      return 'Drop SHG Pending';
+    };
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
       {
         id: 'seller', label: 'Seller', state: sellerState, details: {
-          'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
+          'Person Name': cleanPersonName(order.sellerName || order.seller?.fullName, 'N/A'),
           'Role': 'Seller / Farmer',
           'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
           'Address': order.sellerAddress || order.seller?.address || 'N/A',
           'Order ID': order.id,
           'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-          'Order Placed Date': order.orderDate || 'N/A',
+          'Accepted (Date & Time)': formatIndianDateTime(order.orderDate || order.createdAt),
           'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
           'Status': 'PLACED',
-          'Full Scan History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
+          'History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
         }
       },
       {
-        id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: (order.pickupShgDetails) ? {
-          'Person Name': order.pickupShgDetails.name || 'N/A',
-          'Role': 'Pickup Self Help Group',
-          'Mobile': order.pickupShgDetails.mobile || 'N/A',
-          'Address': order.pickupShgDetails.address || 'N/A',
+        id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: {
+          'Person Name': cleanPersonName(foundPickupShg?.leader || foundPickupShg?.crpName || foundPickupShg?.name || order.shgDetails?.name, 'N/A'),
+          'Role': 'Pickup Self Help Group Member',
+          'Mobile': foundPickupShg?.mobile || foundPickupShg?.phone || order.shgDetails?.mobile || 'N/A',
+          'Address': foundPickupShg?.address || order.shgDetails?.address || 'N/A',
           'Order ID': order.id,
-          'Status': order.pickupShgStatus || 'PENDING',
-          'Full Scan History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
-        } : null
+          'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || (pickupShgState === 'completed' || pickupShgState === 'active' ? (order.createdAt || order.orderDate) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || (pickupShgState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
+          'Status': getExactPickupShgStatus(),
+          'History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
+        }
       },
       {
-        id: 'pickup_transporter', label: 'Pickup Transporter', state: pickupTransporterState, details: (order.pickupTransporterDetails) ? {
-          'Person Name': order.pickupTransporterDetails.name || 'N/A',
+        id: 'pickup_transporter', label: 'Pickup Transporter', state: pickupTransporterState, details: {
+          'Person Name': (foundPickupTransporter || order.pickupTransporterDetails) ? cleanPersonName(foundPickupTransporter?.name || foundPickupTransporter?.fullName || order.pickupTransporterDetails?.name, 'Waiting for Transporter') : 'Waiting for Transporter',
           'Role': 'Pickup Transporter',
-          'Mobile': order.pickupTransporterDetails.mobile || 'N/A',
-          'Address': order.pickupTransporterDetails.address || 'N/A',
-          'Vehicle': order.pickupTransporterDetails.vehicle || 'N/A',
+          'Mobile': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.mobile || foundPickupTransporter?.phone || order.pickupTransporterDetails?.mobile || 'N/A') : 'N/A',
+          'Address': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.address || order.pickupTransporterDetails?.address || 'N/A') : 'N/A',
+          'Vehicle': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.vehicle || foundPickupTransporter?.vehicleNumber || order.pickupTransporterDetails?.vehicle || 'N/A') : 'N/A',
           'Order ID': order.id,
-          'Status': order.pickupTransporterStatus || 'PENDING',
-          'Full Scan History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
-        } : null
+          'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || (pickupTransporterState === 'completed' || pickupTransporterState === 'active' ? (order.createdAt || order.orderDate) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || (pickupTransporterState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
+          'Status': getExactPickupTransporterStatus(),
+          'History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
+        }
       },
       {
         id: 'gmu_hub', label: 'GMU Hub', state: gmuHubState, details: {
           'Warehouse': 'GMU Hub Central Warehouse',
           'Order ID': order.id,
           'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
-          'Intake Time': order.warehouseReceivedDate || 'N/A',
-          'Stored Time': order.storedDate || 'N/A',
-          'Status': (isHubCompleted || order.mainStatus === 'STORED' || order.storedAt) ? 'STORED' : (gmuHubState === 'active' ? 'RECEIVED' : 'PENDING'),
-          'Full Scan History': getLogsForStage(['WAREHOUSE', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED'])
+          'Pickup (Intake Date & Time)': formatIndianDateTime(order.gmuHubIntakeAt || order.warehouseReceivedDate || order.warehouseReceivedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
+          'Drop (Stored Date & Time)': formatIndianDateTime(order.gmuHubStoredAt || order.storedDate || order.storedAt || (gmuHubState === 'completed' || isPhase1Concluded ? (order.storedAt || order.createdAt) : null)),
+          'Status': (isHubCompleted || order.mainStatus === 'STORED' || order.storedAt) ? 'STORED IN GMU HUB' : 'PENDING HUB INTAKE',
+          'History': getLogsForStage(['WAREHOUSE', 'STORED', 'HUB_RECEIVED', 'PARCEL_AT_GMU'])
         }
       },
       {
-        id: 'drop_transporter', label: 'Drop Transporter', state: dropTransporterState, details: (order.dropTransporterDetails) ? {
-          'Person Name': order.dropTransporterDetails.name || 'N/A',
+        id: 'drop_transporter', label: 'Drop Transporter', state: dropTransporterState, details: {
+          'Person Name': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? cleanPersonName(foundDropTransporter?.name || foundDropTransporter?.fullName || order.dropTransporterDetails?.name, 'Waiting for Transporter') : 'Waiting for Transporter',
           'Role': 'Drop Transporter',
-          'Mobile': order.dropTransporterDetails.mobile || 'N/A',
-          'Address': order.dropTransporterDetails.address || 'N/A',
-          'Vehicle': order.dropTransporterDetails.vehicle || 'N/A',
+          'Mobile': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? (foundDropTransporter?.mobile || foundDropTransporter?.phone || order.dropTransporterDetails?.mobile || 'N/A') : 'N/A',
+          'Address': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? (foundDropTransporter?.address || order.dropTransporterDetails?.address || 'N/A') : 'N/A',
+          'Vehicle': (isDropTransporterAccepted && (foundDropTransporter || order.dropTransporterDetails)) ? (foundDropTransporter?.vehicle || foundDropTransporter?.vehicleNumber || order.dropTransporterDetails?.vehicle || 'N/A') : 'N/A',
           'Order ID': order.id,
-          'Status': order.dropTransporterStatus || 'PENDING',
-          'Full Scan History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER'])
-        } : null
+          'Accepted (Date & Time)': formatIndianDateTime(order.dropTransporterAcceptedAt || (dropTransporterState === 'completed' || dropTransporterState === 'active' ? (order.dispatchedAt || order.storedAt || order.updatedAt) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.dropTransporterPickedAt || (dropTransporterState === 'completed' ? (order.dispatchedAt || order.updatedAt) : null)),
+          'Status': getExactDropTransporterStatus(),
+          'History': getLogsForStage(['TRANSPORTER_DROP_PICKUP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER', 'DISPATCHED'])
+        }
       },
       {
-        id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: (order.dropShgDetails) ? {
-          'Person Name': order.dropShgDetails.name || 'N/A',
-          'Role': 'Drop Self Help Group',
-          'Mobile': order.dropShgDetails.mobile || 'N/A',
-          'Address': order.dropShgDetails.address || 'N/A',
+        id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: {
+          'Person Name': cleanPersonName(foundDropShg?.leader || foundDropShg?.crpName || foundDropShg?.name || order.dropShgDetails?.name, 'N/A'),
+          'Role': 'Drop Self Help Group Member',
+          'Mobile': foundDropShg?.mobile || foundDropShg?.phone || order.dropShgDetails?.mobile || 'N/A',
+          'Address': foundDropShg?.address || order.dropShgDetails?.address || 'N/A',
           'Order ID': order.id,
-          'Status': order.dropShgStatus || 'PENDING',
-          'Full Scan History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG'])
-        } : null
+          'Accepted (Date & Time)': formatIndianDateTime(order.dropShgAcceptedAt || (dropShgState === 'completed' || dropShgState === 'active' ? (order.dispatchedAt || order.updatedAt) : null)),
+          'Pickup (Date & Time)': formatIndianDateTime(order.dropShgPickedAt || (dropShgState === 'completed' ? order.updatedAt : null)),
+          'Status': getExactDropShgStatus(),
+          'History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'SHG_DROP_PICKUP'])
+        }
       },
       {
         id: 'buyer', label: 'Buyer', state: buyerState, details: {
@@ -1239,9 +1629,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
           'Address': order.buyerAddress || order.buyer?.address || 'N/A',
           'Order ID': order.id,
-          'Delivery Completed Date': order.deliveredAt || 'N/A',
+          'Receive (Date & Time)': formatIndianDateTime(order.buyerDeliveredAt || order.deliveredAt || (isBuyerCompleted ? order.updatedAt : null)),
           'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
-          'Full Scan History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER'])
+          'History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER', 'FINAL_DELIVERY'])
         }
       }
     ];
@@ -1434,12 +1824,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     return null;
   };
 
-  const handleNodeClick = (nodeLabel: string, nodeDetails: any) => {
-    if (!nodeDetails) return;
-    setActiveNodeTitle(nodeLabel);
-    setActiveNodeDetails(nodeDetails);
-    setIsNodeDrawerOpen(true);
-  };
+
 
   // Redesign Columns for New & Completed sections
   const pickupNewColumns = [
@@ -1861,7 +2246,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                               {nodes.map((node, idx) => {
                                 const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
                                 const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
-                                const isClickable = !!node.details && !isRedirectedSHG;
+                                const isClickable = !isRedirectedSHG;
 
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
                                 let iconContent = null;
@@ -1912,7 +2297,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 return (
                                   <div
                                     key={idx}
-                                    onClick={() => isClickable && handleNodeClick(node.label, node.details)}
+                                    onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
                                     className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
                                   >
                                     {/* Current Location floating badge above active node */}
@@ -1956,7 +2341,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           </div>
 
                           {/* Right Column (Status, ID & Actions) */}
-                          <div className="w-full lg:w-[250px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-8 self-stretch py-1">
+                          <div className="w-full lg:w-[320px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-6 self-stretch py-1 overflow-visible">
                             {/* Top row: Status info badge and time ago (centered) */}
                             <div className="flex flex-col items-center text-center space-y-0.5">
                               <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
@@ -1969,10 +2354,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                             </div>
 
                             {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
-                            <div className="w-full flex flex-row items-center justify-between gap-3">
+                            <div className="w-full flex flex-row items-center justify-between gap-2 overflow-visible">
                               {/* Order ID display styled as "ID - [id number]" */}
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm font-black text-slate-800 tracking-tight whitespace-nowrap">
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-xs font-black text-slate-800 tracking-tight whitespace-nowrap">
                                   {(() => {
                                     const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
                                     return `ID - ${match ? match[1] : order.id}`;
@@ -1990,7 +2375,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 </button>
                               </div>
 
-                              <div className="flex flex-row gap-2 items-center">
+                              <div className="flex flex-row gap-1.5 items-center shrink-0">
                                 {needsIntake && (
                                   <button
                                     onClick={() => {
@@ -2000,7 +2385,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       handleIntakeClick(order, intakeKind);
                                     }}
                                     title="Scan to Intake"
-                                    className="px-3 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
+                                    className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
                                   >
                                     <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
                                     <span>Scan</span>
@@ -2010,7 +2395,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 <button
                                   onClick={() => handleViewOrder(order)}
                                   title="View Details"
-                                  className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
+                                  className="p-2 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
                                 >
                                   <Eye className="h-4 w-4 text-[#B2D534]" />
                                 </button>
@@ -2494,7 +2879,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 {Object.entries(activeNodeDetails).map(([key, val]) => (
                   <div key={key} className="space-y-1">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{key}</span>
-                    <span className="text-sm font-semibold text-slate-800 block leading-relaxed break-words">{val?.toString() || '-'}</span>
+                    {key === 'History' ? (
+                      (() => {
+                        const personTimeline = getPersonHistoryTimeline(activeNodeTitle, selectedOrderDetails);
+                        if (!personTimeline || personTimeline.length === 0) {
+                          return (
+                            <div className="p-4 bg-[#073318]/[0.02] border border-dashed border-slate-200 rounded-2xl text-center">
+                              <p className="text-xs font-semibold text-slate-400 italic">No scan events logged yet for this stage.</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="bg-[#073318] rounded-2xl p-4 text-white space-y-4 shadow-sm border border-[#073318]">
+                            <div className="flex items-center gap-1.5 border-b border-white/10 pb-2">
+                              <Layers className="h-3.5 w-3.5 text-[#B2D534]" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-[#B2D534]">Partner Audit Log</span>
+                            </div>
+                            <div className="relative border-l-2 border-[#B2D534]/30 pl-4 space-y-3 ml-2 text-left">
+                              {personTimeline.map((t: any, idx: number) => {
+                                const timeObj = splitIndianDateTime(t.timestamp || t.updatedAt || t.scanTime || t.createdAt);
+                                return (
+                                  <div key={idx} className="relative group">
+                                    <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[10px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                      <span className="text-[9px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                    </div>
+                                    <p className="text-xs font-black text-white mt-0.5 leading-snug">
+                                      {t.status ? String(t.status).replace(/[-_]/g, ' ') : (t.action || 'Status Update')}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-800 block leading-relaxed break-words">{val?.toString() || '-'}</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2977,101 +3401,136 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       )}
                     </div>
 
-                    {!selectedOrderDetails.parcels || selectedOrderDetails.parcels.length === 0 ? (
-                      <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
-                        <p className="text-xs font-semibold text-slate-400 italic">No QR codes available for this order.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-                        {selectedOrderDetails.parcels.map((parcel: any) => (
-                          <div key={parcel.parcelId} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-xl transition-all">
-                            <img
-                              src={parcel.qrImage}
-                              alt={`Parcel ${parcel.parcelNumber}`}
-                              onClick={() => {
-                                setSelectedParcel(parcel);
-                                setIsParcelPreviewOpen(true);
-                              }}
-                              className="h-12 w-12 rounded-lg bg-white p-0.5 border border-slate-200 cursor-pointer hover:scale-105 transition-all shadow-sm shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-800 truncate">{parcel.productName}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] text-slate-500 font-semibold">
-                                  Parcel {parcel.parcelNumber}/{parcel.totalParcels}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-medium">|</span>
-                                <span className="text-[10px] text-slate-500 font-semibold">
-                                  Qty: {parcel.quantity} ({parcel.weight})
-                                </span>
-                              </div>
-                              <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${parcel.parcelStatus === 'DELIVERED' || parcel.parcelStatus === 'COMPLETED'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : parcel.parcelStatus.includes('IN_TRANSIT') || parcel.parcelStatus === 'DISPATCHED'
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'bg-amber-50 text-amber-700'
-                                }`}>
-                                {parcel.parcelStatus.replace(/[-_]/g, ' ')}
-                              </span>
-                            </div>
-                            <div className="flex flex-col gap-1.5 text-right">
-                              <a
-                                href={parcel.qrImage}
-                                download={`QR_${parcel.orderId}_Parcel_${parcel.parcelNumber}.png`}
-                                className="text-[10px] font-bold text-[#073318] hover:underline"
-                              >
-                                Download
-                              </a>
-                              <button
+                    {(() => {
+                      const rawParcels = selectedOrderDetails?.parcels || [];
+                      const parcelMap = new Map();
+                      rawParcels.forEach((p: any) => {
+                        const key = `${p.productName || p.name}-${p.parcelNumber || 1}`;
+                        if (!parcelMap.has(key)) {
+                          parcelMap.set(key, p);
+                        } else {
+                          const existing = parcelMap.get(key);
+                          const isNewer = (p.parcelStatus && p.parcelStatus !== 'PENDING') || (p.parcelId && !existing.parcelId);
+                          if (isNewer) parcelMap.set(key, p);
+                        }
+                      });
+                      const displayParcels = Array.from(parcelMap.values());
+
+                      if (displayParcels.length === 0) {
+                        return (
+                          <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
+                            <p className="text-xs font-semibold text-slate-400 italic">No QR codes available for this order.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                          {displayParcels.map((parcel: any, idx: number) => (
+                            <div key={parcel.parcelId || idx} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-xl transition-all">
+                              <img
+                                src={parcel.qrImage}
+                                alt={`Parcel ${parcel.parcelNumber}`}
                                 onClick={() => {
                                   setSelectedParcel(parcel);
                                   setIsParcelPreviewOpen(true);
                                 }}
-                                className="text-[10px] font-bold text-slate-500 hover:underline hover:bg-transparent cursor-pointer"
-                              >
-                                Preview
-                              </button>
+                                className="h-12 w-12 rounded-lg bg-white p-0.5 border border-slate-200 cursor-pointer hover:scale-105 transition-all shadow-sm shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{parcel.productName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] text-slate-500 font-semibold">
+                                    Parcel {parcel.parcelNumber || (idx + 1)}/{parcel.totalParcels || displayParcels.length}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-medium">|</span>
+                                  <span className="text-[10px] text-slate-500 font-semibold">
+                                    Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
+                                  </span>
+                                </div>
+                                <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${
+                                  (parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
+                                      ? 'bg-blue-50 text-blue-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}>
+                                  {(parcel.parcelStatus || 'PENDING').replace(/[-_]/g, ' ')}
+                                </span>
+                              </div>
+                              <div className="flex flex-col gap-1.5 text-right">
+                                <a
+                                  href={parcel.qrImage}
+                                  download={`QR-${parcel.productName}-${parcel.parcelNumber}.png`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-[#073318] hover:underline font-bold"
+                                >
+                                  Download
+                                </a>
+                                <button
+                                  onClick={() => {
+                                    setSelectedParcel(parcel);
+                                    setIsParcelPreviewOpen(true);
+                                  }}
+                                  className="text-[10px] text-slate-500 hover:text-slate-700 font-semibold"
+                                >
+                                  Preview
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="bg-[#073318] rounded-3xl p-6 text-white flex flex-col justify-between space-y-6 shadow-lg min-h-[300px]">
                     <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-white">
-                        <Layers className="h-4 w-4 text-[#B2D534]" />
-                        <span className="font-extrabold text-sm uppercase tracking-wider">Tracking Audit History</span>
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <div className="flex items-center gap-2 text-white">
+                          <Layers className="h-4 w-4 text-[#B2D534]" />
+                          <span className="font-extrabold text-sm uppercase tracking-wider">Tracking Audit History</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-white/10 text-[#B2D534] border border-white/10">
+                          Live Indian Time (IST)
+                        </span>
                       </div>
 
-                      <div className="relative border-l border-white/20 pl-4 space-y-4 ml-2.5 py-1 text-left">
+                      <div className="relative border-l-2 border-[#B2D534]/30 pl-5 space-y-5 ml-2.5 py-1 text-left max-h-[380px] overflow-y-auto pr-2">
                         {selectedOrderDetails.tracking && selectedOrderDetails.tracking.length > 0 ? (
                           selectedOrderDetails.tracking.map((t: any, idx: number) => {
-                            const timeStr = t.updatedAt
-                              ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: true
-                              })
-                              : '08:30 AM';
+                            const timeObj = splitIndianDateTime(t.timestamp || t.updatedAt || t.scanTime || t.createdAt);
                             return (
-                              <div key={idx} className="relative">
-                                <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                                <p className="text-xs font-black text-[#B2D534]">{timeStr}</p>
-                                <p className="text-xs font-semibold text-slate-200 mt-0.5">
-                                  {t.remarks || t.status.replace(/[-_]/g, ' ')}
+                              <div key={idx} className="relative group">
+                                <span className="absolute -left-[27px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318] shadow-sm" />
+                                
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[11px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                  <span className="text-[10px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                </div>
+
+                                <p className="text-xs font-black text-white mt-1">
+                                  {t.status ? String(t.status).replace(/[-_]/g, ' ') : (t.action || 'Status Update')}
                                 </p>
                               </div>
                             );
                           })
                         ) : (
                           <div className="relative">
-                            <span className="absolute -left-[22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
-                            <p className="text-xs font-black text-[#B2D534]">
-                              {selectedOrderDetails.created_at ? selectedOrderDetails.created_at.split(' ').pop() : '08:30 AM'}
-                            </p>
-                            <p className="text-xs font-semibold text-slate-200 mt-0.5">Order Created</p>
+                            <span className="absolute -left-[27px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318]" />
+                            {(() => {
+                              const timeObj = splitIndianDateTime(selectedOrderDetails.orderDate || selectedOrderDetails.created_at || selectedOrderDetails.createdAt);
+                              return (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-black text-[#B2D534]">{timeObj.time}</span>
+                                    <span className="text-[10px] text-slate-300 font-semibold">{timeObj.date}</span>
+                                  </div>
+                                  <p className="text-xs font-black text-white mt-1">Order Placed & Registered</p>
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
@@ -3714,6 +4173,25 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             </div>
           </form>
         </Modal>
+
+        {/* Floating Toast Notification */}
+        {toastMessage && (
+          <div className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 transition-all transform animate-bounce-in ${
+            toastType === 'success'
+              ? 'bg-[#073318] border-[#B2D534] text-white shadow-[#073318]/40'
+              : 'bg-red-900 border-red-400 text-white shadow-red-900/40'
+          }`}>
+            <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-[#B2D534]/20 text-[#B2D534]' : 'bg-red-700 text-white'}`}>
+              {toastType === 'success' ? <Check className="h-5 w-5 stroke-[3]" /> : <AlertTriangle className="h-5 w-5" />}
+            </div>
+            <div className="flex-1 text-xs font-bold leading-relaxed tracking-wide">
+              {toastMessage}
+            </div>
+            <button onClick={() => setToastMessage(null)} className="text-white/60 hover:text-white ml-2 p-1 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </Layout>
   );

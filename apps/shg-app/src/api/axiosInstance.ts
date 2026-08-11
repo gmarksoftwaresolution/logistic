@@ -43,7 +43,8 @@ axiosInstance.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      // Handle token expiration if needed
+      originalRequest._retry = true;
+      await AsyncStorage.removeItem(STORAGE_KEYS.JWT_TOKEN);
     }
 
     return Promise.reject(error);
