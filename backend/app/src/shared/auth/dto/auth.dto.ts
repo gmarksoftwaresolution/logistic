@@ -5,6 +5,10 @@ export class SendOtpDto {
   @IsString()
   @Matches(/^(\+91)?\d{10}$/, { message: 'Invalid mobile number format' })
   mobileNumber: string;
+
+  @IsOptional()
+  @IsString()
+  appType?: 'SHG' | 'TRANSPORTER' | 'GMU_ADMIN' | string;
 }
 
 export class VerifyOtpDto {
@@ -21,6 +25,10 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsString()
   language?: string;
+
+  @IsOptional()
+  @IsString()
+  appType?: 'SHG' | 'TRANSPORTER' | 'GMU_ADMIN' | string;
 }
 
 export class LoginDto {

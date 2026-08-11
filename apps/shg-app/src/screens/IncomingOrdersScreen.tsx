@@ -300,7 +300,7 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         className="flex-1 pt-2" 
         showsVerticalScrollIndicator={false}
         data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : incomingReturnOrders.slice(0, visibleReturnCount)}
-        keyExtractor={item => item.id}
+        keyExtractor={(item, index) => `${item.id}-${item.legType || 'inc'}-${index}`}
         ListHeaderComponent={<>
         {/* Segment Tab Switcher */}
         <View

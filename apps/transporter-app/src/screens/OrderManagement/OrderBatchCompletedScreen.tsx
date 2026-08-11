@@ -17,9 +17,18 @@ import { useTranslation } from 'react-i18next';
 
 const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
-  const { batches } = useOrderManagement();
+  const { batches, refreshBatchesList } = useOrderManagement();
 
-  // Consolidate both legs by masterOrderId into a single journey representation
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (refreshBatchesList) {
+        refreshBatchesList().catch(() => {});
+      }
+    });
+    return unsubscribe;
+  }, [navigation, refreshBatchesList]);
+
+  // Consolidate both legs by masterOrderId or clean order ID into a single journey representation
   const journeys = useMemo(() => {
     const journeyMap: Record<string, any> = {};
 
@@ -29,18 +38,20 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
         return;
       }
 
-      const mId = b.masterOrderId ? String(b.masterOrderId) : b.id;
+      const cleanId = b.id.replace(/^(pickup|drop)-/, '');
+      const mId = b.masterOrderId ? String(b.masterOrderId) : cleanId;
       if (!journeyMap[mId]) {
         journeyMap[mId] = {
           masterOrderId: b.masterOrderId,
-          id: b.id,
-          shgName: b.shgName || 'Nesari Bachat Gat',
+          id: cleanId,
+          displayId: b.displayId || cleanId,
+          shgName: b.shgName || 'Local SHG',
           productName: b.products?.[0]?.name || 'General Shipment',
           totalQty: b.totalQty || 1,
           totalWeight: b.totalWeight || '1.5 kg',
           timestamp: b.timestamp || '5:02 PM',
           pickupPoint: b.pickupPointName || 'Local SHG',
-          dropPoint: b.dropPointName || 'Customer Address',
+          dropPoint: b.dropPointName || (b.flowType === 'shg_to_gmu' ? 'Gadhinglaj Hub' : 'Customer Address'),
           pickupCompleted: true,
           dropCompleted: true,
           pickupBatchId: undefined,
@@ -118,7 +129,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
               <View style={styles.cardHeaderRow}>
                 <View style={styles.idGroup}>
                   <Text style={styles.journeyIdText}>
-                    {journey.masterOrderId ? `Order #${journey.masterOrderId}` : `Order #${journey.id}`}
+                    {journey.displayId ? `Order #${journey.displayId.replace(/^ORD-/, '')}` : (journey.masterOrderId ? `Order #${journey.masterOrderId}` : `Order #${journey.id}`)}
                   </Text>
                   <View style={[styles.successPill, journey.dropCompleted ? styles.pillDelivered : styles.pillTransit]}>
                     <Text style={[styles.successPillText, journey.dropCompleted ? styles.textDelivered : styles.textTransit]}>

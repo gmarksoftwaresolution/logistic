@@ -10,10 +10,10 @@
   "scripts": {
     "backend:dev": "npm run start:dev --workspace=@logistic/backend",
     "gmu-hub:dev": "npm run dev --workspace=frontend",
-    "shg-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --offline",
-    "shg-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --tunnel",
-    "transporter-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --offline",
-    "transporter-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --tunnel",
+    "shg-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --clear",
+    "shg-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/shg-app -- --tunnel --clear",
+    "transporter-app:start": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --port 8082 --clear",
+    "transporter-app:start-tunnel": "node backend/app/scripts/update-ip.js && npm start --workspace=@logistic/transporter-app -- --port 8082 --tunnel --clear",
     "db:generate": "prisma generate --schema=backend/app/prisma/schema.prisma",
     "db:push": "prisma db push --schema=backend/app/prisma/schema.prisma",
     "seed:pincode": "ts-node backend/app/prisma/seed-pincode.ts"

@@ -14,32 +14,78 @@ export class UploadsService {
 
   async uploadFile(
     file: Express.Multer.File,
-    folder: string,
-    userId: number,
+    folder = 'general',
+    userId?: number | string,
   ): Promise<{ success: boolean; url: string; path: string }> {
     try {
-      const targetDir = path.join(this.uploadRootDir, userId.toString(), folder);
+      if (!file || !file.buffer) {
+        throw new Error('No file buffer provided');
+      }
+
+      const userFolder = userId ? userId.toString() : 'public';
+      const targetDir = path.join(this.uploadRootDir, userFolder, folder);
       
       if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
       }
 
-      const fileExt = path.extname(file.originalname);
-      const fileName = `${Date.now()}${fileExt}`;
+      const fileExt = path.extname(file.originalname || '') || '.jpg';
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 10000)}${fileExt}`;
       const filePath = path.join(targetDir, fileName);
 
       fs.writeFileSync(filePath, file.buffer);
-      const url = `/uploads/${userId}/${folder}/${fileName}`;
+      const url = `/uploads/${userFolder}/${folder}/${fileName}`;
 
       return {
         success: true,
         url: url,
         path: filePath,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('File upload error:', error);
       throw new InternalServerErrorException(
-        'Local file storage failed. Please try again.',
+        error.message || 'Local file storage failed. Please try again.',
+      );
+    }
+  }
+
+  async uploadBase64(
+    base64Str: string,
+    originalName = 'file.jpg',
+    folder = 'general',
+    userId?: number | string,
+  ): Promise<{ success: boolean; url: string; path: string }> {
+    try {
+      if (!base64Str) {
+        throw new Error('No base64 data provided');
+      }
+
+      const userFolder = userId ? userId.toString() : 'public';
+      const targetDir = path.join(this.uploadRootDir, userFolder, folder);
+
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      const cleanBase64 = base64Str.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(cleanBase64, 'base64');
+
+      const fileExt = path.extname(originalName) || '.jpg';
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 10000)}${fileExt}`;
+      const filePath = path.join(targetDir, fileName);
+
+      fs.writeFileSync(filePath, buffer);
+      const url = `/uploads/${userFolder}/${folder}/${fileName}`;
+
+      return {
+        success: true,
+        url: url,
+        path: filePath,
+      };
+    } catch (error: any) {
+      console.error('Base64 upload error:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Base64 file storage failed. Please try again.',
       );
     }
   }

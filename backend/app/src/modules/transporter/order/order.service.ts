@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getAssignedPickups(transporterId: number, mobileNumber?: string) {
     const user = await this.prisma.user.findUnique({
@@ -30,15 +32,37 @@ export class OrderService {
       where: {
         OR: [
           { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
           { pickupTransporterId: transporterUuid },
           { returnTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['PENDING', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'REDIRECTED'] }
+        mainStatus: {
+          in: [
+            'PENDING',
+            'ACCEPTED',
+            'PICKUP_SHG_ACCEPTED',
+            'PARCEL_AT_SHG',
+            'RETURN_PARCEL_AT_SHG',
+            'TRANSPORTER_ACCEPTED',
+            'IN_TRANSIT_TO_HUB',
+            'PICKUP_TRANSPORTER_ACCEPTED',
+            'PARCEL_PICKED',
+            'REDIRECTED',
+            'HUB_RECEIVED',
+            'PARCEL_AT_GMU',
+            'PARCEL_AT_HUB',
+            'STORED',
+            'DISPATCHED',
+            'DELIVERED',
+            'COMPLETED'
+          ]
+        }
       },
       include: {
         seller: true,
         buyer: true,
         parcels: true,
+        assignments: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -49,9 +73,9 @@ export class OrderService {
 
     const shgUsers = shgIds.length > 0
       ? await this.prisma.user.findMany({
-          where: { id: { in: shgIds } },
-          include: { address: true }
-        })
+        where: { id: { in: shgIds } },
+        include: { address: true, shgDetail: true }
+      })
       : [];
 
     const shgMap = new Map(shgUsers.map(u => [String(u.id), u]));
@@ -60,15 +84,18 @@ export class OrderService {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       const shgUser = o.pickupShgId ? shgMap.get(o.pickupShgId) : null;
       const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
-      
+
       const mappedSeller = (!isRedirected && shgUser) ? {
         id: shgUser.id,
         sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
-        sellerName: shgUser.fullName || 'SHG Member',
-        mobileNumber: shgUser.phoneNumber,
+        sellerName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
+        fullName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
+        mobileNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
+        phoneNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
+        shgName: shgUser.shgDetail?.shgName || '',
         email: shgUser.email,
-        addressLine1: shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
-        addressLine2: shgUser.address?.landmark || '',
+        addressLine1: shgUser.address?.landmark || shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine2: shgUser.address?.houseNo || '',
         village: shgUser.address?.village || '',
         taluka: shgUser.address?.taluka || '',
         district: shgUser.address?.district || '',
@@ -79,6 +106,30 @@ export class OrderService {
         updatedAt: shgUser.updatedAt,
       } : o.seller;
 
+      const fullAddr = mappedSeller ? [
+        mappedSeller.addressLine1,
+        mappedSeller.addressLine2,
+        mappedSeller.village,
+        mappedSeller.taluka,
+        mappedSeller.district,
+        mappedSeller.state ? `${mappedSeller.state} - ${mappedSeller.pincode}` : mappedSeller.pincode
+      ].filter(Boolean).join(', ') : '';
+
+      if (mappedSeller) {
+        (mappedSeller as any).fullAddress = fullAddr;
+      }
+
+      if (o.buyer) {
+        o.buyer.fullAddress = [
+          o.buyer.addressLine1,
+          o.buyer.addressLine2,
+          o.buyer.village,
+          o.buyer.taluka,
+          o.buyer.district,
+          o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode
+        ].filter(Boolean).join(', ');
+      }
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -88,9 +139,10 @@ export class OrderService {
         status: o.mainStatus,
         transporterId: o.pickupTransporterId,
         pickupTransporterId: o.pickupTransporterId,
-        pickupTransporterStatus: o.pickupTransporterStatus || 'TRANSPORTER_ACCEPTED',
+        pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
         seller: mappedSeller,
+        shg: mappedSeller,
         buyer: o.buyer,
         parcels: o.parcels || [],
       };
@@ -122,20 +174,70 @@ export class OrderService {
       where: {
         OR: [
           { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
           { dropTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'] }
+        mainStatus: { in: ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'] }
       },
       include: {
         seller: true,
         buyer: true,
         parcels: true,
+        assignments: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
+    const allDropShgIds = Array.from(new Set(orders.map((o: any) => {
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      return o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
+    }).filter(Boolean)));
+
+    const dropNumericShgIds = allDropShgIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0);
+    const dropUuidShgIds = allDropShgIds.filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
+
+    const dropShgUsers: any[] = [];
+    if (dropNumericShgIds.length > 0) {
+      const byId = await this.prisma.user.findMany({
+        where: { id: { in: dropNumericShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      dropShgUsers.push(...byId);
+    }
+    if (dropUuidShgIds.length > 0) {
+      const byAuth = await this.prisma.user.findMany({
+        where: { authId: { in: dropUuidShgIds } },
+        include: { address: true, shgDetail: true }
+      });
+      dropShgUsers.push(...byAuth);
+    }
+
+    const dropShgUserMap = new Map();
+    dropShgUsers.forEach((u: any) => {
+      dropShgUserMap.set(String(u.id), u);
+      dropShgUserMap.set(u.authId, u);
+    });
+
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
+      const shgId = o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
+      const shgUser = shgId ? dropShgUserMap.get(String(shgId)) : null;
+
+      const shgData = shgUser ? {
+        id: shgUser.id,
+        fullName: shgUser.fullName,
+        phoneNumber: shgUser.phoneNumber,
+        shgName: shgUser.shgDetail?.shgName || shgUser.fullName,
+        address: shgUser.address ? {
+          addressLine1: shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
+          village: shgUser.address.village,
+          taluka: shgUser.address.taluka,
+          district: shgUser.address.district,
+          pincode: shgUser.address.pincode,
+        } : null,
+      } : null;
+
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -144,11 +246,23 @@ export class OrderService {
         barcode: o.barcode,
         status: o.mainStatus,
         dropTransporterId: o.dropTransporterId,
-        dropTransporterStatus: o.dropTransporterStatus || 'DROP_TRANSPORTER_ACCEPTED',
+        dropTransporterStatus: o.dropTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
         seller: o.seller,
         buyer: o.buyer,
+        dropShg: shgData,
+        dropShgDetails: shgData,
+        shg: shgData,
         parcels: o.parcels || [],
+        items: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+          id: p.id || p.parcelId,
+          quantity: p.quantity || 1,
+          weight: p.weight || p.weightKg || 2.5,
+          product: {
+            name: p.productName || 'Agricultural Goods',
+            weight: Number(p.weight || p.weightKg || 2.5)
+          }
+        })) : (o.items || [])
       };
     });
   }
@@ -175,7 +289,7 @@ export class OrderService {
         status: 'PENDING',
         assigneeId: { not: transporterUuid }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     await this.prisma.order.update({
       where: { id: order.id },
@@ -187,14 +301,14 @@ export class OrderService {
     });
 
     // Update RedirectedOrder audit record
-    await (this.prisma.redirectedOrder as any).updateMany({
+    await (this.prisma as any).redirectedOrder.updateMany({
       where: { orderId: order.id },
       data: {
         transporterId: transporterUuid,
         status: 'ACCEPTED',
         acceptedAt: new Date()
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     return order;
   }
@@ -284,7 +398,17 @@ export class OrderService {
   }
 
   async completePickupDrop(orderId: any, transporterId: number, code?: string) {
-    return this.completePickup(orderId, transporterId, code);
+    const order = await this.findOrderFlexible(orderId);
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        pickupTransporterStatus: 'DELIVERED_TO_HUB',
+        mainStatus: 'HUB_RECEIVED',
+      }
+    });
+
+    return order;
   }
 
   async rejectPickup(orderId: any, transporterId: number, reason?: string) {
@@ -307,9 +431,9 @@ export class OrderService {
   async bulkAccept(orders: { id: string | number; type: 'pickup' | 'drop' }[], transporterId: number) {
     for (const item of orders) {
       if (item.type === 'pickup') {
-        await this.acceptPickup(item.id, transporterId).catch(() => {});
+        await this.acceptPickup(item.id, transporterId).catch(() => { });
       } else {
-        await this.acceptDrop(item.id, transporterId).catch(() => {});
+        await this.acceptDrop(item.id, transporterId).catch(() => { });
       }
     }
     return { success: true, message: 'Orders accepted in bulk.' };

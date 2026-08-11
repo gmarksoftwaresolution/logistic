@@ -94,4 +94,15 @@ export class LocationController {
   async getBankDetails(@Param('ifsc') ifsc: string) {
     return this.locationService.getBankFromIfsc(ifsc);
   }
+
+  @Get('reverse-geocode')
+  @ApiOperation({ summary: 'Get reverse geocode address from lat & lng' })
+  async reverseGeocode(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+  ) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    return this.locationService.reverseGeocode(latNum, lngNum);
+  }
 }

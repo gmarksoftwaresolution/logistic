@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Delivery Partner App",
-    "slug": "shg-logistics",
+    "slug": "shg-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/GMU Logo Splash.png",
@@ -19,12 +19,22 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.gmu.app",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "output": "single"
     },
     "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow this app to access your location to auto-fill address details."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -38,10 +48,10 @@
       "expo-localization",
       "expo-font"
     ],
-    "owner": "mahadev8484",
+    "owner": "mahendra7649",
     "extra": {
       "eas": {
-        "projectId": "3442c592-21e1-487b-a86e-ba8e5d7a8933"
+        "projectId": "f41780dc-8cf3-49fa-a2d0-978de1537544"
       }
     }
   }

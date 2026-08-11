@@ -176,6 +176,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await api.post('/auth/send-otp', {
         mobileNumber,
+        appType: 'TRANSPORTER',
         language: i18n.language === 'en' ? 'English' : i18n.language === 'hi' ? 'Hindi' : 'Marathi',
       });
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -201,8 +202,19 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       const response = await api.post('/auth/verify-otp', {
         mobileNumber,
         otp: otpCode,
+        appType: 'TRANSPORTER',
       });
       
+      const userRole = response.data?.userDetails?.role || response.data?.userDetails?.userType;
+      if (userRole === 'SHG' || userRole === 'INDIVIDUAL') {
+        const errorMsg = 'This account is registered as an SHG Member. Please log in using the SHG App.';
+        setError(errorMsg);
+        Alert.alert('Role Mismatch', errorMsg);
+        setOtp(['', '', '', '', '', '']);
+        setIsVerifying(false);
+        return;
+      }
+
       const { accessToken } = response.data;
       await AsyncStorage.setItem('access_token', accessToken);
       await AsyncStorage.setItem('user_phone_number', mobileNumber);

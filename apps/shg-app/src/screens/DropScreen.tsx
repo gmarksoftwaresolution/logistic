@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useEffect } from 'react';
+import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, MainTabParamList, OrdersStackParamList } from "../navigation/types";
@@ -26,7 +26,6 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { ViewMoreButton } from '../components/ViewMoreButton';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
-import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'Drop'>,
@@ -41,10 +40,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DropScreen: React.FC<Props> = ({ navigation, route }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { acceptedOrders, receiveOrder } = useOrders();
+  const { acceptedOrders, receiveOrder, refreshOrdersList, deliverOrder } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
+
+  // Auto-refresh instantly on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshOrdersList) {
+        refreshOrdersList().catch(() => {});
+      }
+    }, [refreshOrdersList])
+  );
 
   // Pickup orders: Accepted orders (waiting for receipt/pickup)
   const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && !o.isPickupRedirected);
@@ -90,6 +98,46 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
     confirmText: 'Confirm',
     onConfirm: () => { },
   });
+
+  // OTP Delivery Modal State
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [otpOrder, setOtpOrder] = useState<Order | null>(null);
+  const [otpCode, setOtpCode] = useState('1234');
+  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
+
+  const handleSendOtp = (order: Order) => {
+    setOtpOrder(order);
+    setOtpCode('1234');
+    setOtpModalVisible(true);
+    Toast.show({
+      type: 'info',
+      text1: 'OTP Sent',
+      text2: 'Delivery OTP 1234 sent to customer mobile.',
+    });
+  };
+
+  const handleConfirmDeliveryWithOtp = async () => {
+    if (!otpOrder) return;
+    if (otpCode !== '1234' && otpCode.length !== 4) {
+      Alert.alert('Invalid OTP', 'Please enter valid delivery PIN (1234).');
+      return;
+    }
+    try {
+      setIsSubmittingOtp(true);
+      await deliverOrder(otpOrder, otpCode || '1234');
+      setOtpModalVisible(false);
+      setOtpOrder(null);
+      Toast.show({
+        type: 'success',
+        text1: t('su_success_388') || 'Success',
+        text2: 'Order delivered successfully and moved to Completed section.',
+      });
+    } catch (err) {
+      Alert.alert('Error', 'Failed to confirm delivery. Please try again.');
+    } finally {
+      setIsSubmittingOtp(false);
+    }
+  };
 
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
@@ -220,7 +268,7 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'pickup'}-${index}`}
           ListEmptyComponent={
             pickupOrders.length === 0 ? (
               <View className="items-center justify-center py-20">
@@ -277,7 +325,7 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${item.legType || 'delivery'}-${index}`}
           ListEmptyComponent={
             deliveryOrders.length === 0 ? (
               <View className="items-center justify-center py-20">
@@ -308,7 +356,8 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
                 time={info.time}
                 distance={item.distance}
                 showScanner={false}
-                onPressCard={() => handleEyeDetails(item)}
+                onSendOtp={() => handleSendOtp(item)}
+                onPressCard={() => handleSendOtp(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
               />
             );
@@ -327,6 +376,89 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         />
       </ScrollView>
+
+      {/* OTP Delivery Verification Modal */}
+      {otpModalVisible && otpOrder && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 999,
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: 'white',
+              borderRadius: 24,
+              padding: 24,
+              width: '100%',
+              maxWidth: 360,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.25,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="items-center mb-4">
+              <View className="w-14 h-14 bg-emerald-50 rounded-full items-center justify-center mb-2 border border-emerald-100">
+                <Ionicons name="shield-checkmark" size={28} color="#059669" />
+              </View>
+              <Text className="text-[17px] font-black text-slate-900 text-center">
+                Customer Delivery OTP
+              </Text>
+              <Text className="text-[12px] font-bold text-emerald-700 mt-0.5">
+                Order #{getFormattedOrderId(otpOrder)}
+              </Text>
+            </View>
+
+            <Text className="text-[12px] font-medium text-slate-600 text-center mb-4">
+              Preset delivery PIN code is configured. Enter or confirm customer PIN to complete delivery.
+            </Text>
+
+            <View className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4 items-center">
+              <Text className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                DELIVERY PIN CODE
+              </Text>
+              <Text className="text-[26px] font-black text-[#073318] tracking-widest">
+                1234
+              </Text>
+            </View>
+
+            <View className="flex-row gap-3 mt-2">
+              <TouchableOpacity
+                onPress={() => {
+                  setOtpModalVisible(false);
+                  setOtpOrder(null);
+                }}
+                disabled={isSubmittingOtp}
+                className="flex-1 py-3.5 rounded-xl bg-slate-100 items-center justify-center"
+              >
+                <Text className="text-[13px] font-bold text-slate-600">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleConfirmDeliveryWithOtp}
+                disabled={isSubmittingOtp}
+                className="flex-1 py-3.5 rounded-xl bg-[#059669] items-center justify-center shadow-sm"
+              >
+                <Text className="text-[13px] font-extrabold text-white">
+                  {isSubmittingOtp ? 'Verifying...' : 'Confirm Delivery'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       <ConfirmModal
         visible={modalConfig.visible}

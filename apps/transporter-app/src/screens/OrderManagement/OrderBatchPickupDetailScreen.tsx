@@ -374,9 +374,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       });
 
       showToast(res.data?.message || 'Product verified successfully via QR!', 'success');
-      await fetchOrderParcels();
+      
+      // Non-blocking background sync
+      fetchOrderParcels().catch(() => {});
       if (refreshBatchesList) {
-        await refreshBatchesList();
+        refreshBatchesList().catch(() => {});
       }
 
       setTimeout(() => {
@@ -384,7 +386,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         setActiveScanningParcel(null);
         setScanned(false);
         isScanningRef.current = false;
-      }, 1200);
+      }, 200);
 
     } catch (err: any) {
       console.error('Verification error:', err);
@@ -680,8 +682,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             })()}
             {(() => {
               const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
-              const resolvedVillage = (displayContact as any).village || batch.areaName || 'Nesari';
-              const resolvedPincode = (displayContact as any).pincode || addressPincode || '416504';
+              const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
+              const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
                   <View style={styles.contactGridItem}>
@@ -823,7 +825,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
             <View style={styles.boxContentPadding}>
               <View style={styles.productsWrapper}>
-              {displayProducts.map((product) => {
+              {displayProducts.map((product, index) => {
                 const isPicked = product.status === 'picked';
                 const isCompleted = product.status === 'completed';
                 const isRejected = product.status === 'rejected';
@@ -833,7 +835,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
                 return (
                   <View
-                    key={product.id}
+                    key={`${product.id}-${index}`}
                     style={[
                       styles.premiumProductCard,
                       (isRejected || isBatchRejected) && { borderColor: '#EF4444' },

@@ -460,50 +460,63 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
         ]);
       }
       
-      const mapItem = (item: any) => ({
-        id: item.id,
-        memberCode: item.transporterCode || item.id,
-        type: (item.type === 'ROUTE_PARTNER' ? 'Milk Van' : 'Personal') as any,
-        name: `${item.firstName} ${item.lastName}`,
-        mobile: item.mobileNumber,
-        email: item.email || '',
-        photo: normalizeUrl(item.profilePhoto) || '',
-        status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any, // mapped to PENDING_APPROVAL, ACTIVE, REJECTED
-        registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
-        assignedOrders: 0,
-        completedOrders: 0,
-        address: item.residentialAddress || '',
-        village: item.village || '',
-        taluka: item.taluka || '',
-        district: item.district || '',
-        state: item.state || '',
-        pincode: item.pincode || '',
-        licenseNumber: item.licenseNumber || '',
-        licensePhoto: normalizeUrl(item.licensePhoto) || '',
-        licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
-        experienceYears: item.experienceYears || 0,
-        accountHolderName: item.accountHolderName || '',
-        accountNumber: item.accountNumber || '',
-        ifscCode: item.ifscCode || '',
-        bankName: item.bankName || '',
-        branchName: item.branchName || '',
-        upiId: item.upiId || '',
-        vehicleCategory: item.vehicleCategory || '',
-        vehicleType: item.vehicleType || '',
-        vehicleMake: item.vehicleMake || '',
-        vehicleNumber: item.vehicleNumber || '',
-        rcBookPhoto: normalizeUrl(item.vehicleRcPhoto) || '',
-        insurancePhoto: normalizeUrl(item.vehicleInsurancePhoto) || '',
-        milkSangathanName: item.milkOrganizationName || 'N/A',
-        collectionCenterName: item.milkCenterName || 'N/A',
-        route: safeParseArray(item.assignedVillages).join(' - ') || 'N/A',
-        assignedPincodes: safeParseArray(item.assignedPincodes),
-        assignedVillages: safeParseArray(item.assignedVillages),
-        timing: item.morningShift && item.eveningShift ? `${item.morningShift} & ${item.eveningShift}` : (item.morningShift || item.eveningShift || 'N/A'),
-        workingDays: safeParseArray(item.workingDays),
-        morningShift: item.morningShift || 'N/A',
-        eveningShift: item.eveningShift || 'N/A'
-      });
+      const mapItem = (item: any) => {
+        const rawVillages = safeParseArray(item.assignedVillages);
+        const operatingVillages = (item.operatingArea && typeof item.operatingArea === 'string' && item.operatingArea.trim() !== '')
+          ? item.operatingArea.split(',').map((v: string) => v.trim()).filter(Boolean)
+          : [];
+
+        const parsedVillages = (rawVillages.length > 0 && !rawVillages.every(v => /^\d{6}$/.test(v.trim())))
+          ? rawVillages
+          : (operatingVillages.length > 0 ? operatingVillages : (item.village ? [item.village] : rawVillages));
+
+        const parsedPincodes = safeParseArray(item.assignedPincodes);
+
+        return {
+          id: item.id,
+          memberCode: item.transporterCode || item.id,
+          type: (item.type === 'ROUTE_PARTNER' ? 'Milk Van' : 'Personal') as any,
+          name: `${item.firstName} ${item.lastName}`,
+          mobile: item.mobileNumber,
+          email: item.email || '',
+          photo: normalizeUrl(item.profilePhoto) || '',
+          status: (item.status === 'PENDING' ? 'PENDING_APPROVAL' : item.status === 'APPROVED' ? 'ACTIVE' : item.status) as any,
+          registrationDate: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '',
+          assignedOrders: 0,
+          completedOrders: 0,
+          address: item.residentialAddress || '',
+          village: item.village || '',
+          taluka: item.taluka || '',
+          district: item.district || '',
+          state: item.state || '',
+          pincode: item.pincode || '',
+          licenseNumber: item.licenseNumber || '',
+          licensePhoto: normalizeUrl(item.licensePhoto) || '',
+          licenseExpiry: item.licenseExpiryDate ? new Date(item.licenseExpiryDate).toISOString().split('T')[0] : '',
+          experienceYears: item.experienceYears || 0,
+          accountHolderName: item.accountHolderName || '',
+          accountNumber: item.accountNumber || '',
+          ifscCode: item.ifscCode || '',
+          bankName: item.bankName || '',
+          branchName: item.branchName || '',
+          upiId: item.upiId || '',
+          vehicleCategory: item.vehicleCategory || '',
+          vehicleType: item.vehicleType || '',
+          vehicleMake: item.vehicleMake || '',
+          vehicleNumber: item.vehicleNumber || '',
+          rcBookPhoto: normalizeUrl(item.vehicleRcPhoto) || '',
+          insurancePhoto: normalizeUrl(item.vehicleInsurancePhoto) || '',
+          milkSangathanName: item.milkOrganizationName || 'N/A',
+          collectionCenterName: item.milkCenterName || 'N/A',
+          route: parsedVillages.join(' - ') || 'N/A',
+          assignedPincodes: parsedPincodes,
+          assignedVillages: parsedVillages,
+          timing: item.morningShift && item.eveningShift ? `${item.morningShift} & ${item.eveningShift}` : (item.morningShift || item.eveningShift || 'N/A'),
+          workingDays: safeParseArray(item.workingDays),
+          morningShift: item.morningShift || 'N/A',
+          eveningShift: item.eveningShift || 'N/A'
+        };
+      };
 
       const mappedRequests = requests.map(mapItem);
       const mappedMembers = members.map(mapItem);
@@ -751,9 +764,18 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
     { 
       header: 'Assigned Route', 
       accessor: (row: TransporterProfileExt) => {
-        const formatted = row.assignedVillages.map((v, idx) => {
-          const pin = row.assignedPincodes[idx] || '';
-          return pin ? `${v} (${pin})` : v;
+        const villages = row.assignedVillages || [];
+        const pincodes = row.assignedPincodes || [];
+        if (villages.length === 0) {
+          return <span className="text-xs text-slate-700 font-medium">{row.route || 'N/A'}</span>;
+        }
+        const formatted = villages.map((v, idx) => {
+          const cleanV = String(v || '').trim();
+          const pin = String(pincodes[idx] || '').trim();
+          if (!pin || cleanV === pin || /^\d{6}$/.test(cleanV)) {
+            return cleanV;
+          }
+          return `${cleanV} (${pin})`;
         }).join(', ');
         return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
       }
@@ -780,9 +802,18 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
     { 
       header: 'Assigned Route', 
       accessor: (row: TransporterProfileExt) => {
-        const formatted = row.assignedVillages.map((v, idx) => {
-          const pin = row.assignedPincodes[idx] || '';
-          return pin ? `${v} (${pin})` : v;
+        const villages = row.assignedVillages || [];
+        const pincodes = row.assignedPincodes || [];
+        if (villages.length === 0) {
+          return <span className="text-xs text-slate-700 font-medium">{row.route || 'N/A'}</span>;
+        }
+        const formatted = villages.map((v, idx) => {
+          const cleanV = String(v || '').trim();
+          const pin = String(pincodes[idx] || '').trim();
+          if (!pin || cleanV === pin || /^\d{6}$/.test(cleanV)) {
+            return cleanV;
+          }
+          return `${cleanV} (${pin})`;
         }).join(', ');
         return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
       }
@@ -811,9 +842,18 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
     { 
       header: 'Assigned Route', 
       accessor: (row: TransporterProfileExt) => {
-        const formatted = row.assignedVillages.map((v, idx) => {
-          const pin = row.assignedPincodes[idx] || '';
-          return pin ? `${v} (${pin})` : v;
+        const villages = row.assignedVillages || [];
+        const pincodes = row.assignedPincodes || [];
+        if (villages.length === 0) {
+          return <span className="text-xs text-slate-700 font-medium">{row.route || 'N/A'}</span>;
+        }
+        const formatted = villages.map((v, idx) => {
+          const cleanV = String(v || '').trim();
+          const pin = String(pincodes[idx] || '').trim();
+          if (!pin || cleanV === pin || /^\d{6}$/.test(cleanV)) {
+            return cleanV;
+          }
+          return `${cleanV} (${pin})`;
         }).join(', ');
         return <span className="text-xs text-slate-700 font-medium">{formatted}</span>;
       }
@@ -1215,12 +1255,17 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
                     
                     <div className="bg-white p-2.5 rounded-xl border border-[#073318]/10 shadow-sm">
                       <p className="text-slate-450 font-bold text-[9px] uppercase tracking-wider mb-1.5">List of Assigned Villages with Pincode</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
                         {selectedProfile.assignedVillages.map((v, idx) => {
                           const pin = selectedProfile.assignedPincodes[idx] || '';
+                          const cleanV = String(v || '').trim();
+                          const cleanPin = String(pin).trim();
+                          const label = (!cleanPin || cleanV === cleanPin || /^\d{6}$/.test(cleanV))
+                            ? cleanV
+                            : `${cleanV} (${cleanPin})`;
                           return (
-                            <span key={v} className="bg-slate-100/80 text-[#073318] px-2 py-0.5 rounded text-[10px] font-bold inline-block border border-slate-200/60 shadow-sm">
-                              {v} ({pin})
+                            <span key={`${v}-${idx}`} className="bg-slate-100/80 text-[#073318] px-2 py-0.5 rounded text-[10px] font-bold inline-block border border-slate-200/60 shadow-sm">
+                              {label}
                             </span>
                           );
                         })}

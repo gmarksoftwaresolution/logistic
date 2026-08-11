@@ -28,6 +28,7 @@ interface OrderCardProps {
   vehicleNumber?: string;
   transporterId?: string;
   verificationPending?: boolean;
+  onSendOtp?: () => void;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -51,7 +52,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   transporterMobile,
   vehicleNumber,
   transporterId,
-  verificationPending
+  verificationPending,
+  onSendOtp
 }) => {
   const context = useContext(LanguageContext);
   const { t } = context!;
@@ -111,6 +113,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
                 <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
                   {t("view_address") || "View Address"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {onSendOtp && (
+              <TouchableOpacity
+                onPress={onSendOtp}
+                activeOpacity={0.8}
+                className="self-start flex-row items-center px-2.5 py-0.5 rounded-[6px] border border-[#059669] bg-[#059669] shadow-xs"
+              >
+                <Ionicons name="key-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text className="text-[10.5px] font-extrabold text-white tracking-wide">
+                  Send OTP (1234)
                 </Text>
               </TouchableOpacity>
             )}
@@ -205,38 +220,17 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         <View className="flex-row items-center">
           <OrderDistance distance={distance} />
 
-          {showScanner && onScan ? (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                onScan();
-              }}
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 15,
-                backgroundColor: '#073318',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginLeft: 8
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="qr-code-outline" size={16} color="white" />
-            </TouchableOpacity>
-          ) : (
-            /* Right Icon - Circular Outline Style */
-            <View style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              borderWidth: 2,
-              borderColor: '#CBD5E1',
-              backgroundColor: 'white'
-            }} className="items-center justify-center ml-2">
-              <Ionicons name="eye" size={24} color="#073318" />
-            </View>
-          )}
+          {/* Right Icon - Circular Outline Style */}
+          <View style={{
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            borderWidth: 1.5,
+            borderColor: '#E2E8F0',
+            backgroundColor: '#F8FAFC'
+          }} className="items-center justify-center ml-2">
+            <Ionicons name="eye-outline" size={16} color="#073318" />
+          </View>
         </View>
       </TouchableOpacity>
     </HighlightCardWrapper>
