@@ -994,6 +994,9 @@ model RedirectedOrder {
   transporterId String?
   reason        String?
   status        String   @default("PENDING") // PENDING, ACCEPTED, COMPLETED
+  acceptedAt    DateTime?
+  pickedUpAt    DateTime?
+  completedAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

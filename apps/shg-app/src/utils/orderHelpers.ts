@@ -1,4 +1,8 @@
 export const getRouteForOrder = (item: any) => {
+  if (item.isRedirected || item.isPickupRedirected) {
+    return `Seller > Transporter`;
+  }
+
   // Use explicitly stored original route data for Return orders to prevent swapping
   if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-') || item.id?.includes('RET-') || item.orderId?.includes('RET-')) {
     if (item.fromLocation && item.toLocation) {

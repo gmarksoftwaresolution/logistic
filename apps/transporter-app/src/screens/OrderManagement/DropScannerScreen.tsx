@@ -16,23 +16,24 @@ import { useOrderManagement } from '../../context/OrderManagementContext';
 import { Colors, Fonts } from '../../constants/Colors';
 
 function decodeQrData(data: string) {
-  const trimmed = data.trim();
+  const trimmed = (data || '').trim();
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (!parsed.parcelId) {
+      const parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+      if (!parcelId) {
         throw new Error('Invalid QR payload');
       }
       return {
-        parcelId: parsed.parcelId,
-        verificationToken: parsed.verificationToken || '',
+        parcelId,
+        verificationToken: parsed.verificationToken || parsed.token || '',
       };
     } catch (err: any) {
       throw new Error('Malformed JSON in QR: ' + err.message);
     }
   } else {
     const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1) {
+    if (parts.length >= 1 && parts[0]) {
       return {
         parcelId: parts[0],
         verificationToken: parts[1] || '',
@@ -143,24 +144,28 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     // Compile master expected list from session
     const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const cleanScannedId = parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '');
+    const cleanScannedVal = String(parcelId || '').trim();
+    const cleanNumId = cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '').replace(/^PCL-/, '');
+    const mappedPclId = cleanScannedVal.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2');
+
     const parcel = allParcels.find((p: any) => 
       p.parcelId === parcelId || 
-      p.orderId === parcelId || 
-      p.barcode === parcelId ||
-      (p.parcelId && p.parcelId.includes(cleanScannedId)) ||
-      (p.orderId && p.orderId.includes(cleanScannedId))
-    ) || (allParcels.length > 0 ? allParcels[0] : null);
+      p.parcelId === mappedPclId ||
+      p.qrCodeValue === data ||
+      p.qrCodeValue === parcelId || 
+      p.verificationToken === parcelId ||
+      (cleanNumId && p.parcelId && p.parcelId.includes(cleanNumId)) ||
+      (cleanNumId && p.orderId && p.orderId.includes(cleanNumId))
+    );
 
     if (!parcel) {
       // Dynamic onboarding: parcel is not in the active session lists yet.
-      // We call the backend directly.
       setHasScannedAny(true);
       triggerScanFeedback('success', `Syncing new parcel scan...`);
       try {
         await scanParcel('DROP', activeSession.sessionId, data);
       } catch (err: any) {
-        const errMsg = err.response?.data?.message || 'Sync failed.';
+        const errMsg = err.response?.data?.message || err.message || 'Sync failed.';
         triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
       } finally {
         setTimeout(resetScanLock, 1500);
@@ -176,23 +181,24 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
     }
 
     // Check duplicate
-    const isDuplicate = localScannedItems.some(i => i.parcelId === parcelId) ||
-                        (activeSession.scanned || []).some(i => i.parcelId === parcelId);
+    const isDuplicate = localScannedItems.some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId) ||
+                        (activeSession.scanned || []).some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId);
 
     if (isDuplicate) {
-      triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName}`);
+      triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
       setTimeout(resetScanLock, 1500);
       return;
     }
 
     // Valid scan! Optimistically add to UI list
     setHasScannedAny(true);
-    triggerScanFeedback('success', `Scanned: ${parcel.productName}`);
+    triggerScanFeedback('success', `Scanned: ${parcel.productName || 'Parcel'}`);
 
+    const targetParcelId = parcel.parcelId || parcelId;
     const newOptimisticItem = {
       ...parcel,
       pendingSync: 'syncing',
-      lastScannedParcelId: parcelId
+      lastScannedParcelId: targetParcelId
     };
 
     setLocalScannedItems(prev => [...prev, newOptimisticItem]);
@@ -201,12 +207,12 @@ export const DropScannerScreen: React.FC<any> = ({ route, navigation }) => {
     try {
       await scanParcel('DROP', activeSession.sessionId, data);
       setLocalScannedItems(prev =>
-        prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
+        prev.map(item => (item.parcelId === targetParcelId || item.parcelId === parcelId) ? { ...item, pendingSync: 'synced' } : item)
       );
     } catch (err: any) {
       // Revert optimistic state and present error feedback
-      setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
-      const errMsg = err.response?.data?.message || 'Sync failed.';
+      setLocalScannedItems(prev => prev.filter(item => item.parcelId !== targetParcelId && item.parcelId !== parcelId));
+      const errMsg = err.response?.data?.message || err.message || 'Sync failed.';
       triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
     } finally {
       setTimeout(resetScanLock, 1500);

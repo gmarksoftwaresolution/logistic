@@ -47,6 +47,7 @@ export interface Order {
   scanned?: boolean;
   acceptedAt?: string;
   completedAt?: string;
+  pickedUpAt?: string;
   legType?: 'pickup' | 'drop';
   phase?: 'PICKUP' | 'DROP';
 
@@ -72,6 +73,11 @@ export interface Order {
   pickupTransporterStatus?: string;
   mainStatus?: string;
   uuid?: string;
+  sellerMobile?: string;
+  buyerMobile?: string;
+  sellerAddress?: string;
+  buyerAddress?: string;
+  tracking?: any[];
 }
 
 interface OrderContextType {
@@ -250,12 +256,8 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     time: timeStr,
     legType: type,
     phase: type === 'drop' ? 'DROP' : 'PICKUP',
-    acceptedAt: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt
-      : dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt,
-    completedAt: type === 'pickup'
-      ? dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt
-      : dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt,
+    acceptedAt: dbOrder.redirectedOrder?.acceptedAt || dbOrder.assignments?.find((a: any) => a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.updatedAt || dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt || '',
+    completedAt: dbOrder.redirectedOrder?.completedAt || (dbOrder.mainStatus === 'HUB_RECEIVED' || dbOrder.mainStatus === 'STORED' || dbOrder.mainStatus === 'DISPATCHED' || dbOrder.mainStatus === 'COMPLETED' ? dbOrder.updatedAt : null) || dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt || '',
     fromLocation: isGeneratedReturn
       ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
       : isGeneratedNewOrder
@@ -275,7 +277,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     products: orderItems.map((item: any) => ({
       code: `#P-${item.productId || item.id}`,
       tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
-      name: item.product?.name || 'Item',
+      name: item.productName || item.product?.name || 'Item',
       details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
       weightValue: (item.product?.weight || 0) * item.quantity,
       qty: item.quantity,
@@ -302,6 +304,12 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     pickupTransporterStatus: dbOrder.pickupTransporterStatus || '',
     mainStatus: dbOrder.mainStatus || '',
     uuid: dbOrder.id || '',
+    sellerMobile: dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || dbOrder.masterOrder?.items?.[0]?.seller?.mobileNumber || '',
+    buyerMobile: dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || '',
+    buyerAddress: actualDropAddress || '',
+    sellerAddress: actualPickupAddress || '',
+    tracking: dbOrder.tracking || dbOrder.masterOrder?.tracking || [],
+    pickedUpAt: dbOrder.redirectedOrder?.pickedUpAt || (dbOrder.pickupTransporterStatus === 'PICKED' || dbOrder.pickupTransporterStatus === 'PARCEL_PICKED' || dbOrder.mainStatus === 'IN_TRANSIT_TO_HUB' ? dbOrder.updatedAt : null) || '',
   };
 };
 

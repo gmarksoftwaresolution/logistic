@@ -55,8 +55,33 @@ async function resetAndSeed20Orders() {
 
   console.log('✅ Database completely purged!\n');
 
+  // Ensure SHG users have addresses matching seller location pincodes & villages
+  const shgUsers = await prisma.user.findMany({
+    where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null }
+  });
+
+  if (shgUsers.length > 0) {
+    for (let sIdx = 0; sIdx < shgUsers.length; sIdx++) {
+      const shg = shgUsers[sIdx];
+      const matchingSeller = sellers[sIdx % sellers.length];
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public."Address" ("userId", village, pincode, taluka, district, state, "updatedAt")
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        ON CONFLICT ("userId") DO UPDATE
+        SET village = EXCLUDED.village, pincode = EXCLUDED.pincode, taluka = EXCLUDED.taluka, district = EXCLUDED.district, state = EXCLUDED.state, "updatedAt" = NOW();
+      `, shg.id, matchingSeller.village, matchingSeller.pincode, matchingSeller.taluka, matchingSeller.district, matchingSeller.state).catch(() => {});
+
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public."ShgServiceArea" (id, "shgUserId", village, pincode, status, "isPrimary", "updatedAt")
+        VALUES ($1, $2, $3, $4, 'ACTIVE', true, NOW())
+        ON CONFLICT (id) DO UPDATE
+        SET village = EXCLUDED.village, pincode = EXCLUDED.pincode, status = 'ACTIVE', "isPrimary" = true, "updatedAt" = NOW();
+      `, `SA-SHG-${shg.id}`, String(shg.id), matchingSeller.village, matchingSeller.pincode).catch(() => {});
+    }
+  }
+
   // 3. CREATE EXACTLY 20 NEW FRESH ORDERS (ORD-2026-101 to ORD-2026-120)
-  console.log('Creating 20 new fresh orders using Seller, Buyer, and Product tables...');
+  console.log('Creating 20 new fresh orders with location-based SHG routing (Pincode + Village)...');
 
   for (let i = 1; i <= 20; i++) {
     const cleanNum = 100 + i; // 101 to 120
@@ -65,6 +90,10 @@ async function resetAndSeed20Orders() {
     // Select Seller and Buyer deterministically
     const seller = sellers[(i - 1) % sellers.length];
     const buyer = buyers[(i - 1) % buyers.length];
+
+    // Select matching SHG user by seller index
+    const assignedShg = shgUsers.length > 0 ? shgUsers[(i - 1) % shgUsers.length] : null;
+    const assignedShgId = assignedShg ? String(assignedShg.id) : null;
 
     // Select 2 distinct products from Product table
     const prod1 = products[(i - 1) % products.length];
@@ -92,24 +121,52 @@ async function resetAndSeed20Orders() {
         productCount: selectedProds.length,
         barcode: `QR-2026-${cleanNum}-PCL-1`,
         phase: 'PICKUP',
-        mainStatus: 'PICKUP_ASSIGNED',
+        mainStatus: 'PENDING',
         pickupShgStatus: 'ACCEPTED',
-        pickupTransporterStatus: 'PENDING',
+        pickupTransporterStatus: null,
         dropShgStatus: 'PENDING',
-        dropTransporterStatus: 'PENDING',
+        dropTransporterStatus: null,
+        pickupShgId: assignedShgId,
       }
     });
+
+    // Create OrderAssignment ONLY for the single matching SHG
+    if (assignedShgId) {
+      await prisma.orderAssignment.create({
+        data: {
+          orderId: createdOrder.id,
+          assigneeId: assignedShgId,
+          assigneeType: 'SHG',
+          role: 'PICKUP',
+          status: 'ACCEPTED'
+        }
+      }).catch(() => {});
+    }
 
     // Create 2 individual per-product Parcel records with QR codes
     for (let pIdx = 0; pIdx < selectedProds.length; pIdx++) {
       const prod = selectedProds[pIdx];
       const parcelNum = pIdx + 1;
       const parcelIdVal = `PCL-2026-${cleanNum}-${parcelNum}`;
-      const barcodeValue = `QR-2026-${cleanNum}-PCL-${parcelNum}`;
       const verificationCode = `V-2026-${cleanNum}-0${parcelNum}`;
-      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
       const qtyVal = pIdx + 1;
       const weightVal = Number(prod.weight || 2.5);
+
+      const qrPayload = {
+        parcelId: parcelIdVal,
+        orderId: orderIdVal,
+        orderNo: orderIdVal,
+        productId: prod.id,
+        productName: prod.name,
+        quantity: qtyVal,
+        weight: `${weightVal} KG`,
+        verificationToken: verificationCode,
+        token: verificationCode,
+        version: 1,
+      };
+
+      const barcodeValue = JSON.stringify(qrPayload);
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
 
       await prisma.parcel.create({
         data: {

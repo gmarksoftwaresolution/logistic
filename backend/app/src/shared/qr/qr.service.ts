@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as QRCode from 'qrcode';
-import { QrVerificationEngine, determineTransition, validateVerificationToken } from './qr-verification-engine';
+import { QrVerificationEngine, determineTransition, validateVerificationToken, triggerTransporterPickupBroadcast } from './qr-verification-engine';
 
 @Injectable()
 export class QrService {
@@ -301,6 +301,8 @@ export class QrService {
 
       if (mainStatus === 'PARCEL_PICKED') {
         pickupShgStatus = 'PICKED';
+        pickupTransporterStatus = 'PENDING';
+        await triggerTransporterPickupBroadcast(tx, order.id);
       } else if (mainStatus === 'TRANSPORTER_ACCEPTED') {
         pickupShgStatus = 'COMPLETED';
         pickupTransporterStatus = 'ACCEPTED';

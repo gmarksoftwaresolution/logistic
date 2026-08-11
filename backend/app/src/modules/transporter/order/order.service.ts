@@ -187,11 +187,12 @@ export class OrderService {
     });
 
     // Update RedirectedOrder audit record
-    await this.prisma.redirectedOrder.updateMany({
+    await (this.prisma.redirectedOrder as any).updateMany({
       where: { orderId: order.id },
       data: {
         transporterId: transporterUuid,
-        status: 'ACCEPTED'
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
       }
     }).catch(() => {});
 
@@ -208,6 +209,14 @@ export class OrderService {
         mainStatus: 'IN_TRANSIT_TO_HUB',
       }
     });
+
+    // Update RedirectedOrder pickedUpAt timestamp
+    await (this.prisma.redirectedOrder as any).updateMany({
+      where: { orderId: order.id },
+      data: {
+        pickedUpAt: new Date()
+      }
+    }).catch(() => {});
 
     return order;
   }

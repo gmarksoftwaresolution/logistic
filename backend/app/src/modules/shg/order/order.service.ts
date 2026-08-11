@@ -68,21 +68,16 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // STRICT BUSINESS LOGIC FILTER: (Village + Pincode Match) OR Direct Assignment
+    // STRICT BUSINESS LOGIC FILTER: Pincode + Village Match
     const matchedOrders = orders.filter((o: any) => {
-      // 1. Directly assigned ID or pickupShgId match
-      if (o.pickupShgId === shgUuid || assignedOrderIds.includes(o.id)) {
-        return true;
-      }
-      // 2. Strict matching on BOTH Seller Village AND Seller Pincode
       if (o.seller) {
         const sellerVillage = this.normalizeStr(o.seller.village);
         const sellerPincode = o.seller.pincode ? o.seller.pincode.trim().toLowerCase() : '';
-        if (userVillage && userPincode && sellerVillage === userVillage && sellerPincode === userPincode) {
-          return true;
+        if (userVillage && userPincode) {
+          return sellerVillage === userVillage && sellerPincode === userPincode;
         }
       }
-      return false;
+      return o.pickupShgId === shgUuid || assignedOrderIds.includes(o.id);
     });
 
     const transporterIds = matchedOrders
@@ -111,26 +106,14 @@ export class OrderService {
         status: o.mainStatus,
         legType: 'pickup',
         seller: o.seller ? {
+          ...o.seller,
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
-          address: {
-            houseNo: o.seller.addressLine1 || '',
-            village: o.seller.village,
-            taluka: o.seller.taluka,
-            district: o.seller.district,
-            pincode: o.seller.pincode,
-          }
         } : null,
         buyer: o.buyer ? {
+          ...o.buyer,
           fullName: o.buyer.buyerName,
           phoneNumber: o.buyer.mobileNumber,
-          address: {
-            houseNo: o.buyer.addressLine1 || '',
-            village: o.buyer.village,
-            taluka: o.buyer.taluka,
-            district: o.buyer.district,
-            pincode: o.buyer.pincode,
-          }
         } : null,
         parcels: o.parcels || [],
         items: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
@@ -210,6 +193,7 @@ export class OrderService {
         seller: true,
         buyer: true,
         parcels: true,
+        redirectedOrder: true,
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -260,13 +244,25 @@ export class OrderService {
         barcode: o.barcode,
         status: o.mainStatus,
         seller: o.seller ? {
+          ...o.seller,
           fullName: o.seller.sellerName,
           phoneNumber: o.seller.mobileNumber,
         } : null,
-        buyer: o.buyer ? {
+        buyer: o.isPickupRedirected ? {
+          fullName: 'Prasad Patil (Hub Manager)',
+          phoneNumber: '9123456789',
+          addressLine1: 'Gadhinglaj Central GMU Hub',
+          addressLine2: 'Near MIDC Area',
+          village: 'Gadhinglaj',
+          taluka: 'Gadhinglaj',
+          district: 'Kolhapur',
+          state: 'Maharashtra',
+          pincode: '416502',
+        } : (o.buyer ? {
+          ...o.buyer,
           fullName: o.buyer.buyerName,
           phoneNumber: o.buyer.mobileNumber,
-        } : null,
+        } : null),
         items: o.parcels || [],
         isPickupRedirected: o.isPickupRedirected,
         isDropRedirected: o.isDropRedirected,
@@ -275,6 +271,7 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
+        redirectedOrder: o.redirectedOrder || null,
         transporter: transporterUser ? {
           fullName: transporterUser.fullName,
           phoneNumber: transporterUser.phoneNumber,

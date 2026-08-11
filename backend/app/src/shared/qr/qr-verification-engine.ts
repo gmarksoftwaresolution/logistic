@@ -1,5 +1,7 @@
-export class QrValidationError extends Error {
-  constructor(message: string, public readonly statusCode: number = 400) {
+import { BadRequestException } from '@nestjs/common';
+
+export class QrValidationError extends BadRequestException {
+  constructor(message: string) {
     super(message);
     this.name = 'QrValidationError';
   }
@@ -51,24 +53,26 @@ export function normalizeStatus(status: string): ParcelStatus {
  * Parses and decodes scanned QR code contents.
  */
 export function decodeQrData(data: string): QrContent {
-  const trimmed = data.trim();
+  const trimmed = (data || '').trim();
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (!parsed.parcelId) {
+      const parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+      if (!parcelId) {
         throw new QrValidationError('Invalid QR payload: missing parcelId');
       }
       return {
-        parcelId: parsed.parcelId,
-        verificationToken: parsed.verificationToken || '',
+        parcelId,
+        verificationToken: parsed.verificationToken || parsed.token || '',
         version: parsed.version || 1,
       };
     } catch (err: any) {
+      if (err instanceof QrValidationError) throw err;
       throw new QrValidationError('Malformed JSON in QR code: ' + err.message);
     }
   } else {
     const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1) {
+    if (parts.length >= 1 && parts[0]) {
       return {
         parcelId: parts[0],
         verificationToken: parts[1] || '',
@@ -255,6 +259,103 @@ export function determineTransition(
 }
 
 /**
+ * Triggers pickup assignment broadcast to matching transporters after SHG pickup scan
+ */
+export async function triggerTransporterPickupBroadcast(tx: any, orderId: string) {
+  try {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { seller: true }
+    });
+
+    if (!order) return;
+
+    const seller = order.seller;
+    let matchedTransporters: any[] = [];
+    let assigneeIds = new Set<string>();
+
+    if (seller) {
+      const transporters = await tx.$queryRawUnsafe(`
+        SELECT u.id, rd."operatingArea", rd."pickupLocations" as "assignedPincodes", mv."assignedVillages"
+        FROM public."User" u
+        LEFT JOIN public."RouteDetail" rd ON u.id = rd."userId"
+        LEFT JOIN public."MilkVanDetail" mv ON u.id = mv."userId"
+        WHERE u.role = 'TRANSPORTER' AND u."applicationStatus" = 'APPROVED' AND u."deletedAt" IS NULL;
+      `) as any[];
+
+      const parseJsonArray = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch (e) { }
+        }
+        return [];
+      };
+
+      const getTransporterLocations = (tr: any) => {
+        const areas = tr.operatingArea
+          ? tr.operatingArea.split(',').map((s: string) => s.trim().toLowerCase())
+          : [];
+        const villages = parseJsonArray(tr.assignedVillages).map((s: any) => String(s).toLowerCase());
+        const pincodes = parseJsonArray(tr.assignedPincodes).map((s: any) => String(s).toLowerCase());
+        return { areas, villages, pincodes };
+      };
+
+      const p = seller.pincode ? seller.pincode.toLowerCase().trim() : '';
+      const v = seller.village ? seller.village.toLowerCase().trim() : '';
+
+      if (p) {
+        matchedTransporters = transporters.filter((tr: any) => {
+          const { areas, pincodes } = getTransporterLocations(tr);
+          return pincodes.some((po: string) => po.split(' (')[0] === p) || areas.some((a: string) => a.split(' (')[0] === p);
+        });
+      }
+
+      if (matchedTransporters.length === 0 && v) {
+        matchedTransporters = transporters.filter((tr: any) => {
+          const { areas, villages } = getTransporterLocations(tr);
+          return villages.some((vi: string) => vi.split(' (')[0] === v) || areas.some((a: string) => a.split(' (')[0] === v);
+        });
+      }
+
+      if (matchedTransporters.length > 0) {
+        matchedTransporters.forEach((tr: any) => assigneeIds.add(String(tr.id)));
+      }
+    }
+
+    if (assigneeIds.size === 0) {
+      const allTransporters = await tx.user.findMany({
+        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null },
+        select: { id: true }
+      });
+      allTransporters.forEach((tr: any) => assigneeIds.add(String(tr.id)));
+    }
+
+    for (const assigneeId of assigneeIds) {
+      await tx.orderAssignment.deleteMany({
+        where: {
+          orderId: order.id,
+          assigneeId,
+          role: 'PICKUP',
+          assigneeType: 'TRANSPORTER',
+        }
+      }).catch(() => {});
+
+      await tx.orderAssignment.create({
+        data: {
+          orderId: order.id,
+          assigneeId,
+          assigneeType: 'TRANSPORTER',
+          role: 'PICKUP',
+          status: 'PENDING'
+        }
+      }).catch(() => {});
+    }
+  } catch (err: any) {
+    console.error(`[triggerTransporterPickupBroadcast] Error broadcasting to transporter for order ${orderId}:`, err.message);
+  }
+}
+
+/**
  * Reusable QR Verification Engine implementation
  */
 export class QrVerificationEngine {
@@ -357,6 +458,8 @@ export class QrVerificationEngine {
         quantity: item.parcel.quantity,
         weight: item.parcel.weight,
         parcelStatus: item.parcel.parcelStatus,
+        qrCodeValue: item.parcel.qrCodeValue || '',
+        verificationToken: item.parcel.verificationToken || '',
       };
     });
 
@@ -374,6 +477,8 @@ export class QrVerificationEngine {
           quantity: p.quantity,
           weight: p.weight,
           parcelStatus: p.parcelStatus,
+          qrCodeValue: p.qrCodeValue || '',
+          verificationToken: p.verificationToken || '',
         };
       });
 
@@ -454,15 +559,19 @@ export class QrVerificationEngine {
     }
 
     const rawScan = String(qrData || '').trim();
-    const cleanScanId = rawScan.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '');
+    const cleanScanId = rawScan.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '').replace(/^PCL-/, '');
+    const mappedPclId = rawScan.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2');
 
     let parcel = await this.prisma.parcel.findFirst({
       where: {
         OR: [
           { parcelId: decoded.parcelId },
           { parcelId: rawScan },
+          { parcelId: mappedPclId },
+          { parcelId: `PCL-${cleanScanId}-1` },
           { qrCodeValue: rawScan },
           { qrCodeValue: decoded.parcelId },
+          { qrCodeValue: mappedPclId },
           { verificationToken: decoded.parcelId },
           { verificationToken: decoded.verificationToken },
           { orderId: rawScan },
@@ -476,15 +585,18 @@ export class QrVerificationEngine {
       throw new QrValidationError('Scanned QR parcel not found in database');
     }
 
-    // Validate verificationToken
-    validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
+    // Validate verificationToken if present in scanned QR
+    if (decoded.verificationToken && parcel.verificationToken) {
+      validateVerificationToken(decoded.verificationToken, parcel.verificationToken);
+    }
 
     // Find the order for the parcel (try DROP phase first, then PICKUP phase)
     let order = await this.prisma.order.findFirst({
       where: {
         OR: [
           { id: parcel.orderId },
-          { orderId: parcel.orderId }
+          { orderId: parcel.orderId },
+          { orderId: `ORD-${cleanScanId}` }
         ],
         phase: 'DROP',
       }
@@ -494,7 +606,8 @@ export class QrVerificationEngine {
         where: {
           OR: [
             { id: parcel.orderId },
-            { orderId: parcel.orderId }
+            { orderId: parcel.orderId },
+            { orderId: `ORD-${cleanScanId}` }
           ],
           phase: 'PICKUP',
         }
@@ -542,6 +655,14 @@ export class QrVerificationEngine {
 
         if (assignment.status === 'REJECTED') {
           throw new QrValidationError('Assignment was rejected');
+        }
+
+        // Auto-accept pending SHG assignment on pickup scan
+        if (userRole === 'SHG' && assignment.status === 'PENDING') {
+          await this.prisma.orderAssignment.update({
+            where: { id: assignment.id },
+            data: { status: 'ACCEPTED' }
+          }).catch(() => {});
         }
       }
     }
@@ -748,6 +869,8 @@ export class QrVerificationEngine {
 
         if (normalizedMainStatus === 'PARCEL_PICKED') {
           pickupShgStatus = 'PICKED';
+          pickupTransporterStatus = 'PENDING';
+          await triggerTransporterPickupBroadcast(tx, order.id);
         } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
           pickupShgStatus = 'COMPLETED';
           pickupTransporterStatus = 'ACCEPTED';
@@ -755,6 +878,10 @@ export class QrVerificationEngine {
           pickupTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_GMU') {
           pickupTransporterStatus = 'COMPLETED';
+          await (tx.redirectedOrder as any).updateMany({
+            where: { orderId: order.id },
+            data: { completedAt: new Date(), status: 'COMPLETED' }
+          }).catch(() => {});
         } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER') {
           dropTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
@@ -934,6 +1061,8 @@ export class QrVerificationEngine {
 
         if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG') {
           pickupShgStatus = 'PICKED';
+          pickupTransporterStatus = 'PENDING';
+          await triggerTransporterPickupBroadcast(tx, order.id);
         } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
           pickupShgStatus = 'COMPLETED';
           pickupTransporterStatus = 'ACCEPTED';
