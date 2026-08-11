@@ -100,22 +100,38 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     'gadhinglaj': 2,
     'dundage': 3,
     'halkarni': 4,
-    'mahagaon': 5,
-    'wagharale': 6,
-    'inchanal': 7,
-    'nesari': 8,
+    'bhadagaon': 5,
+    'mahagaon': 6,
+    'wagharale': 7,
+    'inchanal': 8,
+    'nesari': 9,
   };
 
-  const getRouteRank = (locationName?: string): number => {
-    if (!locationName) return 50;
-    const normalized = locationName.toLowerCase().trim();
+  const getBatchSequenceRank = (batch: BatchOrder, locationType: 'pickup' | 'drop'): number => {
+    if ((batch as any).routeSequence !== undefined) return Number((batch as any).routeSequence);
+    if ((batch as any).stopOrder !== undefined) return Number((batch as any).stopOrder);
+    if ((batch as any).sequence !== undefined) return Number((batch as any).sequence);
+
+    const locName = locationType === 'pickup' 
+      ? (batch.pickupPointName || batch.areaName) 
+      : (batch.dropPointName || batch.areaName);
+
+    if (!locName) return 50;
+
+    const normalized = locName.toLowerCase().trim();
     for (const [key, rank] of Object.entries(ROUTE_CORRIDOR_RANK)) {
       if (normalized.includes(key)) return rank;
     }
-    return 50;
+
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) {
+      hash = (hash << 5) - hash + normalized.charCodeAt(i);
+      hash |= 0;
+    }
+    return 100 + (Math.abs(hash) % 500);
   };
 
-  // 1. Pickups & Drops Data with Route Corridor Sequencing
+  // 1. Pickups & Drops Data with Dynamic Route Corridor Sequencing
   const { sortedPickupEntries, sortedDropEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds } = useMemo(() => {
     // 1. Pickups Data
     const pickupBatches = batches.filter((b) => b.status === 'ACCEPTED_PICKUP');
@@ -137,12 +153,12 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
       }
 
       if (isHubA) {
-        const destRankA = getRouteRank(a.batch.areaName || a.batch.dropPointName);
-        const destRankB = getRouteRank(b.batch.areaName || b.batch.dropPointName);
+        const destRankA = getBatchSequenceRank(a.batch, 'drop');
+        const destRankB = getBatchSequenceRank(b.batch, 'drop');
         if (destRankA !== destRankB) return destRankA - destRankB;
       } else {
-        const originRankA = getRouteRank(a.batch.areaName || a.batch.pickupPointName);
-        const originRankB = getRouteRank(b.batch.areaName || b.batch.pickupPointName);
+        const originRankA = getBatchSequenceRank(a.batch, 'pickup');
+        const originRankB = getBatchSequenceRank(b.batch, 'pickup');
         if (originRankA !== originRankB) return originRankA - originRankB;
       }
 
@@ -171,8 +187,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         return isHubDropA ? -1 : 1;
       }
 
-      const destRankA = getRouteRank(a.batch.areaName || a.batch.dropPointName);
-      const destRankB = getRouteRank(b.batch.areaName || b.batch.dropPointName);
+      const destRankA = getBatchSequenceRank(a.batch, 'drop');
+      const destRankB = getBatchSequenceRank(b.batch, 'drop');
       if (destRankA !== destRankB) return destRankA - destRankB;
 
       const contactA = (a.batch.shgContact?.phone || a.batch.shgContact?.name || a.batch.shgName || '').toLowerCase();
