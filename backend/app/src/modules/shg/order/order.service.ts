@@ -388,7 +388,7 @@ export class OrderService {
           pincode: o.buyer.pincode,
           addressLine1: o.buyer.addressLine1,
           fullAddress: [o.buyer.addressLine1, o.buyer.addressLine2, o.buyer.village, o.buyer.taluka, o.buyer.district, o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode].filter(Boolean).join(', '),
-        } : null,
+        } : null),
         items: o.parcels || [],
         isPickupRedirected: o.isPickupRedirected,
         isDropRedirected: o.isDropRedirected,
