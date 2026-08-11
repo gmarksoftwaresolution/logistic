@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 
 const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches, acceptBatch, rejectBatch, acceptBatchIds, refreshBatchesList, vehicleDetails, showToast } = useOrderManagement();
+  const { batches, acceptBatch, acceptBatchIds, refreshBatchesList, vehicleDetails, showToast } = useOrderManagement();
 
   // Helper to parse numerical weight from weight string e.g. "5 kg" or 5
   const parseWeightKg = (weightStr?: string | number): number => {
@@ -65,14 +65,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     return '#10B981';
   };
   const statusColor = getCapacityStatusColor(usagePercent);
-  const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
-  const [selectedReasonChip, setSelectedReasonChip] = useState<string | null>(null);
-  const [activeSubStep, setActiveSubStep] = useState<'none' | 'shg_gmu_not_available' | 'unsufficient_details'>('none');
-  const [customReasonText, setCustomReasonText] = useState('');
-  const modalScrollRef = useRef<ScrollView>(null);
-  const customReasonInputRef = useRef<TextInput>(null);
-  const [isEditingCustomReason, setIsEditingCustomReason] = useState(false);
-  const [isCustomInputFocused, setIsCustomInputFocused] = useState(false);
+
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,12 +89,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     return unsubscribe;
   }, [navigation]);
 
-  useEffect(() => {
-    if (route.params?.triggerRejectBatchId) {
-      setRejectingBatchId(route.params.triggerRejectBatchId);
-      navigation.setParams({ triggerRejectBatchId: undefined });
-    }
-  }, [route.params?.triggerRejectBatchId]);
+
 
   const handleAcceptSingle = async (batchId: string, type: 'pickup' | 'drop' = 'pickup') => {
     const targetBatch = batches.find(b => b.id === batchId);
@@ -186,30 +174,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const allFoundAreas = Object.keys(groupedEntries);
   const areas = Array.from(new Set([...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas]));
 
-  const handleCloseModal = () => {
-    setRejectingBatchId(null);
-    setSelectedReasonChip(null);
-    setActiveSubStep('none');
-    setCustomReasonText('');
-    setIsEditingCustomReason(false);
-    setIsCustomInputFocused(false);
-  };
 
-  const handleConfirmReject = async () => {
-    if (rejectingBatchId) {
-      let finalReason = '';
-      if (selectedReasonChip === 'Custom Reason') {
-        finalReason = customReasonText.trim();
-      } else {
-        finalReason = selectedReasonChip || '';
-      }
-
-      if (finalReason.trim()) {
-        await rejectBatch(rejectingBatchId, finalReason.trim());
-        handleCloseModal();
-      }
-    }
-  };
 
   const getRouteDisplayText = (batch: BatchOrder, type: 'pickup' | 'drop', areaName: string) => {
     const isHubRoute = areaName === 'Gadhinglaj Hub';
@@ -229,12 +194,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   };
 
-  const reasonChips = [
-    t('orders.reason_vehicle_not_available', { defaultValue: 'Vehicle Not Available' }),
-    t('orders.reason_pickup_location_not_reachable', { defaultValue: 'Pickup Location Not Reachable' }),
-    t('orders.reason_transport_capacity_full', { defaultValue: 'Transport Capacity Full' }),
-    t('orders.reason_custom_own_reason', { defaultValue: 'Custom Reason' }),
-  ];
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -421,9 +381,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
-                                  <TouchableOpacity style={styles.modernRejectBtn} onPress={() => setRejectingBatchId(batch.id)}>
-                                    <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
-                                  </TouchableOpacity>
+
                                 </View>
                               </View>
                             );
@@ -491,9 +449,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                       <Text style={styles.btnTextWhite}>{t('orders.accept', { defaultValue: 'Accept' })}</Text>
                                     </TouchableOpacity>
                                   )}
-                                  <TouchableOpacity style={styles.modernRejectBtn} onPress={() => setRejectingBatchId(batch.id)}>
-                                    <Text style={styles.btnTextRed}>{t('orders.reject', { defaultValue: 'Reject' })}</Text>
-                                  </TouchableOpacity>
+
                                 </View>
                               </View>
                             );
@@ -528,230 +484,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
           })
         )}
       </ScrollView>
-      {/* Reject Modal */}
-      <Modal
-        visible={!!rejectingBatchId}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCloseModal}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>
-                {t('orders.reject_order_leg', { defaultValue: 'Reject Order Leg' })}
-              </Text>
-              <TouchableOpacity onPress={handleCloseModal} style={styles.closeBtn}>
-                <X size={scale(20)} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView 
-              ref={modalScrollRef}
-              showsVerticalScrollIndicator={false} 
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(10) }}
-            >
-              <View>
-                <Text style={styles.modalSubtitle}>{t('orders.specify_reject_reason', { defaultValue: 'Specify reason for failing acceptance' })}</Text>
-                
-                <View style={styles.chipsContainer}>
-                  {/* Option 1: Vehicle Not Available */}
-                  <TouchableOpacity
-                    style={[
-                      styles.reasonChip,
-                      selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedReasonChip('Vehicle Not Available');
-                      setActiveSubStep('none');
-                      setCustomReasonText('');
-                    }}
-                  >
-                    <Text style={[styles.reasonChipText, selectedReasonChip === 'Vehicle Not Available' && styles.reasonChipTextSelected]}>
-                      Vehicle Not Available
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Option 2: Transport Capacity Full */}
-                  <TouchableOpacity
-                    style={[
-                      styles.reasonChip,
-                      selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedReasonChip('Transport Capacity Full');
-                      setActiveSubStep('none');
-                      setCustomReasonText('');
-                    }}
-                  >
-                    <Text style={[styles.reasonChipText, selectedReasonChip === 'Transport Capacity Full' && styles.reasonChipTextSelected]}>
-                      Transport Capacity Full
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Option 3: SHG/Gmu Not Available */}
-                  <TouchableOpacity
-                    style={[
-                      styles.reasonChip,
-                      (activeSubStep === 'shg_gmu_not_available' || selectedReasonChip === 'SHG Not Available' || selectedReasonChip === 'GMU Not Available') && styles.reasonChipSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedReasonChip(null);
-                      setActiveSubStep('shg_gmu_not_available');
-                      setCustomReasonText('');
-                    }}
-                  >
-                    <Text style={[styles.reasonChipText, (activeSubStep === 'shg_gmu_not_available' || selectedReasonChip === 'SHG Not Available' || selectedReasonChip === 'GMU Not Available') && styles.reasonChipTextSelected]}>
-                      SHG/Gmu Not Available
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Option 4: Unsufficient Details */}
-                  <TouchableOpacity
-                    style={[
-                      styles.reasonChip,
-                      (activeSubStep === 'unsufficient_details' || selectedReasonChip === 'Unsufficient Details of SHG' || selectedReasonChip === 'Unsufficient Details of GMU') && styles.reasonChipSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedReasonChip(null);
-                      setActiveSubStep('unsufficient_details');
-                      setCustomReasonText('');
-                    }}
-                  >
-                    <Text style={[styles.reasonChipText, (activeSubStep === 'unsufficient_details' || selectedReasonChip === 'Unsufficient Details of SHG' || selectedReasonChip === 'Unsufficient Details of GMU') && styles.reasonChipTextSelected]}>
-                      Unsufficient Details
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Option 5: Custom Reason */}
-                  {selectedReasonChip === 'Custom Reason' ? (
-                    <TextInput
-                      ref={customReasonInputRef}
-                      style={[
-                        styles.reasonChip,
-                        styles.reasonChipSelected,
-                        {
-                          fontFamily: Fonts.medium,
-                          fontSize: moderateScale(13.5),
-                          color: '#DC2626',
-                          minHeight: verticalScale(50),
-                          textAlignVertical: 'top',
-                        }
-                      ]}
-                      placeholder="Custom Reason here"
-                      placeholderTextColor={Colors.textPlaceholder}
-                      value={customReasonText}
-                      onChangeText={setCustomReasonText}
-                      multiline
-                      autoFocus
-                      onFocus={() => {
-                        setTimeout(() => {
-                          modalScrollRef.current?.scrollToEnd({ animated: true });
-                        }, 100);
-                      }}
-                    />
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.reasonChip}
-                      onPress={() => {
-                        setSelectedReasonChip('Custom Reason');
-                        setActiveSubStep('none');
-                        setTimeout(() => {
-                          customReasonInputRef.current?.focus();
-                        }, 100);
-                      }}
-                    >
-                      <Text style={styles.reasonChipText}>
-                        Custom Reason
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                 {/* Sub-steps container */}
-                {activeSubStep === 'shg_gmu_not_available' && (
-                  <View style={{ marginTop: verticalScale(10), marginBottom: verticalScale(16) }}>
-                    <Text style={styles.subHeadingLabel}>Select Specific Location:</Text>
-                    <View style={styles.chipsContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.reasonChip,
-                          selectedReasonChip === 'SHG Not Available' && styles.reasonChipSelected,
-                        ]}
-                        onPress={() => setSelectedReasonChip('SHG Not Available')}
-                      >
-                        <Text style={[styles.reasonChipText, selectedReasonChip === 'SHG Not Available' && styles.reasonChipTextSelected]}>
-                          SHG Not Available
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.reasonChip,
-                          selectedReasonChip === 'GMU Not Available' && styles.reasonChipSelected,
-                        ]}
-                        onPress={() => setSelectedReasonChip('GMU Not Available')}
-                      >
-                        <Text style={[styles.reasonChipText, selectedReasonChip === 'GMU Not Available' && styles.reasonChipTextSelected]}>
-                          GMU Not Available
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                {activeSubStep === 'unsufficient_details' && (
-                  <View style={{ marginTop: verticalScale(10), marginBottom: verticalScale(16) }}>
-                    <Text style={styles.subHeadingLabel}>Select Specific Party:</Text>
-                    <View style={styles.chipsContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.reasonChip,
-                          selectedReasonChip === 'Unsufficient Details of SHG' && styles.reasonChipSelected,
-                        ]}
-                        onPress={() => setSelectedReasonChip('Unsufficient Details of SHG')}
-                      >
-                        <Text style={[styles.reasonChipText, selectedReasonChip === 'Unsufficient Details of SHG' && styles.reasonChipTextSelected]}>
-                          Unsufficient Details of SHG
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.reasonChip,
-                          selectedReasonChip === 'Unsufficient Details of GMU' && styles.reasonChipSelected,
-                        ]}
-                        onPress={() => setSelectedReasonChip('Unsufficient Details of GMU')}
-                      >
-                        <Text style={[styles.reasonChipText, selectedReasonChip === 'Unsufficient Details of GMU' && styles.reasonChipTextSelected]}>
-                          Unsufficient Details of GMU
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-
-
-                <TouchableOpacity
-                  style={[
-                    styles.confirmRejectBtn,
-                    (!selectedReasonChip || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())) && styles.btnDisabled
-                  ]}
-                  disabled={!selectedReasonChip || (selectedReasonChip === 'Custom Reason' && !customReasonText.trim())}
-                  onPress={handleConfirmReject}
-                >
-                  <Text style={styles.confirmRejectText}>Confirm Reject</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Premium Order Acceptance Success Modal */}
       <Modal
@@ -1049,26 +782,12 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  modernRejectBtn: {
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(6),
-    borderRadius: moderateScale(8),
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1.5,
-    borderColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   btnTextWhite: {
     fontFamily: Fonts.bold,
     fontSize: moderateScale(11),
     color: '#FFFFFF',
   },
-  btnTextRed: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(11),
-    color: Colors.error,
-  },
+
   bulkAreaAcceptBtn: {
     backgroundColor: '#ECFDF5',
     paddingVertical: verticalScale(8),
@@ -1089,94 +808,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: scale(24),
   },
-  modalCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: moderateScale(20),
-    padding: moderateScale(24),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: verticalScale(8) },
-    shadowOpacity: 0.12,
-    shadowRadius: moderateScale(24),
-    elevation: 5,
-    maxHeight: '85%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: verticalScale(8),
-  },
-  modalTitle: {
-    fontFamily: Fonts.extraBold,
-    fontSize: moderateScale(20),
-    color: Colors.textPrimary,
-  },
-  closeBtn: {
-    padding: scale(4),
-  },
-  modalSubtitle: {
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13),
-    color: Colors.textSecondary,
-    marginBottom: verticalScale(20),
-  },
-  chipsContainer: {
-    flexDirection: 'column',
-    gap: verticalScale(10),
-    marginBottom: verticalScale(16),
-    width: '100%',
-  },
-  reasonChip: {
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    borderRadius: moderateScale(12),
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reasonChipSelected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#EF4444',
-  },
-  reasonChipText: {
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13.5),
-    color: Colors.textSecondary,
-  },
-  reasonChipTextSelected: {
-    fontFamily: Fonts.bold,
-    color: '#DC2626',
-  },
-  reasonInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: moderateScale(14),
-    padding: scale(12),
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13),
-    color: Colors.textPrimary,
-    textAlignVertical: 'top',
-    marginBottom: verticalScale(24),
-  },
-  confirmRejectBtn: {
-    backgroundColor: '#EF4444',
-    height: verticalScale(50),
-    borderRadius: moderateScale(14),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnDisabled: {
-    backgroundColor: Colors.buttonDisabled,
-  },
-  confirmRejectText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(14),
-    color: '#FFFFFF',
-  },
+
   successModalCard: {
     backgroundColor: Colors.surface,
     borderRadius: moderateScale(24),
@@ -1300,61 +932,7 @@ const styles = StyleSheet.create({
     color: Colors.textPlaceholder,
   },
 
-  reasonChipInput: {
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: scale(16),
-    paddingVertical: Platform.OS === 'ios' ? verticalScale(12) : verticalScale(10),
-    borderRadius: moderateScale(12),
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    width: '100%',
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13.5),
-    color: Colors.textSecondary,
-  },
-  reasonChipInputSelected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#EF4444',
-    color: Colors.textPrimary,
-    fontFamily: Fonts.medium,
-  },
-  rescheduleTypeChipSelected: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#4F46E5',
-  },
-  rescheduleTypeTextSelected: {
-    fontFamily: Fonts.bold,
-    color: '#4F46E5',
-  },
-  rescheduleReasonChipSelected: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#D97706',
-  },
-  rescheduleReasonTextSelected: {
-    fontFamily: Fonts.bold,
-    color: '#B45309',
-  },
-  customReasonTextInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: moderateScale(12),
-    padding: scale(12),
-    fontFamily: Fonts.medium,
-    fontSize: moderateScale(13.5),
-    color: Colors.textPrimary,
-    textAlignVertical: 'top',
-    minHeight: verticalScale(60),
-    marginTop: verticalScale(4),
-    width: '100%',
-  },
-  subHeadingLabel: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(13),
-    color: Colors.textPrimary,
-    marginTop: verticalScale(14),
-    marginBottom: verticalScale(8),
-  },
+
   dateTimeSelectorRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

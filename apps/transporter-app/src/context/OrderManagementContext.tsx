@@ -254,7 +254,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedPickups = rawPickups.map((o: any) => ({
         id: `pickup-${o.id}`,
         displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
+        areaName: o.seller?.village || o.seller?.address?.village || o.shg?.address?.village || o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
         flowType: 'shg_to_gmu' as FlowType,
         shgName: o.shg?.shgDetail?.shgName || 'N/A',
         pickupPointName: o.seller?.village || o.seller?.address?.village || 'N/A',

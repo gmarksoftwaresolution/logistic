@@ -66,20 +66,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   }, [route.params?.activeTab, screenWidth]);
 
-  // Track accordion expansion states per area.
-  const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({
-    nesari: true,
-    wagrale: true,
-    'Gadhinglaj Hub': true,
-    Mahagaon: true,
-  });
 
-  const toggleAreaExpand = (areaName: string) => {
-    setExpandedAreas((prev) => ({
-      ...prev,
-      [areaName]: prev[areaName] === undefined ? false : !prev[areaName],
-    }));
-  };
 
   const handleNavigate = (batch: BatchOrder, type: 'pickup' | 'drop') => {
     const isPickup = type === 'pickup';
@@ -107,48 +94,96 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     return { pickup: total, drop: total };
   };
 
-  // 1. Pickups Data
-  const { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds } = useMemo(() => {
+  // Route Corridor Rank Index (Order along the regional route corridor)
+  const ROUTE_CORRIDOR_RANK: Record<string, number> = {
+    'gadhinglaj hub': 1,
+    'gadhinglaj': 2,
+    'dundage': 3,
+    'halkarni': 4,
+    'mahagaon': 5,
+    'wagharale': 6,
+    'inchanal': 7,
+    'nesari': 8,
+  };
+
+  const getRouteRank = (locationName?: string): number => {
+    if (!locationName) return 50;
+    const normalized = locationName.toLowerCase().trim();
+    for (const [key, rank] of Object.entries(ROUTE_CORRIDOR_RANK)) {
+      if (normalized.includes(key)) return rank;
+    }
+    return 50;
+  };
+
+  // 1. Pickups & Drops Data with Route Corridor Sequencing
+  const { sortedPickupEntries, sortedDropEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds } = useMemo(() => {
     // 1. Pickups Data
     const pickupBatches = batches.filter((b) => b.status === 'ACCEPTED_PICKUP');
-    const pickupDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
+    const pickupDisplayEntries: DisplayEntry[] = [];
     pickupBatches.forEach(b => {
       pickupDisplayEntries.push({ batch: b, type: 'pickup' });
     });
 
-    const pickupGroupedEntries: Record<string, typeof pickupDisplayEntries> = {};
-    pickupDisplayEntries.forEach((entry) => {
-      let displayArea = entry.batch.areaName;
-      if (entry.batch.flowType === 'gmu_to_shg') displayArea = 'Gadhinglaj Hub';
-      if (!pickupGroupedEntries[displayArea]) pickupGroupedEntries[displayArea] = [];
-      pickupGroupedEntries[displayArea].push(entry);
+    // Sort Pickup Entries by Route Corridor Execution Order:
+    // Phase 1: Hub Pickups (From Gadhinglaj Hub) sorted by destination route rank
+    // Phase 2: Village Pickups (From Village SHG) sorted by origin route rank
+    // Same contact / location sit adjacent
+    const sortedPickupEntries = [...pickupDisplayEntries].sort((a, b) => {
+      const isHubA = a.batch.pickupPointName === 'Gadhinglaj Hub' || a.batch.flowType === 'gmu_to_shg';
+      const isHubB = b.batch.pickupPointName === 'Gadhinglaj Hub' || b.batch.flowType === 'gmu_to_shg';
+
+      if (isHubA !== isHubB) {
+        return isHubA ? -1 : 1;
+      }
+
+      if (isHubA) {
+        const destRankA = getRouteRank(a.batch.areaName || a.batch.dropPointName);
+        const destRankB = getRouteRank(b.batch.areaName || b.batch.dropPointName);
+        if (destRankA !== destRankB) return destRankA - destRankB;
+      } else {
+        const originRankA = getRouteRank(a.batch.areaName || a.batch.pickupPointName);
+        const originRankB = getRouteRank(b.batch.areaName || b.batch.pickupPointName);
+        if (originRankA !== originRankB) return originRankA - originRankB;
+      }
+
+      const contactA = (a.batch.shgContact?.phone || a.batch.shgContact?.name || a.batch.shgName || '').toLowerCase();
+      const contactB = (b.batch.shgContact?.phone || b.batch.shgContact?.name || b.batch.shgName || '').toLowerCase();
+      if (contactA !== contactB) return contactA.localeCompare(contactB);
+
+      return (a.batch.displayId || a.batch.id).localeCompare(b.batch.displayId || b.batch.id);
     });
 
     // 2. Drops Data
     const dropBatches = batches.filter((b) => b.status === 'PICKUP_COMPLETED');
-    
-    const dropDisplayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
+    const dropDisplayEntries: DisplayEntry[] = [];
     dropBatches.forEach(b => {
       dropDisplayEntries.push({ batch: b, type: 'drop' });
     });
 
-    const dropGroupedEntries: Record<string, typeof dropDisplayEntries> = {};
-    dropDisplayEntries.forEach((entry) => {
-      let displayArea = entry.batch.areaName;
-      if (entry.batch.flowType === 'shg_to_gmu') displayArea = 'Gadhinglaj Hub';
-      if (!dropGroupedEntries[displayArea]) dropGroupedEntries[displayArea] = [];
-      dropGroupedEntries[displayArea].push(entry);
+    // Sort Drop Entries by Route Corridor Execution Order:
+    // Phase 1: Hub Drops (To Gadhinglaj Hub)
+    // Phase 2: Village Drops sorted by destination route rank (closest to furthest destination)
+    const sortedDropEntries = [...dropDisplayEntries].sort((a, b) => {
+      const isHubDropA = a.batch.dropPointName === 'Gadhinglaj Hub' || a.batch.flowType === 'shg_to_gmu';
+      const isHubDropB = b.batch.dropPointName === 'Gadhinglaj Hub' || b.batch.flowType === 'shg_to_gmu';
+
+      if (isHubDropA !== isHubDropB) {
+        return isHubDropA ? -1 : 1;
+      }
+
+      const destRankA = getRouteRank(a.batch.areaName || a.batch.dropPointName);
+      const destRankB = getRouteRank(b.batch.areaName || b.batch.dropPointName);
+      if (destRankA !== destRankB) return destRankA - destRankB;
+
+      const contactA = (a.batch.shgContact?.phone || a.batch.shgContact?.name || a.batch.shgName || '').toLowerCase();
+      const contactB = (b.batch.shgContact?.phone || b.batch.shgContact?.name || b.batch.shgName || '').toLowerCase();
+      if (contactA !== contactB) return contactA.localeCompare(contactB);
+
+      return (a.batch.displayId || a.batch.id).localeCompare(b.batch.displayId || b.batch.id);
     });
 
-    const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
-    const allFoundPickupAreas = Object.keys(pickupGroupedEntries);
-    const pickupAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => pickupGroupedEntries[a]), ...allFoundPickupAreas]));
-
-    const allFoundDropAreas = Object.keys(dropGroupedEntries);
-    const dropAreas = Array.from(new Set([...ORDERED_AREAS.filter(a => dropGroupedEntries[a]), ...allFoundDropAreas]));
-
-    const totalPickups = pickupDisplayEntries.length;
-    const totalDrops = dropDisplayEntries.length;
+    const totalPickups = sortedPickupEntries.length;
+    const totalDrops = sortedDropEntries.length;
 
     const pickupOrderIds = Array.from(new Set(
       pickupBatches.map(b => String(b.displayId || ''))
@@ -158,12 +193,11 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
       dropBatches.map(b => String(b.displayId || ''))
     )).filter(Boolean);
 
-    return { pickupAreas, dropAreas, pickupGroupedEntries, dropGroupedEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds };
+    return { sortedPickupEntries, sortedDropEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds };
   }, [batches]);
 
-  const renderAreaList = (
-    tabAreas: string[],
-    tabGroupedEntries: Record<string, DisplayEntry[]>,
+  const renderFlatList = (
+    entries: DisplayEntry[],
     tabType: 'pickup' | 'drop'
   ) => {
     return (
@@ -180,7 +214,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
             />
           }
         >
-          {tabAreas.length === 0 ? (
+          {entries.length === 0 ? (
             <View style={styles.emptyCard}>
               <Package size={scale(42)} color="#94A3B8" strokeWidth={1.5} />
               <Text style={styles.emptyCardText}>
@@ -191,109 +225,68 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
               </Text>
             </View>
           ) : (
-            tabAreas.map((areaName) => {
-              const areaEntries = tabGroupedEntries[areaName];
-              const isExpanded = expandedAreas[areaName] !== false;
+            <View style={styles.notificationsWrapper}>
+              {entries.map((entry: DisplayEntry, index: number) => {
+                const { batch, type } = entry;
+                const isPickup = type === 'pickup';
+                const legTag = isPickup 
+                  ? { text: t('orders.pickup_orders', { defaultValue: 'Pickup Order' }), color: '#2563EB', bg: '#EFF6FF' }
+                  : { text: t('orders.drop_orders', { defaultValue: 'Drop Order' }), color: '#059669', bg: '#ECFDF5' };
 
-              return (
-                <View key={areaName} style={styles.areaAccordionBlock}>
-                  <View style={styles.areaAccentBar} />
-                  
+                const { pickup: currentPickup, drop: currentDrop } = getCounts(batch);
+
+                return (
                   <TouchableOpacity
-                    style={styles.areaHeaderRow}
-                    activeOpacity={0.8}
-                    onPress={() => toggleAreaExpand(areaName)}
+                    key={`${batch.id}-${type}-${index}`}
+                    style={styles.notificationWidgetCard}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type })
+                    }
                   >
-                    <View style={styles.headerLeftCol}>
-                      <MapPin size={scale(18)} color={Colors.primary} strokeWidth={2.5} />
-                      <Text style={styles.areaTitleText} numberOfLines={1}>
-                        {areaName}
+                    <View style={styles.widgetLeftData}>
+                      <View style={styles.widgetTopRow}>
+                        <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                      </View>
+
+                      <Text style={styles.widgetRouteText} numberOfLines={2}>
+                        {`From - ${batch.pickupPointName} To ${batch.dropPointName}`}
                       </Text>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                        <Text style={styles.widgetTotalsText}>
+                          {isPickup ? currentPickup : currentDrop} {t('orders.items')} • {batch.totalWeight}
+                        </Text>
+                        <View style={[styles.legTagBox, { backgroundColor: legTag.bg }]}>
+                          <Text style={[styles.legTagText, { color: legTag.color }]}>
+                            {legTag.text}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
 
-                    <View style={styles.headerRightCol}>
-                      <View style={styles.assignedBadgePill}>
-                        <Text style={styles.assignedBadgeText}>{areaEntries.length} {t('orders.tasks')}</Text>
-                      </View>
-                      <View style={styles.chevronBox}>
-                        {isExpanded ? (
-                          <ChevronDown size={scale(18)} color={Colors.textSecondary} />
-                        ) : (
-                          <ChevronRight size={scale(18)} color={Colors.textSecondary} />
-                        )}
-                      </View>
+                    {/* View Icon Action Strip */}
+                    <View style={styles.actionStrip}>
+                      <TouchableOpacity
+                        style={styles.modernViewBtn}
+                        onPress={() =>
+                          navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type })
+                        }
+                      >
+                        <Text style={styles.btnTextWhite}>{t('orders.view', { defaultValue: 'View' })}</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.modernNavigateBtn}
+                        onPress={() => handleNavigate(batch, type)}
+                      >
+                        <Text style={styles.btnTextGreen}>{t('orders.navigate_short', { defaultValue: 'Navigate' })}</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
-
-                  {isExpanded && (
-                    <View style={styles.accordionBody}>
-                      <View style={styles.notificationsWrapper}>
-                        {areaEntries.map((entry: DisplayEntry, index: number) => {
-                          const { batch, type } = entry;
-                          const isPickup = type === 'pickup';
-                          const legTag = isPickup 
-                            ? { text: t('orders.pickup_orders', { defaultValue: 'Pickup Order' }), color: '#2563EB', bg: '#EFF6FF' }
-                            : { text: t('orders.drop_orders', { defaultValue: 'Drop Order' }), color: '#059669', bg: '#ECFDF5' };
-
-                          const { pickup: currentPickup, drop: currentDrop } = getCounts(batch);
-
-                          return (
-                            <TouchableOpacity
-                              key={`${batch.id}-${type}-${index}`}
-                              style={styles.notificationWidgetCard}
-                              activeOpacity={0.85}
-                              onPress={() =>
-                                navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type })
-                              }
-                            >
-                              <View style={styles.widgetLeftData}>
-                                <View style={styles.widgetTopRow}>
-                                  <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
-                                </View>
-
-                                <Text style={styles.widgetRouteText} numberOfLines={2}>
-                                  {`From - ${batch.pickupPointName} To ${batch.dropPointName}`}
-                                </Text>
-
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                                  <Text style={styles.widgetTotalsText}>
-                                    {isPickup ? currentPickup : currentDrop} {t('orders.items')} • {batch.totalWeight}
-                                  </Text>
-                                  <View style={[styles.legTagBox, { backgroundColor: legTag.bg }]}>
-                                    <Text style={[styles.legTagText, { color: legTag.color }]}>
-                                      {legTag.text}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-
-                              {/* View Icon Action Strip */}
-                              <View style={styles.actionStrip}>
-                                  <TouchableOpacity
-                                    style={styles.modernViewBtn}
-                                    onPress={() =>
-                                      navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type })
-                                    }
-                                  >
-                                    <Text style={styles.btnTextWhite}>{t('orders.view', { defaultValue: 'View' })}</Text>
-                                  </TouchableOpacity>
-
-                                  <TouchableOpacity
-                                    style={styles.modernNavigateBtn}
-                                    onPress={() => handleNavigate(batch, type)}
-                                  >
-                                    <Text style={styles.btnTextGreen}>{t('orders.navigate_short', { defaultValue: 'Navigate' })}</Text>
-                                  </TouchableOpacity>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              );
-            })
+                );
+              })}
+            </View>
           )}
         </ScrollView>
       </View>
@@ -374,8 +367,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
         }}
         style={{ flex: 1 }}
       >
-        {renderAreaList(pickupAreas, pickupGroupedEntries, 'pickup')}
-        {renderAreaList(dropAreas, dropGroupedEntries, 'drop')}
+        {renderFlatList(sortedPickupEntries, 'pickup')}
+        {renderFlatList(sortedDropEntries, 'drop')}
       </Animated.ScrollView>
 
       {activeTab === 'pickup' && (
@@ -465,92 +458,8 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(14),
     color: '#64748B',
   },
-  areaAccordionBlock: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: moderateScale(16),
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-    position: 'relative',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  areaAccentBar: {
-    width: scale(4),
-    height: '100%',
-    backgroundColor: Colors.primary,
-    position: 'absolute',
-    left: 0,
-    top: 0,
-  },
-  areaHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: scale(20),
-    paddingRight: scale(16),
-    paddingVertical: verticalScale(16),
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
-  },
-  headerLeftCol: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(12),
-    marginRight: scale(8),
-  },
-  headerRightCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(10),
-  },
-  areaTitleText: {
-    flex: 1,
-    fontFamily: Fonts.extraBold,
-    fontSize: moderateScale(15),
-    color: Colors.textPrimary,
-  },
-  assignedBadgePill: {
-    backgroundColor: 'rgba(178, 213, 52, 0.12)',
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(3),
-    borderRadius: scale(12),
-    borderWidth: 1,
-    borderColor: 'rgba(178, 213, 52, 0.3)',
-  },
-  assignedBadgeText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(11),
-    color: Colors.primary,
-  },
-  chevronBox: {
-    width: scale(32),
-    height: scale(32),
-    borderRadius: scale(16),
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accordionBody: {
-    paddingHorizontal: scale(16),
-    paddingTop: verticalScale(12),
-    paddingBottom: verticalScale(16),
-    backgroundColor: '#FFFFFF',
-  },
   notificationsWrapper: {
-    gap: verticalScale(20),
+    gap: verticalScale(14),
   },
   notificationWidgetCard: {
     flexDirection: 'row',

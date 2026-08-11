@@ -16,7 +16,7 @@ import {
 import { Colors, Fonts } from '../../constants/Colors';
 import { useOrderManagement, HUB_CONTACT } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
-import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink } from 'lucide-react-native';
+import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink, Check } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -476,36 +476,26 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 styles.bottomStickyBar,
                 { paddingBottom: insets.bottom > 0 ? insets.bottom + verticalScale(16) : verticalScale(28) }
               ]}>
-                <View style={styles.rowActions}>
-                  <TouchableOpacity
-                    style={[styles.actionBtnHalf, styles.acceptBtnNew]}
-                    activeOpacity={0.8}
-                    onPress={async () => {
-                      try {
-                        await acceptBatch(batch.id);
-                        navigation.goBack();
-                        navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
-                      } catch (err) {
-                        console.error('Failed to accept batch in detail view:', err);
-                      }
-                    }}
-                  >
-                    <Text style={styles.acceptBtnText}>{t('orders.accept', { defaultValue: 'Accept' }).toUpperCase()}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.actionBtnHalf, styles.rejectBtnNew]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      navigation.navigate('CategoryOrders', { 
-                        category: 'new', 
-                        triggerRejectBatchId: batch.id 
-                      });
-                    }}
-                  >
-                    <Text style={styles.rejectBtnText}>{t('orders.reject', { defaultValue: 'Reject' }).toUpperCase()}</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.stickyActionBtn}
+                  activeOpacity={0.85}
+                  onPress={async () => {
+                    try {
+                      await acceptBatch(batch.id);
+                      navigation.goBack();
+                      navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
+                    } catch (err) {
+                      console.error('Failed to accept batch in detail view:', err);
+                    }
+                  }}
+                >
+                  <View style={styles.btnContent}>
+                    <Text style={styles.stickyActionBtnText}>
+                      {t('orders.accept', { defaultValue: 'ACCEPT ORDER' }).toUpperCase()}
+                    </Text>
+                    <Check size={scale(18)} color="#FFFFFF" strokeWidth={3} style={styles.btnIcon} />
+                  </View>
+                </TouchableOpacity>
               </View>
             );
           }
