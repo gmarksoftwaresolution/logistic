@@ -221,14 +221,19 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const rawDrops = dropResponse.data || [];
 
       const mappedPickups = rawPickups.map((o: any) => {
-        const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
+        const isRedirected = !!(
+          o.isPickupRedirected ||
+          o.isRedirected ||
+          o.pickupShgStatus === 'REDIRECTED' ||
+          o.mainStatus === 'REDIRECTED'
+        );
         return {
           id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: isRedirected ? (o.seller?.taluka || o.seller?.address?.taluka || 'N/A') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
+          areaName: isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
           flowType: 'shg_to_gmu' as FlowType,
           shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
-          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.address?.village || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
+          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
           dropPointName: 'Gadhinglaj Hub',
           pickupCount: 1,
           dropCount: 0,
