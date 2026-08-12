@@ -93,7 +93,7 @@ export class OrderManagementService implements OnModuleInit {
       }
     }
 
-    // 2. Check Transporter auto-broadcasts
+    // 2. Check Transporter auto-broadcastss
     const ordersAtShg = await this.prisma.order.findMany({
       where: {
         phase: 'PICKUP',
@@ -898,18 +898,18 @@ export class OrderManagementService implements OnModuleInit {
 
     const relatedPickupOrders = dropOrderIds.length > 0
       ? await this.prisma.order.findMany({
-          where: {
-            OR: [
-              { orderId: { in: dropOrderIds }, phase: 'PICKUP' },
-              { id: { in: dropOrderIds }, phase: 'PICKUP' }
-            ]
-          },
-          include: {
-            assignments: true,
-            seller: true,
-            parcels: { include: { scanHistories: true } }
-          }
-        })
+        where: {
+          OR: [
+            { orderId: { in: dropOrderIds }, phase: 'PICKUP' },
+            { id: { in: dropOrderIds }, phase: 'PICKUP' }
+          ]
+        },
+        include: {
+          assignments: true,
+          seller: true,
+          parcels: { include: { scanHistories: true } }
+        }
+      })
       : [];
 
     const pickupOrderMap = new Map(relatedPickupOrders.map(p => [p.orderId || p.id, p]));
@@ -2514,7 +2514,7 @@ export class OrderManagementService implements OnModuleInit {
             role: 'DROP',
             status: 'ACCEPTED',
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 
