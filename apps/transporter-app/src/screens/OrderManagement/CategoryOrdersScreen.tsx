@@ -172,7 +172,8 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
   const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
   const allFoundAreas = Object.keys(groupedEntries);
-  const areas = Array.from(new Set([...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas]));
+  const rawAreas = [...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas];
+  const areas = rawAreas.filter((item, index) => item != null && rawAreas.indexOf(item) === index);
 
 
 
@@ -467,7 +468,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                       activeOpacity={0.85}
                       disabled={acceptingArea !== null}
                       onPress={() => {
-                        const idsToAccept = Array.from(new Set(areaEntries.map(e => e.batch.id)));
+                        const idsToAccept = areaEntries.map(e => e.batch.id).filter((id, idx, arr) => id != null && arr.indexOf(id) === idx);
                         handleAcceptBulk(idsToAccept, areaName);
                       }}
                     >

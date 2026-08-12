@@ -260,7 +260,7 @@ export class OrderService {
           }
         }],
         isPickupRedirected: o.isPickupRedirected,
-        isDropRedirected: o.isDropRedirected,
+        isDropRedirected: (o as any).isDropRedirected || false,
         pickupShgStatus: o.pickupShgStatus,
         pickupTransporterStatus: o.pickupTransporterStatus,
         dropShgStatus: o.dropShgStatus,
@@ -404,7 +404,7 @@ export class OrderService {
         } : null,
         items: o.parcels || [],
         isPickupRedirected: o.isPickupRedirected,
-        isDropRedirected: o.isDropRedirected,
+        isDropRedirected: (o as any).isDropRedirected || false,
         pickupShgStatus: o.pickupShgStatus,
         pickupTransporterStatus: o.pickupTransporterStatus,
         dropShgStatus: o.dropShgStatus,

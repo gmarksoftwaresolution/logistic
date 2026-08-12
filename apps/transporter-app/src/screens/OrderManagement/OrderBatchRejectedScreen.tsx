@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 
 const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
-  const { batches, refreshBatchesList } = useOrderManagement();
+  const { batches, rejectedBatches: contextRejectedBatches, refreshBatchesList } = useOrderManagement();
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -43,8 +43,12 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
     }));
   };
 
-  // Filter rejected batches
-  const rejectedBatches = batches.filter((b) => b.status === 'rejected');
+  // Filter rejected batches from context
+  const safeContextRejected = Array.isArray(contextRejectedBatches) ? contextRejectedBatches : [];
+  const safeActiveBatches = Array.isArray(batches) ? batches : [];
+  const rejectedBatches = safeContextRejected.length > 0
+    ? safeContextRejected
+    : safeActiveBatches.filter((b) => String(b.status).toUpperCase() === 'REJECTED');
 
   // Prepare display entries (Rejected batches are viewed as a whole)
   const displayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];

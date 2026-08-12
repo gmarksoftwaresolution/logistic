@@ -34,6 +34,16 @@ const ScanSessionContext = createContext<ScanSessionContextType | undefined>(und
 
 const SESSION_PICKUP_KEY = '@gmu_active_pickup_session';
 
+const normalizeSession = (data: any): ScanSessionData | null => {
+  if (!data || typeof data !== 'object') return null;
+  return {
+    ...data,
+    scanned: Array.isArray(data.scanned) ? data.scanned : [],
+    remaining: Array.isArray(data.remaining) ? data.remaining : [],
+    orderIds: Array.isArray(data.orderIds) ? data.orderIds : [],
+  };
+};
+
 export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activePickupSession, setActivePickupSession] = useState<ScanSessionData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,7 +62,8 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         try {
           const res = await axiosInstance.get(`/qr/pickup/session?sessionId=${parsed.sessionId}`);
           if (res.data && res.data.status === 'IN_PROGRESS') {
-            setActivePickupSession(res.data);
+            const normalized = normalizeSession(res.data);
+            setActivePickupSession(normalized);
           } else {
             setActivePickupSession(null);
             await AsyncStorage.removeItem(SESSION_PICKUP_KEY);
@@ -75,8 +86,9 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const response = await axiosInstance.post('/qr/pickup/session/start', { orderIds });
       if (response.data) {
-        setActivePickupSession(response.data);
-        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(response.data));
+        const normalized = normalizeSession(response.data);
+        setActivePickupSession(normalized);
+        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(normalized));
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to start scan session';
@@ -93,8 +105,9 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const response = await axiosInstance.post('/qr/pickup/scan', { sessionId, qrData });
       if (response.data) {
-        setActivePickupSession(response.data);
-        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(response.data));
+        const normalized = normalizeSession(response.data);
+        setActivePickupSession(normalized);
+        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(normalized));
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to scan parcel';
@@ -119,8 +132,9 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const response = await axiosInstance.post('/qr/pickup/remove', { sessionId, parcelId });
       if (response.data) {
-        setActivePickupSession(response.data);
-        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(response.data));
+        const normalized = normalizeSession(response.data);
+        setActivePickupSession(normalized);
+        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(normalized));
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to remove parcel';
@@ -154,8 +168,9 @@ export const ScanSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const res = await axiosInstance.post('/qr/pickup/confirm-order', { sessionId, orderId });
       const sessionData = res.data?.session;
       if (sessionData) {
-        setActivePickupSession(sessionData);
-        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(sessionData));
+        const normalized = normalizeSession(sessionData);
+        setActivePickupSession(normalized);
+        await AsyncStorage.setItem(SESSION_PICKUP_KEY, JSON.stringify(normalized));
       } else {
         setActivePickupSession(null);
         await AsyncStorage.removeItem(SESSION_PICKUP_KEY);

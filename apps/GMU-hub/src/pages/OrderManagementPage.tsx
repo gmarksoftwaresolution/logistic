@@ -40,50 +40,52 @@ import { api } from '../utils/api';
 const CANONICAL_STATUS_MAP: Record<string, string> = {
   'order placed & registered': 'Order Placed & Registered',
   'order placed': 'Order Placed & Registered',
+  'pending': 'Order Placed & Registered',
+  'created': 'Order Placed & Registered',
+  'registered': 'Order Placed & Registered',
   'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
   'shg accepted': 'Pickup SHG Assigned & Accepted',
   'collected & scanned by shg': 'Collected & Scanned by SHG',
   'shg pickup': 'Collected & Scanned by SHG',
   'shg_pickup': 'Collected & Scanned by SHG',
+  'shg scan': 'Collected & Scanned by SHG',
+  'parcel_at_shg': 'Collected & Scanned by SHG',
   'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
   'transporter accepted': 'Transporter Route Assigned & Accepted',
-  'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
-  'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
-  'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
+  'accepted_pickup': 'Transporter Route Assigned & Accepted',
+  'picked up by transporter (in transit to hub)': 'Picked up by Transporter',
+  'picked up by transporter': 'Picked up by Transporter',
+  'transporter pickup': 'Picked up by Transporter',
+  'transporter_pickup': 'Picked up by Transporter',
+  'parcel_picked': 'Picked up by Transporter',
+  'in_transit_to_hub': 'Picked up by Transporter',
   'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
   'hub intake': 'Received & Quality Checked at GMU Hub',
   'hub_received': 'Received & Quality Checked at GMU Hub',
-  'stored in hub inventory': 'Stored in Hub Inventory',
-  'stored_in_hub': 'Stored in Hub Inventory',
+  'at_gmu': 'Received & Quality Checked at GMU Hub',
+  'stored': 'Received & Quality Checked at GMU Hub',
+  'stored in hub inventory': 'Received & Quality Checked at GMU Hub',
+  'stored_in_hub': 'Received & Quality Checked at GMU Hub',
   'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
   'drop shg accepted': 'Drop SHG Assigned & Accepted',
   'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
   'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
-  'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
-  'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
-  'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
-  'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+  'dispatched from hub (in transit to drop center)': 'Dispatched from Hub',
+  'dispatched from hub': 'Dispatched from Hub',
+  'dispatched': 'Dispatched from Hub',
+  'out_for_delivery': 'Dispatched from Hub',
+  'drop transporter pickup': 'Dispatched from Hub',
+  'transporter drop pickup': 'Dispatched from Hub',
+  'transporter_drop_pickup': 'Dispatched from Hub',
+  'transporter picked up from hub': 'Transporter Picked Up from Hub',
   'received at destination shg center': 'Received at Destination SHG Center',
   'drop shg pickup': 'Received at Destination SHG Center',
   'shg drop pickup': 'Received at Destination SHG Center',
   'shg_drop_pickup': 'Received at Destination SHG Center',
+  'at_buyer_shg': 'Received at Destination SHG Center',
   'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
   'delivered': 'Delivered & Handed Over to Buyer',
-};
-
-const STAGE_ORDER: Record<string, number> = {
-  'Order Placed & Registered': 1,
-  'Pickup SHG Assigned & Accepted': 2,
-  'Collected & Scanned by SHG': 3,
-  'Transporter Route Assigned & Accepted': 4,
-  'Picked up by Transporter (In Transit to Hub)': 5,
-  'Received & Quality Checked at GMU Hub': 6,
-  'Stored in Hub Inventory': 7,
-  'Drop SHG Assigned & Accepted': 8,
-  'Drop Transporter Route Assigned & Accepted': 9,
-  'Dispatched from Hub (In Transit to Drop Center)': 10,
-  'Received at Destination SHG Center': 11,
-  'Delivered & Handed Over to Buyer': 12,
+  'completed': 'Delivered & Handed Over to Buyer',
 };
 
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
@@ -95,37 +97,6 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
   } catch (e) {
     return '-';
   }
-};
-
-const CANONICAL_STATUS_MAP: Record<string, string> = {
-  'order placed': 'Order Placed & Registered',
-  'order placed & registered': 'Order Placed & Registered',
-  'pending': 'Order Placed & Registered',
-  'created': 'Order Placed & Registered',
-  'registered': 'Order Placed & Registered',
-  'collected & scanned by shg': 'Collected & Scanned by SHG',
-  'shg pickup': 'Collected & Scanned by SHG',
-  'shg scan': 'Collected & Scanned by SHG',
-  'parcel_at_shg': 'Collected & Scanned by SHG',
-  'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
-  'transporter accepted': 'Transporter Route Assigned & Accepted',
-  'accepted_pickup': 'Transporter Route Assigned & Accepted',
-  'picked up by transporter': 'Picked up by Transporter',
-  'parcel_picked': 'Picked up by Transporter',
-  'in_transit_to_hub': 'Picked up by Transporter',
-  'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
-  'at_gmu': 'Received & Quality Checked at GMU Hub',
-  'hub_received': 'Received & Quality Checked at GMU Hub',
-  'stored': 'Received & Quality Checked at GMU Hub',
-  'dispatched from hub': 'Dispatched from Hub',
-  'dispatched': 'Dispatched from Hub',
-  'out_for_delivery': 'Dispatched from Hub',
-  'transporter picked up from hub': 'Transporter Picked Up from Hub',
-  'received at destination shg center': 'Received at Destination SHG Center',
-  'at_buyer_shg': 'Received at Destination SHG Center',
-  'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
-  'delivered': 'Delivered & Handed Over to Buyer',
-  'completed': 'Delivered & Handed Over to Buyer',
 };
 
 const STAGE_ORDER: Record<string, number> = {
@@ -249,6 +220,11 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   // Pagination for return view
   const [returnPage, setReturnPage] = useState(1);
   const returnItemsPerPage = 10;
+
+  // Return Sub-Tabs: transporter | buyer
+  const [activeReturnSubTab, setActiveReturnSubTab] = useState<'transporter' | 'buyer'>('transporter');
+
+
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -1207,14 +1183,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     })).filter(Boolean)
   );
 
-  // Dynamic filter values
-  const uniqueVillages = Array.from(new Set(
-    allMergedOrders.flatMap(o => [o.sellerVillage, o.buyerVillage].filter(Boolean))
-  )).sort();
+  const uniqueVillages = allMergedOrders
+    .flatMap(o => [o.sellerVillage, o.buyerVillage].filter(Boolean))
+    .filter((v, idx, arr) => arr.indexOf(v) === idx)
+    .sort();
 
-  const uniquePincodes = Array.from(new Set(
-    allMergedOrders.flatMap(o => [o.sellerPincode, o.buyerPincode].filter(Boolean))
-  )).sort();
+  const uniquePincodes = allMergedOrders
+    .flatMap(o => [o.sellerPincode, o.buyerPincode].filter(Boolean))
+    .filter((p, idx, arr) => arr.indexOf(p) === idx)
+    .sort();
 
   // Search & Filter helper
   const filterAndSearchOrders = (orders: any[]) => {
@@ -1706,6 +1683,26 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     );
   };
 
+  const isTransporterReturnOrder = (o: any) => {
+    if (o.returnType === 'TRANSPORTER_RETURN') return true;
+    if (['TRANSPORTER_RETURN_PENDING', 'TRANSPORTER_RETURN_COMPLETED', 'INVENTORY_TRANSPORTER_RETURN'].includes(o.mainStatus)) return true;
+    if (returnDropNewOrders.some((r: any) => r.id === o.id) || returnDropCompletedOrders.some((r: any) => r.id === o.id)) return true;
+    return false;
+  };
+
+  const isBuyerReturnOrder = (o: any) => {
+    if (o.returnType === 'BUYER_RETURN') return true;
+    if ([
+      'RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG',
+      'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED',
+      'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED',
+      'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'RETURN_PARCEL_AT_TRANSPORTER',
+      'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'
+    ].includes(o.mainStatus)) return true;
+    if (returnPickupNewOrders.some((r: any) => r.id === o.id) || returnPickupCompletedOrders.some((r: any) => r.id === o.id)) return true;
+    return false;
+  };
+
   const newOrdersList = filterAndSearchOrders(
     allMergedOrders.filter(
       (o: any) =>
@@ -1740,11 +1737,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     )
   );
 
+  const transporterReturnOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => isOrderReturn(o) && isTransporterReturnOrder(o))
+  );
 
+  const buyerReturnOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) => isOrderReturn(o) && !isTransporterReturnOrder(o))
+  );
 
   const returnOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) => isOrderReturn(o))
   );
+
+
 
   const delayedCount = allMergedOrders.filter((o: any) =>
     o.rescheduleType ||
@@ -1993,35 +1998,100 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
 
   const returnColumns = [
-    { header: 'Order ID', accessor: 'id' as keyof PickupOrder },
     {
-      header: 'Status', accessor: (row: any) => (
-        <StatusBadge status={row.mainStatus} />
+      header: 'Order ID',
+      accessor: (row: any) => (
+        <div className="flex items-center gap-1 font-black text-slate-800 tracking-tight">
+          <span>{row.id}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(row.id);
+              showNotification(`Copied Order ID ${row.id} to clipboard!`, 'success');
+            }}
+            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            title="Copy Order ID"
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+        </div>
       )
     },
-    { header: 'Buyer Name', accessor: 'buyerName' as keyof PickupOrder },
-    { header: 'Buyer Village/City', accessor: 'buyerVillage' as keyof PickupOrder },
-    { header: 'SHG Name', accessor: (row: any) => row.shgDetails?.name || 'N/A' },
-    { header: 'Transporter Name', accessor: (row: any) => row.transporterDetails?.name || 'N/A' },
-    { header: 'Product Count', accessor: 'productCount' as keyof PickupOrder },
-    { header: 'Total Qty', accessor: 'totalQty' as keyof PickupOrder },
-    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof PickupOrder },
-    { header: 'Date Placed', accessor: (row: any) => (row.orderDate ? row.orderDate.split(' ')[0].split('T')[0] : (row.created_at ? row.created_at.split(' ')[0] : '-')) },
     {
-      header: 'Action', accessor: (row: any) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleViewOrder(row);
-          }}
-          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#073318] rounded-xl border border-slate-200 shadow-sm flex items-center justify-center gap-1.5 px-3 font-semibold text-xs transition-colors cursor-pointer"
-        >
-          <Eye className="h-3.5 w-3.5" />
-          <span>View</span>
-        </button>
+      header: 'Seller Name',
+      accessor: (row: any) => row.sellerName || row.seller?.fullName || 'N/A'
+    },
+    {
+      header: 'Seller Village',
+      accessor: (row: any) => row.sellerVillage || row.seller?.village || row.sellerAddress || 'N/A'
+    },
+    {
+      header: 'Buyer Name',
+      accessor: (row: any) => row.buyerName || row.buyer?.fullName || 'N/A'
+    },
+    {
+      header: 'Buyer Address',
+      accessor: (row: any) => row.buyerAddress || row.buyer?.address || 'N/A'
+    },
+    {
+      header: 'Product Count',
+      accessor: (row: any) => row.productCount || (row.items ? row.items.length : 1)
+    },
+    {
+      header: 'Total Weight',
+      accessor: (row: any) => `${row.totalWeight || row.weight || 0} kg`
+    },
+    {
+      header: 'Status',
+      accessor: (row: any) => (
+        <div className="flex flex-col gap-1 items-start">
+          <StatusBadge status={row.mainStatus} />
+          <span className="inline-flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded uppercase tracking-wider">
+            {isTransporterReturnOrder(row) ? '🚛 Transporter Return' : '👤 Buyer Return'}
+          </span>
+        </div>
       )
+    },
+    {
+      header: 'Action',
+      accessor: (row: any) => {
+        const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'TRANSPORTER_RETURN_PENDING', 'RETURN_IN_TRANSIT_TO_HUB'].includes(row.mainStatus);
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewOrder(row);
+              }}
+              title="View Details"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#073318] rounded-xl border border-slate-200 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+            >
+              <Eye className="h-3.5 w-3.5 text-[#073318]" />
+              <span>View</span>
+            </button>
+
+            {needsIntake && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const intakeKind = row.returnType
+                    ? (row.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                    : 'pickup';
+                  handleIntakeClick(row, intakeKind);
+                }}
+                title="Scan to Intake"
+                className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+              >
+                <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                <span>Intake</span>
+              </button>
+            )}
+          </div>
+        );
+      }
     },
   ];
+
 
   return (
     <Layout currentPage="order-management" onNavigate={onNavigate}>
@@ -2584,316 +2654,73 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* ---------------- SECTION 5: RETURN ORDERS ---------------- */}
         {activeTopTab === 'returned' && (
           <div className="space-y-6">
-            {returnOrdersList.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
-                <span className="text-4xl block">📦</span>
-                <p className="text-sm">No return orders currently found matching the filter criteria.</p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {returnOrdersList
-                    .slice((returnPage - 1) * returnItemsPerPage, returnPage * returnItemsPerPage)
-                    .map((order) => {
-                      const isExpanded = !!expandedOrders[order.id];
-                      const nodes = getTimelineNodes(order);
+            {/* Return Sub-Tabs Navigation */}
+            <div className="flex items-center gap-3 bg-white p-2 border border-slate-205/85 rounded-2xl shadow-xs">
+              <button
+                onClick={() => {
+                  setActiveReturnSubTab('transporter');
+                  setReturnPage(1);
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
+                  activeReturnSubTab === 'transporter'
+                    ? 'bg-[#073318] text-white shadow-md'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                }`}
+              >
+                <Truck className={`h-4 w-4 ${activeReturnSubTab === 'transporter' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
+                <span>Transporter Return</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                    activeReturnSubTab === 'transporter'
+                      ? 'bg-[#B2D534] text-[#073318]'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {transporterReturnOrdersList.length}
+                </span>
+              </button>
 
-                      const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus);
+              <button
+                onClick={() => {
+                  setActiveReturnSubTab('buyer');
+                  setReturnPage(1);
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
+                  activeReturnSubTab === 'buyer'
+                    ? 'bg-[#073318] text-white shadow-md'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                }`}
+              >
+                <User className={`h-4 w-4 ${activeReturnSubTab === 'buyer' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
+                <span>Buyer Return</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                    activeReturnSubTab === 'buyer'
+                      ? 'bg-[#B2D534] text-[#073318]'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {buyerReturnOrdersList.length}
+                </span>
+              </button>
+            </div>
 
-                      return (
-                        <div
-                          key={order.id}
-                          className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
-                        >
-                          {/* Decorative Left Border based on Priority */}
-                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
-                            ? 'bg-[#EF4444]'
-                            : order.priority?.toLowerCase() === 'medium'
-                              ? 'bg-[#F59E0B]'
-                              : 'bg-[#10B981]'
-                            }`} />
-
-                          {/* Center Column (Visual Journey Stepper) */}
-                          <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
-                            <div className="min-w-[700px] relative flex items-center justify-between h-12">
-
-                              {/* Horizontal Connecting Line Track */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
-
-                              {/* Segmented active/completed highlight line */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
-                                {nodes.slice(0, -1).map((node, idx) => {
-                                  const nextNode = nodes[idx + 1];
-                                  let segmentBg = 'bg-slate-200'; // Pending
-
-                                  if (node.state === 'completed' && nextNode.state === 'completed') {
-                                    segmentBg = 'bg-[#073318]'; // completed (sidebar green)
-                                  } else if (
-                                    (node.state === 'completed' && nextNode.state === 'active') ||
-                                    node.state === 'active'
-                                  ) {
-                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
-                                  }
-
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
-                                    />
-                                  );
-                                })}
-                              </div>
-
-                              {/* Stepper Nodes */}
-                              {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
-                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
-                                const isClickable = !!node.details && !isRedirectedSHG;
-
-                                let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
-                                let iconContent = null;
-                                let labelColor = 'text-slate-405';
-                                let ringClass = '';
-
-                                // Node Labels & Icons mapping
-                                const getIconForNode = (label: string) => {
-                                  const lbl = label.toLowerCase();
-                                  if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
-                                  return <User className="h-3.5 w-3.5" />;
-                                };
-
-                                const iconElement = getIconForNode(node.label);
-
-                                if (isRedirectedSHG) {
-                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
-                                  iconContent = iconElement;
-                                  labelColor = 'text-slate-350 opacity-40 font-medium';
-                                } else if (node.state === 'completed') {
-                                  nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
-                                  iconContent = (
-                                    <div className="relative">
-                                      {iconElement}
-                                      <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#073318] font-bold';
-                                } else if (node.state === 'active') {
-                                  nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
-                                  iconContent = (
-                                    <div className="relative animate-pulse">
-                                      {iconElement}
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#0284C7] font-black';
-                                  ringClass = 'active-node-ring-blue';
-                                } else {
-                                  nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
-                                  iconContent = iconElement;
-                                }
-
-                                const dateDetails = getNodeTimeAndDate(order, node.label);
-
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => isClickable && handleNodeClick(node.label, node.details)}
-                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
-                                  >
-                                    {/* Current Location floating badge above active node */}
-                                    {node.state === 'active' && (
-                                      <div className="absolute -top-8 flex flex-col items-center gap-0.5 whitespace-nowrap z-50">
-                                        <span className="text-[9px] font-black text-[#073318] tracking-wide uppercase">Current Location</span>
-                                        <span className="text-[#073318] text-[8px] leading-none animate-bounce">▼</span>
-                                      </div>
-                                    )}
-
-                                    <div className={`h-[32px] w-[32px] rounded-full border-2 flex items-center justify-center font-bold transition-all relative ${nodeBg} ${ringClass} ${isClickable ? 'cursor-pointer' : ''}`}>
-                                      {iconContent}
-                                      {/* Orbiting Satellite Dots Radar Ring */}
-                                      {node.state === 'active' && (
-                                        <div className="absolute inset-0 -m-2.5 border border-[#0284C7]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
-                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                        </div>
-                                      )}
-                                    </div>
-                                    <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
-                                      {nodeLabel}
-                                    </span>
-                                    {/* Timestamp underneath completed/active nodes */}
-                                    {node.state === 'active' ? (
-                                      <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
-                                    ) : dateDetails ? (
-                                      <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
-                                        <span className="block font-bold text-slate-600">{dateDetails.time}</span>
-                                        <span className="block">{dateDetails.date}</span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-[8px] font-medium text-slate-305 mt-1">-</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Right Column (Status, ID & Actions) */}
-                          <div className="w-full lg:w-[250px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-8 self-stretch py-1">
-                            {/* Top row: Status info badge and time ago (centered) */}
-                            <div className="flex flex-col items-center text-center space-y-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
-                                {order.mainStatus.replace(/[-_]/g, ' ')}
-                              </span>
-                              <span className="block text-[10px] text-slate-400 font-semibold">
-                                • {getUpdatedTimeAgo(order)}
-                              </span>
-                            </div>
-
-                            {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
-                            <div className="w-full flex flex-row items-center justify-between gap-3">
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm font-black text-slate-800 tracking-tight whitespace-nowrap">
-                                  {(() => {
-                                    const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
-                                    return `ID - ${match ? match[1] : order.id}`;
-                                  })()}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(order.id);
-                                    alert(`Order ID ${order.id} copied to clipboard!`);
-                                  }}
-                                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
-                                  title="Copy Order ID"
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </button>
-                              </div>
-
-                              <div className="flex flex-row gap-2 items-center">
-                                {needsIntake && (
-                                  <button
-                                    onClick={() => {
-                                      const intakeKind = order.returnType
-                                        ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
-                                        : 'pickup';
-                                      handleIntakeClick(order, intakeKind);
-                                    }}
-                                    title="Scan to Intake"
-                                    className="px-3 py-2 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
-                                  >
-                                    <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-                                    <span>Scan</span>
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => handleViewOrder(order)}
-                                  title="View Details"
-                                  className="p-2.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
-                                >
-                                  <Eye className="h-4 w-4 text-[#B2D534]" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Expanded Details Section */}
-                          {isExpanded && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5 border-t border-slate-100 animate-in fade-in duration-200">
-                              {/* Product Details Table */}
-                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
-                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                  <Package className="h-3.5 w-3.5" />
-                                  Product details
-                                </h5>
-                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                                  <table className="w-full text-left border-collapse text-xs">
-                                    <thead>
-                                      <tr className="bg-slate-100 text-slate-500 font-extrabold uppercase text-[9px] border-b border-slate-200">
-                                        <th className="p-2.5">Item</th>
-                                        <th className="p-2.5">Qty</th>
-                                        <th className="p-2.5">Weight</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {order.items?.map((item: any, i: number) => (
-                                        <tr key={i} className="hover:bg-slate-50/50 font-semibold text-slate-700">
-                                          <td className="p-2.5">{item.name}</td>
-                                          <td className="p-2.5">{item.quantity}</td>
-                                          <td className="p-2.5">{item.weight} kg</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-
-                              {/* Partner Details Table */}
-                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
-                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                  <Users className="h-3.5 w-3.5" />
-                                  Assigned Partners Info
-                                </h5>
-                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs p-3 space-y-3">
-                                  <div className="flex items-start justify-between text-xs">
-                                    <div>
-                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Buyer</span>
-                                      <span className="font-extrabold text-slate-750">{order.buyerName || 'N/A'}</span>
-                                      <span className="block text-[10px] text-slate-500">{order.buyerMobile}</span>
-                                    </div>
-                                    <div className="text-right">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">SHG Member</span>
-                                      <span className="font-extrabold text-slate-750">{order.pickupShgDetails?.name || 'N/A'}</span>
-                                      <span className="block text-[10px] text-slate-500">{order.pickupShgDetails?.mobile}</span>
-                                    </div>
-                                  </div>
-                                  <div className="border-t border-slate-100 pt-2 flex items-start justify-between text-xs">
-                                    <div>
-                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Transporter</span>
-                                      <span className="font-extrabold text-slate-750">{order.pickupTransporterDetails?.name || 'N/A'}</span>
-                                      <span className="block text-[10px] text-slate-500">{order.pickupTransporterDetails?.mobile}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-
-                {/* Pagination Controls */}
-                {returnOrdersList.length > returnItemsPerPage && (
-                  <div className="flex items-center justify-center gap-4 text-xs font-semibold text-slate-600 mt-6 select-none">
-                    <button
-                      disabled={returnPage === 1}
-                      onClick={() => setReturnPage((prev) => Math.max(prev - 1, 1))}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <span>Page {returnPage} of {Math.ceil(returnOrdersList.length / returnItemsPerPage)}</span>
-                    <button
-                      disabled={returnPage >= Math.ceil(returnOrdersList.length / returnItemsPerPage)}
-                      onClick={() => setReturnPage((prev) => prev + 1)}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+            {/* Table View */}
+            <DataTable
+              columns={returnColumns}
+              data={activeReturnSubTab === 'transporter' ? transporterReturnOrdersList : buyerReturnOrdersList}
+              selectedDate={dateFilter}
+              onDateChange={setDateFilter}
+              onRowDoubleClick={handleViewOrder}
+              onRefresh={() => loadData(true)}
+              hideDateAndRefresh={true}
+              hideSearchAndFilters={true}
+              grabToScroll={true}
+            />
           </div>
         )}
+
+
 
         {/* --- DYNAMIC SIDE DRAWER FOR TIMELINE NODE CLICKS --- */}
         {isNodeDrawerOpen && activeNodeDetails && (

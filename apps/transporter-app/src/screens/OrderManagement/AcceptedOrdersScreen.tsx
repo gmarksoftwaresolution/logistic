@@ -201,13 +201,13 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     const totalPickups = sortedPickupEntries.length;
     const totalDrops = sortedDropEntries.length;
 
-    const pickupOrderIds = Array.from(new Set(
-      pickupBatches.map(b => String(b.displayId || ''))
-    )).filter(Boolean);
+    const pickupOrderIds = pickupBatches
+      .map(b => String(b.displayId || ''))
+      .filter((id, idx, arr) => Boolean(id) && arr.indexOf(id) === idx);
     
-    const dropOrderIds = Array.from(new Set(
-      dropBatches.map(b => String(b.displayId || ''))
-    )).filter(Boolean);
+    const dropOrderIds = dropBatches
+      .map(b => String(b.displayId || ''))
+      .filter((id, idx, arr) => Boolean(id) && arr.indexOf(id) === idx);
 
     return { sortedPickupEntries, sortedDropEntries, totalPickups, totalDrops, pickupOrderIds, dropOrderIds };
   }, [batches]);

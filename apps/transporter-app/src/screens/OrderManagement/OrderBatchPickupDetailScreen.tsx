@@ -691,10 +691,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               );
             })()}
             {(() => {
-              const formattedAddr = formatAddress(displayContact.address);
-              const addressPincode = typeof displayContact.address === 'string' ? displayContact.address?.match(/\d{6}/)?.[0] : (displayContact.address as any)?.pincode;
-              const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
-              const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
+              const resolvedContact = displayContact || {};
+              const formattedAddr = formatAddress(resolvedContact.address);
+              const addressPincode = typeof resolvedContact.address === 'string' ? resolvedContact.address?.match(/\d{6}/)?.[0] : (resolvedContact.address as any)?.pincode;
+              const resolvedVillage = (resolvedContact as any).village || batch.areaName || 'N/A';
+              const resolvedPincode = (resolvedContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
                   {!!(displayContact as any).shgName && (
@@ -1577,7 +1578,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       {(canConfirm && type === 'pickup') && (
         <FloatingScannerButton
           module="PICKUP"
-          orderIds={Array.from(new Set(orderParcels.map((p: any) => p.orderId)))}
+          orderIds={(orderParcels || []).map((p: any) => p.orderId).filter((id: any, idx: number, arr: any[]) => id != null && arr.indexOf(id) === idx)}
           navigation={navigation}
         />
       )}
