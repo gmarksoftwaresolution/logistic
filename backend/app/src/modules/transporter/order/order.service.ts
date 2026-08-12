@@ -67,56 +67,82 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const shgIds = orders
-      .map(o => o.pickupShgId ? parseInt(o.pickupShgId, 10) : null)
-      .filter((id): id is number => id !== null && !isNaN(id));
+    const allShgUsers = await this.prisma.user.findMany({
+      where: { role: 'SHG', applicationStatus: 'APPROVED' },
+      include: { address: true, shgDetail: true }
+    });
 
-    const shgUsers = shgIds.length > 0
-      ? await this.prisma.user.findMany({
-        where: { id: { in: shgIds } },
-        include: { address: true, shgDetail: true }
-      })
-      : [];
-
-    const shgMap = new Map(shgUsers.map(u => [String(u.id), u]));
+    const normalizeStr = (s?: string | null): string => {
+      if (!s) return '';
+      return s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+    };
 
     return orders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const shgUser = o.pickupShgId ? shgMap.get(o.pickupShgId) : null;
+
+      // 1. Resolve SHG by ID, Assignment, Holder, or Village
+      const directShgId = o.pickupShgId;
+      const assignShgId = o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
+      const holderShgId = o.parcels?.find((p: any) => p.currentHolderType === 'SHG')?.currentHolderId;
+      const sellerVillageNorm = normalizeStr(o.seller?.village);
+
+      const shgUser = allShgUsers.find(u =>
+        (directShgId && (String(u.id) === String(directShgId) || u.authId === String(directShgId))) ||
+        (assignShgId && (String(u.id) === String(assignShgId) || u.authId === String(assignShgId))) ||
+        (holderShgId && (String(u.id) === String(holderShgId) || u.authId === String(holderShgId))) ||
+        (sellerVillageNorm && normalizeStr(u.address?.village) === sellerVillageNorm)
+      ) || null;
+
       const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
 
-      const mappedSeller = (!isRedirected && shgUser) ? {
+      const shgData = shgUser ? {
         id: shgUser.id,
+        authId: shgUser.authId,
         sellerCode: shgUser.uniqueCode || `SHG-${shgUser.id}`,
-        sellerName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
-        fullName: shgUser.fullName || shgUser.shgDetail?.crpName || shgUser.shgDetail?.shgName || 'N/A',
-        mobileNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
-        phoneNumber: shgUser.phoneNumber || shgUser.shgDetail?.crpMobile || '',
-        shgName: shgUser.shgDetail?.shgName || '',
+        crpName: shgUser.shgDetail?.crpName || shgUser.fullName || 'SHG CRP Lead',
+        personName: shgUser.shgDetail?.crpName || shgUser.fullName || 'SHG CRP Lead',
+        fullName: shgUser.shgDetail?.crpName || shgUser.fullName || 'SHG CRP Lead',
+        name: shgUser.shgDetail?.crpName || shgUser.fullName || 'SHG CRP Lead',
+        sellerName: shgUser.shgDetail?.crpName || shgUser.fullName || 'SHG CRP Lead',
+        mobileNumber: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        phoneNumber: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        phone: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        shgName: shgUser.shgDetail?.shgName || `${shgUser.address?.village || ''} SHG Center`,
         email: shgUser.email,
-        addressLine1: shgUser.address?.landmark || shgUser.address?.houseNo || shgUser.address?.deliveryAddress || '',
+        addressLine1: shgUser.address?.deliveryAddress || shgUser.address?.landmark || shgUser.address?.houseNo || shgUser.address?.village || '',
         addressLine2: shgUser.address?.houseNo || '',
-        village: shgUser.address?.village || '',
-        taluka: shgUser.address?.taluka || '',
-        district: shgUser.address?.district || '',
-        state: shgUser.address?.state || '',
-        pincode: shgUser.address?.pincode || '',
+        village: shgUser.address?.village || o.seller?.village || '',
+        taluka: shgUser.address?.taluka || o.seller?.taluka || '',
+        district: shgUser.address?.district || o.seller?.district || '',
+        state: shgUser.address?.state || o.seller?.state || 'Maharashtra',
+        pincode: shgUser.address?.pincode || o.seller?.pincode || '',
         postOffice: shgUser.address?.postOffice || null,
-        createdAt: shgUser.createdAt,
-        updatedAt: shgUser.updatedAt,
-      } : o.seller;
+        fullAddress: [
+          shgUser.address?.deliveryAddress || shgUser.address?.landmark || shgUser.address?.houseNo,
+          shgUser.address?.village,
+          shgUser.address?.taluka,
+          shgUser.address?.district,
+          shgUser.address?.state ? `${shgUser.address.state} - ${shgUser.address.pincode}` : shgUser.address?.pincode
+        ].filter(Boolean).join(', ') || `${shgUser.address?.village || ''} Center`,
+        address: shgUser.address ? {
+          addressLine1: shgUser.address.deliveryAddress || shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
+          village: shgUser.address.village,
+          taluka: shgUser.address.taluka,
+          district: shgUser.address.district,
+          state: shgUser.address.state,
+          pincode: shgUser.address.pincode,
+        } : null,
+      } : null;
 
-      const fullAddr = mappedSeller ? [
-        mappedSeller.addressLine1,
-        mappedSeller.addressLine2,
-        mappedSeller.village,
-        mappedSeller.taluka,
-        mappedSeller.district,
-        mappedSeller.state ? `${mappedSeller.state} - ${mappedSeller.pincode}` : mappedSeller.pincode
-      ].filter(Boolean).join(', ') : '';
-
-      if (mappedSeller) {
-        (mappedSeller as any).fullAddress = fullAddr;
+      if (o.seller) {
+        o.seller.fullAddress = [
+          o.seller.addressLine1,
+          o.seller.addressLine2,
+          o.seller.village,
+          o.seller.taluka,
+          o.seller.district,
+          o.seller.state ? `${o.seller.state} - ${o.seller.pincode}` : o.seller.pincode
+        ].filter(Boolean).join(', ');
       }
 
       if (o.buyer) {
@@ -141,9 +167,11 @@ export class OrderService {
         pickupTransporterId: o.pickupTransporterId,
         pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
         mainStatus: o.mainStatus,
-        seller: mappedSeller,
-        shg: mappedSeller,
+        seller: o.seller,
         buyer: o.buyer,
+        shg: shgData,
+        pickupShg: shgData,
+        pickupShgDetails: shgData,
         parcels: o.parcels || [],
       };
     });
@@ -164,7 +192,7 @@ export class OrderService {
         assigneeId: transporterUuid,
         assigneeType: 'TRANSPORTER',
         role: 'DROP',
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED'] },
+        status: { in: ['PENDING', 'ACCEPTED'] },
       },
       select: { orderId: true }
     });
@@ -188,55 +216,96 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const allDropShgIds = Array.from(new Set(orders.map((o: any) => {
-      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
-      return o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
-    }).filter(Boolean)));
+    const activeOrders = orders.filter((o: any) => {
+      const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
+      const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+      const mStatus = (o.mainStatus || '').toUpperCase();
 
-    const dropNumericShgIds = allDropShgIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0);
-    const dropUuidShgIds = allDropShgIds.filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
-
-    const dropShgUsers: any[] = [];
-    if (dropNumericShgIds.length > 0) {
-      const byId = await this.prisma.user.findMany({
-        where: { id: { in: dropNumericShgIds } },
-        include: { address: true, shgDetail: true }
-      });
-      dropShgUsers.push(...byId);
-    }
-    if (dropUuidShgIds.length > 0) {
-      const byAuth = await this.prisma.user.findMany({
-        where: { authId: { in: dropUuidShgIds } },
-        include: { address: true, shgDetail: true }
-      });
-      dropShgUsers.push(...byAuth);
-    }
-
-    const dropShgUserMap = new Map();
-    dropShgUsers.forEach((u: any) => {
-      dropShgUserMap.set(String(u.id), u);
-      dropShgUserMap.set(u.authId, u);
+      // Transporter drop task is finished ONLY when drop transporter completes delivery or parcel is at drop SHG / delivered
+      if (dtStatus === 'COMPLETED' || dtStatus === 'DROPPED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+        return false;
+      }
+      return true;
     });
 
-    return orders.map((o: any) => {
+    const allShgUsers = await this.prisma.user.findMany({
+      where: { role: 'SHG', applicationStatus: 'APPROVED' },
+      include: { address: true, shgDetail: true }
+    });
+
+    const normalizeStr = (s?: string | null): string => {
+      if (!s) return '';
+      return s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
+    };
+
+    return activeOrders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const shgAssign = o.assignments?.find((a: any) => a.assigneeType === 'SHG');
-      const shgId = o.dropShgId || o.pickupShgId || shgAssign?.assigneeId;
-      const shgUser = shgId ? dropShgUserMap.get(String(shgId)) : null;
+
+      const directShgId = o.dropShgId || o.pickupShgId;
+      const assignShgId = o.assignments?.find((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG')?.assigneeId;
+      const buyerVillageNorm = normalizeStr(o.buyer?.village);
+
+      const shgUser = allShgUsers.find(u =>
+        (directShgId && (String(u.id) === String(directShgId) || u.authId === String(directShgId))) ||
+        (assignShgId && (String(u.id) === String(assignShgId) || u.authId === String(assignShgId))) ||
+        (buyerVillageNorm && normalizeStr(u.address?.village) === buyerVillageNorm)
+      ) || null;
 
       const shgData = shgUser ? {
         id: shgUser.id,
-        fullName: shgUser.fullName,
-        phoneNumber: shgUser.phoneNumber,
-        shgName: shgUser.shgDetail?.shgName || shgUser.fullName,
+        authId: shgUser.authId,
+        crpName: shgUser.shgDetail?.crpName || shgUser.fullName || 'Drop SHG Lead',
+        personName: shgUser.shgDetail?.crpName || shgUser.fullName || 'Drop SHG Lead',
+        fullName: shgUser.shgDetail?.crpName || shgUser.fullName || 'Drop SHG Lead',
+        name: shgUser.shgDetail?.crpName || shgUser.fullName || 'Drop SHG Lead',
+        phoneNumber: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        mobileNumber: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        phone: shgUser.shgDetail?.crpMobile || shgUser.phoneNumber || '',
+        shgName: shgUser.shgDetail?.shgName || `${shgUser.address?.village || ''} Drop SHG`,
+        village: shgUser.address?.village || o.buyer?.village || '',
+        taluka: shgUser.address?.taluka || o.buyer?.taluka || '',
+        district: shgUser.address?.district || o.buyer?.district || '',
+        state: shgUser.address?.state || o.buyer?.state || 'Maharashtra',
+        pincode: shgUser.address?.pincode || o.buyer?.pincode || '',
+        addressLine1: shgUser.address?.deliveryAddress || shgUser.address?.landmark || shgUser.address?.houseNo || shgUser.address?.village || '',
+        fullAddress: [
+          shgUser.address?.deliveryAddress || shgUser.address?.landmark || shgUser.address?.houseNo,
+          shgUser.address?.village,
+          shgUser.address?.taluka,
+          shgUser.address?.district,
+          shgUser.address?.state ? `${shgUser.address.state} - ${shgUser.address.pincode}` : shgUser.address?.pincode
+        ].filter(Boolean).join(', ') || `${shgUser.address?.village || ''} Drop SHG Center`,
         address: shgUser.address ? {
-          addressLine1: shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
+          addressLine1: shgUser.address.deliveryAddress || shgUser.address.landmark || shgUser.address.houseNo || shgUser.address.village,
           village: shgUser.address.village,
           taluka: shgUser.address.taluka,
           district: shgUser.address.district,
+          state: shgUser.address.state,
           pincode: shgUser.address.pincode,
         } : null,
       } : null;
+
+      if (o.seller) {
+        o.seller.fullAddress = [
+          o.seller.addressLine1,
+          o.seller.addressLine2,
+          o.seller.village,
+          o.seller.taluka,
+          o.seller.district,
+          o.seller.state ? `${o.seller.state} - ${o.seller.pincode}` : o.seller.pincode
+        ].filter(Boolean).join(', ');
+      }
+
+      if (o.buyer) {
+        o.buyer.fullAddress = [
+          o.buyer.addressLine1,
+          o.buyer.addressLine2,
+          o.buyer.village,
+          o.buyer.taluka,
+          o.buyer.district,
+          o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode
+        ].filter(Boolean).join(', ');
+      }
 
       return {
         id: cleanOrderId,
@@ -330,7 +399,7 @@ export class OrderService {
       data: {
         pickedUpAt: new Date()
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     return order;
   }

@@ -113,7 +113,9 @@ export class OrderService {
       include: {
         seller: true,
         buyer: true,
-        parcels: true,
+        parcels: {
+          include: { scanHistories: true }
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -123,13 +125,23 @@ export class OrderService {
       const isDropPhase = o.phase === 'DROP' || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
 
       if (isDropPhase) {
-        // Phase 2 Drop Leg: Match only if explicitly assigned to this SHG as Drop SHG, or if village + pincode matches
+        // Drop Leg Completed Check: If delivered, exclude from active pickups
+        const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED') {
+          return false;
+        }
+
         if (o.dropShgId && String(o.dropShgId) === shgUuid) return true;
         const dropVillage = o.dropShgDetails?.village || o.buyer?.village;
         const dropPincode = o.dropShgDetails?.pincode || o.buyer?.pincode;
         return isVillageMatch(dropVillage, dropPincode);
       } else {
-        // Phase 1 Pickup Leg: Match only if explicitly assigned to this SHG as Pickup SHG, or if village + pincode matches
+        // Pickup Leg Completed Check: If picked up by SHG / handed to transporter, exclude from active pickups
+        const pShgStatus = (o.pickupShgStatus || '').toUpperCase();
+        if (pShgStatus === 'DROPPED' || pShgStatus === 'COMPLETED' || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())) {
+          return false;
+        }
+
         if (o.pickupShgId && String(o.pickupShgId) === shgUuid) return true;
         const sellerVillage = o.seller?.village;
         const sellerPincode = o.seller?.pincode;
@@ -274,6 +286,13 @@ export class OrderService {
             otherDetails: transporterUser.otherDetails || [],
           };
         })(),
+        createdAt: o.createdAt,
+        updatedAt: o.updatedAt,
+        date: o.createdAt,
+        orderDate: o.createdAt,
+        acceptedAt: o.pickupShgStatus === 'ACCEPTED' ? (o.acceptedAt || o.updatedAt) : o.createdAt,
+        collectedAt: (o.pickupShgStatus === 'PICKED' || o.mainStatus === 'PARCEL_AT_SHG') ? (o.collectedAt || o.updatedAt) : null,
+        products: o.parcels || [],
       };
     });
   }
@@ -877,88 +896,60 @@ export class OrderService {
     }
 
     const shgUuid = String(user.id);
+    const shgAuthId = user.authId || '';
 
-    const userVillage = (user.address?.village || '').toLowerCase().trim();
-    const userPincode = (user.address?.pincode || '').toLowerCase().trim();
+    const assignedOrders = await this.prisma.orderAssignment.findMany({
+      where: {
+        assigneeId: { in: [shgUuid, shgAuthId].filter(Boolean) },
+        assigneeType: 'SHG',
+      },
+      select: { orderId: true }
+    });
+    const assignedOrderIds = assignedOrders.map(a => a.orderId);
 
     const orders = await this.prisma.order.findMany({
       where: {
         OR: [
-          // 1. Pickup leg orders at SHG - ONLY when physically picked up from seller & still at center!
-          {
-            pickupShgId: shgUuid,
-            OR: [
-              {
-                pickupShgStatus: 'PICKED',
-                mainStatus: {
-                  notIn: [
-                    'IN_TRANSIT_TO_HUB',
-                    'DELIVERED_TO_HUB',
-                    'HUB_RECEIVED',
-                    'HUB_STORED',
-                    'STORED',
-                    'DISPATCHED',
-                    'IN_TRANSIT_TO_DROP_SHG',
-                    'IN_TRANSIT_TO_BUYER',
-                    'PARCEL_AT_DROP_SHG',
-                    'PARCEL_WITH_DROP_SHG',
-                    'DELIVERED',
-                    'COMPLETED',
-                    'CANCELLED',
-                    'REJECTED'
-                  ]
-                }
-              },
-              {
-                mainStatus: {
-                  in: [
-                    'PARCEL_AT_SHG',
-                    'PARCEL_PICKED',
-                    'SHG_PICKED',
-                    'PICKED',
-                    'PICKUP_TRANSPORTER_PENDING',
-                    'PICKUP_TRANSPORTER_ASSIGNED',
-                    'PICKUP_TRANSPORTER_ACCEPTED',
-                    'TRANSPORTER_ASSIGNED',
-                    'TRANSPORTER_ACCEPTED',
-                    'READY_FOR_TRANSPORTER',
-                    'PICKUP_TRANSPORTER_ARRIVED'
-                  ]
-                }
-              }
-            ]
-          },
-          // 2. Drop leg orders at SHG
-          {
-            dropShgId: shgUuid,
-            mainStatus: {
-              in: [
-                'PARCEL_AT_DROP_SHG',
-                'PARCEL_WITH_DROP_SHG',
-                'AT_BUYER_SHG',
-                'OUT_FOR_DELIVERY'
-              ]
-            }
-          },
-          // 3. Return leg orders at SHG
-          {
-            OR: [{ pickupReturnShgId: shgUuid }, { dropShgId: shgUuid }],
-            mainStatus: {
-              in: ['RETURN_PARCEL_AT_SHG', 'RETURN_PICKED_BY_SHG']
-            }
-          }
-        ]
+          { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
+          { pickupShgId: shgUuid },
+          { pickupShgId: shgAuthId },
+          { dropShgId: shgUuid },
+          { dropShgId: shgAuthId },
+        ],
       },
       include: {
         seller: true,
         buyer: true,
-        parcels: true,
+        parcels: {
+          include: { scanHistories: true }
+        },
         assignments: true
       },
       orderBy: { updatedAt: 'desc' }
     });
 
-    const transporterIds = orders
+    const matchedOrders = orders.filter((o: any) => {
+      const isDropLeg = (o.phase === 'DROP' || (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId)));
+
+      if (isDropLeg) {
+        // Drop Leg is in-stock at SHG center if received/accepted at SHG BUT NOT delivered to buyer yet
+        const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED') {
+          return false;
+        }
+        return ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY', 'ACCEPTED', 'PICKED'].includes(o.mainStatus) || ['ACCEPTED', 'PICKED'].includes(dShgStatus);
+      } else {
+        // Pickup Leg is in-stock at SHG center if collected/accepted from seller BUT NOT picked up/dispatched by transporter yet
+        const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
+        if (pTransStatus === 'PICKED' || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED'].includes((o.mainStatus || '').toUpperCase())) {
+          return false;
+        }
+        return ['PARCEL_AT_SHG', 'PARCEL_PICKED', 'PICKUP_ASSIGNED', 'ACCEPTED', 'PICKUP_SHG_ACCEPTED'].includes(o.mainStatus) || ['ACCEPTED', 'PICKED'].includes((o.pickupShgStatus || '').toUpperCase());
+      }
+    });
+
+    const transporterIds = matchedOrders
       .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
       .filter((id): id is number => id !== null && !isNaN(id));
 
@@ -971,9 +962,9 @@ export class OrderService {
 
     const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
 
-    return orders.map((o: any) => {
+    return matchedOrders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const isDropLeg = (o.phase === 'DROP' || ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
+      const isDropLeg = (o.phase === 'DROP' || (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId)));
       const isReturn = (o.mainStatus || '').includes('RETURN');
 
       let stockType: 'WAITING_FOR_TRANSPORTER' | 'READY_FOR_BUYER' | 'RETURN_AT_SHG' = 'WAITING_FOR_TRANSPORTER';
@@ -1042,13 +1033,20 @@ export class OrderService {
           productName: p.productName || 'Agricultural Goods',
           weight: p.weight || 2.5,
           parcelStatus: p.parcelStatus,
+          scanHistories: p.scanHistories || [],
         })) : [{
           id: 1,
           parcelId: `PCL-${cleanOrderId}-1`,
           productName: 'Agricultural Goods',
           weight: o.totalWeight || 2.5,
           parcelStatus: o.mainStatus,
-        }]
+          scanHistories: [],
+        }],
+        createdAt: o.createdAt,
+        updatedAt: o.updatedAt,
+        date: o.createdAt,
+        orderDate: o.createdAt,
+        products: o.parcels || [],
       };
     });
   }
@@ -1074,58 +1072,54 @@ export class OrderService {
     }
 
     const shgUuid = String(user.id);
+    const shgAuthId = user.authId || '';
+
+    const assignedOrders = await this.prisma.orderAssignment.findMany({
+      where: {
+        assigneeId: { in: [shgUuid, shgAuthId].filter(Boolean) },
+        assigneeType: 'SHG',
+      },
+      select: { orderId: true }
+    });
+    const assignedOrderIds = assignedOrders.map(a => a.orderId);
 
     const orders = await this.prisma.order.findMany({
       where: {
         OR: [
-          // 1. Handed over to Transporter (Phase 1 dispatched)
-          {
-            pickupShgId: shgUuid,
-            mainStatus: {
-              in: [
-                'IN_TRANSIT_TO_HUB',
-                'DELIVERED_TO_HUB',
-                'HUB_RECEIVED',
-                'STORED',
-                'DISPATCHED',
-                'IN_TRANSIT_TO_DROP_SHG',
-                'IN_TRANSIT_TO_BUYER',
-                'PARCEL_AT_DROP_SHG',
-                'PARCEL_WITH_DROP_SHG',
-                'DELIVERED',
-                'COMPLETED'
-              ]
-            }
-          },
-          // 2. Delivered to Buyer (Phase 2 completed)
-          {
-            dropShgId: shgUuid,
-            mainStatus: {
-              in: [
-                'DELIVERED',
-                'COMPLETED',
-                'BUYER_DELIVERED'
-              ]
-            }
-          },
-          // 3. Completed Returns
-          {
-            OR: [{ pickupReturnShgId: shgUuid }, { dropShgId: shgUuid }],
-            mainStatus: {
-              in: ['RETURN_IN_TRANSIT_TO_HUB', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED']
-            }
-          }
-        ]
+          { id: { in: assignedOrderIds } },
+          { orderId: { in: assignedOrderIds } },
+          { pickupShgId: shgUuid },
+          { pickupShgId: shgAuthId },
+          { dropShgId: shgUuid },
+          { dropShgId: shgAuthId },
+        ],
       },
       include: {
         seller: true,
         buyer: true,
-        parcels: true,
+        parcels: {
+          include: { scanHistories: true }
+        },
+        assignments: true
       },
       orderBy: { updatedAt: 'desc' }
     });
 
-    const transporterIds = orders
+    const matchedOrders = orders.filter((o: any) => {
+      const isDropLeg = (o.phase === 'DROP' || (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId)));
+
+      if (isDropLeg) {
+        // Drop Leg is out-stock once delivered to buyer
+        const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+        return dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED';
+      } else {
+        // Pickup Leg is out-stock once dispatched / picked up by transporter
+        const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
+        return pTransStatus === 'PICKED' || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase());
+      }
+    });
+
+    const transporterIds = matchedOrders
       .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
       .filter((id): id is number => id !== null && !isNaN(id));
 
@@ -1138,9 +1132,9 @@ export class OrderService {
 
     const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
 
-    return orders.map((o: any) => {
+    return matchedOrders.map((o: any) => {
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const isDeliveredToBuyer = ['DELIVERED', 'COMPLETED', 'BUYER_DELIVERED'].includes(o.mainStatus) && (o.dropShgId && String(o.dropShgId) === shgUuid);
+      const isDeliveredToBuyer = ['DELIVERED', 'COMPLETED', 'BUYER_DELIVERED'].includes(o.mainStatus) && (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId));
       const isReturn = (o.mainStatus || '').includes('RETURN');
 
       let stockType: 'HANDED_TO_TRANSPORTER' | 'DELIVERED_TO_BUYER' | 'COMPLETED_RETURN' = 'HANDED_TO_TRANSPORTER';
@@ -1210,13 +1204,20 @@ export class OrderService {
           productName: p.productName || 'Agricultural Goods',
           weight: p.weight || 2.5,
           parcelStatus: p.parcelStatus,
+          scanHistories: p.scanHistories || [],
         })) : [{
           id: 1,
           parcelId: `PCL-${cleanOrderId}-1`,
           productName: 'Agricultural Goods',
           weight: o.totalWeight || 2.5,
           parcelStatus: o.mainStatus,
-        }]
+          scanHistories: [],
+        }],
+        createdAt: o.createdAt,
+        updatedAt: o.updatedAt,
+        date: o.createdAt,
+        orderDate: o.createdAt,
+        products: o.parcels || [],
       };
     });
   }

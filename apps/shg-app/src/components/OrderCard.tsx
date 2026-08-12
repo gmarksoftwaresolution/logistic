@@ -1,9 +1,10 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { LanguageContext } from '../context/LanguageContext';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OrderDistance } from './OrderDistance';
 import { HighlightCardWrapper } from './HighlightCardWrapper';
+import { TrackingHistoryModal } from './TrackingHistoryModal';
 
 interface OrderCardProps {
   orderIdText: string;
@@ -29,6 +30,7 @@ interface OrderCardProps {
   transporterId?: string;
   verificationPending?: boolean;
   onSendOtp?: () => void;
+  rawOrder?: any;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -53,8 +55,10 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   vehicleNumber,
   transporterId,
   verificationPending,
-  onSendOtp
+  onSendOtp,
+  rawOrder,
 }) => {
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const context = useContext(LanguageContext);
   const { t } = context!;
 

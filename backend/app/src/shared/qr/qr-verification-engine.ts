@@ -87,8 +87,12 @@ export function decodeQrData(data: string): QrContent {
  * Validates the scanned token against the token stored in database.
  */
 export function validateVerificationToken(scannedToken: string, dbToken: string) {
-  if (scannedToken && dbToken && scannedToken !== dbToken) {
-    throw new QrValidationError('Verification token invalid');
+  if (scannedToken && dbToken) {
+    const s = String(scannedToken).trim().toLowerCase();
+    const d = String(dbToken).trim().toLowerCase();
+    if (s && d && s !== d) {
+      throw new QrValidationError('Verification token invalid');
+    }
   }
 }
 
@@ -130,11 +134,11 @@ export function determineTransition(
         };
       } else {
         return {
-          nextParcelStatus: 'PARCEL_WITH_DROP_SHG',
+          nextParcelStatus: 'PARCEL_AT_DROP_SHG',
           nextHolderId: userId,
           nextHolderType: 'SHG',
-          action: 'SHG_DROP_PICKUP',
-          message: 'Parcel received by drop SHG from transporter (Transporter delivery completed)',
+          action: 'SHG_DROP_RECEIVE',
+          message: 'Parcel received by drop SHG from transporter (Ready for buyer delivery)',
         };
       }
     }
@@ -183,15 +187,6 @@ export function determineTransition(
         nextHolderType: 'TRANSPORTER',
         action: 'TRANSPORTER_PICKUP',
         message: order?.isPickupRedirected ? 'Parcel loaded by Transporter directly from Seller (Redirected)' : 'Parcel loaded by Transporter from SHG',
-      };
-    }
-    if (currentStatus === 'IN_TRANSIT' || currentStatus === 'IN_TRANSIT_TO_HUB') {
-      return {
-        nextParcelStatus: 'HUB_RECEIVED',
-        nextHolderId: 'HUB',
-        nextHolderType: 'WAREHOUSE',
-        action: 'TRANSPORTER_HUB_DELIVER',
-        message: 'Parcel delivered to GMU Hub by Transporter',
       };
     }
   }
@@ -328,7 +323,7 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
           role: 'PICKUP',
           assigneeType: 'TRANSPORTER',
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
       await tx.orderAssignment.create({
         data: {
@@ -338,7 +333,7 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
           role: 'PICKUP',
           status: 'PENDING'
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   } catch (err: any) {
     console.error(`[triggerTransporterPickupBroadcast] Error broadcasting to transporter for order ${orderId}:`, err.message);
@@ -425,7 +420,7 @@ export async function triggerTransporterDropBroadcast(tx: any, orderId: string) 
           role: 'DROP',
           assigneeType: 'TRANSPORTER',
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
       await tx.orderAssignment.create({
         data: {
@@ -435,7 +430,7 @@ export async function triggerTransporterDropBroadcast(tx: any, orderId: string) 
           role: 'DROP',
           status: 'PENDING'
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     await tx.order.update({
@@ -443,7 +438,7 @@ export async function triggerTransporterDropBroadcast(tx: any, orderId: string) 
       data: {
         dropTransporterStatus: 'PENDING'
       }
-    }).catch(() => {});
+    }).catch(() => { });
   } catch (err: any) {
     console.error(`[triggerTransporterDropBroadcast] Error broadcasting to transporter for order ${orderId}:`, err.message);
   }
@@ -453,7 +448,7 @@ export async function triggerTransporterDropBroadcast(tx: any, orderId: string) 
  * Reusable QR Verification Engine implementation
  */
 export class QrVerificationEngine {
-  constructor(private readonly prisma: any) {}
+  constructor(private readonly prisma: any) { }
 
   /**
    * Retrieves active session details containing expected, scanned, and remaining parcels.
@@ -518,7 +513,7 @@ export class QrVerificationEngine {
             currentHolderId: ord.sellerId || session.userId,
             currentHolderType: 'SELLER'
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 
@@ -788,7 +783,7 @@ export class QrVerificationEngine {
                   role: 'DROP',
                   status: 'ACCEPTED',
                 }
-              }).catch(() => {});
+              }).catch(() => { });
             } else {
               await this.prisma.order.update({
                 where: { id: order.id },
@@ -805,14 +800,22 @@ export class QrVerificationEngine {
                   role: 'PICKUP',
                   status: 'ACCEPTED',
                 }
-              }).catch(() => {});
+              }).catch(() => { });
             }
           } else {
             throw new QrValidationError('Parcel not assigned to current user.');
           }
         } else {
           if (userRole === 'TRANSPORTER' && assignment.status === 'PENDING') {
-            throw new QrValidationError('Please accept the assignment first before scanning');
+            // Auto-accept pending assignment when scanning
+            await this.prisma.orderAssignment.updateMany({
+              where: {
+                orderId: order.id,
+                assigneeId: { in: userIdsToCheck },
+                assigneeType: 'TRANSPORTER',
+              },
+              data: { status: 'ACCEPTED' }
+            });
           }
 
           if (assignment.status === 'REJECTED') {
@@ -825,7 +828,7 @@ export class QrVerificationEngine {
           await this.prisma.orderAssignment.update({
             where: { id: assignment.id },
             data: { status: 'ACCEPTED' }
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     }
@@ -866,19 +869,7 @@ export class QrVerificationEngine {
       },
     });
 
-    const sessionDetails = await this.getSessionDetails(sessionType, userId, userRole, sessionId);
-
-    // Auto-Commit on scan: Immediately commit custody transfer when batch scanning completes (1-step verification)
-    if (sessionDetails.remaining.length === 0) {
-      const result = await this.confirmSession(sessionType, sessionId);
-      return {
-        ...sessionDetails,
-        autoCommitted: true,
-        message: result.message || 'Scan verified! Custody transferred and order status updated directly.'
-      };
-    }
-
-    return sessionDetails;
+    return await this.getSessionDetails(sessionType, userId, userRole, sessionId);
   }
 
   /**
@@ -961,7 +952,7 @@ export class QrVerificationEngine {
     await this.prisma.$transaction(async (tx: any) => {
       for (const item of session.items) {
         const parcel = item.parcel;
-        
+
         let order = await tx.order.findFirst({
           where: {
             OR: [
@@ -1044,7 +1035,7 @@ export class QrVerificationEngine {
           await (tx.redirectedOrder as any).updateMany({
             where: { orderId: order.id },
             data: { completedAt: new Date(), status: 'COMPLETED' }
-          }).catch(() => {});
+          }).catch(() => { });
         } else if (normalizedMainStatus === 'STORED' || mainStatus === 'STORED') {
           pickupShgStatus = 'DROPPED';
           pickupTransporterStatus = 'DROPPED';
@@ -1118,7 +1109,7 @@ export class QrVerificationEngine {
     sessionId: string,
     orderId: string
   ) {
-    const session = await this.prisma.scanSession.findUnique({
+    let session = await this.prisma.scanSession.findUnique({
       where: { sessionId },
       include: {
         items: {
@@ -1130,7 +1121,26 @@ export class QrVerificationEngine {
     });
 
     if (!session) {
-      throw new QrValidationError('Session expired.');
+      // Auto-fallback: check if user has an active IN_PROGRESS session
+      session = await this.prisma.scanSession.findFirst({
+        where: {
+          userId,
+          userRole: (userRole || 'SHG').toUpperCase(),
+          sessionType,
+          status: 'IN_PROGRESS',
+        },
+        include: {
+          items: {
+            include: {
+              parcel: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!session) {
+      throw new QrValidationError('Session expired or not found.');
     }
 
     if (session.status === 'CONFIRMED') {
@@ -1150,6 +1160,7 @@ export class QrVerificationEngine {
           { orderId: orderId },
           { id: cleanId },
           { orderId: cleanId },
+          { id: `ORD-${cleanId}` },
           { orderId: `ORD-${cleanId}` }
         ]
       }
@@ -1163,42 +1174,59 @@ export class QrVerificationEngine {
       where: {
         OR: [
           { orderId: order.orderId },
-          { orderId: order.id }
+          { orderId: order.id },
+          { orderId: `ORD-${cleanId}` },
+          { orderId: cleanId }
         ]
       },
     });
 
     let sessionItemsForOrder = session.items.filter(
-      (item: any) => item.parcel.orderId === order.orderId || item.parcel.orderId === order.id || item.parcel.orderId.includes(cleanId)
+      (item: any) => item.parcel && (
+        item.parcel.orderId === order.orderId ||
+        item.parcel.orderId === order.id ||
+        item.parcel.orderId.includes(cleanId) ||
+        String(item.parcelId).includes(cleanId)
+      )
     );
 
-    // If session items were attached without matching orderId directly, use all session items if matching order
+    // If session items were attached without matching orderId directly, use all session items that belong to this order
     if (sessionItemsForOrder.length === 0 && session.items.length > 0) {
-      sessionItemsForOrder = session.items;
+      sessionItemsForOrder = session.items.filter((i: any) => i.parcel);
     }
 
-    const scannedIds = new Set(sessionItemsForOrder.map((i: any) => {
-      const pid = String(i.parcelId || i.parcel?.parcelId || '');
-      return pid.replace(/^P-/, '').replace(/-1$/, '').replace(/^QR-/, '');
-    }));
+    const scannedIds = new Set(sessionItemsForOrder.map((i: any) => String(i.parcelId || i.parcel?.parcelId || '').trim()));
+    const missing = expectedParcels.filter((p: any) => !scannedIds.has(String(p.parcelId || '').trim()));
 
-    const missing = expectedParcels.filter((p: any) => {
-      const cleanP = String(p.parcelId || '').replace(/^P-/, '').replace(/-1$/, '').replace(/^QR-/, '');
-      return !scannedIds.has(cleanP);
-    });
+    // Check if any "missing" parcel was actually already scanned/collected in DB
+    const trulyMissing: any[] = [];
+    for (const p of missing) {
+      const isAlreadyScanned = p.parcelStatus === 'PARCEL_AT_SHG' ||
+        p.parcelStatus === 'COLLECTED' ||
+        p.parcelStatus === 'PICKED' ||
+        p.parcelStatus === 'SHG_PICKUP' ||
+        p.parcelStatus === 'IN_TRANSIT';
+      if (!isAlreadyScanned) {
+        trulyMissing.push(p);
+      }
+    }
 
-    if (expectedParcels.length > 0 && missing.length > 0 && sessionItemsForOrder.length < expectedParcels.length) {
-      throw new QrValidationError(`All parcels for Order ${order.orderId} must be scanned before confirming pickup (${expectedParcels.length - missing.length}/${expectedParcels.length} scanned).`);
+    if (expectedParcels.length > 0 && trulyMissing.length > 0 && sessionItemsForOrder.length < expectedParcels.length) {
+      throw new QrValidationError(`All parcels for Order ${order.orderId} must be scanned before confirming pickup (${expectedParcels.length - trulyMissing.length}/${expectedParcels.length} scanned).`);
     }
 
     await this.prisma.$transaction(async (tx: any) => {
+      const userRoleFinal = session.userRole || userRole || 'SHG';
+      const userIdFinal = session.userId || userId;
+
       for (const item of sessionItemsForOrder) {
         const parcel = item.parcel;
+        if (!parcel) continue;
 
         const transition = determineTransition(
-          order.phase as SessionType,
-          session.userRole,
-          session.userId,
+          (order.phase || sessionType) as SessionType,
+          userRoleFinal,
+          userIdFinal,
           parcel,
           order
         );
@@ -1218,8 +1246,8 @@ export class QrVerificationEngine {
             orderId: parcel.orderId,
             productId: parcel.productId,
             productName: parcel.productName,
-            userRole: session.userRole,
-            userId: session.userId,
+            userRole: userRoleFinal,
+            userId: userIdFinal,
             action: transition.action,
             currentHolder: transition.nextHolderId,
             currentStage: transition.nextParcelStatus,
@@ -1227,140 +1255,176 @@ export class QrVerificationEngine {
             remarks: transition.message,
           },
         });
+      }
 
-        let mainStatus = transition.nextParcelStatus;
-        const normalizedMainStatus = normalizeStatus(mainStatus);
-        let pickupShgStatus = order.pickupShgStatus;
-        let pickupTransporterStatus = order.pickupTransporterStatus;
-        let dropShgStatus = order.dropShgStatus;
-        let dropTransporterStatus = order.dropTransporterStatus;
+      // Sync order status columns based on the actor role and session type
+      const roleUpper = String(userRoleFinal || session.userRole || userRole || '').toUpperCase();
+      const isPhase2DropLeg = sessionType === 'DROP' || order.phase === 'DROP';
+      let mainStatus = order.mainStatus;
+      let pickupShgStatus = order.pickupShgStatus;
+      let pickupTransporterStatus = order.pickupTransporterStatus;
+      let dropShgStatus = order.dropShgStatus;
+      let dropTransporterStatus = order.dropTransporterStatus;
+      let pickupShgId = order.pickupShgId;
+      let pickupTransporterId = order.pickupTransporterId;
+      let dropShgId = order.dropShgId;
+      let dropTransporterId = order.dropTransporterId;
 
-        if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG') {
-          pickupShgStatus = 'PICKED';
-          pickupTransporterStatus = 'PENDING';
-          await triggerTransporterPickupBroadcast(tx, order.id);
-        } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
-          pickupShgStatus = 'COMPLETED';
-          pickupTransporterStatus = 'ACCEPTED';
-        } else if (normalizedMainStatus === 'IN_TRANSIT') {
-          pickupTransporterStatus = 'PICKED';
-        } else if (normalizedMainStatus === 'AT_GMU') {
-          pickupTransporterStatus = 'COMPLETED';
-        } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || normalizedMainStatus === 'READY_FOR_DISPATCH' || (transition.nextParcelStatus as string) === 'DISPATCHED') {
+      if (roleUpper === 'TRANSPORTER') {
+        if (isPhase2DropLeg) {
           dropTransporterStatus = 'PICKED';
-          mainStatus = 'DISPATCHED';
-
-          // Update GMU Hub InventoryItem status from STORED to DISPATCHED
-          await tx.$executeRawUnsafe(`
-            UPDATE public."InventoryItem"
-            SET "status" = 'DISPATCHED', "dispatchedAt" = NOW(), "updatedAt" = NOW()
-            WHERE "orderId" = $1 OR "orderId" = $2;
-          `, order.id, order.orderId).catch(() => {});
-        } else if (normalizedMainStatus === 'AT_BUYER_SHG') {
-          dropTransporterStatus = 'COMPLETED';
-          dropShgStatus = session.userRole === 'SHG' ? 'PICKED_UP' : 'ACCEPTED';
-        } else if (normalizedMainStatus === 'DELIVERED') {
-          dropShgStatus = 'DROPPED';
-          dropTransporterStatus = 'COMPLETED';
+          dropTransporterId = String(userIdFinal);
+          mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
+        } else {
+          // Transporter picking up from Pickup SHG to carry to GMU Hub
+          pickupTransporterStatus = 'PICKED';
+          pickupTransporterId = String(userIdFinal);
+          mainStatus = 'IN_TRANSIT_TO_HUB';
         }
-
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            mainStatus,
-            pickupShgStatus,
-            pickupTransporterStatus,
-            dropShgStatus,
-            dropTransporterStatus,
-          },
-        });
-
-        if (sessionType === 'PICKUP' && (normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED' || (transition.nextParcelStatus as string) === 'PARCEL_AT_SHG')) {
-          await tx.orderAssignment.updateMany({
-            where: {
-              orderId: order.id,
-              assigneeId: session.userId,
-              role: 'PICKUP',
-            },
-            data: {
-              status: 'ACCEPTED',
-            },
-          });
-
-          // Broadcast request to all approved Transporters when SHG picks up from Seller
-          const approvedTransporters = await tx.user.findMany({
-            where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
-            select: { id: true }
-          });
-          const targetTransporterIds = new Set<string>();
-          if (order.pickupTransporterId) targetTransporterIds.add(String(order.pickupTransporterId));
-          approvedTransporters.forEach((t: any) => targetTransporterIds.add(String(t.id)));
-
-          if (targetTransporterIds.size > 0) {
-            await tx.orderAssignment.deleteMany({
-              where: {
-                OR: [
-                  { orderId: order.id, role: 'PICKUP', assigneeType: 'TRANSPORTER' },
-                  { orderId: order.orderId, role: 'PICKUP', assigneeType: 'TRANSPORTER' }
-                ]
-              }
-            });
-            const assignmentData: any[] = [];
-            targetTransporterIds.forEach((tId) => {
-              assignmentData.push({
-                orderId: order.id,
-                assigneeId: tId,
-                assigneeType: 'TRANSPORTER',
-                role: 'PICKUP',
-                status: 'PENDING'
-              });
-            });
-            await tx.orderAssignment.createMany({
-              data: assignmentData
-            });
+      } else if (roleUpper === 'SHG') {
+        if (isPhase2DropLeg) {
+          // Drop SHG receiving from Transporter OR delivering to Buyer
+          if (order.mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || order.mainStatus === 'DISPATCHED' || (order.dropShgStatus !== 'ACCEPTED' && order.dropShgStatus !== 'DELIVERED')) {
+            dropShgStatus = 'PICKED';
+            dropShgId = String(userIdFinal);
+            dropTransporterStatus = 'COMPLETED';
+            mainStatus = 'PARCEL_AT_DROP_SHG';
+          } else {
+            dropShgStatus = 'DELIVERED';
+            dropShgId = String(userIdFinal);
+            mainStatus = 'DELIVERED';
           }
+        } else {
+          pickupShgStatus = 'PICKED';
+          pickupShgId = String(userIdFinal);
+          mainStatus = 'PARCEL_AT_SHG';
+        }
+      } else if (roleUpper === 'GMU' || roleUpper === 'ADMIN') {
+        if (isPhase2DropLeg) {
+          mainStatus = 'DISPATCHED';
+        } else {
+          pickupTransporterStatus = 'COMPLETED';
+          mainStatus = 'HUB_RECEIVED';
         }
       }
 
-      await tx.scanSessionItem.deleteMany({
-        where: {
-          sessionId,
-          parcelId: { in: Array.from(scannedIds) },
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          mainStatus,
+          pickupShgStatus,
+          pickupShgId,
+          pickupTransporterId,
+          pickupTransporterStatus,
+          dropShgId,
+          dropShgStatus,
+          dropTransporterId,
+          dropTransporterStatus,
         },
       });
 
-      const currentOrderIds = session.orderIds.split(',').map((id: string) => id.trim()).filter(Boolean);
-      const remainingOrderIds = currentOrderIds.filter((id) => id !== order.orderId && id !== order.id);
+    // Update Order Assignment according to role
+    const userIdsToCheck = Array.from(new Set([String(userIdFinal), String(userId)].filter(Boolean)));
+    if (roleUpper === 'TRANSPORTER') {
+      await tx.orderAssignment.updateMany({
+        where: {
+          orderId: { in: [order.id, order.orderId] },
+          assigneeId: { in: userIdsToCheck },
+          role: sessionType === 'PICKUP' ? 'PICKUP' : 'DROP',
+        },
+        data: {
+          status: 'ACCEPTED',
+        },
+      });
+    } else if (roleUpper === 'SHG' && sessionType === 'PICKUP') {
+      await tx.orderAssignment.updateMany({
+        where: {
+          orderId: { in: [order.id, order.orderId] },
+          assigneeId: { in: userIdsToCheck },
+          role: 'PICKUP',
+        },
+        data: {
+          status: 'ACCEPTED',
+        },
+      });
 
-      if (remainingOrderIds.length === 0) {
-        await tx.scanSession.update({
-          where: { sessionId },
-          data: {
-            orderIds: '',
-            status: 'CONFIRMED',
-          },
+      // Broadcast request to all approved Transporters when SHG picks up from Seller
+      const approvedTransporters = await tx.user.findMany({
+        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null },
+        select: { id: true }
+      });
+      const targetTransporterIds = new Set<string>();
+      if (order.pickupTransporterId) targetTransporterIds.add(String(order.pickupTransporterId));
+      approvedTransporters.forEach((t: any) => targetTransporterIds.add(String(t.id)));
+
+      if (targetTransporterIds.size > 0) {
+        await tx.orderAssignment.deleteMany({
+          where: {
+            OR: [
+              { orderId: order.id, role: 'PICKUP', assigneeType: 'TRANSPORTER' },
+              { orderId: order.orderId, role: 'PICKUP', assigneeType: 'TRANSPORTER' }
+            ]
+          }
         });
-      } else {
-        await tx.scanSession.update({
-          where: { sessionId },
-          data: {
-            orderIds: remainingOrderIds.join(','),
-          },
+        const assignmentData: any[] = [];
+        targetTransporterIds.forEach((tId) => {
+          assignmentData.push({
+            orderId: order.id,
+            assigneeId: String(tId),
+            assigneeType: 'TRANSPORTER',
+            role: 'PICKUP',
+            status: 'PENDING'
+          });
+        });
+        await tx.orderAssignment.createMany({
+          data: assignmentData,
+          skipDuplicates: true,
         });
       }
-    });
-
-    let updatedSession: any = null;
-    try {
-      updatedSession = await this.getSessionDetails(sessionType, session.userId, session.userRole, sessionId);
-    } catch (e) {
-      // Session may be CONFIRMED
     }
 
-    return {
-      success: true,
-      message: `Order ${orderId} confirmed successfully.`,
-      session: updatedSession
-    };
+    await tx.scanSessionItem.deleteMany({
+      where: {
+        sessionId,
+        parcelId: { in: Array.from(scannedIds) },
+      },
+    });
+
+    const cleanNum = (idStr: string) => String(idStr || '').replace(/^(pickup|drop)-/i, '').replace(/^ORD-/i, '').trim().toLowerCase();
+    const currentCleanId = cleanNum(order.orderId || order.id || cleanId);
+
+    const currentOrderIds = (session.orderIds || '').split(',').map((id: string) => id.trim()).filter(Boolean);
+    const remainingOrderIds = currentOrderIds.filter((id) => cleanNum(id) !== currentCleanId);
+
+    if (remainingOrderIds.length === 0) {
+      await tx.scanSession.update({
+        where: { sessionId },
+        data: {
+          orderIds: '',
+          status: 'CONFIRMED',
+        },
+      });
+    } else {
+      await tx.scanSession.update({
+        where: { sessionId },
+        data: {
+          orderIds: remainingOrderIds.join(','),
+        },
+      });
+    }
+  }, { timeout: 30000 });
+
+let updatedSession: any = null;
+try {
+  updatedSession = await this.getSessionDetails(sessionType, session.userId, session.userRole, sessionId);
+} catch (e) {
+  // Session may be CONFIRMED
+}
+
+return {
+  success: true,
+  message: `Order ${orderId} confirmed successfully.`,
+  session: updatedSession
+};
   }
 }

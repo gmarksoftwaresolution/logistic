@@ -25,6 +25,7 @@ import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrde
 import { FilterModal } from '../components/FilterModal';
 import { FilterState, isOrderInDateRange } from '../utils/dateFilters';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 import { Order } from '../context/OrderContext';
 
 type Props = CompositeScreenProps<
@@ -36,6 +37,7 @@ type Props = CompositeScreenProps<
 >;
 
 const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = useState<Order | null>(null);
   const context = useContext(LanguageContext);
   const { user } = useUser();
   const { deliveredOrders, highlightedOrders, refreshOrdersList } = useOrders();
@@ -302,17 +304,33 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                           <OrderDistance distance={item.distance} />
                         </View>
 
-                        {/* View Address Button */}
-                        <TouchableOpacity 
-                          onPress={() => setSelectedAddressOrder(item)} 
-                          activeOpacity={0.7}
-                          className="mt-2 mb-4 self-start flex-row items-center px-2 py-0.5 rounded-[6px] border border-[#22C55E]/40 bg-[#F0FDF4]"
-                        >
-                          <Ionicons name="location-outline" size={10} color="#16A34A" style={{ marginRight: 4 }} />
-                          <Text className="text-[10px] font-bold text-[#16A34A] tracking-wide">
-                            {t("view_address") || "View Address"}
-                          </Text>
-                        </TouchableOpacity>
+                        {/* Action Buttons: View Address & Track Order */}
+                        <View className="flex-row items-center gap-2 mt-2 mb-4">
+                          <TouchableOpacity 
+                            onPress={() => setSelectedAddressOrder(item)} 
+                            activeOpacity={0.7}
+                            className="flex-row items-center px-2.5 py-1 rounded-[8px] border border-[#22C55E]/40 bg-[#F0FDF4]"
+                          >
+                            <Ionicons name="location-outline" size={12} color="#16A34A" style={{ marginRight: 4 }} />
+                            <Text className="text-[11px] font-bold text-[#16A34A]">
+                              {t("view_address") || "View Address"}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setSelectedTrackingOrder(item);
+                            }} 
+                            activeOpacity={0.7}
+                            className="flex-row items-center px-2.5 py-1 rounded-[8px] border border-blue-200 bg-blue-50"
+                          >
+                            <Ionicons name="footsteps-outline" size={12} color="#2563EB" style={{ marginRight: 4 }} />
+                            <Text className="text-[11px] font-bold text-[#2563EB]">
+                              {t("track_order") || "Track Order"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                         
                         <View className="flex-row justify-between items-center">
                           <Text className="text-[13px] text-[#8792A1] font-medium">
@@ -361,6 +379,13 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           />
         );
       })()}
+
+      <TrackingHistoryModal
+        visible={!!selectedTrackingOrder}
+        onClose={() => setSelectedTrackingOrder(null)}
+        order={selectedTrackingOrder}
+        role="SHG"
+      />
     </SafeAreaView>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { LanguageContext } from '../context/LanguageContext';
 import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart, formatAddressString } from '../utils/orderHelpers';
 import { useOnboarding } from '../context/OnboardingContext';
 import WalkthroughElement from '../components/WalkthroughElement';
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'CompletedOrderDetails'>;
 
@@ -16,17 +17,15 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   route,
   navigation
 }) => {
-  const {
-    order
-  } = route.params;
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const { order } = route.params;
   const context = useContext(LanguageContext);
-  if (!context) return null;
-  const {
-    t
-  } = context;
   const isScreenFocused = useIsFocused();
   const { isActive, currentStep } = useOnboarding();
   const scrollViewRef = React.useRef<ScrollView>(null);
+
+  if (!context) return null;
+  const { t } = context;
 
   React.useEffect(() => {
     if (isActive && currentStep?.id === 'completed_details_close') {
@@ -75,98 +74,182 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const formatTime = (isoString?: string) => {
-    if (!isoString) return null;
-    const dateObj = new Date(isoString);
-    if (isNaN(dateObj.getTime())) return null;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const dateStr = `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-    const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    return `${dateStr}, ${timeStr}`;
-  };
+  // Dynamic products list from order.products, order.parcels, or order.items
+  const rawItems = (order.products && order.products.length > 0)
+    ? order.products
+    : (order.parcels && order.parcels.length > 0)
+      ? order.parcels
+      : (order.items && order.items.length > 0)
+        ? order.items
+        : [];
 
-  const products = order.products || [];
-  return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
-      {/* Header */}
-      <View className="px-6 py-4 flex-row items-center justify-between">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="w-10 h-10 bg-white rounded-full items-center justify-center border border-slate-100 shadow-sm mr-4">
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          </TouchableOpacity>
-          <View>
-            <Text className="text-[17px] font-black text-[#0F172A]">{t("su_completed_order_deta_364")}</Text>
-            <Text className="text-[12px] font-medium text-slate-500 mt-0.5">{t("su_view_past_order_info_365")}</Text>
+  const productsList = rawItems.length > 0
+    ? rawItems.map((item: any, idx: number) => {
+      const rawName = item.productName || item.name || item.product?.name || order.parcelName || order.productName || order.category;
+      const name = (!rawName || rawName.trim().toLowerCase() === 'item')
+        ? (order.parcelName || order.productName || order.category || order.itemCategory || 'Agri Goods Product')
+        : rawName;
+      return {
+        code: item.code ? (item.code.startsWith('#') ? item.code : `#${item.code}`) : (item.parcelId ? `#${item.parcelId}` : `#P-${item.id || idx + 1}`),
+        name: name,
+        tag: item.tag || (order.legType === 'pickup' || order.phase === 'PICKUP' ? 'PICKUP ORDER' : 'DELIVERY ORDER'),
+        details: item.details || `${item.quantity || item.qty || 1} ${(item.quantity || item.qty || 1) > 1 ? 'items' : 'item'} • ${item.weight || '1'}kg`,
+      };
+    })
+    : Array.from({ length: order.remainingQty || order.totalQty || order.productCount || 1 }).map((_, idx) => ({
+      code: `#P-0${idx + 1}`,
+      name: order.parcelName || order.productName || order.category || order.itemCategory || 'Agri Goods Product',
+      tag: order.legType === 'pickup' || order.phase === 'PICKUP' ? 'PICKUP ORDER' : 'DELIVERY ORDER',
+      details: `1 item • ${order.weight ? (parseFloat(order.weight) / (order.remainingQty || 1)).toFixed(1) : '1'}kg`
+    }));
+
+  const totalWeight = order.weight || productsList.reduce((sum: number, p: any) => sum + (p.weightValue || 1), 0);
+  return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    {/* Header mimicking the mockup layout */}
+    <View className="px-6 py-4 flex-row items-center justify-between">
+      <View className="flex-row items-center">
+        <TouchableOpacity onPress={() => navigation.goBack()} className="w-10 h-10 bg-white rounded-full items-center justify-center border border-slate-100 shadow-sm mr-4">
+          <Ionicons name="arrow-back" size={20} color="#0F172A" />
+        </TouchableOpacity>
+        <View>
+          <Text className="text-[17px] font-black text-[#0F172A]">{t("su_completed_order_deta_364")}</Text>
+          <Text className="text-[12px] font-medium text-slate-500 mt-0.5">{t("su_view_past_order_info_365")}</Text>
+        </View>
+      </View>
+      <TouchableOpacity className="w-10 h-10 bg-white rounded-full items-center justify-center border border-slate-100 shadow-sm">
+        <Ionicons name="help" size={20} color="#073318" />
+      </TouchableOpacity>
+    </View>
+
+    <ScrollView ref={scrollViewRef} className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+      {/* Main Order Info Card - Green Theme */}
+      <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{
+        shadowColor: '#073318',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8
+      }}>
+        <View className="flex-row justify-between items-start mb-6">
+          <View className="flex-row items-center flex-1 mr-2">
+            <View className="w-12 h-12 bg-white/10 rounded-[12px] items-center justify-center mr-3 border border-white/20">
+              <Ionicons name="cube-outline" size={24} color="#FFFFFF" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[18px] font-black text-white tracking-wider" numberOfLines={1}>
+                #{formattedOrderId}
+              </Text>
+              <Text className="text-[12px] font-bold text-white/70 mt-0.5" numberOfLines={1}>
+                {source} {t("su_transit_347")}
+              </Text>
+            </View>
+          </View>
+          <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-row items-center flex-shrink-0">
+            <Text className="text-[10px] font-black text-[#6EE7B7] uppercase tracking-wider">{t("su_completed_307")}</Text>
+            <Ionicons name="checkmark-circle" size={12} color="#6EE7B7" style={{ marginLeft: 4 }} />
           </View>
         </View>
-        <TouchableOpacity className="w-10 h-10 bg-white rounded-full items-center justify-center border border-slate-100 shadow-sm">
-          <Ionicons name="help" size={20} color="#073318" />
-        </TouchableOpacity>
+
+        <View className="flex-row items-center justify-between mb-6">
+          <View className="flex-1">
+            <Text className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1">{t("from")}</Text>
+            <Text className="text-[16px] font-black text-white">{source}</Text>
+          </View>
+          <View className="w-8 items-center">
+            <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.4)" />
+          </View>
+          <View className="flex-1 items-end">
+            <Text className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1">{t("to")}</Text>
+            <Text className="text-[16px] font-black text-white">{destination}</Text>
+          </View>
+        </View>
+
+        <View className="flex-row gap-3">
+          <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
+            <Ionicons name="cube-outline" size={16} color="#FFFFFF" />
+            <Text className="text-[14px] font-black text-white mt-1">{order.remainingQty || 1}</Text>
+            <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_items_350")}</Text>
+          </View>
+          <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
+            <Ionicons name="barbell-outline" size={16} color="#FFFFFF" />
+            <Text className="text-[14px] font-black text-white mt-1">{order.weight || '12'}{t("su_kg_351")}</Text>
+            <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_weight_352")}</Text>
+          </View>
+          <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
+            <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+            <Text className="text-[11px] font-black text-white mt-1" numberOfLines={1}>{info.date}</Text>
+            <Text className="text-[9px] font-bold text-white/60 mt-0.5" numberOfLines={1}>{info.time}</Text>
+          </View>
+        </View>
       </View>
 
-      <ScrollView ref={scrollViewRef} className="flex-1 px-6 pt-2" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Main Order Info Card - Green Theme */}
-        <View className="bg-[#073318] rounded-[28px] p-5 mb-6" style={{
-          shadowColor: '#073318',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.3,
-          shadowRadius: 12,
-          elevation: 8
-        }}>
-          <View className="flex-row justify-between items-start mb-6">
-            <View className="flex-row items-center flex-1 mr-2">
-              <View className="w-12 h-12 bg-white/10 rounded-[12px] items-center justify-center mr-3 border border-white/20">
-                <Ionicons name="cube-outline" size={24} color="#FFFFFF" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[18px] font-black text-white tracking-wider" numberOfLines={1}>
-                  #{formattedOrderId}
-                </Text>
-                <Text className="text-[12px] font-bold text-white/70 mt-0.5" numberOfLines={1}>
-                  {source} {t("su_transit_347")}
-                </Text>
-              </View>
-            </View>
-            <View className="bg-[#0D4021] border border-white/10 px-3 py-1.5 rounded-full shadow-sm flex-row items-center flex-shrink-0">
-              <Text className="text-[10px] font-black text-[#6EE7B7] uppercase tracking-wider">{t("su_completed_307")}</Text>
-              <Ionicons name="checkmark-circle" size={12} color="#6EE7B7" style={{ marginLeft: 4 }} />
-            </View>
+      {/* Order Summary */}
+      <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 4
+      }}>
+        <View className="flex-row items-center pb-4 border-b border-slate-100 mb-4">
+          <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
+            <Ionicons name="document-text-outline" size={16} color="#073318" />
           </View>
-
-          <View className="flex-row items-center justify-between mb-6">
-            <View className="flex-1">
-              <Text className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1">{t("from")}</Text>
-              <Text className="text-[16px] font-black text-white">{source}</Text>
-            </View>
-            <View className="w-8 items-center">
-              <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.4)" />
-            </View>
-            <View className="flex-1 items-end">
-              <Text className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1">{t("to")}</Text>
-              <Text className="text-[16px] font-black text-white">{destination}</Text>
-            </View>
-          </View>
-
-          <View className="flex-row gap-3">
-            <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
-              <Ionicons name="cube-outline" size={16} color="#FFFFFF" />
-              <Text className="text-[14px] font-black text-white mt-1">{order.remainingQty || 1}</Text>
-              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_items_350")}</Text>
-            </View>
-            <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
-              <Ionicons name="barbell-outline" size={16} color="#FFFFFF" />
-              <Text className="text-[14px] font-black text-white mt-1">{order.weight || '12'}{t("su_kg_351")}</Text>
-              <Text className="text-[9px] font-bold text-white/60 mt-0.5">{t("su_total_weight_352")}</Text>
-            </View>
-            <View className="flex-1 bg-white/10 p-3 rounded-[16px] items-center justify-center border border-white/5">
-              <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
-              <Text className="text-[11px] font-black text-white mt-1" numberOfLines={1}>{info.date}</Text>
-              <Text className="text-[9px] font-bold text-white/60 mt-0.5" numberOfLines={1}>{info.time}</Text>
-            </View>
-          </View>
+          <Text className="text-[15px] font-black text-[#111827]">{t("su_order_summary_373")}</Text>
         </View>
 
-        {/* Order Summary */}
+        <View className="flex-row justify-between items-center mb-3">
+          <Text className="text-[13px] text-slate-500 font-bold">{t("su_order_id_374")}</Text>
+          <Text className="text-[13px] font-black text-[#111827]">#{formattedOrderId}</Text>
+        </View>
+
+        <View className="flex-row justify-between items-center mb-3">
+          <Text className="text-[13px] text-slate-500 font-bold">{t("su_order_type_375")}</Text>
+          <Text className="text-[13px] font-black text-[#1B7034]">{isDelivery ? (t('su_delivery_order') || 'Delivery Order') : (t('su_pickup_order') || 'Pickup Order')}</Text>
+        </View>
+
+        <View className="flex-row justify-between items-center mb-3">
+          <Text className="text-[13px] text-slate-500 font-bold">{t("su_completed_on_376")}</Text>
+          <Text className="text-[13px] font-black text-[#111827]">{info.date}, {info.time}</Text>
+        </View>
+
+        <View className="flex-row justify-between items-center">
+          <Text className="text-[13px] text-slate-500 font-bold">{t("su_status_377")}</Text>
+          <View className="bg-[#D1F2D9] px-2.5 py-1 rounded-full">
+            <Text className="text-[11px] font-black text-[#1B7034]">{t("su_completed_307")}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Tracking History Action Card */}
+      <TouchableOpacity
+        onPress={() => setShowTrackingModal(true)}
+        className="bg-white rounded-[24px] p-4 mb-6 flex-row items-center justify-between border border-emerald-100 shadow-sm"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
+          elevation: 2,
+        }}
+      >
+        <View className="flex-row items-center gap-3">
+          <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center border border-[#D5EFE0]">
+            <Ionicons name="location" size={20} color="#16A34A" />
+          </View>
+          <View>
+            <Text className="text-[14px] font-black text-slate-800 tracking-wide">Tracking History</Text>
+            <Text className="text-[11px] font-bold text-emerald-600">View audit logs & status progress</Text>
+          </View>
+        </View>
+        <View className="w-8 h-8 rounded-full bg-slate-50 items-center justify-center border border-slate-100">
+          <Ionicons name="chevron-forward" size={16} color="#64748B" />
+        </View>
+      </TouchableOpacity>
+
+      {/* Dynamic Details Cards (Standard vs Redirect Flow) */}
+      {!order.isRedirected ? (
+        /* Standard Contact Details Card */
         <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
@@ -174,78 +257,38 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           shadowRadius: 8,
           elevation: 4
         }}>
-          <View className="flex-row items-center pb-4 border-b border-slate-100 mb-4">
-            <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
-              <Ionicons name="document-text-outline" size={16} color="#073318" />
+          <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
+            <View className="flex-row items-center">
+              <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
+                <Ionicons name={headerIcon} size={16} color="#073318" />
+              </View>
+              <Text className="text-[15px] font-black text-[#111827]">{detailsTitle}</Text>
             </View>
-            <Text className="text-[15px] font-black text-[#111827]">{t("su_order_summary_373")}</Text>
+            <TouchableOpacity onPress={() => handleCall(mobileValue)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
+              <Ionicons name="call-outline" size={14} color="#073318" />
+              <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
+            </TouchableOpacity>
           </View>
 
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-[13px] text-slate-500 font-bold">{t("su_order_id_374")}</Text>
-            <Text className="text-[13px] font-black text-[#111827]">#{formattedOrderId}</Text>
-          </View>
-
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-[13px] text-slate-500 font-bold">{t("su_order_type_375")}</Text>
-            <Text className="text-[13px] font-black text-[#1B7034]">{isDelivery ? (t('su_delivery_order') || 'Delivery Order') : (t('su_pickup_order') || 'Pickup Order')}</Text>
-          </View>
-
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-[13px] text-slate-500 font-bold">{t("su_completed_on_376")}</Text>
-            <Text className="text-[13px] font-black text-[#111827]">{info.date}, {info.time}</Text>
-          </View>
-
-          <View className="flex-row justify-between items-center">
-            <Text className="text-[13px] text-slate-500 font-bold">{t("su_status_377")}</Text>
-            <View className="bg-[#D1F2D9] px-2.5 py-1 rounded-full">
-              <Text className="text-[11px] font-black text-[#1B7034]">{t("su_completed_307")}</Text>
+          <View className="flex-row items-start mb-4">
+            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+              <Ionicons name="person-outline" size={18} color="#073318" />
+            </View>
+            <View className="flex-1 justify-center mt-0.5">
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{nameLabel}</Text>
+              <Text className="text-[14px] font-black text-[#111827]">{nameValue}</Text>
             </View>
           </View>
-        </View>
 
-        {/* Dynamic Details Cards (Standard vs Redirect Flow) */}
-        {!order.isRedirected ? (
-          /* Standard Details Card */
-          <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 4
-          }}>
-            <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
-              <View className="flex-row items-center">
-                <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
-                  <Ionicons name={headerIcon} size={16} color="#073318" />
-                </View>
-                <Text className="text-[15px] font-black text-[#111827]">{detailsTitle}</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleCall(mobileValue)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
-                <Ionicons name="call-outline" size={14} color="#073318" />
-                <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
-              </TouchableOpacity>
+          <View className="flex-row items-start mb-4">
+            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+              <Ionicons name="call-outline" size={18} color="#073318" />
             </View>
-
-            <View className="flex-row items-start mb-4">
-              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                <Ionicons name="person-outline" size={18} color="#073318" />
-              </View>
-              <View className="flex-1 justify-center mt-0.5">
-                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{nameLabel}</Text>
-                <Text className="text-[14px] font-black text-[#111827]">{nameValue}</Text>
-              </View>
+            <View className="flex-1 justify-center mt-0.5">
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{mobileLabel}</Text>
+              <Text className="text-[14px] font-black text-[#111827]">{mobileValue}</Text>
             </View>
-
-            <View className="flex-row items-start mb-4">
-              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                <Ionicons name="call-outline" size={18} color="#073318" />
-              </View>
-              <View className="flex-1 justify-center mt-0.5">
-                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">{mobileLabel}</Text>
-                <Text className="text-[14px] font-black text-[#111827]">{mobileValue}</Text>
-              </View>
-            </View>
+          </View>
 
           <View className="flex-row items-start mb-4">
             <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
@@ -268,9 +311,64 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           </View>
         </View>
       ) : (
-          /* Three Cards for Redirected Orders */
-          <>
-            {/* 1. Pickup Info Card */}
+        /* Three Cards for Redirected Orders */
+        <>
+          {/* 1. Pickup Info Card */}
+          <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 4
+          }}>
+            <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
+                  <Ionicons name="storefront-outline" size={16} color="#073318" />
+                </View>
+                <Text className="text-[15px] font-black text-[#111827]">Pickup Info</Text>
+              </View>
+              {order.sellerMobile ? (
+                <TouchableOpacity onPress={() => handleCall(order.sellerMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
+                  <Ionicons name="call-outline" size={14} color="#073318" />
+                  <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="person-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Name</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.sellerName || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="call-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Mobile Number</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.sellerMobile || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="location-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Address</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.sellerAddress || 'N/A'}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 2. Drop Info Card */}
+          {!(order.isRedirected || order.isPickupRedirected) && (
             <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 4 },
@@ -281,12 +379,12 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
               <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
                 <View className="flex-row items-center">
                   <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
-                    <Ionicons name="storefront-outline" size={16} color="#073318" />
+                    <Ionicons name="person-outline" size={16} color="#073318" />
                   </View>
-                  <Text className="text-[15px] font-black text-[#111827]">Pickup Info</Text>
+                  <Text className="text-[15px] font-black text-[#111827]">Drop Info</Text>
                 </View>
-                {order.sellerMobile ? (
-                  <TouchableOpacity onPress={() => handleCall(order.sellerMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
+                {order.buyerMobile ? (
+                  <TouchableOpacity onPress={() => handleCall(order.buyerMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
                     <Ionicons name="call-outline" size={14} color="#073318" />
                     <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
                   </TouchableOpacity>
@@ -298,8 +396,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
                   <Ionicons name="person-outline" size={18} color="#073318" />
                 </View>
                 <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Name</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.sellerName || 'N/A'}</Text>
+                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Buyer Name</Text>
+                  <Text className="text-[14px] font-black text-[#111827]">{order.buyerName || 'N/A'}</Text>
                 </View>
               </View>
 
@@ -308,8 +406,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
                   <Ionicons name="call-outline" size={18} color="#073318" />
                 </View>
                 <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Mobile Number</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.sellerMobile || 'N/A'}</Text>
+                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Buyer Mobile Number</Text>
+                  <Text className="text-[14px] font-black text-[#111827]">{order.buyerMobile || 'N/A'}</Text>
                 </View>
               </View>
 
@@ -318,122 +416,67 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
                   <Ionicons name="location-outline" size={18} color="#073318" />
                 </View>
                 <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Seller Address</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.sellerAddress || 'N/A'}</Text>
+                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Delivery Address</Text>
+                  <Text className="text-[14px] font-black text-[#111827]">{order.buyerAddress || 'N/A'}</Text>
                 </View>
               </View>
             </View>
+          )}
 
-            {/* 2. Drop Info Card */}
-            {!(order.isRedirected || order.isPickupRedirected) && (
-              <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.05,
-                shadowRadius: 8,
-                elevation: 4
-              }}>
-                <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
-                  <View className="flex-row items-center">
-                    <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
-                      <Ionicons name="person-outline" size={16} color="#073318" />
-                    </View>
-                    <Text className="text-[15px] font-black text-[#111827]">Drop Info</Text>
-                  </View>
-                  {order.buyerMobile ? (
-                    <TouchableOpacity onPress={() => handleCall(order.buyerMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
-                      <Ionicons name="call-outline" size={14} color="#073318" />
-                      <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
-                    </TouchableOpacity>
-                  ) : null}
+          {/* 3. Transporter Details Card */}
+          <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 4
+          }}>
+            <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
+                  <Ionicons name="car-outline" size={16} color="#073318" />
                 </View>
-
-                <View className="flex-row items-start mb-4">
-                  <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                    <Ionicons name="person-outline" size={18} color="#073318" />
-                  </View>
-                  <View className="flex-1 justify-center mt-0.5">
-                    <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Buyer Name</Text>
-                    <Text className="text-[14px] font-black text-[#111827]">{order.buyerName || 'N/A'}</Text>
-                  </View>
-                </View>
-
-                <View className="flex-row items-start mb-4">
-                  <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                    <Ionicons name="call-outline" size={18} color="#073318" />
-                  </View>
-                  <View className="flex-1 justify-center mt-0.5">
-                    <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Buyer Mobile Number</Text>
-                    <Text className="text-[14px] font-black text-[#111827]">{order.buyerMobile || 'N/A'}</Text>
-                  </View>
-                </View>
-
-                <View className="flex-row items-start">
-                  <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                    <Ionicons name="location-outline" size={18} color="#073318" />
-                  </View>
-                  <View className="flex-1 justify-center mt-0.5">
-                    <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Delivery Address</Text>
-                    <Text className="text-[14px] font-black text-[#111827]">{order.buyerAddress || 'N/A'}</Text>
-                  </View>
-                </View>
+                <Text className="text-[15px] font-black text-[#111827]">Transporter Details</Text>
               </View>
-            )}
+              {order.transporterMobile ? (
+                <TouchableOpacity onPress={() => handleCall(order.transporterMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
+                  <Ionicons name="call-outline" size={14} color="#073318" />
+                  <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
 
-            {/* 3. Transporter Details Card */}
-            <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.05,
-              shadowRadius: 8,
-              elevation: 4
-            }}>
-              <View className="flex-row justify-between items-center pb-4 border-b border-slate-100 mb-4">
-                <View className="flex-row items-center">
-                  <View className="w-8 h-8 rounded-full bg-[#F8FAFC] items-center justify-center mr-2 border border-slate-100">
-                    <Ionicons name="car-outline" size={16} color="#073318" />
-                  </View>
-                  <Text className="text-[15px] font-black text-[#111827]">Transporter Details</Text>
-                </View>
-                {order.transporterMobile ? (
-                  <TouchableOpacity onPress={() => handleCall(order.transporterMobile!)} className="bg-[#E8F5EC] px-3 py-1.5 rounded-[10px] flex-row items-center border border-[#D5EFE0]">
-                    <Ionicons name="call-outline" size={14} color="#073318" />
-                    <Text className="text-[12px] font-black text-[#073318] ml-1.5">{t("su_call_353")}</Text>
-                  </TouchableOpacity>
-                ) : null}
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="person-outline" size={18} color="#073318" />
               </View>
-
-              <View className="flex-row items-start mb-4">
-                <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                  <Ionicons name="person-outline" size={18} color="#073318" />
-                </View>
-                <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Name</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.transporterName || 'N/A'}</Text>
-                </View>
-              </View>
-
-              <View className="flex-row items-start mb-4">
-                <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                  <Ionicons name="call-outline" size={18} color="#073318" />
-                </View>
-                <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Mobile Number</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.transporterMobile || 'N/A'}</Text>
-                </View>
-              </View>
-
-              <View className="flex-row items-start">
-                <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                  <Ionicons name="car-outline" size={18} color="#073318" />
-                </View>
-                <View className="flex-1 justify-center mt-0.5">
-                  <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Vehicle Number</Text>
-                  <Text className="text-[14px] font-black text-[#111827]">{order.vehicleNumber || 'N/A'}</Text>
-                </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Name</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.transporterName || 'N/A'}</Text>
               </View>
             </View>
-          </>
+
+            <View className="flex-row items-start mb-4">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="call-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Mobile Number</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.transporterMobile || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+                <Ionicons name="car-outline" size={18} color="#073318" />
+              </View>
+              <View className="flex-1 justify-center mt-0.5">
+                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Vehicle Number</Text>
+                <Text className="text-[14px] font-black text-[#111827]">{order.vehicleNumber || 'N/A'}</Text>
+              </View>
+            </View>
+          </View>
+        </>
         )}
 
         {/* Activity Details Timeline */}
@@ -499,11 +542,11 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
             <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
               <Ionicons name="cube-outline" size={16} color="#073318" />
             </View>
-            <Text className="text-[15px] font-black text-[#111827]">{t("su_products_delivered_380")}({products.length})</Text>
+            <Text className="text-[15px] font-black text-[#111827]">{t("su_products_delivered_380") || 'Products Delivered'} ({productsList.length})</Text>
           </View>
 
-          {products.map((product: any) => (
-            <View key={product.code} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
+          {productsList.map((product: any, idx: number) => (
+            <View key={product.code || idx} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
               <View className="flex-1">
                 <View className="flex-row items-center">
                   <View className="bg-[#E0F2FE] px-2 py-0.5 rounded-[4px] mr-2">
@@ -558,8 +601,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           <Text className="font-extrabold text-[15px] text-[#073318] ml-2">{t("su_download_invoice_386")}</Text>
         </TouchableOpacity>
 
-        <WalkthroughElement 
-          stepId="completed_details_close" 
+        <WalkthroughElement
+          stepId="completed_details_close"
           style={{ width: '100%', marginBottom: 40 }}
           isFocused={isScreenFocused}
         >
@@ -576,9 +619,15 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
 
         {/* Large bottom spacer to push the button cleanly above the custom floating tab bar */}
         <View className="h-36" />
-      </ScrollView>
-    </SafeAreaView>
-  );
+    </ScrollView>
+
+    <TrackingHistoryModal
+      visible={showTrackingModal}
+      onClose={() => setShowTrackingModal(false)}
+      order={order}
+      role="SHG"
+    />
+  </SafeAreaView>;
 };
 
 export default CompletedOrderDetailsScreen;

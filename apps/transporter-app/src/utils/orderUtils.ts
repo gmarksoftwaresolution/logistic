@@ -63,3 +63,27 @@ export const cleanRejectReason = (reason: string | undefined): string => {
 
   return cleaned.trim();
 };
+
+/**
+ * Formats an address value (string or object) safely into a displayable string
+ * to prevent React "Objects are not valid as a React child" render errors.
+ */
+export const formatAddress = (addr: any): string => {
+  if (!addr) return 'N/A';
+  if (typeof addr === 'string') {
+    return addr.trim() ? addr : 'N/A';
+  }
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.addressLine1 || addr.houseNo,
+      addr.addressLine2,
+      addr.village,
+      addr.taluka,
+      addr.district,
+      addr.state,
+      addr.pincode ? `- ${addr.pincode}` : ''
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+  }
+  return String(addr);
+};

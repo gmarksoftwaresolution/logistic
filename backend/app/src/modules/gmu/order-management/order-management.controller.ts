@@ -180,6 +180,12 @@ export class OrderManagementController {
     return this.service.getBuyerReturnOrders(filter);
   }
 
+  @Get('history')
+  @ApiOperation({ summary: 'Get complete order history metrics and list' })
+  async getOrderHistory(@Query() filter: OrderFilterDto) {
+    return this.service.getOrderHistory(filter);
+  }
+
   @Get('inventory/stored')
   @ApiOperation({ summary: 'Get stored orders in inventory' })
   async getInventoryStoredOrders(@Query() filter: OrderFilterDto) {
@@ -468,6 +474,9 @@ export class OrderManagementController {
   @Get(':id')
   @ApiOperation({ summary: 'Get complete order information by UUID or OrderID' })
   async getOrderDetails(@Param('id') id: string) {
+    if (id === 'history') {
+      return this.service.getOrderHistory();
+    }
     return this.service.getOrderDetails(id);
   }
 }

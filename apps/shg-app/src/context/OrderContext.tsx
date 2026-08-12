@@ -636,7 +636,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && lastTokenRef.current) {
-        refreshOrdersList().catch(() => {});
+        refreshOrdersList().catch(() => { });
       }
     };
 
@@ -648,7 +648,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     const poller = setInterval(() => {
       if (AppState.currentState === 'active' && lastTokenRef.current) {
-        refreshOrdersList().catch(() => {});
+        refreshOrdersList().catch(() => { });
       }
     }, 4000);
 

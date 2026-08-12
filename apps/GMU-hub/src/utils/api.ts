@@ -41,6 +41,7 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
+  get: (url: string) => request(url),
   auth: {
     sendOtp: (mobileNumber: string) =>
       request('/auth/send-otp', {

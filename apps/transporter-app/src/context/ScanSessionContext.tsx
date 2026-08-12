@@ -24,7 +24,7 @@ interface ScanSessionContextType {
   scanParcel: (type: 'PICKUP', sessionId: string, qrData: string) => Promise<void>;
   removeParcel: (type: 'PICKUP', sessionId: string, parcelId: string) => Promise<void>;
   confirmSession: (type: 'PICKUP', sessionId: string) => Promise<void>;
-  confirmSessionOrder: (type: 'PICKUP', sessionId: string, orderId: string) => Promise<void>;
+  confirmSessionOrder: (type: 'PICKUP', sessionId: string, orderId: string) => Promise<any>;
   cancelSession: (type?: 'PICKUP') => Promise<void>;
   refreshSession: (type?: 'PICKUP') => Promise<void>;
   clearError: () => void;

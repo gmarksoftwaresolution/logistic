@@ -20,6 +20,9 @@ import WalkthroughElement from '../components/WalkthroughElement';
 import { useOrderManagement, ActivityEntry, BatchOrder } from '../context/OrderManagementContext';
 import { useTranslation } from 'react-i18next';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../utils/responsive';
+import { formatAddress } from '../utils/orderUtils';
+import { Ionicons } from '@expo/vector-icons';
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 import { Search, MapPin, Package, Clock, Filter, XCircle, CheckCircle, History as HistoryIcon, X, ChevronRight, Hash, Phone, User, Globe, AlertCircle, TrendingUp, Calendar, ChevronLeft } from 'lucide-react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -46,11 +49,12 @@ const getDaysInMonth = (year: number, month: number) => {
 const OrderHistoryScreen = () => {
   const { t } = useTranslation();
   const { activities, batches } = useOrderManagement();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [detailsBatch, setDetailsBatch] = useState<BatchOrder | null>(null);
   const [detailsActivityStatus, setDetailsActivityStatus] = useState<string | null>(null);
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = useState<any>(null);
   const [visitedTabs, setVisitedTabs] = useState<string[]>(['All']);
   const [dateFilterType, setDateFilterType] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customSelectedDate, setCustomSelectedDate] = useState<Date | null>(null);
@@ -66,7 +70,7 @@ const OrderHistoryScreen = () => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const direction = currentOffset > lastOffsetY.current ? 'down' : 'up';
     const diff = Math.abs(currentOffset - lastOffsetY.current);
-    
+
     if (currentOffset <= 0) {
       DeviceEventEmitter.emit('show-tabbar');
     } else if (diff > 10) {
@@ -83,13 +87,13 @@ const OrderHistoryScreen = () => {
 
   const selectTab = (index: number) => {
     const filter = filters[index];
-    
+
     // Guard to avoid duplicate state updates and stutters
     if (selectedFilter === filter) return;
-    
+
     setSelectedFilter(filter);
     setVisitedTabs((prev) => prev.includes(filter) ? prev : [...prev, filter]);
-    
+
     // Auto-scroll the tab list to center the selected tab
     try {
       tabListRef.current?.scrollToIndex({
@@ -104,7 +108,7 @@ const OrderHistoryScreen = () => {
 
   const groupedActivitiesPerFilter = useMemo(() => {
     const result: Record<string, Record<string, ActivityEntry[]>> = {};
-    
+
     const today = new Date();
     const todayStr = formatDateToHuman(today);
 
@@ -117,21 +121,21 @@ const OrderHistoryScreen = () => {
     filters.forEach((filter) => {
       const filtered = activities.filter((act) => {
         // Only show Picked, Dropped, Completed, and Rejected history items. Exclude Accepted.
-        const isValidHistoryStatus = 
+        const isValidHistoryStatus =
           act.status === 'Accepted' ||
-          act.status === 'Picked' || 
-          act.status === 'Dropped' || 
+          act.status === 'Picked' ||
+          act.status === 'Dropped' ||
           act.status === 'Completed' ||
           act.status === 'Rejected';
 
         if (!isValidHistoryStatus) return false;
 
-        const matchesSearch = 
+        const matchesSearch =
           act.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
           act.route.toLowerCase().includes(searchQuery.toLowerCase());
-        
-        const matchesFilter = 
-          filter === 'All' || 
+
+        const matchesFilter =
+          filter === 'All' ||
           (filter === 'Picked Up' && (act.status === 'Picked' || act.status === 'Dropped' || act.status === 'Completed')) ||
           (filter === 'Dropped' && (act.status === 'Dropped' || act.status === 'Completed')) ||
           (filter === 'Rejected' && act.status === 'Rejected');
@@ -224,7 +228,7 @@ const OrderHistoryScreen = () => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
     const days = getDaysInMonth(year, month);
-    
+
     const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     const monthNames = [
       'January', 'February', 'March', 'April', 'May', 'June',
@@ -261,8 +265,8 @@ const OrderHistoryScreen = () => {
             if (!day) {
               return <View key={`empty-${index}`} style={styles.emptyDayCell} />;
             }
-            
-            const isSelected = customSelectedDate && 
+
+            const isSelected = customSelectedDate &&
               day.getDate() === customSelectedDate.getDate() &&
               day.getMonth() === customSelectedDate.getMonth() &&
               day.getFullYear() === customSelectedDate.getFullYear() &&
@@ -323,8 +327,8 @@ const OrderHistoryScreen = () => {
     const batch = batchesMap[item.orderId];
 
     const cardContent = (
-      <TouchableOpacity 
-        style={styles.activityCard} 
+      <TouchableOpacity
+        style={styles.activityCard}
         activeOpacity={0.7}
         onPress={() => {
           if (batch) {
@@ -337,10 +341,10 @@ const OrderHistoryScreen = () => {
         <View style={styles.cardHeader}>
           <View style={styles.orderIdContainer}>
             <Text style={styles.orderIdLabel}>{t('orders.order_id')}</Text>
-            <Text 
-              style={styles.orderIdValue} 
-              numberOfLines={1} 
-              adjustsFontSizeToFit 
+            <Text
+              style={styles.orderIdValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
               minimumFontScale={0.8}
             >
               {batch?.displayId || item.orderId}
@@ -371,6 +375,20 @@ const OrderHistoryScreen = () => {
           <Text style={styles.routeText} numberOfLines={2}>{item.route}</Text>
         </View>
 
+        {/* Track Order Action Button */}
+        <TouchableOpacity
+          style={styles.cardTrackBtn}
+          onPress={(e) => {
+            e.stopPropagation();
+            const targetOrder = batch || item;
+            setSelectedTrackingOrder(targetOrder);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="footsteps-outline" size={scale(12)} color="#16A34A" style={{ marginRight: 4 }} />
+          <Text style={styles.cardTrackBtnText}>{t('orders.track_order', { defaultValue: 'Track Order' })}</Text>
+        </TouchableOpacity>
+
         {/* Divider */}
         <View style={styles.divider} />
 
@@ -399,15 +417,15 @@ const OrderHistoryScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScreenHeader 
-        title={t('history.title')} 
-        subtitle={t('history.subtitle')} 
-        showBackButton={true} 
+      <ScreenHeader
+        title={t('history.title')}
+        subtitle={t('history.subtitle')}
+        showBackButton={true}
         showProfile={false}
         showHelp={true}
         helpContent="This screen shows your complete delivery history. You can search for specific orders using the search bar or filter by status using the tabs above. Tap a card to see more details about that specific batch."
       />
-      
+
       <View style={styles.mainContainer}>
         {/* Padded Header Wrapper */}
         <View style={{ paddingHorizontal: scale(20) }}>
@@ -429,16 +447,16 @@ const OrderHistoryScreen = () => {
               )}
             </View>
             {dateFilterType === 'all' ? (
-              <TouchableOpacity 
-                style={styles.calendarFilterBtn} 
+              <TouchableOpacity
+                style={styles.calendarFilterBtn}
                 onPress={() => setShowDateModal(true)}
               >
                 <Calendar size={scale(16)} color={Colors.textSecondary} />
                 <Text style={styles.calendarBtnText}>{t('orders.filter', { defaultValue: 'Filter' })}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity 
-                style={[styles.calendarFilterBtn, styles.calendarResetBtnActive]} 
+              <TouchableOpacity
+                style={[styles.calendarFilterBtn, styles.calendarResetBtnActive]}
                 onPress={() => {
                   setDateFilterType('all');
                   setCustomSelectedDate(null);
@@ -536,13 +554,13 @@ const OrderHistoryScreen = () => {
         animationType="slide"
         onRequestClose={() => setShowDateModal(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setShowDateModal(false)}
         >
-          <TouchableOpacity 
-            activeOpacity={1} 
+          <TouchableOpacity
+            activeOpacity={1}
             style={[styles.detailsModalContent, { height: 'auto', paddingBottom: verticalScale(30) }]}
           >
             {/* Header */}
@@ -563,7 +581,7 @@ const OrderHistoryScreen = () => {
 
             {/* Presets Row */}
             <View style={styles.datePresetsContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.datePresetChip, dateFilterType === 'all' && styles.datePresetChipActive]}
                 onPress={() => {
                   setDateFilterType('all');
@@ -576,7 +594,7 @@ const OrderHistoryScreen = () => {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.datePresetChip, dateFilterType === 'today' && styles.datePresetChipActive]}
                 onPress={() => {
                   setDateFilterType('today');
@@ -589,7 +607,7 @@ const OrderHistoryScreen = () => {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.datePresetChip, dateFilterType === 'yesterday' && styles.datePresetChipActive]}
                 onPress={() => {
                   setDateFilterType('yesterday');
@@ -612,7 +630,7 @@ const OrderHistoryScreen = () => {
 
             {/* Modal Reset Button */}
             {dateFilterType !== 'all' && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.modalResetBtn}
                 activeOpacity={0.7}
                 onPress={() => {
@@ -644,8 +662,8 @@ const OrderHistoryScreen = () => {
                 <Text style={styles.detailsTitle}>{t('orders.order_details')}</Text>
                 <Text style={styles.detailsBatchId}>#{detailsBatch?.displayId || detailsBatch?.id}</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.closeModalBtn} 
+              <TouchableOpacity
+                style={styles.closeModalBtn}
                 onPress={() => setDetailsBatch(null)}
               >
                 <X size={scale(22)} color={Colors.textPrimary} />
@@ -750,7 +768,7 @@ const OrderHistoryScreen = () => {
               )}
 
               <Text style={styles.itemsListTitle}>{t('orders.product_details')}</Text>
-              
+
               {/* Products List */}
               {detailsBatch?.products.map((product, index) => {
                 const getProductDisplayStatus = () => {
@@ -766,7 +784,7 @@ const OrderHistoryScreen = () => {
                   if (detailsActivityStatus === 'Accepted') {
                     return { key: 'orders.accepted', defaultText: 'Accepted', color: '#16A34A', bg: '#F0FDF4' };
                   }
-                  
+
                   const isSuccess = product.status === 'completed' || product.status === 'picked';
                   return {
                     key: `orders.${product.status}`,
@@ -799,8 +817,8 @@ const OrderHistoryScreen = () => {
               <View style={styles.modalBottomSpacer} />
             </ScrollView>
 
-            <TouchableOpacity 
-              style={styles.closeFullBtn} 
+            <TouchableOpacity
+              style={styles.closeFullBtn}
               onPress={() => setDetailsBatch(null)}
             >
               <Text style={styles.closeFullBtnText}>{t('orders.close_details')}</Text>
@@ -808,6 +826,15 @@ const OrderHistoryScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {selectedTrackingOrder && (
+        <TrackingHistoryModal
+          visible={!!selectedTrackingOrder}
+          onClose={() => setSelectedTrackingOrder(null)}
+          order={selectedTrackingOrder}
+          role="TRANSPORTER"
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -979,7 +1006,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(10),
-    marginBottom: verticalScale(14),
+    marginBottom: verticalScale(10),
+  },
+  cardTrackBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: '#D5EFE0',
+    backgroundColor: '#E8F5EC',
+    marginBottom: verticalScale(10),
+  },
+  cardTrackBtnText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(11),
+    color: '#16A34A',
   },
   routeText: {
     flex: 1,

@@ -249,10 +249,24 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       // Filter out locally tracked scanned items immediately (< 1ms)
       setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
       
-      await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
+      const res = await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
       refreshBatchesList().catch(() => {});
       
-      Alert.alert('Success', `Order #${orderId.replace('pickup-', '').replace('drop-', '')} confirmed successfully!`);
+      const cleanOrderId = orderId.replace('pickup-', '').replace('drop-', '').replace('ORD-', '');
+      Alert.alert(
+        'Pickup Confirmed',
+        `Order #${cleanOrderId} pickup has been confirmed and updated in database!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (!res?.session || res?.session?.status === 'CONFIRMED' || !res?.session?.orderIds) {
+                navigation.goBack();
+              }
+            }
+          }
+        ]
+      );
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Confirmation failed';
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
