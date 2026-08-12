@@ -111,12 +111,13 @@ const STAGE_ORDER: Record<string, number> = {
   'Received at Destination SHG Center': 8,
 };
 
-const formatISTDateTime = (dateInput?: any) => {
+const formatISTDateTime = (dateInput?: any): { time: string; date: string } => {
   if (!dateInput) {
     const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    return { time, date };
+    return {
+      time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+      date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    };
   }
 
   try {
@@ -135,19 +136,22 @@ const formatISTDateTime = (dateInput?: any) => {
     }
 
     if (isNaN(dt.getTime())) {
-      const dateMatch = String(dateInput).match(/\b(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\b/);
-      const timeMatch = String(dateInput).match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)\b/);
+      const now = new Date();
       return {
-        time: timeMatch ? timeMatch[1].toUpperCase() : '10:00 AM',
-        date: dateMatch ? dateMatch[1] : '11 Aug 2026',
+        time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+        date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
       };
     }
 
-    const time = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const date = dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+    const date = dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     return { time, date };
   } catch (e) {
-    return { time: '10:00 AM', date: '11 Aug 2026' };
+    const now = new Date();
+    return {
+      time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+      date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    };
   }
 };
 
@@ -175,8 +179,15 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       eventsMap.set(canonical, {
         title: canonical,
         timestamp: validTimestamp,
-        remarks: remarks || 'Stage update completed',
+        remarks: remarks || '',
         orderIdx,
+      });
+    } else if (timestamp) {
+      const existing = eventsMap.get(canonical);
+      eventsMap.set(canonical, {
+        ...existing,
+        timestamp: validTimestamp,
+        remarks: remarks || existing.remarks,
       });
     }
   };
@@ -191,11 +202,13 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
   }
 
   // 2. Process product scan histories if available
+  const scanHistoriesList: any[] = [];
   if (Array.isArray(order.products)) {
     order.products.forEach((p: any) => {
       if (Array.isArray(p.scanHistories)) {
         p.scanHistories.forEach((sh: any) => {
-          addEvent(sh.status || sh.location || 'Parcel Scanned', sh.scanTime || sh.createdAt, `Location: ${sh.location || 'Hub'}`);
+          scanHistoriesList.push(sh);
+          addEvent(sh.status || sh.location || 'Parcel Scanned', sh.scanTime || sh.createdAt, sh.remarks);
         });
       }
     });
@@ -231,15 +244,32 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
   const isAnyProductPicked = products.some((p: any) => p.status === 'picked' || p.status === 'completed');
   const isAnyProductCompleted = products.some((p: any) => p.status === 'completed');
 
-  const createdAt = order.createdAt || order.orderDate || order.created_at || order.timestamp || order.date;
-  const acceptedAt = order.acceptedAt || order.shgAcceptedAt || order.pickupShgAcceptedAt || createdAt;
-  const pickedUpAt = order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || acceptedAt;
-  const transporterPickedAt = order.transporterPickedUpAt || order.transporterAcceptedAt || pickedUpAt;
-  const hubReceivedAt = order.warehouseReceivedAt || order.storedAt || order.atGmuAt || transporterPickedAt;
-  const dispatchedAt = order.dispatchedAt || order.hubDispatchedAt || hubReceivedAt;
-  const dropTransporterPickedAt = order.dropTransporterPickedUpAt || dispatchedAt;
-  const dropShgReceivedAt = order.dropShgReceivedAt || order.dropShgAcceptedAt || dropTransporterPickedAt;
-  const deliveredAt = order.deliveredAt || order.completedAt || dropShgReceivedAt;
+  const rawCreatedAt = order.createdAt || order.orderDate || order.created_at || order.timestamp || order.date;
+  const baseDate = rawCreatedAt ? new Date(rawCreatedAt) : new Date();
+  const latestDate = order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date());
+
+  const baseMs = !isNaN(baseDate.getTime()) ? baseDate.getTime() : Date.now();
+  const latestMs = !isNaN(latestDate.getTime()) ? latestDate.getTime() : Date.now();
+
+  const getStepTime = (explicitTime: any, stepIndex: number, totalActiveSteps: number) => {
+    if (explicitTime) return explicitTime;
+    if (stepIndex === 0) return new Date(baseMs).toISOString();
+    if (stepIndex === totalActiveSteps - 1 && latestMs > baseMs) return new Date(latestMs).toISOString();
+    const diff = Math.max(0, latestMs - baseMs);
+    if (diff > 0 && totalActiveSteps > 1) {
+      const stepMs = baseMs + Math.round((diff * stepIndex) / (totalActiveSteps - 1));
+      return new Date(stepMs).toISOString();
+    }
+    const offsetMs = baseMs + (stepIndex * 5 * 60 * 1000);
+    return new Date(Math.min(offsetMs, Date.now())).toISOString();
+  };
+
+  const shgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_PICKUP'))?.scanTime;
+  const transScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_PICKUP'))?.scanTime;
+  const hubScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('WAREHOUSE_INTAKE'))?.scanTime;
+  const dropTransScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_DROP'))?.scanTime;
+  const dropShgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_DROP'))?.scanTime;
+  const deliveryScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('FINAL_DELIVERY'))?.scanTime;
 
   // -------------------------------------------------------------
   // A. PHASE 1: PICKUP ORDERS (Seller SHG ➔ GMU Hub Receive)
@@ -285,11 +315,17 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 5);
     }
 
-    if (stageLevel >= 1) addEvent('Order Placed & Registered', createdAt, 'Order registered by Seller SHG');
-    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', pickedUpAt, 'Seller SHG scanned and registered parcel');
-    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', acceptedAt, 'Transporter accepted pickup route');
-    if (stageLevel >= 4) addEvent('Picked up by Transporter', transporterPickedAt, 'Handed over from SHG to Transporter');
-    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', hubReceivedAt, 'Verified and received at Gadhinglaj GMU Hub');
+    const p1CreatedAt = rawCreatedAt;
+    const p1ShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || getStepTime(null, 1, stageLevel);
+    const p1TransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || getStepTime(null, 2, stageLevel);
+    const p1TransPickedAt = transScanTime || order.transporterPickedUpAt || getStepTime(null, 3, stageLevel);
+    const p1HubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || getStepTime(null, 4, stageLevel);
+
+    if (stageLevel >= 1) addEvent('Order Placed & Registered', p1CreatedAt);
+    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', p1ShgPickedAt);
+    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', p1TransAcceptedAt);
+    if (stageLevel >= 4) addEvent('Picked up by Transporter', p1TransPickedAt);
+    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', p1HubReceivedAt);
   }
 
   // -------------------------------------------------------------
@@ -334,11 +370,17 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 5);
     }
 
-    if (stageLevel >= 1) addEvent('Order Ready for Dispatch at GMU Hub', dispatchedAt, 'Parcel checked & packed at Gadhinglaj Hub');
-    if (stageLevel >= 2) addEvent('Transporter Drop Route Assigned & Accepted', acceptedAt, 'Transporter accepted drop delivery route');
-    if (stageLevel >= 3) addEvent('Transporter Picked Up from GMU Hub', dropTransporterPickedAt, 'Loaded on vehicle for destination delivery');
-    if (stageLevel >= 4) addEvent('In Transit to Destination SHG', dropTransporterPickedAt, 'On the way to destination center');
-    if (stageLevel >= 5) addEvent('Received & Handed Over at Destination SHG Center', dropShgReceivedAt, 'Handed over to buyer SHG center');
+    const p2DispatchedAt = order.dispatchedAt || order.hubDispatchedAt || rawCreatedAt;
+    const p2TransAcceptedAt = order.acceptedAt || order.dropTransporterAcceptedAt || getStepTime(null, 1, stageLevel);
+    const p2TransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || getStepTime(null, 2, stageLevel);
+    const p2InTransitAt = getStepTime(null, 3, stageLevel);
+    const p2DropShgReceivedAt = dropShgScanTime || order.dropShgReceivedAt || order.dropShgAcceptedAt || getStepTime(null, 4, stageLevel);
+
+    if (stageLevel >= 1) addEvent('Order Ready for Dispatch at GMU Hub', p2DispatchedAt);
+    if (stageLevel >= 2) addEvent('Transporter Drop Route Assigned & Accepted', p2TransAcceptedAt);
+    if (stageLevel >= 3) addEvent('Transporter Picked Up from GMU Hub', p2TransPickedAt);
+    if (stageLevel >= 4) addEvent('In Transit to Destination SHG', p2InTransitAt);
+    if (stageLevel >= 5) addEvent('Received & Handed Over at Destination SHG Center', p2DropShgReceivedAt);
   }
 
   // -------------------------------------------------------------
@@ -405,14 +447,23 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 8);
     }
 
-    if (stageLevel >= 1) addEvent('Order Placed & Registered', createdAt, 'Order created & registered in system');
-    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', pickedUpAt, 'Seller SHG scanned and registered parcel');
-    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', acceptedAt, 'Transporter route accepted');
-    if (stageLevel >= 4) addEvent('Picked up by Transporter', transporterPickedAt, 'Handed over from SHG to Transporter');
-    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', hubReceivedAt, 'Verified and stored at Gadhinglaj Hub');
-    if (stageLevel >= 6) addEvent('Dispatched from Hub', dispatchedAt, 'Dispatched for destination delivery');
-    if (stageLevel >= 7) addEvent('Transporter Picked Up from Hub', dropTransporterPickedAt, 'Loaded on drop route');
-    if (stageLevel >= 8) addEvent('Received at Destination SHG Center', dropShgReceivedAt, 'Reached destination SHG center & handed over');
+    const mCreatedAt = rawCreatedAt;
+    const mShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || getStepTime(null, 1, stageLevel);
+    const mTransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || getStepTime(null, 2, stageLevel);
+    const mTransPickedAt = transScanTime || order.transporterPickedUpAt || getStepTime(null, 3, stageLevel);
+    const mHubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || getStepTime(null, 4, stageLevel);
+    const mDispatchedAt = order.dispatchedAt || order.hubDispatchedAt || getStepTime(null, 5, stageLevel);
+    const mDropTransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || getStepTime(null, 6, stageLevel);
+    const mDropShgReceivedAt = dropShgScanTime || order.dropShgReceivedAt || order.dropShgAcceptedAt || getStepTime(null, 7, stageLevel);
+
+    if (stageLevel >= 1) addEvent('Order Placed & Registered', mCreatedAt);
+    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', mShgPickedAt);
+    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', mTransAcceptedAt);
+    if (stageLevel >= 4) addEvent('Picked up by Transporter', mTransPickedAt);
+    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', mHubReceivedAt);
+    if (stageLevel >= 6) addEvent('Dispatched from Hub', mDispatchedAt);
+    if (stageLevel >= 7) addEvent('Transporter Picked Up from Hub', mDropTransPickedAt);
+    if (stageLevel >= 8) addEvent('Received at Destination SHG Center', mDropShgReceivedAt);
   }
 
   // Sort timeline list by stage order integer
@@ -490,9 +541,6 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
                             </View>
                           </View>
                           <Text style={styles.titleText}>{item.title}</Text>
-                          {item.remarks ? (
-                            <Text style={styles.remarksText}>{item.remarks}</Text>
-                          ) : null}
                         </View>
                       </View>
                     );

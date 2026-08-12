@@ -1372,7 +1372,6 @@ export class OrderManagementService implements OnModuleInit {
       {
         OR: [
           { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { status: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
           { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
         ]
       },
@@ -1497,7 +1496,6 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getOrderHistory(filter?: OrderFilterDto) {
-    const totalOrdersCount = await this.prisma.order.count();
     const completedOrders = await this.getDropCompletedOrders(filter);
     const transporterReturns = await this.getTransporterReturnOrders(filter);
     const buyerReturns = await this.getBuyerReturnOrders(filter);
@@ -1506,6 +1504,8 @@ export class OrderManagementService implements OnModuleInit {
     const uniqueReturnsMap = new Map<string, any>();
     allReturns.forEach(o => uniqueReturnsMap.set(o.id, o));
     const returnOrdersList = Array.from(uniqueReturnsMap.values());
+
+    const totalOrdersCount = completedOrders.length + returnOrdersList.length;
 
     return {
       metrics: {
