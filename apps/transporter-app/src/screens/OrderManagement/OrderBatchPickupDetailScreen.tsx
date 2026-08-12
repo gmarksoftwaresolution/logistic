@@ -38,8 +38,11 @@ import {
   VerificationSuccessDialog,
   VerificationFailureDialog,
 } from '../../components/VerificationComponents';
+import { formatAddress } from '../../utils/orderUtils';
+import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
   const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, generateDropHandoverCode, showToast, refreshBatchesList } = useOrderManagement();
@@ -167,7 +170,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     const pendingParcel = (displayProducts || [])
       .map(p => orderParcels.find(op => op.productId === (p as any).productId))
       .find(op => op && op.parcelStatus !== 'VERIFIED');
-    
+
     if (pendingParcel) {
       setActiveScanningParcel(pendingParcel);
       setScannerModalVisible(true);
@@ -379,11 +382,11 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       });
 
       showToast(res.data?.message || 'Product verified successfully via QR!', 'success');
-      
+
       // Non-blocking background sync
-      fetchOrderParcels().catch(() => {});
+      fetchOrderParcels().catch(() => { });
       if (refreshBatchesList) {
-        refreshBatchesList().catch(() => {});
+        refreshBatchesList().catch(() => { });
       }
 
       setTimeout(() => {
@@ -511,39 +514,39 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     if (isCurrentLegCompleted) return true;
     const matchingParcel = orderParcels.find((p: any) => p.productId === (product as any).productId);
     if (!matchingParcel) return false;
-    
+
     const status = matchingParcel.parcelStatus;
     const isPickupFlow = batch.flowType !== 'gmu_to_shg';
-    
+
     if (type === 'pickup') {
       if (isPickupFlow) {
         // Step 3: Transporter pickup from SHG
-        return status === 'IN_TRANSIT_TO_HUB' || 
-               status === 'HUB_RECEIVED' || 
-               status === 'DELIVERED' || 
-               status === 'COMPLETED' || 
-               status === 'VERIFIED';
+        return status === 'IN_TRANSIT_TO_HUB' ||
+          status === 'HUB_RECEIVED' ||
+          status === 'DELIVERED' ||
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       } else {
         // Step 7: Transporter pickup from GMU Hub
-        return status === 'IN_TRANSIT_TO_BUYER' || 
-               status === 'PARCEL_AT_DROP_SHG' || 
-               status === 'DELIVERED' || 
-               status === 'COMPLETED' || 
-               status === 'VERIFIED';
+        return status === 'IN_TRANSIT_TO_BUYER' ||
+          status === 'PARCEL_AT_DROP_SHG' ||
+          status === 'DELIVERED' ||
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       }
     } else {
       if (isPickupFlow) {
         // Step 4: Transporter delivery to GMU Hub
-        return status === 'HUB_RECEIVED' || 
-               status === 'DELIVERED' || 
-               status === 'COMPLETED' || 
-               status === 'VERIFIED';
+        return status === 'HUB_RECEIVED' ||
+          status === 'DELIVERED' ||
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       } else {
         // Step 8: Transporter delivery to Drop SHG
-        return status === 'PARCEL_AT_DROP_SHG' || 
-               status === 'DELIVERED' || 
-               status === 'COMPLETED' || 
-               status === 'VERIFIED';
+        return status === 'PARCEL_AT_DROP_SHG' ||
+          status === 'DELIVERED' ||
+          status === 'COMPLETED' ||
+          status === 'VERIFIED';
       }
     }
   };
@@ -688,29 +691,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               );
             })()}
             {(() => {
-              const resolvedContact = displayContact || {};
-              const rawAddress = resolvedContact.address;
-              const addressStr = typeof rawAddress === 'string'
-                ? rawAddress
-                : (rawAddress && typeof rawAddress === 'object'
-                    ? Object.values(rawAddress).filter(Boolean).join(', ')
-                    : (rawAddress ? String(rawAddress) : ''));
-              const addressPincode = addressStr.match(/\d{6}/)?.[0];
-              const resolvedVillage = (resolvedContact as any).village || batch.areaName || 'N/A';
-              const resolvedPincode = (resolvedContact as any).pincode || addressPincode || 'N/A';
+              const formattedAddr = formatAddress(displayContact.address);
+              const addressPincode = typeof displayContact.address === 'string' ? displayContact.address?.match(/\d{6}/)?.[0] : (displayContact.address as any)?.pincode;
+              const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
+              const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
-                  <View style={styles.contactGridItem}>
-                    <View style={styles.contactIconCircle}>
-                      <User size={scale(14)} color={Colors.primary} />
-                    </View>
-                    <View style={styles.contactDetailCol}>
-                      <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(resolvedContact.name)}</Text>
-                    </View>
-                  </View>
-
-                  {!!(resolvedContact as any).shgName && (
+                  {!!(displayContact as any).shgName && (
                     <View style={styles.contactGridItem}>
                       <View style={styles.contactIconCircle}>
                         <User size={scale(14)} color={Colors.primary} />
@@ -721,6 +708,16 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                     </View>
                   )}
+
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <User size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Contact Person (CRP)' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName((displayContact as any).crpName || displayContact.name) || (isHubPoint ? 'Hub Manager' : 'SHG Lead')}</Text>
+                    </View>
+                  </View>
 
                   <View style={styles.contactGridItem}>
                     <View style={styles.contactIconCircle}>
@@ -783,7 +780,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>{addressStr || 'N/A'}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>{formattedAddr}</Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
@@ -867,32 +864,60 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           </View>
 
-            {/* Handover Progress Bar */}
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: scale(12),
-              padding: scale(12),
+          {/* Section: Tracking History Action Card */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#073318',
+              borderRadius: scale(16),
+              padding: scale(14),
               marginHorizontal: scale(16),
-              marginBottom: scale(16),
-              borderWidth: 1,
-              borderColor: '#F1F5F9',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.03,
-              shadowRadius: 4,
-              elevation: 2,
-            }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: scale(6) }}>
-                <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>Handover Progress</Text>
-                <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>{verifiedCount} of {displayProducts.length} verified</Text>
+              marginBottom: scale(14),
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              elevation: 3,
+            }}
+            onPress={() => setShowTrackingModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+              <View style={{ width: scale(36), height: scale(36), borderRadius: scale(18), backgroundColor: 'rgba(178, 213, 52, 0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <MapPin size={scale(18)} color="#B2D534" />
               </View>
-              <View style={{ height: scale(6), backgroundColor: '#F1F5F9', borderRadius: scale(3), overflow: 'hidden' }}>
-                <View style={{ height: '100%', backgroundColor: '#10B981', borderRadius: scale(3), width: `${(verifiedCount / Math.max(1, displayProducts.length)) * 100}%` }} />
+              <View>
+                <Text style={{ fontSize: scale(13), fontWeight: '900', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Tracking History</Text>
+                <Text style={{ fontSize: scale(10), fontWeight: '700', color: '#B2D534', marginTop: scale(2) }}>View Transporter audit timeline</Text>
               </View>
             </View>
+            <ArrowRight size={scale(18)} color="#B2D534" />
+          </TouchableOpacity>
 
-            <View style={styles.boxContentPadding}>
-              <View style={styles.productsWrapper}>
+          {/* Handover Progress Bar */}
+          <View style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: scale(12),
+            padding: scale(12),
+            marginHorizontal: scale(16),
+            marginBottom: scale(16),
+            borderWidth: 1,
+            borderColor: '#F1F5F9',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.03,
+            shadowRadius: 4,
+            elevation: 2,
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: scale(6) }}>
+              <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>Handover Progress</Text>
+              <Text style={{ fontFamily: Fonts.bold, fontSize: moderateScale(11), color: '#073318' }}>{verifiedCount} of {displayProducts.length} verified</Text>
+            </View>
+            <View style={{ height: scale(6), backgroundColor: '#F1F5F9', borderRadius: scale(3), overflow: 'hidden' }}>
+              <View style={{ height: '100%', backgroundColor: '#10B981', borderRadius: scale(3), width: `${(verifiedCount / Math.max(1, displayProducts.length)) * 100}%` }} />
+            </View>
+          </View>
+
+          <View style={styles.boxContentPadding}>
+            <View style={styles.productsWrapper}>
               {displayProducts.map((product, index) => {
                 const isPicked = product.status === 'picked';
                 const isCompleted = product.status === 'completed';
@@ -1556,6 +1581,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           navigation={navigation}
         />
       )}
+
+      <TrackingHistoryModal
+        visible={showTrackingModal}
+        onClose={() => setShowTrackingModal(false)}
+        order={batch}
+        role="TRANSPORTER"
+      />
     </SafeAreaView>
   );
 };

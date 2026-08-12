@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,22 +9,22 @@ import { LanguageContext } from '../context/LanguageContext';
 import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
 import { useOnboarding } from '../context/OnboardingContext';
 import WalkthroughElement from '../components/WalkthroughElement';
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
+
 type Props = NativeStackScreenProps<OrdersStackParamList, 'CompletedOrderDetails'>;
 const CompletedOrderDetailsScreen: React.FC<Props> = ({
   route,
   navigation
 }) => {
-  const {
-    order
-  } = route.params;
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const { order } = route.params;
   const context = useContext(LanguageContext);
-  if (!context) return null;
-  const {
-    t
-  } = context;
   const isScreenFocused = useIsFocused();
   const { isActive, currentStep } = useOnboarding();
   const scrollViewRef = React.useRef<ScrollView>(null);
+
+  if (!context) return null;
+  const { t } = context;
 
   React.useEffect(() => {
     if (isActive && currentStep?.id === 'completed_details_close') {
@@ -71,9 +71,36 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  // Dynamic products list matching the remainingQty length
-  const products = order.products || [];
-  const totalWeight = order.weight || products.reduce((sum: number, p: any) => sum + (p.weightValue || 0), 0);
+  // Dynamic products list from order.products, order.parcels, or order.items
+  const rawItems = (order.products && order.products.length > 0)
+    ? order.products
+    : (order.parcels && order.parcels.length > 0)
+      ? order.parcels
+      : (order.items && order.items.length > 0)
+        ? order.items
+        : [];
+
+  const productsList = rawItems.length > 0
+    ? rawItems.map((item: any, idx: number) => {
+        const rawName = item.productName || item.name || item.product?.name || order.parcelName || order.productName || order.category;
+        const name = (!rawName || rawName.trim().toLowerCase() === 'item') 
+          ? (order.parcelName || order.productName || order.category || order.itemCategory || 'Agri Goods Product') 
+          : rawName;
+        return {
+          code: item.code ? (item.code.startsWith('#') ? item.code : `#${item.code}`) : (item.parcelId ? `#${item.parcelId}` : `#P-${item.id || idx + 1}`),
+          name: name,
+          tag: item.tag || (order.legType === 'pickup' || order.phase === 'PICKUP' ? 'PICKUP ORDER' : 'DELIVERY ORDER'),
+          details: item.details || `${item.quantity || item.qty || 1} ${ (item.quantity || item.qty || 1) > 1 ? 'items' : 'item'} • ${item.weight || '1'}kg`,
+        };
+      })
+    : Array.from({ length: order.remainingQty || order.totalQty || order.productCount || 1 }).map((_, idx) => ({
+        code: `#P-0${idx + 1}`,
+        name: order.parcelName || order.productName || order.category || order.itemCategory || 'Agri Goods Product',
+        tag: order.legType === 'pickup' || order.phase === 'PICKUP' ? 'PICKUP ORDER' : 'DELIVERY ORDER',
+        details: `1 item • ${order.weight ? (parseFloat(order.weight) / (order.remainingQty || 1)).toFixed(1) : '1'}kg`
+      }));
+
+  const totalWeight = order.weight || productsList.reduce((sum: number, p: any) => sum + (p.weightValue || 1), 0);
   return <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       {/* Header mimicking the mockup layout */}
       <View className="px-6 py-4 flex-row items-center justify-between">
@@ -199,6 +226,32 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
           </View>
         </View>
 
+        {/* Tracking History Action Card */}
+        <TouchableOpacity
+          onPress={() => setShowTrackingModal(true)}
+          className="bg-white rounded-[24px] p-4 mb-6 flex-row items-center justify-between border border-emerald-100 shadow-sm"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            elevation: 2,
+          }}
+        >
+          <View className="flex-row items-center gap-3">
+            <View className="w-10 h-10 rounded-full bg-[#E8F5EC] items-center justify-center border border-[#D5EFE0]">
+              <Ionicons name="location" size={20} color="#16A34A" />
+            </View>
+            <View>
+              <Text className="text-[14px] font-black text-slate-800 tracking-wide">Tracking History</Text>
+              <Text className="text-[11px] font-bold text-emerald-600">View audit logs & status progress</Text>
+            </View>
+          </View>
+          <View className="w-8 h-8 rounded-full bg-slate-50 items-center justify-center border border-slate-100">
+            <Ionicons name="chevron-forward" size={16} color="#64748B" />
+          </View>
+        </TouchableOpacity>
+
         {/* Dynamic Contact Details Card (Seller vs Buyer) */}
         <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
         shadowColor: '#000',
@@ -279,10 +332,10 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
             <View className="w-8 h-8 rounded-full bg-[#E8F5EC] items-center justify-center mr-2 border border-[#D5EFE0]">
               <Ionicons name="cube-outline" size={16} color="#073318" />
             </View>
-            <Text className="text-[15px] font-black text-[#111827]">{t("su_products_delivered_380")}{products.length})</Text>
+            <Text className="text-[15px] font-black text-[#111827]">{t("su_products_delivered_380") || 'Products Delivered'} ({productsList.length})</Text>
           </View>
 
-          {products.map((product: any) => <View key={product.code} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
+          {productsList.map((product: any, idx: number) => <View key={product.code || idx} className="bg-white border border-[#E2E8F0] rounded-[16px] p-3 my-2 flex-row items-center justify-between shadow-sm">
               <View className="flex-1">
                 <View className="flex-row items-center">
                   <View className="bg-[#E0F2FE] px-2 py-0.5 rounded-[4px] mr-2">
@@ -358,6 +411,13 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
         {/* Large bottom spacer to push the button cleanly above the custom floating tab bar */}
         <View className="h-36" />
       </ScrollView>
+
+      <TrackingHistoryModal
+        visible={showTrackingModal}
+        onClose={() => setShowTrackingModal(false)}
+        order={order}
+        role="SHG"
+      />
     </SafeAreaView>;
 };
 export default CompletedOrderDetailsScreen;

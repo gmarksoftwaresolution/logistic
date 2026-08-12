@@ -13,11 +13,14 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, ArrowRight, CheckCircle, History, MapPin, Truck } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
 const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
   const { batches, refreshBatchesList } = useOrderManagement();
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = React.useState<any>(null);
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -47,29 +50,56 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
           displayId: b.displayId || cleanId,
           shgName: b.shgName || 'Local SHG',
           productName: b.products?.[0]?.name || 'General Shipment',
+          products: Array.isArray(b.products) ? [...b.products] : [],
+          tracking: Array.isArray((b as any).tracking) ? [...(b as any).tracking] : [],
           totalQty: b.totalQty || 1,
           totalWeight: b.totalWeight || '1.5 kg',
           timestamp: b.timestamp || '5:02 PM',
+          createdAt: b.createdAt || (b as any).orderDate || b.timestamp,
+          acceptedAt: (b as any).acceptedAt,
+          shgPickedUpAt: (b as any).shgPickedUpAt,
+          transporterPickedUpAt: (b as any).transporterPickedUpAt,
+          warehouseReceivedAt: (b as any).warehouseReceivedAt,
+          dispatchedAt: (b as any).dispatchedAt,
+          deliveredAt: (b as any).completedAt || (b as any).deliveredAt || b.timestamp,
           pickupPoint: b.pickupPointName || 'Local SHG',
           dropPoint: b.dropPointName || (b.flowType === 'shg_to_gmu' ? 'Gadhinglaj Hub' : 'Customer Address'),
           pickupCompleted: true,
           dropCompleted: true,
           pickupBatchId: undefined,
           dropBatchId: undefined,
+          mainStatus: 'DROP_COMPLETED',
+          status: 'DROP_COMPLETED',
         };
       }
 
       const journey = journeyMap[mId];
 
+      if (b.products && Array.isArray(b.products)) {
+        const existingIds = new Set((journey.products || []).map((p: any) => p.id || p.name));
+        b.products.forEach((p: any) => {
+          if (!existingIds.has(p.id || p.name)) {
+            journey.products.push(p);
+          }
+        });
+      }
+
+      if ((b as any).tracking && Array.isArray((b as any).tracking)) {
+        (b as any).tracking.forEach((t: any) => {
+          journey.tracking.push(t);
+        });
+      }
+
       if (b.id.startsWith('pickup-')) {
         journey.pickupBatchId = b.id;
-        journey.pickupPoint = b.pickupPointName;
-        journey.pickupCompleted = true;
-        journey.dropCompleted = true;
+        if (b.pickupPointName) journey.pickupPoint = b.pickupPointName;
+        if (b.createdAt) journey.createdAt = b.createdAt;
+        if ((b as any).acceptedAt) journey.acceptedAt = (b as any).acceptedAt;
+        if (b.timestamp) journey.shgPickedUpAt = b.timestamp;
       } else if (b.id.startsWith('drop-')) {
         journey.dropBatchId = b.id;
-        journey.dropPoint = b.dropPointName;
-        journey.dropCompleted = true;
+        if (b.dropPointName) journey.dropPoint = b.dropPointName;
+        if (b.timestamp) journey.deliveredAt = b.timestamp;
       }
     });
 
@@ -180,24 +210,29 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
                 </View>
               </View>
 
-              {/* Action Buttons to View Details */}
+              {/* Action Buttons to View Details & Tracking */}
               <View style={styles.cardActionsRow}>
-                {(journey.pickupBatchId || journey.dropBatchId) && (
-                  <>
-                    <TouchableOpacity
-                      style={styles.actionBtnOutline}
-                      onPress={() => navigation.navigate('OrderBatchPickupDetail', { batchId: journey.pickupBatchId || journey.dropBatchId, type: 'pickup' })}
-                    >
-                      <Text style={styles.actionBtnOutlineText}>Pickup Details</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.actionBtnOutline}
-                      onPress={() => navigation.navigate('OrderBatchPickupDetail', { batchId: journey.dropBatchId || journey.pickupBatchId, type: 'drop' })}
-                    >
-                      <Text style={styles.actionBtnOutlineText}>Drop Details</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                <TouchableOpacity
+                  style={styles.actionBtnOutline}
+                  onPress={() => navigation.navigate('OrderBatchPickupDetail', { batchId: journey.pickupBatchId || journey.dropBatchId || journey.id, type: 'pickup' })}
+                >
+                  <Text style={styles.actionBtnOutlineText}>Pickup Details</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionBtnOutline}
+                  onPress={() => navigation.navigate('OrderBatchPickupDetail', { batchId: journey.dropBatchId || journey.pickupBatchId || journey.id, type: 'drop' })}
+                >
+                  <Text style={styles.actionBtnOutlineText}>Drop Details</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionBtnTrack}
+                  onPress={() => setSelectedTrackingOrder(journey)}
+                >
+                  <Ionicons name="footsteps-outline" size={scale(13)} color="#16A34A" style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnTrackText}>Track Order</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Bottom Metrics strip */}
@@ -220,6 +255,15 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
           ))
         )}
       </ScrollView>
+
+      {selectedTrackingOrder && (
+        <TrackingHistoryModal
+          visible={!!selectedTrackingOrder}
+          onClose={() => setSelectedTrackingOrder(null)}
+          order={selectedTrackingOrder}
+          role="TRANSPORTER"
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -447,8 +491,24 @@ const styles = StyleSheet.create({
   },
   actionBtnOutlineText: {
     fontFamily: Fonts.bold,
-    fontSize: moderateScale(12),
+    fontSize: moderateScale(11.5),
     color: Colors.textSecondary,
+  },
+  actionBtnTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(10),
+    borderWidth: 1.5,
+    borderColor: '#D5EFE0',
+    backgroundColor: '#E8F5EC',
+  },
+  actionBtnTrackText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(11.5),
+    color: '#16A34A',
   },
   metricsStrip: {
     flexDirection: 'row',

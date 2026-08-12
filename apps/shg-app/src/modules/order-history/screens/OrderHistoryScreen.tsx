@@ -16,6 +16,7 @@ import { HistoryFilterModal } from '../components/HistoryFilterModal';
 import { HistoryCard } from '../components/HistoryCard';
 import { EmptyHistory } from '../components/EmptyHistory';
 import { AddressDetailsModal } from '../../../components/AddressDetailsModal';
+import { TrackingHistoryModal } from '../../../components/TrackingHistoryModal';
 import { HistoryItem } from '../types/history.types';
 import { getFormattedOrderId } from '../../../utils/orderHelpers';
 
@@ -48,6 +49,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
 
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<HistoryItem | null>(null);
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = useState<HistoryItem | null>(null);
 
   const renderHeader = () => (
     <View>
@@ -82,6 +84,7 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
                 navigation.navigate('OrderHistoryDetails', { order });
               }}
               onViewAddress={setSelectedAddressOrder}
+              onTrackOrder={setSelectedTrackingOrder}
             />
           )}
           renderSectionHeader={({ section: { title, data } }) => (
@@ -157,6 +160,14 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
           />
         );
       })()}
+
+      {selectedTrackingOrder && (
+        <TrackingHistoryModal
+          visible={!!selectedTrackingOrder}
+          onClose={() => setSelectedTrackingOrder(null)}
+          order={selectedTrackingOrder}
+        />
+      )}
     </SafeAreaView>
   );
 };

@@ -20,8 +20,11 @@ import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
+import { formatAddress } from '../../utils/orderUtils';
 
 const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const { t } = useTranslation();
   const { batchId, type = 'pickup' } = route.params;
   const { batches, acceptBatch } = useOrderManagement();
@@ -168,6 +171,34 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
               <Text style={styles.metricLabel}>{t('orders.timestamp', { defaultValue: 'Time' })}</Text>
             </View>
           </View>
+
+          {/* Section: Tracking History Action Card */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#073318',
+              borderRadius: scale(16),
+              padding: scale(14),
+              marginBottom: scale(16),
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              elevation: 3,
+            }}
+            onPress={() => setShowTrackingModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+              <View style={{ width: scale(36), height: scale(36), borderRadius: scale(18), backgroundColor: 'rgba(178, 213, 52, 0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <MapPin size={scale(18)} color="#B2D534" />
+              </View>
+              <View>
+                <Text style={{ fontSize: scale(13), fontWeight: '900', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Tracking History</Text>
+                <Text style={{ fontSize: scale(10), fontWeight: '700', color: '#B2D534', marginTop: scale(2) }}>View Transporter audit timeline</Text>
+              </View>
+            </View>
+            <ArrowRight size={scale(18)} color="#B2D534" />
+          </TouchableOpacity>
+
           {/* Section: Pickup Location & Contact Details */}
           <View style={styles.contactCardContainer}>
             <View style={styles.contactCardHeader}>
@@ -192,14 +223,27 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
             <View style={styles.contactCardBody}>
               <View style={styles.contactInfoGrid}>
+                {/* SHG Name Item (if not GMU Hub) */}
+                {!!(!isPickupHub && ((pickupContact as any)?.shgName || batch.shgName)) && (
+                  <View style={styles.contactInfoRow}>
+                    <View style={styles.contactIconBg}>
+                      <User size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactTextCol}>
+                      <Text style={styles.contactTextLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
+                      <Text style={styles.contactTextValue}>{(pickupContact as any)?.shgName || batch.shgName}</Text>
+                    </View>
+                  </View>
+                )}
+
                 {/* Person Item */}
                 <View style={styles.contactInfoRow}>
                   <View style={styles.contactIconBg}>
                     <User size={scale(14)} color={Colors.primary} />
                   </View>
                   <View style={styles.contactTextCol}>
-                    <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
-                    <Text style={styles.contactTextValue}>{cleanPersonName(pickupContact?.name) || 'Seller'}</Text>
+                    <Text style={styles.contactTextLabel}>{isPickupHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person (CRP)' })}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName((pickupContact as any)?.crpName || pickupContact?.name) || (isPickupHub ? 'Hub Manager' : 'SHG Lead')}</Text>
                   </View>
                 </View>
 
@@ -244,13 +288,13 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 </View>
                 <View style={{ flex: 1, marginRight: scale(4) }}>
                   <Text style={styles.contactTextLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                  <Text style={styles.addressTextValue}>{pickupContact?.address || ''}</Text>
+                  <Text style={styles.addressTextValue}>{formatAddress(pickupContact?.address)}</Text>
                 </View>
-                {pickupContact?.address && (
+                {!!pickupContact?.address && (
                   <TouchableOpacity 
                     style={styles.navBtn} 
                     onPress={() => {
-                      const query = [pickupContact.address, pickupContact.village, pickupContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
+                      const query = [formatAddress(pickupContact.address), pickupContact.village, pickupContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
                       Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
                     }} 
                     activeOpacity={0.7}
@@ -287,14 +331,27 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
             <View style={styles.contactCardBody}>
               <View style={styles.contactInfoGrid}>
+                {/* SHG Name Item (if not GMU Hub) */}
+                {!!(!isDropHub && ((dropContact as any)?.shgName || batch.shgName)) && (
+                  <View style={styles.contactInfoRow}>
+                    <View style={styles.contactIconBg}>
+                      <User size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactTextCol}>
+                      <Text style={styles.contactTextLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
+                      <Text style={styles.contactTextValue}>{(dropContact as any)?.shgName || batch.shgName}</Text>
+                    </View>
+                  </View>
+                )}
+
                 {/* Person Item */}
                 <View style={styles.contactInfoRow}>
                   <View style={styles.contactIconBg}>
                     <User size={scale(14)} color={Colors.primary} />
                   </View>
                   <View style={styles.contactTextCol}>
-                    <Text style={styles.contactTextLabel}>{t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
-                    <Text style={styles.contactTextValue}>{cleanPersonName(dropContact?.name) || 'Buyer'}</Text>
+                    <Text style={styles.contactTextLabel}>{isDropHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person (CRP)' })}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName((dropContact as any)?.crpName || dropContact?.name) || (isDropHub ? 'Hub Manager' : 'Drop SHG Lead')}</Text>
                   </View>
                 </View>
 
@@ -339,13 +396,13 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 </View>
                 <View style={{ flex: 1, marginRight: scale(4) }}>
                   <Text style={styles.contactTextLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                  <Text style={styles.addressTextValue}>{dropContact?.address || ''}</Text>
+                  <Text style={styles.addressTextValue}>{formatAddress(dropContact?.address)}</Text>
                 </View>
-                {dropContact?.address && (
+                {!!dropContact?.address && (
                   <TouchableOpacity 
                     style={styles.navBtn} 
                     onPress={() => {
-                      const query = [dropContact.address, dropContact.village, dropContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
+                      const query = [formatAddress(dropContact.address), dropContact.village, dropContact.pincode, 'Maharashtra', 'India'].filter(Boolean).join(', ');
                       Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
                     }} 
                     activeOpacity={0.7}
@@ -529,7 +586,12 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
           );
         })()}
 
-
+        <TrackingHistoryModal
+          visible={showTrackingModal}
+          onClose={() => setShowTrackingModal(false)}
+          order={batch}
+          role="TRANSPORTER"
+        />
       </View>
     </View>
   );

@@ -263,48 +263,44 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const rawDrops = dropResponse.data || [];
 
       const mappedPickups = rawPickups.map((o: any) => {
-        const cleanOrderId = String(o.masterOrder?.orderNumber || o.orderId || o.id || '');
-        const pId = `pickup-${o.id}`;
+        const pickupShgObj = o.pickupShgDetails || o.pickupShg || o.shg;
+        const pickupShgCrp = pickupShgObj?.crpName || pickupShgObj?.personName || pickupShgObj?.name || pickupShgObj?.fullName || 'SHG CRP Lead';
+        const pickupShgName = pickupShgObj?.shgName || `${pickupShgObj?.village || o.seller?.village || ''} SHG Center`;
+        const pickupShgPhone = pickupShgObj?.crpMobile || pickupShgObj?.phoneNumber || pickupShgObj?.mobileNumber || pickupShgObj?.phone || '';
+        const pickupShgVillage = pickupShgObj?.village || pickupShgObj?.address?.village || o.seller?.village || 'N/A';
+        const pickupShgPincode = pickupShgObj?.pincode || pickupShgObj?.address?.pincode || o.seller?.pincode || 'N/A';
+        const pickupShgTaluka = pickupShgObj?.taluka || pickupShgObj?.address?.taluka || o.seller?.taluka || 'N/A';
+        const pickupShgDistrict = pickupShgObj?.district || pickupShgObj?.address?.district || o.seller?.district || 'N/A';
+        const pickupShgAddress = pickupShgObj?.fullAddress || [
+          pickupShgObj?.address?.deliveryAddress || pickupShgObj?.address?.landmark || pickupShgObj?.address?.houseNo || pickupShgObj?.address?.addressLine1,
+          pickupShgObj?.address?.village || pickupShgVillage,
+          pickupShgObj?.address?.taluka || pickupShgTaluka,
+          pickupShgObj?.address?.district || pickupShgDistrict,
+          pickupShgObj?.address?.pincode || pickupShgPincode
+        ].filter(Boolean).join(', ') || o.seller?.fullAddress || 'N/A';
+
+        const pickupPointVillage = pickupShgVillage !== 'N/A' ? pickupShgVillage : (o.seller?.village || pickupShgObj?.village || 'Local Village');
 
         return {
-          id: pId,
+          id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: o.seller?.village || o.seller?.address?.village || o.shg?.address?.village || o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
+          areaName: pickupShgVillage !== 'N/A' ? pickupShgVillage : (o.seller?.taluka || 'N/A'),
           flowType: 'shg_to_gmu' as FlowType,
-          shgName: o.shg?.shgDetail?.shgName || 'N/A',
-          pickupPointName: o.seller?.village || o.seller?.address?.village || 'N/A',
+          shgName: pickupShgName,
+          pickupPointName: pickupPointVillage,
           dropPointName: 'Gadhinglaj Hub',
           pickupCount: 1,
           dropCount: 0,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-          status: (
-            resolvedRejectedBatches[pId] ||
-            resolvedRejectedBatches[String(o.id)] ||
-            resolvedRejectedBatches[cleanOrderId] ||
-            resolvedRejectedBatches[getCleanNumber(o.id)] ||
-            resolvedRejectedBatches[getCleanNumber(cleanOrderId)] ||
-            resolvedRejectedBatches[o.masterOrder?.orderNumber] ||
-            o.pickupTransporterStatus === 'REJECTED' ||
-            o.mainStatus === 'REJECTED' ||
-            o.status === 'REJECTED'
-          )
-            ? 'rejected'
-            : (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
-              ? 'DROP_COMPLETED'
-              : (['PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
-                ? 'PICKUP_COMPLETED'
-                : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
-                  ? 'ACCEPTED_PICKUP'
-                  : 'NEW_ORDER',
+          status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
+            ? 'DROP_COMPLETED'
+            : (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED'].includes((o.mainStatus || '').toUpperCase()))
+              ? 'PICKUP_COMPLETED'
+              : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+                ? 'ACCEPTED_PICKUP'
+                : 'NEW_ORDER',
           rejectReason: (() => {
-            const localReason = resolvedRejectedBatches[pId] ||
-              resolvedRejectedBatches[String(o.id)] ||
-              resolvedRejectedBatches[cleanOrderId] ||
-              resolvedRejectedBatches[getCleanNumber(o.id)] ||
-              resolvedRejectedBatches[getCleanNumber(cleanOrderId)] ||
-              resolvedRejectedBatches[o.masterOrder?.orderNumber];
-            if (localReason) return cleanRejectReason(localReason);
             const rawReason = o.tracking?.[0]?.remarks;
             let reasonVal = rawReason;
             if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.dropOrders?.[0]) {
@@ -314,86 +310,64 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
             return finalReason ? cleanRejectReason(finalReason) : undefined;
           })(),
-        // Store the pickup's masterOrderId so we can look up the drop order later
-        masterOrderId: o.masterOrderId,
-        handoverCode: o.handoverCode,
-        isRTO: o.isRTO || false,
-        shgContact: {
-          name: cleanPersonName(o.shg?.fullName || o.seller?.sellerName || o.seller?.fullName || o.shg?.shgName, 'N/A'),
-          shgName: o.shg?.shgName || o.seller?.shgName || o.shg?.fullName || '',
-          phone: o.shg?.phoneNumber || o.shg?.mobileNumber || o.seller?.mobileNumber || o.seller?.phoneNumber || '',
-          address: o.shg?.fullAddress || o.seller?.fullAddress || (() => {
-            if (o.shg?.address) {
-              const parts = [
-                o.shg.address.addressLine1,
-                o.shg.address.village,
-                o.shg.address.taluka,
-                o.shg.address.pincode
-              ].filter(Boolean);
-              if (parts.length > 0) return parts.join(', ');
-            }
-            if (o.seller) {
-              const parts = [
-                o.seller.addressLine1,
-                o.seller.addressLine2,
-                o.seller.village,
-                o.seller.taluka,
-                o.seller.district,
-                o.seller.pincode
-              ].filter(Boolean);
-              if (parts.length > 0) return parts.join(', ');
-            }
-            return 'N/A';
-          })(),
-          village: o.shg?.address?.village || o.seller?.village || 'N/A',
-          pincode: o.shg?.address?.pincode || o.seller?.pincode || 'N/A',
-          taluka: o.shg?.address?.taluka || o.seller?.taluka || 'N/A',
-          district: o.shg?.address?.district || o.seller?.district || 'N/A',
-        },
-        products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
-          const pId = String(item.id || item.parcelId || Math.random());
-          const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
-          const cached = capturedPhotosRef.current[photoKey] || capturedPhotosRef.current[pId] || {};
-          return {
-            id: pId,
-            name: item.product?.name || item.productName || 'General Item',
-            qty: item.quantity || 1,
-            weight: `${item.product?.weight || item.weight || 1} kg`,
+          masterOrderId: o.masterOrderId,
+          handoverCode: o.handoverCode,
+          isRTO: o.isRTO || false,
+          shgContact: {
+            name: cleanPersonName(pickupShgCrp, 'SHG CRP Lead'),
+            crpName: cleanPersonName(pickupShgCrp, 'SHG CRP Lead'),
+            shgName: pickupShgName,
+            phone: pickupShgPhone,
+            address: pickupShgAddress,
+            village: pickupShgVillage,
+            pincode: pickupShgPincode,
+            taluka: pickupShgTaluka,
+            district: pickupShgDistrict,
+          },
+          products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
+            const pId = String(item.id || item.parcelId || Math.random());
+            const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
+            const cached = capturedPhotosRef.current[photoKey] || capturedPhotosRef.current[pId] || {};
+            return {
+              id: pId,
+              name: item.product?.name || item.productName || 'General Item',
+              qty: item.quantity || 1,
+              weight: `${item.product?.weight || item.weight || 1} kg`,
+              legType: 'pickup' as const,
+              status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
+              pickupPhoto: cached.pickupPhoto,
+              pickupPhotoTime: cached.pickupPhotoTime,
+              dropPhoto: cached.dropPhoto,
+              dropPhotoTime: cached.dropPhotoTime,
+              isRTO: o.isRTO || false,
+              verificationCode: item.verificationCode || '',
+              verificationStatus: item.verificationStatus || 'PENDING',
+              productId: item.productId,
+            };
+          }) : (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
+            id: String(p.parcelId || p.id || Math.random()),
+            name: p.productName || p.product?.name || 'General Item',
+            qty: p.quantity || 1,
+            weight: `${p.weight || p.weightKg || 1} kg`,
             legType: 'pickup' as const,
             status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
-            pickupPhoto: cached.pickupPhoto,
-            pickupPhotoTime: cached.pickupPhotoTime,
-            dropPhoto: cached.dropPhoto,
-            dropPhotoTime: cached.dropPhotoTime,
-            isRTO: o.isRTO || false,
-            verificationCode: item.verificationCode || '',
-            verificationStatus: item.verificationStatus || 'PENDING',
-            productId: item.productId,
-          };
-        }) : (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
-          id: String(p.parcelId || p.id || Math.random()),
-          name: p.productName || p.product?.name || 'General Item',
-          qty: p.quantity || 1,
-          weight: `${p.weight || p.weightKg || 1} kg`,
-          legType: 'pickup' as const,
-          status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
-          verificationCode: p.verificationToken || p.verificationCode || '',
-          verificationStatus: p.parcelStatus || 'PENDING',
-          productId: p.productId,
-        })) : [{
-          id: `p-${o.id}`,
-          name: 'General Parcel Package',
-          qty: o.totalQty || 1,
-          weight: `${o.totalWeight || 5} kg`,
-          legType: 'pickup' as const,
-          status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
-          verificationCode: '',
-          verificationStatus: 'PENDING',
-        }],
-        timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        createdAt: o.createdAt,
-      };
-    });
+            verificationCode: p.verificationToken || p.verificationCode || '',
+            verificationStatus: p.parcelStatus || 'PENDING',
+            productId: p.productId,
+          })) : [{
+            id: `p-${o.id}`,
+            name: 'General Parcel Package',
+            qty: o.totalQty || 1,
+            weight: `${o.totalWeight || 5} kg`,
+            legType: 'pickup' as const,
+            status: (o.pickupTransporterStatus === 'PICKED' || o.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB' || o.pickupTransporterStatus === 'COMPLETED' || o.pickupTransporterStatus === 'DROPPED') ? 'picked' : 'pending',
+            verificationCode: '',
+            verificationStatus: 'PENDING',
+          }],
+          timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: o.createdAt,
+        };
+      });
 
       const mappedDrops = rawDrops.map((o: any) => {
         const rawId = String(o.orderId || o.id || '105');
@@ -401,26 +375,32 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const bId = `drop-${o.id}`;
         const isPickupFinished = resolvedDropPickups.includes(bId);
 
-        const dropShgName = o.dropShgDetails?.name || o.dropShgDetails?.fullName || o.dropShg?.fullName || o.shg?.shgDetail?.shgName || o.shg?.fullName || 'Drop SHG Member';
-        const dropShgMobile = o.dropShgDetails?.mobile || o.dropShgDetails?.phoneNumber || o.dropShg?.phoneNumber || o.shg?.phoneNumber || o.shg?.mobileNumber || 'N/A';
-        const dropShgAddress = o.dropShgDetails?.address || [
-          o.dropShg?.address?.addressLine1,
-          o.dropShg?.address?.village,
-          o.dropShg?.address?.taluka,
-          o.dropShg?.address?.pincode
-        ].filter(Boolean).join(', ') || 'N/A';
+        const dropShgObj = o.dropShgDetails || o.dropShg || o.shg;
+        const dropShgCrp = dropShgObj?.crpName || dropShgObj?.personName || dropShgObj?.name || dropShgObj?.fullName || 'Drop SHG Lead';
+        const dropShgName = dropShgObj?.shgName || `${dropShgObj?.village || o.buyer?.village || ''} Drop SHG`;
+        const dropShgMobile = dropShgObj?.crpMobile || dropShgObj?.phoneNumber || dropShgObj?.mobileNumber || dropShgObj?.phone || 'N/A';
+        const dropShgVillage = dropShgObj?.village || dropShgObj?.address?.village || o.buyer?.village || 'N/A';
+        const dropShgPincode = dropShgObj?.pincode || dropShgObj?.address?.pincode || o.buyer?.pincode || 'N/A';
+        const dropShgTaluka = dropShgObj?.taluka || dropShgObj?.address?.taluka || o.buyer?.taluka || 'N/A';
+        const dropShgDistrict = dropShgObj?.district || dropShgObj?.address?.district || o.buyer?.district || 'N/A';
+        const dropShgAddress = dropShgObj?.fullAddress || [
+          dropShgObj?.address?.deliveryAddress || dropShgObj?.address?.landmark || dropShgObj?.address?.houseNo || dropShgObj?.address?.addressLine1,
+          dropShgObj?.address?.village || dropShgVillage,
+          dropShgObj?.address?.taluka || dropShgTaluka,
+          dropShgObj?.address?.district || dropShgDistrict,
+          dropShgObj?.address?.pincode || dropShgPincode
+        ].filter(Boolean).join(', ') || o.buyer?.fullAddress || 'N/A';
 
-        const dropShgVillage = o.dropShgDetails?.village || o.dropShg?.address?.village || o.buyer?.village || 'N/A';
-        const dropShgPincode = o.dropShgDetails?.pincode || o.dropShg?.address?.pincode || o.buyer?.pincode || 'N/A';
+        const dropPointVillage = dropShgVillage !== 'N/A' ? dropShgVillage : (o.buyer?.village || dropShgObj?.village || 'Local Village');
 
         return {
           id: bId,
           displayId: `ORD-2026-${cleanNum}`,
           areaName: dropShgVillage,
           flowType: 'gmu_to_shg' as FlowType,
-          shgName: o.dropShgDetails?.shgName || 'Drop SHG',
+          shgName: dropShgName,
           pickupPointName: 'Gadhinglaj Hub',
-          dropPointName: `${dropShgVillage} Drop SHG`,
+          dropPointName: dropPointVillage,
           pickupCount: 0,
           dropCount: 1,
           totalQty: o.totalQty || o.parcels?.length || o.items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 1,
@@ -428,25 +408,18 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           status: (() => {
             const mStatus = (o.mainStatus || o.status || '').toUpperCase();
             const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
+            const dShgStatus = (o.dropShgStatus || '').toUpperCase();
 
-            if (
-              resolvedRejectedBatches[bId] ||
-              resolvedRejectedBatches[String(o.id)] ||
-              resolvedRejectedBatches[cleanNum] ||
-              resolvedRejectedBatches[rawId] ||
-              resolvedRejectedBatches[o.orderId] ||
-              mStatus === 'REJECTED' ||
-              dtStatus === 'REJECTED'
-            ) {
-              return 'rejected' as const;
-            }
-            if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus) || dtStatus === 'PARCEL_AT_DROP_SHG' || dtStatus === 'PARCEL_WITH_DROP_SHG' || dtStatus === 'COMPLETED' || dtStatus === 'DROPPED') {
+            // 1. Move to COMPLETED SECTION only when Drop SHG confirms receipt from Transporter (or order is DELIVERED/COMPLETED)
+            if (dtStatus === 'COMPLETED' || dtStatus === 'DROPPED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
               return 'DROP_COMPLETED' as const;
             }
-            if (['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || dtStatus === 'PICKED' || isPickupFinished) {
+            // 2. Move to DROP SECTION when Transporter confirms pickup from GMU Hub (In-transit to Drop SHG)
+            if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || isPickupFinished) {
               return 'PICKUP_COMPLETED' as const;
             }
-            if (['DROP_TRANSPORTER_ACCEPTED', 'TRANSPORTER_ACCEPTED', 'ACCEPTED'].includes(dtStatus) || mStatus === 'DROP_TRANSPORTER_ACCEPTED' || (o.dropTransporterId && dtStatus !== 'PENDING')) {
+            // 3. Move to ACCEPTED section when Transporter accepts drop assignment from GMU Hub or dropTransporterId is set
+            if (['DROP_TRANSPORTER_ACCEPTED', 'TRANSPORTER_ACCEPTED', 'ACCEPTED'].includes(dtStatus) || mStatus === 'DROP_TRANSPORTER_ACCEPTED' || Boolean(o.dropTransporterId)) {
               return 'ACCEPTED_PICKUP' as const;
             }
             return 'NEW_ORDER' as const;
@@ -473,12 +446,15 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           handoverCode: o.handoverCode,
           isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedBatches[bId] || resolvedRejectedBatches[String(o.id)] || resolvedRejectedBatches[cleanNum]),
           shgContact: {
-            name: cleanPersonName(dropShgName, 'Drop SHG Member'),
-            shgName: o.dropShgDetails?.shgName || 'Drop SHG',
+            name: cleanPersonName(dropShgCrp, 'Drop SHG Lead'),
+            crpName: cleanPersonName(dropShgCrp, 'Drop SHG Lead'),
+            shgName: dropShgName,
             phone: dropShgMobile,
             address: dropShgAddress,
             village: dropShgVillage,
             pincode: dropShgPincode,
+            taluka: dropShgTaluka,
+            district: dropShgDistrict,
           },
           originalRecipient: {
             name: cleanPersonName(dropShgName, 'Drop SHG Member'),
@@ -669,7 +645,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && lastTokenRef.current) {
-        refreshBatchesList().catch(() => {});
+        refreshBatchesList().catch(() => { });
       }
     };
 
@@ -681,7 +657,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   useEffect(() => {
     const poller = setInterval(() => {
       if (AppState.currentState === 'active' && lastTokenRef.current) {
-        refreshBatchesList().catch(() => {});
+        refreshBatchesList().catch(() => { });
       }
     }, 4000);
 
@@ -1179,7 +1155,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
     const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId)));
     const cleanNum = getCleanNumber(rawId);
-    
+
     // Persist local rejection state into AsyncStorage under all ID formats so refreshes never revert it
     try {
       const storedRejected = await AsyncStorage.getItem('rejected_batches');

@@ -20,6 +20,9 @@ import WalkthroughElement from '../components/WalkthroughElement';
 import { useOrderManagement, ActivityEntry, BatchOrder } from '../context/OrderManagementContext';
 import { useTranslation } from 'react-i18next';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../utils/responsive';
+import { formatAddress } from '../utils/orderUtils';
+import { Ionicons } from '@expo/vector-icons';
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 import { Search, MapPin, Package, Clock, Filter, XCircle, CheckCircle, History as HistoryIcon, X, ChevronRight, Hash, Phone, User, Globe, AlertCircle, TrendingUp, Calendar, ChevronLeft } from 'lucide-react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -51,6 +54,7 @@ const OrderHistoryScreen = () => {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [detailsBatch, setDetailsBatch] = useState<BatchOrder | null>(null);
   const [detailsActivityStatus, setDetailsActivityStatus] = useState<string | null>(null);
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = useState<any>(null);
   const [visitedTabs, setVisitedTabs] = useState<string[]>(['All']);
   const [dateFilterType, setDateFilterType] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customSelectedDate, setCustomSelectedDate] = useState<Date | null>(null);
@@ -370,6 +374,20 @@ const OrderHistoryScreen = () => {
           <MapPin size={scale(16)} color={Colors.primary} strokeWidth={2.5} />
           <Text style={styles.routeText} numberOfLines={2}>{item.route}</Text>
         </View>
+
+        {/* Track Order Action Button */}
+        <TouchableOpacity 
+          style={styles.cardTrackBtn}
+          onPress={(e) => {
+            e.stopPropagation();
+            const targetOrder = batch || item;
+            setSelectedTrackingOrder(targetOrder);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="footsteps-outline" size={scale(12)} color="#16A34A" style={{ marginRight: 4 }} />
+          <Text style={styles.cardTrackBtnText}>{t('orders.track_order', { defaultValue: 'Track Order' })}</Text>
+        </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.divider} />
@@ -704,7 +722,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : formatAddress(detailsBatch?.shgContact?.address)}
                       </Text>
                     </View>
                   </View>
@@ -742,7 +760,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : formatAddress(detailsBatch?.shgContact?.address)}
                       </Text>
                     </View>
                   </View>
@@ -808,6 +826,15 @@ const OrderHistoryScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {selectedTrackingOrder && (
+        <TrackingHistoryModal
+          visible={!!selectedTrackingOrder}
+          onClose={() => setSelectedTrackingOrder(null)}
+          order={selectedTrackingOrder}
+          role="TRANSPORTER"
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -979,7 +1006,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(10),
-    marginBottom: verticalScale(14),
+    marginBottom: verticalScale(10),
+  },
+  cardTrackBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: '#D5EFE0',
+    backgroundColor: '#E8F5EC',
+    marginBottom: verticalScale(10),
+  },
+  cardTrackBtnText: {
+    fontFamily: Fonts.extraBold,
+    fontSize: moderateScale(11),
+    color: '#16A34A',
   },
   routeText: {
     flex: 1,

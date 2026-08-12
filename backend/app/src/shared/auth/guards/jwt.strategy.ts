@@ -27,26 +27,43 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     let user: any = null;
-    if (userId && !isNaN(userId)) {
-      user = await this.prisma.user.findUnique({
-        where: { id: userId },
-      });
-    }
-
-    // Fallback: If user ID not found (e.g. after DB reseed/reset), lookup by phone number
-    const phone = payload.phoneNumber || payload.mobile;
-    if (!user && phone) {
-      const cleaned = String(phone).replace(/\D/g, '').slice(-10);
-      if (cleaned) {
-        user = await this.prisma.user.findFirst({
-          where: {
-            OR: [
-              { phoneNumber: cleaned },
-              { phoneNumber: `+91${cleaned}` },
-              { phoneNumber: String(phone) },
-            ],
-          },
+    try {
+      if (userId && !isNaN(userId)) {
+        user = await this.prisma.user.findUnique({
+          where: { id: userId },
         });
+      }
+
+      // Fallback: If user ID not found (e.g. after DB reseed/reset), lookup by phone number
+      const phone = payload.phoneNumber || payload.mobile;
+      if (!user && phone) {
+        const cleaned = String(phone).replace(/\D/g, '').slice(-10);
+        if (cleaned) {
+          user = await this.prisma.user.findFirst({
+            where: {
+              OR: [
+                { phoneNumber: cleaned },
+                { phoneNumber: `+91${cleaned}` },
+                { phoneNumber: String(phone) },
+              ],
+            },
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn('[JwtStrategy] Database connection transient issue:', err?.message || err);
+      const cached = userId ? this.userCache.get(userId) : null;
+      if (cached?.user) {
+        return cached.user;
+      }
+      if (payload.sub && payload.role) {
+        return {
+          id: userId || Number(payload.sub),
+          authId: payload.authId || String(payload.sub),
+          role: payload.role,
+          phoneNumber: payload.phoneNumber || payload.mobile || '',
+          applicationStatus: 'APPROVED',
+        };
       }
     }
 
@@ -55,7 +72,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     if (user.id) {
-      this.userCache.set(user.id, { user, expiresAt: now + 60000 }); // cache for 60 seconds
+      this.userCache.set(user.id, { user, expiresAt: now + 300000 }); // cache for 5 minutes
     }
     return user;
   }

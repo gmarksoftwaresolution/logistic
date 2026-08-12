@@ -161,12 +161,33 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const extractErrorMessage = (err: any, fallback: string): string => {
+    if (!err) return fallback;
+    const data = err.response?.data;
+    let msg = data?.message || data?.error || err.message;
+
+    if (typeof msg === 'object' && msg !== null) {
+      msg = msg.message || msg.error || JSON.stringify(msg);
+    }
+
+    if (Array.isArray(msg)) {
+      msg = msg[0];
+    }
+
+    if (typeof msg === 'object' && msg !== null) {
+      msg = (msg as any).message || (msg as any).error || JSON.stringify(msg);
+    }
+
+    return typeof msg === 'string' && msg.trim().length > 0 ? msg : fallback;
+  };
+
   const handleSendOTP = async () => {
-    if (!mobileNumber || mobileNumber.length === 0) {
+    if (!mobileNumber) {
       setError(t('errors.mobile_required'));
       return;
     }
-    if (!/^[6789]\d{9}$/.test(mobileNumber)) {
+    
+    if (mobileNumber.length < 10) {
       setError(t('errors.mobile_invalid'));
       return;
     }
@@ -182,10 +203,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setCurrentStep(2);
       setTimer(30);
-    } catch (error: any) {
-      console.log('Send OTP error:', error);
-      const message = error.response?.data?.message || 'Failed to send OTP. Please try again.';
-      const displayMessage = Array.isArray(message) ? message[0] : message;
+    } catch (err: any) {
+      console.log('Send OTP error:', err, err.response?.data);
+      const displayMessage = extractErrorMessage(err, 'Failed to send OTP. Please try again.');
       setError(displayMessage);
     } finally {
       setIsVerifying(false);
@@ -206,7 +226,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       });
       
       const userRole = response.data?.userDetails?.role || response.data?.userDetails?.userType;
-      if (userRole === 'SHG' || userRole === 'INDIVIDUAL') {
+      if (userRole === 'SHG') {
         const errorMsg = 'This account is registered as an SHG Member. Please log in using the SHG App.';
         setError(errorMsg);
         Alert.alert('Role Mismatch', errorMsg);
@@ -233,10 +253,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setCurrentStep(3);
-    } catch (error: any) {
-      console.log('Verify OTP error:', error);
-      const message = error.response?.data?.message || 'Invalid OTP. Please try again.';
-      const displayMessage = Array.isArray(message) ? message[0] : message;
+    } catch (err: any) {
+      console.log('Verify OTP error:', err, err.response?.data);
+      const displayMessage = extractErrorMessage(err, 'Invalid OTP. Please try again.');
       setError(displayMessage);
       setOtp(['', '', '', '', '', '']);
       setTimeout(() => {

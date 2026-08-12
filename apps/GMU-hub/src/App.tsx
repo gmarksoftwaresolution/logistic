@@ -2,6 +2,7 @@ import { LandingPage } from './pages/LandingPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { OrderManagementPage } from './pages/OrderManagementPage';
+import { OrderHistoryPage } from './pages/OrderHistoryPage';
 import { InventoryManagementPage } from './pages/InventoryManagementPage';
 import { CommunityManagementPage } from './pages/CommunityManagementPage';
 import { TransporterManagementPage } from './pages/TransporterManagementPage';
@@ -32,6 +33,9 @@ function App() {
       )}
       {currentPage === 'order-management' && (
         <OrderManagementPage onNavigate={handleNavigate} />
+      )}
+      {currentPage === 'order-history' && (
+        <OrderHistoryPage onNavigate={handleNavigate} />
       )}
       {currentPage === 'inventory-management' && (
         <InventoryManagementPage onNavigate={handleNavigate} />

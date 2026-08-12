@@ -81,8 +81,8 @@ export class AuthService {
       if (dto.appType === 'SHG' && user.role === 'TRANSPORTER') {
         throw new BadRequestException('This mobile number is registered as a Transporter. Please log in using the Transporter App.');
       }
-      if (dto.appType === 'TRANSPORTER' && (user.role === 'SHG' || user.role === 'INDIVIDUAL')) {
-        throw new BadRequestException('This mobile number is registered as an SHG / Community Member. Please log in using the SHG App.');
+      if (dto.appType === 'TRANSPORTER' && user.role === 'SHG') {
+        throw new BadRequestException('This mobile number is registered as an SHG Member. Please log in using the SHG App.');
       }
     }
 
@@ -157,8 +157,15 @@ export class AuthService {
     if (dto.appType === 'SHG' && userAny.role === 'TRANSPORTER') {
       throw new BadRequestException('This account is registered as a Transporter. Please log in using the Transporter App.');
     }
-    if (dto.appType === 'TRANSPORTER' && (userAny.role === 'SHG' || userAny.role === 'INDIVIDUAL')) {
-      throw new BadRequestException('This account is registered as an SHG / Community Member. Please log in using the SHG App.');
+    if (dto.appType === 'TRANSPORTER' && userAny.role === 'SHG') {
+      throw new BadRequestException('This account is registered as an SHG Member. Please log in using the SHG App.');
+    }
+    if (dto.appType === 'TRANSPORTER' && userAny.role === 'INDIVIDUAL') {
+      await this.prisma.user.update({
+        where: { id: userAny.id },
+        data: { role: 'TRANSPORTER' },
+      });
+      userAny.role = 'TRANSPORTER';
     }
 
     const tokens = await this.getTokens(userAny.id, userAny.phoneNumber);
