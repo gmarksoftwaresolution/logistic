@@ -1749,6 +1749,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     allMergedOrders.filter((o: any) => isOrderReturn(o))
   );
 
+  const transporterRejectOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) =>
+      isOrderRejected(o) &&
+      !isOrderReturn(o) &&
+      o.returnType !== 'TRANSPORTER_RETURN'
+    )
+  );
+
 
 
   const delayedCount = allMergedOrders.filter((o: any) =>
@@ -2042,6 +2050,23 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       accessor: (row: any) => `${row.totalWeight || row.weight || 0} kg`
     },
     {
+      header: 'Reject Reason',
+      accessor: (row: any) => {
+        const reason = row.rejectReason || row.remarks || row.dropRejectReason || row.pickupRejectReason || 'Recipient Unavailable - Return to Hub';
+        const rejectedBy = row.dropTransporterName || row.pickupTransporterName || row.dropTransporterDetails?.name || row.pickupTransporterDetails?.name || row.rejectedByName || 'Transporter';
+        return (
+          <div className="flex flex-col gap-0.5 text-left max-w-[220px]">
+            <span className="font-extrabold text-xs text-rose-700 leading-tight">
+              {reason}
+            </span>
+            <span className="text-[10px] font-bold text-slate-500">
+              By: {rejectedBy}
+            </span>
+          </div>
+        );
+      }
+    },
+    {
       header: 'Status',
       accessor: (row: any) => (
         <div className="flex flex-col gap-1 items-start">
@@ -2055,7 +2080,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     {
       header: 'Action',
       accessor: (row: any) => {
-        const needsIntake = ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'TRANSPORTER_RETURN_PENDING', 'RETURN_IN_TRANSIT_TO_HUB'].includes(row.mainStatus);
         return (
           <div className="flex items-center gap-2">
             <button
@@ -2070,22 +2094,17 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>View</span>
             </button>
 
-            {needsIntake && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const intakeKind = row.returnType
-                    ? (row.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
-                    : 'pickup';
-                  handleIntakeClick(row, intakeKind);
-                }}
-                title="Scan to Intake"
-                className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-              >
-                <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-                <span>Intake</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              title="In Take"
+              className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+            >
+              <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+              <span>IN TAKE</span>
+            </button>
           </div>
         );
       }
@@ -2185,6 +2204,19 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>Return Orders</span>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'returned' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
                 {returnOrdersList.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('rejected')}
+              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'rejected'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <span>Transporter Reject</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
+                {transporterRejectOrdersList.length}
               </span>
             </button>
           </div>
@@ -2733,6 +2765,23 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           </div>
         )}
 
+        {/* ---------------- SECTION 6: TRANSPORTER REJECT ---------------- */}
+        {activeTopTab === 'rejected' && (
+          <div className="space-y-6">
+            <DataTable
+              columns={returnColumns}
+              data={transporterRejectOrdersList}
+              selectedDate={dateFilter}
+              onDateChange={setDateFilter}
+              onRowDoubleClick={handleViewOrder}
+              onRefresh={() => loadData(true)}
+              hideDateAndRefresh={true}
+              hideSearchAndFilters={true}
+              grabToScroll={true}
+            />
+          </div>
+        )}
+
 
 
         {/* --- DYNAMIC SIDE DRAWER FOR TIMELINE NODE CLICKS --- */}
@@ -3261,6 +3310,35 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       </div>
                     </div>
                   </div>
+
+                  {/* Rejection & Return Details Card */}
+                  {(selectedOrderDetails.rejectReason || selectedOrderDetails.remarks || selectedOrderDetails.returnType || selectedOrderDetails.mainStatus === 'REJECTED') && (
+                    <div className="border border-rose-500/20 bg-rose-50/40 rounded-3xl p-6 space-y-4 shadow-sm text-left">
+                      <div className="flex items-center justify-between border-b border-rose-900/10 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="bg-rose-700 p-1.5 rounded-lg text-white">
+                            <AlertTriangle className="h-4 w-4" />
+                          </div>
+                          <span className="font-extrabold text-sm text-rose-900 uppercase tracking-wider">Rejection & Return Details</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-xs space-y-1">
+                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Rejected By</p>
+                          <p className="font-extrabold text-slate-800 text-sm">
+                            {selectedOrderDetails.dropTransporterName || selectedOrderDetails.pickupTransporterName || selectedOrderDetails.dropTransporterDetails?.name || selectedOrderDetails.pickupTransporterDetails?.name || selectedOrderDetails.rejectedByName || 'Transporter'}
+                          </p>
+                        </div>
+                        <div className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-xs space-y-1">
+                          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Reject Reason</p>
+                          <p className="font-extrabold text-rose-700 text-sm">
+                            {selectedOrderDetails.rejectReason || selectedOrderDetails.remarks || selectedOrderDetails.dropRejectReason || selectedOrderDetails.pickupRejectReason || 'Recipient Unavailable - Return to Hub'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right details */}

@@ -102,6 +102,7 @@ type NotificationType = 'success' | 'error' | 'info';
 
 interface OrderManagementContextType {
   batches: BatchOrder[];
+  rejectedBatches?: BatchOrder[];
   activities: ActivityEntry[];
   newOrdersCount: number;
   acceptedOrdersCount: number;
@@ -295,11 +296,33 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           status: (() => {
             const mStatus = (o.mainStatus || '').toUpperCase();
             const ptStatus = (o.pickupTransporterStatus || '').toUpperCase();
+            const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
+            const bId = `pickup-${o.id}`;
+            const cleanNum = getCleanNumber(o.id || o.orderId);
+            const rawId = String(o.id || '');
+            const isLocalRejected = Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[rawId] || resolvedRejectedMap[cleanNum] || resolvedRejectedMap[o.orderId]);
+            const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(mStatus);
+            const isRTO = (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected || mStatus === 'REJECTED' || ptStatus === 'REJECTED' || dtStatus === 'REJECTED') && isPickedUp;
 
+            // Rule 2: If parcel WAS picked up and then rejected, keep active in DROP section until Hub takes in / receives return parcel!
+            if (isRTO) {
+              if (dtStatus === 'COMPLETED' || mStatus === 'RETURNED_TO_HUB' || (ptStatus === 'COMPLETED' && mStatus === 'COMPLETED')) {
+                return 'DROP_COMPLETED' as const;
+              }
+              return 'PICKUP_COMPLETED' as const;
+            }
+            // Rule 1: Accepted/assigned without pickup and rejected -> Move to REJECTED TAB!
             if (mStatus === 'REJECTED' || ptStatus === 'REJECTED' || mStatus === 'CANCELLED') {
+              if (isPickedUp) {
+                return 'PICKUP_COMPLETED' as const;
+              }
               return 'REJECTED' as const;
             }
+            // Normal completed pickup
             if (['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes(ptStatus) || mStatus === 'DELIVERED_TO_HUB' || mStatus === 'STORED') {
+              if (mStatus === 'REJECTED' || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected || ptStatus === 'REJECTED' || dtStatus === 'REJECTED') {
+                return 'PICKUP_COMPLETED' as const;
+              }
               return 'DROP_COMPLETED' as const;
             }
             if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED'].includes(mStatus)) {
@@ -331,60 +354,27 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           // Store the pickup's masterOrderId so we can look up the drop order later
           masterOrderId: o.masterOrderId,
           handoverCode: o.handoverCode,
-          isRTO: o.isRTO || false,
-          isRedirected: isRedirected,
-          shgContact: {
-            name: isRedirected
-              ? cleanPersonName(o.seller?.sellerName || o.seller?.fullName, 'Seller')
-              : cleanPersonName(o.shg?.fullName || o.shg?.shgName || o.seller?.sellerName || o.seller?.fullName, 'N/A'),
-            shgName: isRedirected
-              ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
-              : (o.shg?.shgName || o.shg?.fullName || o.seller?.shgName || ''),
-            phone: isRedirected
-              ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.shg?.phoneNumber || '')
-              : (o.shg?.phoneNumber || o.shg?.mobileNumber || o.seller?.mobileNumber || o.seller?.phoneNumber || ''),
-            address: isRedirected
-              ? (o.seller?.fullAddress || (() => {
-                if (o.seller) {
-                  const parts = [
-                    o.seller.addressLine1,
-                    o.seller.addressLine2,
-                    o.seller.village,
-                    o.seller.taluka,
-                    o.seller.district,
-                    o.seller.pincode
-                  ].filter(Boolean);
-                  if (parts.length > 0) return parts.join(', ');
-                }
-                return o.shg?.fullAddress || 'N/A';
-              })())
-              : (o.shg?.fullAddress || (() => {
-                if (o.shg?.address) {
-                  const parts = [
-                    o.shg.address.addressLine1,
-                    o.shg.address.village,
-                    o.shg.address.taluka,
-                    o.shg.address.pincode
-                  ].filter(Boolean);
-                  if (parts.length > 0) return parts.join(', ');
-                }
-                if (o.seller) {
-                  const parts = [
-                    o.seller.addressLine1,
-                    o.seller.addressLine2,
-                    o.seller.village,
-                    o.seller.taluka,
-                    o.seller.district,
-                    o.seller.pincode
-                  ].filter(Boolean);
-                  if (parts.length > 0) return parts.join(', ');
-                }
-                return 'N/A';
-              })()),
-            village: isRedirected ? (o.seller?.village || o.shg?.address?.village || 'N/A') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
-            pincode: isRedirected ? (o.seller?.pincode || o.shg?.address?.pincode || 'N/A') : (o.shg?.address?.pincode || o.seller?.pincode || 'N/A'),
-            taluka: isRedirected ? (o.seller?.taluka || o.shg?.address?.taluka || 'N/A') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
-            district: isRedirected ? (o.seller?.district || o.shg?.address?.district || 'N/A') : (o.shg?.address?.district || o.seller?.district || 'N/A'),
+          isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)]),
+          shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)])) ? {
+            name: HUB_CONTACT.name,
+            crpName: HUB_CONTACT.name,
+            shgName: `Return Hub (Gadhinglaj Hub)`,
+            phone: HUB_CONTACT.phone,
+            address: HUB_CONTACT.address,
+            village: HUB_CONTACT.village,
+            pincode: HUB_CONTACT.pincode,
+            latitude: HUB_CONTACT.latitude,
+            longitude: HUB_CONTACT.longitude,
+          } : {
+            name: cleanPersonName(pickupShgCrp, 'SHG CRP Lead'),
+            crpName: cleanPersonName(pickupShgCrp, 'SHG CRP Lead'),
+            shgName: pickupShgName,
+            phone: pickupShgPhone,
+            address: pickupShgAddress,
+            village: pickupShgVillage,
+            pincode: pickupShgPincode,
+            taluka: pickupShgTaluka,
+            district: pickupShgDistrict,
           },
           products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
             const pId = String(item.id || item.parcelId || Math.random());
@@ -470,17 +460,29 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           status: (() => {
             const mStatus = (o.mainStatus || o.status || '').toUpperCase();
             const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
+            const ptStatus = (o.pickupTransporterStatus || '').toUpperCase();
             const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+            const bId = `drop-${o.id}`;
+            const cleanNum = getCleanNumber(o.id || o.orderId);
+            const rawId = String(o.id || '');
+            const isLocalRejected = Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[rawId] || resolvedRejectedMap[cleanNum] || resolvedRejectedMap[o.orderId]);
+            const isRTO = o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected || mStatus === 'REJECTED' || dtStatus === 'REJECTED';
 
-            // 0. Rejected status
+            // Rule 2: If parcel WAS picked up (or delivery rejected), keep active in DROP section with updated hub return address until Hub takes in return parcel!
+            if (isRTO) {
+              if (dtStatus === 'COMPLETED' || mStatus === 'RETURNED_TO_HUB' || (dShgStatus === 'DELIVERED' && mStatus === 'COMPLETED')) {
+                return 'DROP_COMPLETED' as const;
+              }
+              return 'PICKUP_COMPLETED' as const;
+            }
+            // Normal completed drop
+            if (dtStatus === 'COMPLETED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
+              return 'DROP_COMPLETED' as const;
+            }
+            // Rule 1: Accepted/assigned without pickup and rejected -> Move to REJECTED TAB!
             if (mStatus === 'REJECTED' || dtStatus === 'REJECTED' || dShgStatus === 'REJECTED') {
               return 'REJECTED' as const;
             }
-            // 1. Move to COMPLETED SECTION only when Drop SHG confirms receipt from Transporter (or order is DELIVERED/COMPLETED)
-            if (dtStatus === 'COMPLETED' || dtStatus === 'DROPPED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
-              return 'DROP_COMPLETED' as const;
-            }
-            // 2. Move to DROP SECTION when Transporter confirms pickup from GMU Hub (In-transit to Drop SHG)
             if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || isPickupFinished) {
               return 'PICKUP_COMPLETED' as const;
             }
@@ -512,8 +514,18 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropOrderId: o.id, // Track the actual DB drop order ID
           transporterId: o.transporterId,
           handoverCode: o.handoverCode,
-          isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[cleanNum]),
-          shgContact: {
+          isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[cleanNum] || (o.mainStatus === 'REJECTED' && (o.dropTransporterStatus === 'REJECTED' || o.pickupTransporterStatus === 'DROPPED'))),
+          shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[cleanNum] || (o.mainStatus === 'REJECTED' && (o.dropTransporterStatus === 'REJECTED' || o.pickupTransporterStatus === 'DROPPED')))) ? {
+            name: HUB_CONTACT.name,
+            crpName: HUB_CONTACT.name,
+            shgName: `Return Hub (Gadhinglaj Hub)`,
+            phone: HUB_CONTACT.phone,
+            address: HUB_CONTACT.address,
+            village: HUB_CONTACT.village,
+            pincode: HUB_CONTACT.pincode,
+            latitude: HUB_CONTACT.latitude,
+            longitude: HUB_CONTACT.longitude,
+          } : {
             name: cleanPersonName(dropShgCrp, 'Drop SHG Lead'),
             crpName: cleanPersonName(dropShgCrp, 'Drop SHG Lead'),
             shgName: dropShgName,
@@ -641,7 +653,40 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       });
 
       // Exclude DROP_COMPLETED and REJECTED from the live active batches (they live in completedBatches & rejectedBatches)
-      setBatches(freshLiveBatches.filter(b => b.status !== 'DROP_COMPLETED' && b.status !== 'REJECTED'));
+      let combinedLiveBatches = freshLiveBatches.filter(b => b.status !== 'DROP_COMPLETED' && b.status !== 'REJECTED');
+
+      // Merge active RTO return batches from AsyncStorage so they stay ACTIVE in Drop section!
+      try {
+        const storedStr = await AsyncStorage.getItem('active_rto_batches');
+        if (storedStr) {
+          const rtoMap = JSON.parse(storedStr) || {};
+          const activeRtoList = Object.values(rtoMap).filter((b: any) => b && typeof b === 'object' && b.isRTO && b.status !== 'DROP_COMPLETED');
+          const processedNums = new Set<string>();
+
+          activeRtoList.forEach((rtoBatch: any) => {
+            const rtoBaseNum = getCleanNumber(rtoBatch.id || rtoBatch.displayId || rtoBatch.orderId);
+            if (!rtoBaseNum || processedNums.has(rtoBaseNum)) return;
+            processedNums.add(rtoBaseNum);
+
+            // Remove any old/duplicate pickup or drop entries matching this order number
+            combinedLiveBatches = combinedLiveBatches.filter(b => {
+              const bNum = getCleanNumber(b.id || b.displayId || b.orderId);
+              return bNum !== rtoBaseNum;
+            });
+
+            // Push active RTO return batch (status: PICKUP_COMPLETED, dropPointName: Gadhinglaj Hub)
+            combinedLiveBatches.push({
+              ...rtoBatch,
+              status: 'PICKUP_COMPLETED',
+              isRTO: true,
+              dropPointName: rtoBatch.pickupPointName || rtoBatch.dropPointName || 'Gadhinglaj Hub',
+              shgContact: rtoBatch.shgContact || HUB_CONTACT,
+            });
+          });
+        }
+      } catch (err) { }
+
+      setBatches(combinedLiveBatches);
     } catch (error: any) {
       if (error.response?.status === 401) {
         console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
@@ -1211,6 +1256,22 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         return;
       }
 
+      // Clear from active_rto_batches in AsyncStorage
+      try {
+        const storedStr = await AsyncStorage.getItem('active_rto_batches');
+        if (storedStr) {
+          const rtoMap = JSON.parse(storedStr);
+          const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
+          const baseNum = getCleanNumber(batchId);
+          Object.keys(rtoMap).forEach(k => {
+            if (k === batchId || k === rawId || getCleanNumber(k) === baseNum) {
+              delete rtoMap[k];
+            }
+          });
+          await AsyncStorage.setItem('active_rto_batches', JSON.stringify(rtoMap));
+        }
+      } catch (e) { }
+
       // Optimistically move to completed
       const batchToComplete = batchesRef.current.find(b => b.id === batchId);
       if (batchToComplete) {
@@ -1306,49 +1367,68 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const targetBatch = batchesRef.current.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId)));
       const finalReason = reason || 'Recipient Unavailable - Return to Hub';
 
-      // Construct RTO object with updated screen return destination address and preserved original recipient address
-      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Hub' : (targetBatch?.pickupPointName || 'Gadhinglaj Hub');
-      const rejectedBatchObj: BatchOrder = {
+      // Construct RTO object with status PICKUP_COMPLETED so it stays active in the Drop section for return delivery
+      const pickedHubName = targetBatch?.pickupPointName || 'Gadhinglaj Hub';
+      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? pickedHubName : (targetBatch?.pickupPointName || 'Gadhinglaj Hub');
+      const activeRtoObj: BatchOrder = {
         ...targetBatch,
         id: targetBatch?.id || batchId,
-        areaName: targetBatch?.areaName || 'Gadhinglaj Hub',
+        areaName: targetBatch?.areaName || pickedHubName,
         flowType: targetBatch?.flowType || 'gmu_to_shg',
-        shgName: targetBatch?.shgName || 'Gadhinglaj Hub',
-        pickupPointName: targetBatch?.pickupPointName || 'Gadhinglaj Hub',
+        shgName: `Return Hub (${pickedHubName})`,
+        pickupPointName: pickedHubName,
         dropPointName: returnPoint,
         pickupCount: targetBatch?.pickupCount || 0,
         dropCount: targetBatch?.dropCount || 1,
         totalQty: targetBatch?.totalQty || 1,
         totalWeight: targetBatch?.totalWeight || '5 kg',
-        status: 'REJECTED' as const,
+        status: 'PICKUP_COMPLETED' as const, // STAYS ACTIVE IN DROP SECTION!
         rejectReason: finalReason,
         isRTO: true,
         originalRecipient: targetBatch?.originalRecipient || targetBatch?.shgContact,
-        shgContact: targetBatch?.flowType === 'gmu_to_shg' ? HUB_CONTACT : (targetBatch?.shgContact || HUB_CONTACT),
+        shgContact: {
+          name: HUB_CONTACT.name,
+          shgName: `Return Hub (${pickedHubName})`,
+          phone: HUB_CONTACT.phone,
+          address: HUB_CONTACT.address,
+          village: HUB_CONTACT.village,
+          pincode: HUB_CONTACT.pincode,
+          latitude: HUB_CONTACT.latitude,
+          longitude: HUB_CONTACT.longitude,
+        },
         products: targetBatch?.products || [],
       };
 
-      // Save into rejectedBatches state & AsyncStorage array
-      setRejectedBatches(prev => {
-        const safePrev = Array.isArray(prev) ? prev : [];
-        const filtered = safePrev.filter(b => b.id !== batchId && b.id !== targetBatch?.id);
-        const updated = [...filtered, rejectedBatchObj];
-        AsyncStorage.setItem('rejected_batches', JSON.stringify(updated)).catch(() => { });
-        return updated;
-      });
+      // Persist activeRtoObj in AsyncStorage so refreshBatchesList preserves active RTO in Drop section!
+      try {
+        const storedStr = await AsyncStorage.getItem('active_rto_batches');
+        const rtoMap = storedStr ? JSON.parse(storedStr) : {};
+        rtoMap[batchId] = activeRtoObj;
+        if (rawId) rtoMap[rawId] = activeRtoObj;
+        if (targetBatch?.id) rtoMap[targetBatch.id] = activeRtoObj;
+        if (targetBatch?.displayId) rtoMap[targetBatch.displayId] = activeRtoObj;
+        await AsyncStorage.setItem('active_rto_batches', JSON.stringify(rtoMap));
+      } catch (err) { }
 
-      // Remove from active batches (< 1ms instant removal)
-      setBatches(prev => prev.filter(b => b.id !== batchId && b.id !== targetBatch?.id));
+      // Update active batches in-place (< 1ms instant update in Drop section!)
+      setBatches(prev => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        const exists = safePrev.some(b => b.id === batchId || b.id === targetBatch?.id);
+        if (exists) {
+          return safePrev.map(b => (b.id === batchId || b.id === targetBatch?.id) ? activeRtoObj : b);
+        }
+        return [...safePrev, activeRtoObj];
+      });
 
       const type = batchId.startsWith('pickup-') ? 'pickup' : 'drop';
       const dbOrderId = targetBatch?.dropOrderId || targetBatch?.masterOrderId || rawId;
 
       await api.post(`/orders/${type}/${dbOrderId}/reject`, { remarks: finalReason });
-      showToast('Parcel rerouted to Hub for return.', 'info');
+      showToast('Delivery rejected. Return parcel to updated Hub address.', 'info');
       await refreshBatchesList();
     } catch (error: any) {
       console.error('Error rerouting batch to hub:', error);
-      showToast('Parcel rerouted to Hub for return.', 'info');
+      showToast('Delivery rejected. Return parcel to updated Hub address.', 'info');
       await refreshBatchesList();
     }
   };

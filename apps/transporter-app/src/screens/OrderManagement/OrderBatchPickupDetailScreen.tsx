@@ -41,6 +41,8 @@ import {
 import { formatAddress } from '../../utils/orderUtils';
 import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
+const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
+
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const { t } = useTranslation();
@@ -459,7 +461,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
     if (!finalReason) return;
 
-    if (type === 'drop') {
+    const isDeliveryLeg = type === 'drop' || batch?.flowType === 'gmu_to_shg' || batch?.status === 'PICKUP_COMPLETED' || batch?.status === 'ACCEPTED_PICKUP';
+
+    if (isDeliveryLeg) {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);
       handleCloseModal();
       navigation.goBack();
@@ -507,7 +511,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const isPickupLegCompleted = batch.status === 'PICKUP_COMPLETED' || batch.status === 'DROP_COMPLETED';
   const isDropLegCompleted = batch.status === 'DROP_COMPLETED';
   const isCurrentLegCompleted = type === 'pickup' ? isPickupLegCompleted : isDropLegCompleted;
-  const isBatchRejected = batch.status === 'rejected';
+  const isBatchRejected = batch.status === 'REJECTED' || batch.status === 'rejected' || (batch as any)?.mainStatus === 'REJECTED' || (batch as any)?.mainStatus === 'rejected' || (batch as any)?.isRejected || batch.status?.toLowerCase() === 'rejected';
 
   const canConfirm = displayProducts.length > 0 && !isCurrentLegCompleted && !isBatchRejected;
   const isParcelVerifiedForTransporter = (product: any) => {
@@ -1088,29 +1092,47 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                           );
                         }
 
-                        if (true) {
+                        if (isBatchRejected) {
                           return (
                             <View style={{
                               flexDirection: 'row',
                               alignItems: 'center',
                               gap: scale(4),
-                              backgroundColor: '#F1F5F9',
+                              backgroundColor: '#FEE2E2',
                               paddingHorizontal: scale(8),
                               paddingVertical: verticalScale(4),
                               borderRadius: scale(8),
                               borderWidth: 1,
-                              borderColor: '#E2E8F0',
+                              borderColor: '#FCA5A5',
                             }}>
                               <Text style={{
                                 fontFamily: Fonts.bold,
                                 fontSize: moderateScale(11),
-                                color: '#64748B',
-                              }}>Pending</Text>
+                                color: '#DC2626',
+                              }}>Rejected</Text>
                             </View>
                           );
                         }
 
-                        return null;
+                        return (
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: scale(4),
+                            backgroundColor: '#F1F5F9',
+                            paddingHorizontal: scale(8),
+                            paddingVertical: verticalScale(4),
+                            borderRadius: scale(8),
+                            borderWidth: 1,
+                            borderColor: '#E2E8F0',
+                          }}>
+                            <Text style={{
+                              fontFamily: Fonts.bold,
+                              fontSize: moderateScale(11),
+                              color: '#64748B',
+                            }}>Pending</Text>
+                          </View>
+                        );
                       })()}
                     </View>
                   </View>
@@ -1141,35 +1163,19 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           {isCurrentLegCompleted ? (
             <VerificationStatusBadge status={type === 'pickup' ? 'pickup_verified' : 'delivery_verified'} />
           ) : isBatchRejected ? (
-            <View style={styles.rejectedBannerContainer}>
-              <Text style={styles.rejectedBannerTextHeader}>Batch Rejected</Text>
+            <View
+              style={[
+                styles.bottomRejectBtn,
+                { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5', justifyContent: 'center' }
+              ]}
+            >
+              <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
+              <Text style={[styles.bottomRejectBtnText, { color: '#DC2626', fontWeight: '800' }]}>
+                REJECTED
+              </Text>
             </View>
           ) : (
             <View style={{ gap: verticalScale(12) }}>
-              {/* Manual Confirmation Button (Disabled since verification is automatic) */}
-              {/*
-              {verifiedCount >= displayProducts.length && (
-                <TouchableOpacity
-                  style={[
-                    styles.primaryConfirmBtn,
-                    type === 'pickup' ? styles.bgPickup : styles.bgDrop,
-                    isFinalizing && styles.btnDisabled
-                  ]}
-                  disabled={isFinalizing}
-                  onPress={handleFinalBatchConfirm}
-                >
-                  <CheckCircle size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.primaryConfirmBtnText}>
-                    {isFinalizing
-                      ? 'Confirming...'
-                      : type === 'pickup'
-                        ? 'Confirm Pickup'
-                        : 'Confirm Delivery'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              */}
-              {/* Removed Scan QR Code (Simulated) button */}
               <TouchableOpacity
                 style={styles.bottomRejectBtn}
                 onPress={() => setRejectingProductId('all')}
@@ -1236,10 +1242,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                   <CameraView
                     style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
                     facing="back"
-                    barcodeScannerSettings={{
-                      barcodeTypes: ['qr'],
-                    }}
-                    onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+                    barcodeScannerSettings={BARCODE_SETTINGS}
+                    onBarcodeScanned={handleBarcodeScanned}
                   />
                 ) : (
                   <View style={{ padding: scale(16), alignItems: 'center' }}>

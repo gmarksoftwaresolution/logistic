@@ -191,7 +191,7 @@ api.interceptors.response.use(
     // Enrich message for network errors (no response received)
     if (!error.response) {
       const currentURL = api.defaults.baseURL || BASE_URL;
-      error.message = `Network Error: Cannot connect to backend at ${currentURL}.\n\nTo fix this:\n1. Ensure the NestJS server is running on port 3001.\n2. If using a physical phone, ensure it's on the same Wi-Fi as your computer.\n3. Make sure Windows Defender Firewall allows Node.js on port 3001.`;
+      error.message = `Network Error: Cannot connect to backend at ${currentURL}.\n\nTo fix this:\n1. Ensure the NestJS server is running on port 3000.\n2. If using a physical phone, ensure it's on the same Wi-Fi as your computer.\n3. Make sure Windows Defender Firewall allows Node.js on port 3000.`;
     }
 
     return Promise.reject(error);

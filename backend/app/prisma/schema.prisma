@@ -97,6 +97,8 @@ model Order {
   returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
   rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
   rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
+  rejectReason            String?
+  remarks                 String?
   
   // Redirect indicators
   isPickupRedirected      Boolean?          @default(false)
