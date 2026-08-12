@@ -15,30 +15,30 @@ import { useScanSession } from '../context/ScanSessionContext';
 import { useOrders } from '../context/OrderContext';
 import { Colors, Fonts } from '../constants/theme';
 
+const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
+
 function decodeQrData(data: string) {
   const trimmed = data.trim();
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (!parsed.parcelId) {
-        throw new Error('Invalid QR payload');
-      }
+      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || trimmed).trim();
       return {
-        parcelId: parsed.parcelId,
-        verificationToken: parsed.verificationToken || '',
+        parcelId,
+        verificationToken: parsed.verificationToken || parsed.verificationCode || '',
       };
     } catch (err: any) {
-      throw new Error('Malformed JSON in QR: ' + err.message);
+      return {
+        parcelId: trimmed,
+        verificationToken: '',
+      };
     }
   } else {
     const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1) {
-      return {
-        parcelId: parts[0],
-        verificationToken: parts[1] || '',
-      };
-    }
-    throw new Error('Invalid QR format');
+    return {
+      parcelId: parts[0] || trimmed,
+      verificationToken: parts[1] || '',
+    };
   }
 }
 
@@ -104,13 +104,15 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     setScanFeedback(type);
     setFeedbackMessage(message);
 
-    if (type === 'success') {
-      Vibration.vibrate(80);
-    } else if (type === 'duplicate') {
-      Vibration.vibrate([0, 80, 50, 80]);
-    } else {
-      Vibration.vibrate(300);
-    }
+    try {
+      if (type === 'success') {
+        Vibration.vibrate(80);
+      } else if (type === 'duplicate') {
+        Vibration.vibrate([0, 80, 50, 80]);
+      } else {
+        Vibration.vibrate(300);
+      }
+    } catch (_) {}
 
     // Auto clear feedback after 1.5 seconds
     setTimeout(() => {
@@ -119,34 +121,47 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     }, 1500);
   };
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+  const handleBarcodeScanned = async (event: any) => {
     if (scanned || isScanningRef.current || !activeSession || actionLoading) return;
+    const data = typeof event === 'string' ? event : event?.data;
+    if (!data) return;
 
     // Scan lock: prevent any further scans until this operation finishes
     isScanningRef.current = true;
     setScanned(true);
 
-    const resetScanLock = () => {
-      setScanned(false);
-      isScanningRef.current = false;
+    const resetScanLock = (delay = 1500) => {
+      setTimeout(() => {
+        setScanned(false);
+        isScanningRef.current = false;
+      }, delay);
     };
 
     try {
-      const decoded = decodeQrData(data);
-      const { parcelId, verificationToken } = decoded;
+      let decoded: any;
+      try {
+        decoded = decodeQrData(data);
+      } catch (err: any) {
+        triggerScanFeedback('error', 'Malformed QR scanned.');
+        resetScanLock(1500);
+        return;
+      }
+
+      const parcelId = String(decoded?.parcelId || '').trim();
+      const verificationToken = decoded?.verificationToken || '';
 
       const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
       const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
       const allParcels = [...safeScanned, ...safeRemaining];
       const cleanScannedVal = String(parcelId || '').trim();
-      const cleanNumId = cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '');
+      const cleanNumId = cleanScannedVal ? cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '') : '';
 
       const parcel = allParcels.find((p: any) => 
         p.parcelId === parcelId || 
         p.qrCodeValue === parcelId || 
         p.verificationToken === parcelId ||
-        (p.parcelId && p.parcelId.includes(cleanNumId)) ||
-        (p.orderId && p.orderId.includes(cleanNumId))
+        (cleanNumId && p.parcelId && String(p.parcelId).includes(cleanNumId)) ||
+        (cleanNumId && p.orderId && String(p.orderId).includes(cleanNumId))
       );
 
       if (!parcel) {
@@ -160,6 +175,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         } catch (err: any) {
           const errMsg = err.response?.data?.message || 'Sync failed.';
           triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+        } finally {
+          resetScanLock(1500);
         }
         return;
       }
@@ -167,6 +184,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       // Validate verification token locally if available
       if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
         triggerScanFeedback('error', 'Invalid verification token.');
+        resetScanLock(1500);
         return;
       }
 
@@ -177,6 +195,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
       if (isDuplicate) {
         triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
+        resetScanLock(1500);
         return;
       }
 
@@ -204,11 +223,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
         const errMsg = err.response?.data?.message || 'Sync failed.';
         triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+      } finally {
+        resetScanLock(350);
       }
     } catch (err: any) {
       triggerScanFeedback('error', 'Malformed QR scanned.');
-    } finally {
-      setTimeout(resetScanLock, 350);
+      resetScanLock(1500);
     }
   };
 
@@ -469,7 +489,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         <CameraView
           style={styles.camera}
           facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          barcodeScannerSettings={BARCODE_SETTINGS}
           onBarcodeScanned={handleBarcodeScanned}
         />
         <View style={styles.overlayContainer}>
@@ -527,7 +547,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                     <View style={styles.detailItem}>
                       <Text style={styles.detailLabel}>Last Parcel</Text>
                       <Text style={styles.detailValue}>
-                        {orderGroup.lastScannedParcelId ? `P-${orderGroup.lastScannedParcelId.substring(0, 6)}` : 'None'}
+                        {orderGroup.lastScannedParcelId ? `P-${String(orderGroup.lastScannedParcelId).substring(0, 6)}` : 'None'}
                       </Text>
                     </View>
                     <View style={styles.detailItem}>
@@ -558,7 +578,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                       <View key={`scanned-${item.parcelId || itemIdx}-${itemIdx}`} style={styles.parcelRow}>
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
-                        <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
+                        <Text style={styles.parcelRowId}>(P-{String(item.parcelId || '').substring(0, 6)})</Text>
                         
                         {/* Optimistic sync label */}
                         <Text style={[
@@ -583,7 +603,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                       <View key={`remaining-${item.parcelId || remIdx}-${remIdx}`} style={[styles.parcelRow, styles.parcelRowRemaining]}>
                         <RefreshCw size={14} color="#F59E0B" />
                         <Text style={[styles.parcelRowName, styles.remainingText]} numberOfLines={1}>{item.productName}</Text>
-                        <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
+                        <Text style={styles.parcelRowId}>(P-{String(item.parcelId || '').substring(0, 6)})</Text>
                         <Text style={styles.waitingBadge}>Waiting</Text>
                       </View>
                     ))}

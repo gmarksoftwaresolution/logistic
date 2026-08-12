@@ -814,20 +814,15 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       {
         phase: 'PICKUP',
-        assignments: {
-          some: { role: 'PICKUP', status: 'REJECTED' },
-        },
+        OR: [
+          { assignments: { some: { status: 'REJECTED' } } },
+          { mainStatus: 'REJECTED' },
+          { pickupTransporterStatus: 'REJECTED' },
+          { pickupShgStatus: 'REJECTED' }
+        ],
         returnType: null,
       },
-      filter,
-      [
-        'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED',
-        'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED',
-        'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER',
-        'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB',
-        // legacy
-        'PENDING_PICKUP', 'PICKUP_SHG_PENDING',
-      ]
+      filter
     );
     const defaultInclude = {
       assignments: true,
@@ -1268,8 +1263,14 @@ export class OrderManagementService implements OnModuleInit {
         return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       });
 
+      const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.scanResult === 'REJECTED');
+      const rejectAssign = effectiveAssignments.find((a: any) => a.status === 'REJECTED');
+      const actualRejectReason = o.rejectReason || o.remarks || pOrder?.rejectReason || pOrder?.remarks || rejectScan?.remarks || rejectAssign?.remarks || null;
+
       return {
         ...o,
+        rejectReason: actualRejectReason || o.rejectReason || o.remarks,
+        remarks: actualRejectReason || o.remarks || o.rejectReason,
         pickupShgDetails,
         pickupTransporterDetails,
         dropShgDetails,
@@ -1372,7 +1373,7 @@ export class OrderManagementService implements OnModuleInit {
       {
         OR: [
           { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { status: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
+          { dropTransporterStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
           { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
         ]
       },
@@ -1401,18 +1402,15 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       {
         phase: 'DROP',
-        assignments: {
-          some: { role: 'DROP', status: 'REJECTED' },
-        },
-        OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }],
+        OR: [
+          { assignments: { some: { status: 'REJECTED' } } },
+          { mainStatus: 'REJECTED' },
+          { dropTransporterStatus: 'REJECTED' },
+          { dropShgStatus: 'REJECTED' }
+        ],
+        returnType: null,
       },
-      filter,
-      [
-        'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-        'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG',
-        // legacy
-        'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'IN_TRANSIT_TO_SHG',
-      ]
+      filter
     );
     const defaultInclude = {
       assignments: true,

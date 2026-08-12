@@ -214,7 +214,7 @@ export class OrderService {
           assigneeId: { in: idVariants },
           assigneeType: 'TRANSPORTER',
           role: 'DROP',
-          status: { in: ['PENDING', 'ACCEPTED'] },
+          status: { in: ['PENDING', 'ACCEPTED', 'REJECTED'] },
         },
         select: { orderId: true }
       });
@@ -227,7 +227,7 @@ export class OrderService {
             { orderId: { in: assignedOrderIds } },
             { dropTransporterId: { in: idVariants } },
           ],
-          mainStatus: { in: ['HUB_RECEIVED', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'] }
+          mainStatus: { in: ['HUB_RECEIVED', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'REJECTED'] }
         },
         include: {
           seller: true,
@@ -620,6 +620,8 @@ export class OrderService {
         dropTransporterStatus: 'REJECTED',
         mainStatus: 'REJECTED',
         returnType: 'TRANSPORTER_RETURN',
+        rejectReason: remarksStr,
+        remarks: remarksStr,
       }
     });
 
@@ -629,6 +631,7 @@ export class OrderService {
       },
       data: {
         status: 'REJECTED',
+        remarks: remarksStr,
       }
     });
 

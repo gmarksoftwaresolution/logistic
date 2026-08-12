@@ -18,6 +18,8 @@ import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../api/axiosInstance';
 import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
+
+const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
 import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
@@ -395,8 +397,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
     }
   }, [scannerModalVisible, permission]);
 
-  const handleBarcodeScanned = async ({ type, data }: { type: string; data: string }) => {
+  const handleBarcodeScanned = async (event: any) => {
     if (scanned || isScanningRef.current) return;
+    const data = typeof event === 'string' ? event : event?.data;
+    if (!data) return;
     isScanningRef.current = true;
     setScanned(true);
     setScanningStatus('success');
@@ -1284,9 +1288,7 @@ const OrderDetailsScreen: React.FC<Props> = ({
                     style={{ width: '100%', height: '100%', position: 'absolute' }}
                     facing="back"
                     onBarcodeScanned={handleBarcodeScanned}
-                    barcodeScannerSettings={{
-                      barcodeTypes: ["qr"],
-                    }}
+                    barcodeScannerSettings={BARCODE_SETTINGS}
                   />
                 ) : (
                   <TouchableOpacity onPress={requestPermission} className="bg-[#059669] px-4 py-2 rounded-full absolute z-10">
