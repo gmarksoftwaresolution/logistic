@@ -81,7 +81,9 @@ const TableRow: React.FC<TableRowProps> = ({ item, index, onActionPress }) => {
 
       {/* Delivery Address */}
       <View style={[styles.cell, { width: COLUMN_WIDTHS[8] }]}>
-        <Text style={styles.addressText} numberOfLines={2}>{item.address}</Text>
+        <Text style={styles.addressText} numberOfLines={2}>
+          {typeof item.address === 'string' ? item.address : (typeof item.address === 'object' ? ([item.address?.addressLine1, item.address?.village, item.address?.district, item.address?.pincode].filter(Boolean).join(', ') || '') : String(item.address || ''))}
+        </Text>
       </View>
 
       {/* Delivery Day */}

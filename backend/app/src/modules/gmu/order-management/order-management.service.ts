@@ -13,9 +13,30 @@ export class OrderManagementService implements OnModuleInit {
 
   private isLoopRunning = false;
 
-  onModuleInit() {
+  async onModuleInit() {
     // Automatic broadcast loop disabled to prevent mass-assigning historical seed orders on startup.
     // Live workflows broadcast on demand when orders change status.
+    this.fixPendingStoredOrders().catch(err => console.error('[onModuleInit] fixPendingStoredOrders error:', err.message));
+  }
+
+  async fixPendingStoredOrders() {
+    const pendingStored = await this.prisma.order.findMany({
+      where: {
+        mainStatus: 'STORED',
+        dropShgStatus: 'PENDING',
+      }
+    });
+
+    if (pendingStored.length > 0) {
+      console.log(`[fixPendingStoredOrders] Found ${pendingStored.length} orders with mainStatus=STORED and dropShgStatus=PENDING. Syncing dropShgStatus to ACCEPTED & broadcasting to Transporters.`);
+      for (const order of pendingStored) {
+        try {
+          await this.storeInventory(order.id);
+        } catch (err: any) {
+          console.error(`[fixPendingStoredOrders] Failed to sync stored order ${order.id}:`, err.message);
+        }
+      }
+    }
   }
 
   async runAutoBroadcastLoop() {
@@ -154,7 +175,7 @@ export class OrderManagementService implements OnModuleInit {
     const dropOrdersForTransporter = await this.prisma.order.findMany({
       where: {
         phase: 'DROP',
-        mainStatus: 'DROP_SHG_ACCEPTED',
+        mainStatus: { in: ['DROP_SHG_ACCEPTED', 'STORED'] },
         NOT: {
           returnType: 'BUYER_RETURN',
         },
@@ -1002,7 +1023,7 @@ export class OrderManagementService implements OnModuleInit {
       const dShgUser = dShgId ? userMap.get(String(dShgId)) : null;
 
       // Find Drop Transporter user
-      const dTransId = o.dropTransporterId || pOrder?.dropTransporterId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+      const dTransId = o.dropTransporterId || pOrder?.dropTransporterId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && (a.status === 'ACCEPTED' || a.status === 'PICKED' || a.status === 'IN_TRANSIT'))?.assigneeId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
       const dTransUser = dTransId ? userMap.get(String(dTransId)) : null;
 
       const formatAddr = (u: any) => {
@@ -2416,14 +2437,17 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async warehouseIntake(id: string) {
-    const order = await this.getOrderDetails(id, 'PICKUP');
+    const order = await this.getOrderDetails(id);
 
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
         mainStatus: 'STORED',
+        phase: 'DROP',
         pickupTransporterStatus: 'DROPPED',
         pickupShgStatus: 'DROPPED',
+        dropShgStatus: 'ACCEPTED',
+        dropTransporterStatus: 'PENDING',
         warehouseReceivedAt: new Date(),
         storedAt: new Date(),
       },
@@ -2433,41 +2457,69 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async storeInventory(id: string) {
-    const order = await this.getOrderDetails(id, 'PICKUP');
+    const order = await this.getOrderDetails(id);
 
-    // 1. Update status to STORED, pickupShgStatus=DROPPED, pickupTransporterStatus=DROPPED
+    // 1. Find matching Drop SHG for buyer
+    const matchingShgs = await this.getMatchingShgs(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+    );
+    let allocatedShgId = order.dropShgId;
+    if (!allocatedShgId && matchingShgs.length > 0) {
+      allocatedShgId = String(matchingShgs[0].id);
+    }
+    if (!allocatedShgId) {
+      const defaultShg = await this.prisma.user.findFirst({ where: { role: 'SHG' } });
+      if (defaultShg) allocatedShgId = String(defaultShg.id);
+    }
+
+    // 2. Update status to STORED, phase=DROP, dropShgStatus=ACCEPTED, dropShgId=allocatedShgId, dropTransporterStatus=PENDING
     const updated = await this.prisma.order.update({
       where: { id: order.id },
       data: {
         mainStatus: 'STORED',
+        phase: 'DROP',
         pickupShgStatus: 'DROPPED',
         pickupTransporterStatus: 'DROPPED',
+        dropShgStatus: 'ACCEPTED',
+        dropShgId: allocatedShgId,
+        dropTransporterStatus: 'PENDING',
         storedAt: new Date(),
         warehouseReceivedAt: new Date(),
       },
     });
 
-    // 2. Ensure Warehouse Inventory record
-    try {
-      let warehouse = await this.prisma.warehouse.findFirst();
-      if (!warehouse) {
-        warehouse = await this.prisma.warehouse.create({
-          data: {
-            name: 'GMU Hub Warehouse',
-            address: 'Kolhapur',
-          }
+    // 3. Ensure SHG OrderAssignment record exists with status ACCEPTED
+    if (allocatedShgId) {
+      const existingShgAssign = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: allocatedShgId,
+          assigneeType: 'SHG',
+          role: 'DROP',
+        }
+      });
+      if (existingShgAssign) {
+        await this.prisma.orderAssignment.update({
+          where: { id: existingShgAssign.id },
+          data: { status: 'ACCEPTED' }
         });
+      } else {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: allocatedShgId,
+            assigneeType: 'SHG',
+            role: 'DROP',
+            status: 'ACCEPTED',
+          }
+        }).catch(() => {});
       }
-    } catch (wErr: any) {
-      console.warn(`[storeInventory] Warehouse creation note:`, wErr.message);
     }
 
-    // 3. Fast Asynchronous Phase 2 Partner Matching & Broadcasts on the SAME order
-    const dropId = order.id;
-    Promise.allSettled([
-      this.broadcastDropShg(dropId),
-      this.broadcastDropTransporter(dropId),
-    ]).catch(err => console.error('[storeInventory] Background broadcast note:', err));
+    // 4. Immediately broadcast delivery requests to Transporters
+    await this.broadcastDropTransporter(order.id).catch(err => console.error('[storeInventory] Transporter broadcast note:', err));
 
     return updated;
   }
@@ -2563,7 +2615,7 @@ export class OrderManagementService implements OnModuleInit {
       data: {
         dropShgId: allocatedShgId,
         dropShgStatus: 'ACCEPTED',
-        mainStatus: 'DROP_SHG_ACCEPTED',
+        mainStatus: order.mainStatus === 'STORED' ? 'STORED' : 'DROP_SHG_ACCEPTED',
       },
       include: { assignments: true },
     });
@@ -2770,7 +2822,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED',
+        mainStatus: order.mainStatus === 'STORED' ? 'STORED' : (order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED'),
         dropTransporterStatus: 'PENDING',
         dropTransporterId: null,
       },

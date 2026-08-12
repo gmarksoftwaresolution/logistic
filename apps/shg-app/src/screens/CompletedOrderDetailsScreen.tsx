@@ -6,7 +6,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
-import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, getInfoForOrder, translateRoutePart, formatAddressString } from '../utils/orderHelpers';
 import { useOnboarding } from '../context/OnboardingContext';
 import WalkthroughElement from '../components/WalkthroughElement';
 
@@ -54,9 +54,9 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
   let mobileValue = order.mobile || (order.seller?.phoneNumber || "N/A");
   let villageLabel = "Village";
-  let villageValue = order.sellerVillage || order.seller?.village || source || "N/A";
+  let villageValue = formatAddressString(order.sellerVillage || order.seller?.village || source) || "N/A";
   let fullAddressLabel = "Full Address";
-  let fullAddressValue = order.sellerAddress || order.seller?.fullAddress || order.address || villageValue;
+  let fullAddressValue = formatAddressString(order.sellerAddress) || formatAddressString(order.seller?.fullAddress) || formatAddressString(order.address) || villageValue;
 
   if (isDelivery) {
     detailsTitle = t('su_buyer_details') || "Buyer Details";
@@ -66,9 +66,9 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
     mobileLabel = t('su_buyer_mobile_number') || "Buyer Mobile Number";
     mobileValue = order.mobile || (order.buyer?.phoneNumber || "N/A");
     villageLabel = "Village";
-    villageValue = order.buyerVillage || order.buyer?.village || destination || "N/A";
+    villageValue = formatAddressString(order.buyerVillage || order.buyer?.village || destination) || "N/A";
     fullAddressLabel = "Full Address";
-    fullAddressValue = order.buyerAddress || order.buyer?.fullAddress || order.address || villageValue;
+    fullAddressValue = formatAddressString(order.buyerAddress) || formatAddressString(order.buyer?.fullAddress) || formatAddressString(order.address) || villageValue;
   }
 
   const handleCall = (phoneNumber: string) => {
@@ -266,7 +266,8 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
               <Text className="text-[13.5px] font-bold text-[#111827] leading-relaxed">{fullAddressValue}</Text>
             </View>
           </View>
-        ) : (
+        </View>
+      ) : (
           /* Three Cards for Redirected Orders */
           <>
             {/* 1. Pickup Info Card */}

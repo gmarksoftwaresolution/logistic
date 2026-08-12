@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getOrderHistoryDetails } from '../modules/order-history/services/orderHistoryService';
 import { HISTORY_STATUS_COLORS } from '../modules/order-history/constants/history.constants';
 import { LanguageContext } from '../context/LanguageContext';
-import { SharedHeader } from '../components/SharedHeader';
+import { formatAddressString } from '../utils/orderHelpers';
 
 export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
   const { order: initialOrder } = route.params;
@@ -66,11 +66,11 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
   let destination = 'Buyer';
 
   if (order.legType === 'pickup' || order.pickupOrderNumber) {
-    source = order.seller?.address?.addressLine1 || 'Seller';
+    source = formatAddressString(order.seller?.address?.addressLine1 || order.seller?.address) || 'Seller';
     destination = 'Transporter';
   } else {
     source = 'Transporter';
-    destination = order.deliveryAddress || order.buyer?.address?.addressLine1 || 'Buyer';
+    destination = formatAddressString(order.deliveryAddress) || formatAddressString(order.buyer?.address?.addressLine1 || order.buyer?.address) || 'Buyer';
   }
 
   const qty = order.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1;

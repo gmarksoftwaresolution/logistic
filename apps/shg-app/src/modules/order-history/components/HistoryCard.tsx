@@ -5,6 +5,8 @@ import { HistoryItem } from '../types/history.types';
 import { LanguageContext } from '../../../context/LanguageContext';
 import { HISTORY_STATUS_COLORS } from '../constants/history.constants';
 
+import { formatAddressString } from '../../../utils/orderHelpers';
+
 interface Props {
   order: HistoryItem;
   onPress: (order: HistoryItem) => void;
@@ -44,11 +46,11 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress }) 
   let destination = 'Buyer';
 
   if (order.legType === 'pickup') {
-    source = order.seller?.address?.addressLine1?.split(',')[0] || 'Seller';
+    source = formatAddressString(order.seller?.address?.addressLine1 || order.seller?.address).split(',')[0] || 'Seller';
     destination = 'Transporter';
   } else {
     source = 'Transporter';
-    destination = order.deliveryAddress?.split(',')[0] || order.buyer?.address?.addressLine1?.split(',')[0] || 'Buyer';
+    destination = formatAddressString(order.deliveryAddress).split(',')[0] || formatAddressString(order.buyer?.address?.addressLine1 || order.buyer?.address).split(',')[0] || 'Buyer';
   }
 
   const qty = order.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1;

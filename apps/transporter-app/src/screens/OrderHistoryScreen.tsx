@@ -704,7 +704,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([detailsBatch?.shgContact?.address?.addressLine1, detailsBatch?.shgContact?.address?.village, detailsBatch?.shgContact?.address?.district, detailsBatch?.shgContact?.address?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
                       </Text>
                     </View>
                   </View>
@@ -742,7 +742,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : detailsBatch?.shgContact.address}
+                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([detailsBatch?.shgContact?.address?.addressLine1, detailsBatch?.shgContact?.address?.village, detailsBatch?.shgContact?.address?.district, detailsBatch?.shgContact?.address?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
                       </Text>
                     </View>
                   </View>

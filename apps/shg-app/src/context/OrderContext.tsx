@@ -73,7 +73,6 @@ export interface Order {
   otherSuitableVehicles?: VehicleInfo[];
   barcode?: string;
   isPickupRedirected?: boolean;
-  isDropRedirected?: boolean;
   isRedirected?: boolean;
   pickupShgStatus?: string;
   dropShgStatus?: string;
@@ -82,8 +81,6 @@ export interface Order {
   uuid?: string;
   sellerMobile?: string;
   buyerMobile?: string;
-  sellerAddress?: string;
-  buyerAddress?: string;
   tracking?: any[];
 }
 
@@ -130,6 +127,26 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
 
 
 
+  const toAddressStr = (addr: any): string => {
+    if (!addr) return '';
+    if (typeof addr === 'string') return addr;
+    if (typeof addr === 'object') {
+      const parts = [
+        addr.addressLine1,
+        addr.addressLine2,
+        addr.landmark,
+        addr.village,
+        addr.taluka,
+        addr.district,
+        addr.city,
+        addr.state,
+        addr.pincode
+      ].map(p => (p !== null && p !== undefined && typeof p !== 'object') ? String(p).trim() : '').filter(Boolean);
+      if (parts.length > 0) return parts.join(', ');
+    }
+    return typeof addr === 'object' ? '' : String(addr || '');
+  };
+
   const sellerAddressArr = [
     dbOrder.seller?.address?.addressLine1,
     dbOrder.seller?.address?.addressLine2,
@@ -144,7 +161,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     dbOrder.masterOrder?.items?.[0]?.seller?.addressLine1,
     dbOrder.masterOrder?.items?.[0]?.seller?.village
   ].filter(Boolean);
-  const actualPickupAddress = sellerAddressArr.length > 0 ? sellerAddressArr[0] : '';
+  const actualPickupAddress = sellerAddressArr.length > 0 ? toAddressStr(sellerAddressArr[0]) : '';
 
   const buyerAddressArr = [
     dbOrder.buyer?.address?.addressLine1,
@@ -161,9 +178,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     dbOrder.masterOrder?.buyer?.village
   ].filter(Boolean);
 
-  let actualDropAddress = dbOrder.deliveryAddress;
+  let actualDropAddress = toAddressStr(dbOrder.deliveryAddress);
   if (!actualDropAddress || actualDropAddress.includes('Test')) {
-    actualDropAddress = buyerAddressArr.length > 0 ? buyerAddressArr[0] : (dbOrder.deliveryAddress || '');
+    actualDropAddress = buyerAddressArr.length > 0 ? toAddressStr(buyerAddressArr[0]) : toAddressStr(dbOrder.deliveryAddress);
   }
 
   const dateObj = dbOrder.scheduledDateTime ? new Date(dbOrder.scheduledDateTime) : (dbOrder.createdAt ? new Date(dbOrder.createdAt) : new Date());
@@ -174,8 +191,8 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
   const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
   const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
 
-  const finalAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress));
-  const finalSourceAddress = isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress);
+  const finalAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress)));
+  const finalSourceAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress));
 
   let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
   if (isGeneratedNewOrder) isReturnFlag = false;
@@ -272,26 +289,20 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     phase: type === 'drop' ? 'DROP' : 'PICKUP',
     acceptedAt: dbOrder.redirectedOrder?.acceptedAt || dbOrder.assignments?.find((a: any) => a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.updatedAt || dbOrder.tracking?.find((t: any) => t.status === 'ACCEPTED')?.updatedAt || '',
     completedAt: dbOrder.redirectedOrder?.completedAt || (dbOrder.mainStatus === 'HUB_RECEIVED' || dbOrder.mainStatus === 'STORED' || dbOrder.mainStatus === 'DISPATCHED' || dbOrder.mainStatus === 'COMPLETED' ? dbOrder.updatedAt : null) || dbOrder.tracking?.find((t: any) => t.status === 'COMPLETED')?.updatedAt || '',
-    fromLocation: isGeneratedReturn
-      ? (type === 'pickup' ? dbOrder.deliveryAddress : 'Transporter')
-      : isGeneratedNewOrder
-        ? (type === 'pickup' ? dbOrder.seller?.fullName : 'Transporter')
-        : (type === 'drop'
-          ? (actualPickupAddress || 'Transporter')
-          : (actualPickupAddress === 'Transporter' ? 'Transporter' : (actualPickupAddress || 'Seller'))),
-    toLocation: isGeneratedReturn
-      ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-      : isGeneratedNewOrder
-        ? (type === 'pickup' ? 'Transporter' : dbOrder.deliveryAddress)
-        : (type === 'drop'
-          ? (actualDropAddress || 'Buyer')
-          : (actualPickupAddress === 'Transporter' ? (actualDropAddress || 'Buyer') : 'Transporter')),
+    fromLocation: type === 'drop'
+      ? 'Transporter'
+      : toAddressStr(isGeneratedReturn
+        ? dbOrder.deliveryAddress
+        : (isGeneratedNewOrder ? dbOrder.seller?.fullName : (actualPickupAddress || 'Seller'))),
+    toLocation: type === 'drop'
+      ? toAddressStr(actualDropAddress || dbOrder.buyer?.fullName || dbOrder.buyerName || 'Buyer')
+      : 'Transporter',
     buyerName: dbOrder.buyer?.buyerName || dbOrder.buyer?.fullName || dbOrder.masterOrder?.buyer?.buyerName || dbOrder.masterOrder?.buyer?.fullName || '',
     sellerName: dbOrder.seller?.fullName || dbOrder.masterOrder?.items?.[0]?.seller?.fullName || '',
     sellerVillage: dbOrder.seller?.village || dbOrder.seller?.address?.village || '',
-    sellerAddress: dbOrder.seller?.fullAddress || actualPickupAddress || '',
+    sellerAddress: toAddressStr(dbOrder.seller?.fullAddress || actualPickupAddress || ''),
     buyerVillage: dbOrder.buyer?.village || dbOrder.buyer?.address?.village || '',
-    buyerAddress: dbOrder.buyer?.fullAddress || actualDropAddress || '',
+    buyerAddress: toAddressStr(dbOrder.buyer?.fullAddress || actualDropAddress || ''),
     seller: dbOrder.seller,
     buyer: dbOrder.buyer,
     products: orderItems.map((item: any) => ({
@@ -317,8 +328,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     transporterRoute: dbOrder.transporter?.transporterRoute || '',
     handoverCode: dbOrder.handoverCode || '',
     isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
-    isDropRedirected: !!(dbOrder.isDropRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.dropShgStatus === 'REDIRECTED'),
-    isRedirected: !!(dbOrder.isPickupRedirected || dbOrder.isDropRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.masterOrder?.isDropRedirected || dbOrder.pickupShgStatus === 'REDIRECTED' || dbOrder.dropShgStatus === 'REDIRECTED'),
+    isRedirected: type === 'pickup'
+      ? !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED')
+      : false,
     pickupShgStatus: dbOrder.pickupShgStatus || dbOrder.masterOrder?.pickupShgStatus || '',
     dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
     pickupTransporterStatus: dbOrder.pickupTransporterStatus || '',
@@ -326,8 +338,6 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     uuid: dbOrder.id || '',
     sellerMobile: dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || dbOrder.masterOrder?.items?.[0]?.seller?.mobileNumber || '',
     buyerMobile: dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || '',
-    buyerAddress: actualDropAddress || '',
-    sellerAddress: actualPickupAddress || '',
     tracking: dbOrder.tracking || dbOrder.masterOrder?.tracking || [],
     pickedUpAt: dbOrder.redirectedOrder?.pickedUpAt || (dbOrder.pickupTransporterStatus === 'PICKED' || dbOrder.pickupTransporterStatus === 'PARCEL_PICKED' || dbOrder.mainStatus === 'IN_TRANSIT_TO_HUB' ? dbOrder.updatedAt : null) || '',
   };
@@ -337,18 +347,18 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
   const [acceptedOrders, setAcceptedOrders] = useState<Order[]>([]);
   const [redirectedOrders, setRedirectedOrders] = useState<Order[]>([]);
-  const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
-  const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
-  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
-  const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
-
   const [incomingReturnOrders, setIncomingReturnOrders] = useState<Order[]>([]);
-  const localAcceptedReturnsRef = useRef<Order[]>([]);
-  const localCompletedReturnsRef = useRef<Order[]>([]);
-  const localCompletedOrdersRef = useRef<Order[]>([]);
+  const [returnedOrders, setReturnedOrders] = useState<Order[]>([]);
+  const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
+  const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
+  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
 
+  const localCompletedOrdersRef = useRef<Order[]>([]);
+  const localCompletedReturnsRef = useRef<Order[]>([]);
+  const localAcceptedReturnsRef = useRef<Order[]>([]);
   const [localPickedUpPickups, setLocalPickedUpPickups] = useState<string[]>([]);
+  const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
 
   const applyHighlight = (orderId: string) => {
     setHighlightedOrders(prev => ({ ...prev, [orderId]: 'new' }));
@@ -361,49 +371,28 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }, 30000);
   };
 
-  useEffect(() => {
-    const loadLocalData = async () => {
-      try {
-        const val = await AsyncStorage.getItem('picked_up_pickups');
-        if (val) {
-          setLocalPickedUpPickups(JSON.parse(val));
-        }
-      } catch (e) {
-        console.warn('Failed to load local data from storage:', e);
-      }
-    };
-    loadLocalData();
-  }, []);
-
-  const previousOrdersRef = useRef<Record<string, { status: string; legType: string }>>({});
-
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...returnedOrders];
 
   const refreshOrdersList = useCallback(async () => {
     try {
       setIsOrdersLoading(true);
-      // Check if user is logged in
       const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
       if (!token) {
         setIsOrdersLoading(false);
         return;
       }
 
-      // Fetch local picked up pickups directly from AsyncStorage to avoid state race conditions on mount
       const localPickedUpStr = await AsyncStorage.getItem('picked_up_pickups');
       const localPickedUp: string[] = localPickedUpStr ? JSON.parse(localPickedUpStr) : [];
 
       const localRescheduledStr = await AsyncStorage.getItem('rescheduled_orders');
       const localRescheduled: Record<string, { date: string, time: string, reason: string }> = localRescheduledStr ? JSON.parse(localRescheduledStr) : {};
 
-      // 1. Fetch live assigned pickups
       const pickupResponse = await axiosInstance.get('/orders/new/assigned');
       const rawPickups = pickupResponse.data || [];
 
-      // 2. Fetch live assigned & completed drops (API removed)
       const rawDrops: any[] = [];
 
-      // 3. Fetch live return orders
       let rawReturns: any[] = [];
       try {
         const returnsResponse = await axiosInstance.get('/orders/returns/assigned');
@@ -428,7 +417,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.warn('Failed to fetch rejected orders:', err);
       }
 
-      // Auto-accept any assigned PENDING / RETURN_PENDING pickups & returns on backend
       rawPickups.forEach((o: any) => {
         if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
           axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => { });
@@ -441,9 +429,8 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
       });
 
-      // Map pickups to UI shape
       const mappedPickups = rawPickups.map((o: any) => {
-        const isDropLeg = o.legType === 'drop' || o.phase === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus || o.status);
+        const isDropLeg = o.legType === 'drop' || o.phase === 'DROP' || ['STORED', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'PARCEL_AT_GMU', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus || o.status);
         const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : (o.legType || 'pickup'), false);
         if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';
@@ -464,7 +451,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const allMapped = [...mappedPickups, ...mappedDrops];
 
-      // Filter out pickup leg if an active drop leg exists for the same order
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
@@ -475,7 +461,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return true;
       });
 
-      // Compare with previous orders to identify new/updated orders
       const previousOrders = previousOrdersRef.current;
       const newHighlights: Record<string, 'new' | 'updated'> = {};
       const currentOrdersRecord: Record<string, { status: string; legType: string }> = {};
@@ -518,7 +503,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
       }
 
-      // Segment mapped orders by status
       const sortedIncoming = finalMapped.filter(o => o.status === 'assigned').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
@@ -532,7 +516,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
-      const sortedAccepted = finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isPickupRedirected).sort((a, b) => {
+      const sortedAccepted = finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected).sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -545,8 +529,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
 
-      // Filter redirected orders
-      const sortedRedirected = finalMapped.filter(o => o.isPickupRedirected && o.status !== 'COMPLETED').sort((a, b) => {
+      const sortedRedirected = finalMapped.filter(o => o.isRedirected && o.status !== 'COMPLETED').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -576,8 +559,6 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }));
 
       const activeReturns = mappedReturns.filter(o => o.status !== 'REJECTED' && o.status !== 'COMPLETED' && o.status !== 'assigned');
-      const rejectedReturnsFromBackend = mappedReturns.filter(o => o.status === 'REJECTED');
-
 
       const sortedReturned = finalMapped.filter(o => o.status === 'RETURNED').sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
@@ -602,13 +583,12 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setReturnedOrders(mappedReturned);
 
-      // Completed = Everything Completed from Dedicated Endpoints + COMPLETED mapped orders
-      const activeOrderIds = new Set(finalMapped.filter(o => o.status === 'Accepted' || o.status === 'PickedUp').map(o => o.orderId));
+      const activeOrderIds = new Set(finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected).map(o => o.orderId));
       const mappedCompletedNew = (rawCompleted.newOrders || [])
         .map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false))
-        .filter((o: any) => !activeOrderIds.has(o.orderId) && o.status === 'COMPLETED');
+        .filter((o: any) => !activeOrderIds.has(o.orderId));
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
-      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED');
+      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED' || o.isRedirected || o.isPickupRedirected);
       const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
       const uniqueCompletedMap = new Map<string, Order>();
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));

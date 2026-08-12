@@ -769,7 +769,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>
+                          {typeof displayContact.address === 'string' ? displayContact.address : (typeof displayContact.address === 'object' ? ([displayContact.address?.addressLine1, displayContact.address?.village, displayContact.address?.district, displayContact.address?.pincode].filter(Boolean).join(', ') || '') : String(displayContact.address || ''))}
+                        </Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>

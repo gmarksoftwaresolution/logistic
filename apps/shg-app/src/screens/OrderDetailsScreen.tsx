@@ -10,7 +10,7 @@ import { OrdersStackParamList } from '../navigation/types';
 import { LanguageContext } from '../context/LanguageContext';
 import { useOrders } from '../context/OrderContext';
 import { useUser } from '../context/UserContext';
-import { getRouteForOrder, getFormattedOrderId, translateRoutePart } from '../utils/orderHelpers';
+import { getRouteForOrder, getFormattedOrderId, translateRoutePart, formatAddressString } from '../utils/orderHelpers';
 import { Order } from '../context/OrderContext';
 import WalkthroughElement from '../components/WalkthroughElement';
 import { useOnboarding } from '../context/OnboardingContext';
@@ -93,10 +93,10 @@ const OrderDetailsScreen: React.FC<Props> = ({
   let detailsTitle = t('su_transporter_details') || "Transporter Details";
   let headerIcon: any = "car-outline";
   let nameLabel = t('su_person_name') || "Person Name";
-  let nameValue = order.transporterName || "N/A";
-  let mobileLabel = t('su_mobile_number') || "Mobile Number";
+  let nameValue = activeRawName;
+  let mobileLabel = t('su_transporter_mobile_number') || "Transporter Mobile Number";
   let mobileValue = order.transporterMobile || "N/A";
-  let addressOrVehicleLabel = t('su_vehicle_number') || "Vehicle Number";
+  let addressOrVehicleLabel = "Vehicle Number";
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "N/A";
 
@@ -124,17 +124,17 @@ const OrderDetailsScreen: React.FC<Props> = ({
     mobileValue = isValidPhone ? order.mobile : (order.seller?.phoneNumber || "N/A");
 
     villageLabel = "Village";
-    villageValue = (order as any).sellerVillage || order.seller?.village || order.seller?.address?.village || source || "N/A";
+    villageValue = formatAddressString((order as any).sellerVillage || order.seller?.village || order.seller?.address?.village || source) || "N/A";
 
     fullAddressLabel = "Full Address";
-    fullAddressValue = (order as any).sellerAddress || (order.seller as any)?.fullAddress || [
-      order.seller?.addressLine1,
-      order.seller?.addressLine2,
-      order.seller?.village || villageValue,
-      order.seller?.taluka,
-      order.seller?.district,
-      order.seller?.state ? `${order.seller?.state} - ${order.seller?.pincode || ''}` : (order.seller?.pincode || '')
-    ].filter(Boolean).join(', ') || order.address || villageValue;
+    fullAddressValue = formatAddressString((order as any).sellerAddress) || formatAddressString((order.seller as any)?.fullAddress) || [
+      formatAddressString(order.seller?.addressLine1),
+      formatAddressString(order.seller?.addressLine2),
+      formatAddressString(order.seller?.village || villageValue),
+      formatAddressString(order.seller?.taluka),
+      formatAddressString(order.seller?.district),
+      order.seller?.state ? `${order.seller?.state} - ${order.seller?.pincode || ''}` : formatAddressString(order.seller?.pincode)
+    ].filter(Boolean).join(', ') || formatAddressString(order.address) || villageValue;
   } else if (activeType === 'buyer') {
     detailsTitle = t('su_buyer_details') || "Buyer Details";
     headerIcon = "person-outline";
@@ -144,17 +144,17 @@ const OrderDetailsScreen: React.FC<Props> = ({
     mobileValue = order.mobile || (order.buyer?.phoneNumber || "N/A");
 
     villageLabel = "Village";
-    villageValue = (order as any).buyerVillage || order.buyer?.village || order.buyer?.address?.village || destination || "N/A";
+    villageValue = formatAddressString((order as any).buyerVillage || order.buyer?.village || order.buyer?.address?.village || destination) || "N/A";
 
     fullAddressLabel = "Full Address";
-    fullAddressValue = (order as any).buyerAddress || (order.buyer as any)?.fullAddress || [
-      order.buyer?.addressLine1,
-      order.buyer?.addressLine2,
-      order.buyer?.village || villageValue,
-      order.buyer?.taluka,
-      order.buyer?.district,
-      order.buyer?.state ? `${order.buyer?.state} - ${order.buyer?.pincode || ''}` : (order.buyer?.pincode || '')
-    ].filter(Boolean).join(', ') || order.address || villageValue;
+    fullAddressValue = formatAddressString((order as any).buyerAddress) || formatAddressString((order.buyer as any)?.fullAddress) || [
+      formatAddressString(order.buyer?.addressLine1),
+      formatAddressString(order.buyer?.addressLine2),
+      formatAddressString(order.buyer?.village || villageValue),
+      formatAddressString(order.buyer?.taluka),
+      formatAddressString(order.buyer?.district),
+      order.buyer?.state ? `${order.buyer?.state} - ${order.buyer?.pincode || ''}` : formatAddressString(order.buyer?.pincode)
+    ].filter(Boolean).join(', ') || formatAddressString(order.address) || villageValue;
   }
 
   const products = order.products || [];

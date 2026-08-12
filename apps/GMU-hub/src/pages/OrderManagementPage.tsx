@@ -2244,8 +2244,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                               {/* Stepper Nodes */}
                               {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
-                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
+                                const isRedirectedSHG = node.id === 'pickup_shg' && (
+                                  order.isPickupRedirected ||
+                                  order.isRedirected ||
+                                  order.pickupShgStatus === 'REDIRECTED' ||
+                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
+                                  (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
+                                );
+                                const nodeLabel = node.label;
                                 const isClickable = !isRedirectedSHG;
 
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
@@ -2266,9 +2272,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 const iconElement = getIconForNode(node.label);
 
                                 if (isRedirectedSHG) {
-                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
-                                  iconContent = iconElement;
-                                  labelColor = 'text-slate-350 opacity-40 font-medium';
+                                  nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
+                                  iconContent = (
+                                    <div className="relative">
+                                      {iconElement}
+                                      <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
+                                    </div>
+                                  );
+                                  labelColor = 'text-purple-800 font-extrabold';
                                 } else if (node.state === 'completed') {
                                   nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
                                   iconContent = (
@@ -2324,7 +2335,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       {nodeLabel}
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
-                                    {node.state === 'active' ? (
+                                    {isRedirectedSHG ? (
+                                      <span className="text-[8px] font-extrabold text-purple-700 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider">Redirected</span>
+                                    ) : node.state === 'active' ? (
                                       <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
                                     ) : dateDetails ? (
                                       <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
@@ -2344,8 +2357,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           <div className="w-full lg:w-[320px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-6 self-stretch py-1 overflow-visible">
                             {/* Top row: Status info badge and time ago (centered) */}
                             <div className="flex flex-col items-center text-center space-y-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                              <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${
+                                (order.mainStatus || '').toUpperCase() === 'REDIRECTED'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                  : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
+                              } rounded-full uppercase tracking-wider`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${
+                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
+                                }`} />
                                 {order.mainStatus.replace(/[-_]/g, ' ')}
                               </span>
                               <span className="block text-[10px] text-slate-400 font-semibold">
@@ -2603,8 +2622,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                               {/* Stepper Nodes */}
                               {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
-                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
+                                const isRedirectedSHG = node.id === 'pickup_shg' && (
+                                  order.isPickupRedirected ||
+                                  order.isRedirected ||
+                                  order.pickupShgStatus === 'REDIRECTED' ||
+                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
+                                  (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
+                                );
+                                const nodeLabel = node.label;
                                 const isClickable = !!node.details && !isRedirectedSHG;
 
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
@@ -2625,9 +2650,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 const iconElement = getIconForNode(node.label);
 
                                 if (isRedirectedSHG) {
-                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
-                                  iconContent = iconElement;
-                                  labelColor = 'text-slate-350 opacity-40 font-medium';
+                                  nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
+                                  iconContent = (
+                                    <div className="relative">
+                                      {iconElement}
+                                      <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
+                                    </div>
+                                  );
+                                  labelColor = 'text-purple-800 font-extrabold';
                                 } else if (node.state === 'completed') {
                                   nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
                                   iconContent = (
@@ -2683,7 +2713,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       {nodeLabel}
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
-                                    {node.state === 'active' ? (
+                                    {isRedirectedSHG ? (
+                                      <span className="text-[8px] font-extrabold text-purple-700 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider">Redirected</span>
+                                    ) : node.state === 'active' ? (
                                       <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
                                     ) : dateDetails ? (
                                       <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
@@ -2703,8 +2735,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           <div className="w-full lg:w-[250px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-8 self-stretch py-1">
                             {/* Top row: Status info badge and time ago (centered) */}
                             <div className="flex flex-col items-center text-center space-y-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                              <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${
+                                (order.mainStatus || '').toUpperCase() === 'REDIRECTED'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                  : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
+                              } rounded-full uppercase tracking-wider`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${
+                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
+                                }`} />
                                 {order.mainStatus.replace(/[-_]/g, ' ')}
                               </span>
                               <span className="block text-[10px] text-slate-400 font-semibold">

@@ -100,11 +100,8 @@ model Order {
   
   // Redirect indicators
   isPickupRedirected      Boolean?          @default(false)
-  isDropRedirected        Boolean?          @default(false)
   redirectedPickupAt      DateTime?
-  redirectedDropAt        DateTime?
   redirectedPickupShgId   String?
-  redirectedDropShgId     String?
   
   // Timestamps
   warehouseReceivedAt     DateTime?
@@ -118,7 +115,7 @@ model Order {
 
   assignments             OrderAssignment[]
   parcels                 Parcel[]
-  redirectedOrder         RedirectedOrder?
+  redirectedOrders        RedirectedOrder[]
 
   @@index([orderId])
   @@index([barcode])
@@ -988,8 +985,9 @@ model return_order_timeline {
 
 model RedirectedOrder {
   id            String   @id @default(uuid())
-  orderId       String   @unique
+  orderId       String
   order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legType       String   @default("PICKUP") // PICKUP or DROP
   shgId         String
   transporterId String?
   reason        String?

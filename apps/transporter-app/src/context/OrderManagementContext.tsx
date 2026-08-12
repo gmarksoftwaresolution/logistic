@@ -63,7 +63,6 @@ export interface BatchOrder {
   handoverCode?: string;
   isRTO?: boolean;
   isPickupRedirected?: boolean;
-  isDropRedirected?: boolean;
   isRedirected?: boolean;
   shgContact: {
     name: string;
@@ -221,71 +220,95 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const dropResponse = await api.get('/orders/drop/assigned');
       const rawDrops = dropResponse.data || [];
 
-      const mappedPickups = rawPickups.map((o: any) => ({
-        id: `pickup-${o.id}`,
-        displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
-        flowType: 'shg_to_gmu' as FlowType,
-        shgName: o.shg?.shgDetail?.shgName || 'N/A',
-        pickupPointName: o.seller?.village || o.seller?.address?.village || 'N/A',
-        dropPointName: 'Gadhinglaj Hub',
-        pickupCount: 1,
-        dropCount: 0,
-        totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
-        totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-        status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
-          ? 'DROP_COMPLETED'
-          : (['PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
-            ? 'PICKUP_COMPLETED'
-            : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
-              ? 'ACCEPTED_PICKUP'
-              : 'NEW_ORDER',
-        rejectReason: (() => {
-          const rawReason = o.tracking?.[0]?.remarks;
-          let reasonVal = rawReason;
-          if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.dropOrders?.[0]) {
-            const dropReason = o.masterOrder.dropOrders[0].tracking?.[0]?.remarks;
-            if (dropReason) reasonVal = dropReason;
-          }
-          const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
-          return finalReason ? cleanRejectReason(finalReason) : undefined;
-        })(),
-        // Store the pickup's masterOrderId so we can look up the drop order later
-        masterOrderId: o.masterOrderId,
-        handoverCode: o.handoverCode,
-        isRTO: o.isRTO || false,
-        shgContact: {
-          name: cleanPersonName(o.shg?.fullName || o.seller?.sellerName || o.seller?.fullName || o.shg?.shgName, 'N/A'),
-          shgName: o.shg?.shgName || o.seller?.shgName || o.shg?.fullName || '',
-          phone: o.shg?.phoneNumber || o.shg?.mobileNumber || o.seller?.mobileNumber || o.seller?.phoneNumber || '',
-          address: o.shg?.fullAddress || o.seller?.fullAddress || (() => {
-            if (o.shg?.address) {
-              const parts = [
-                o.shg.address.addressLine1,
-                o.shg.address.village,
-                o.shg.address.taluka,
-                o.shg.address.pincode
-              ].filter(Boolean);
-              if (parts.length > 0) return parts.join(', ');
+      const mappedPickups = rawPickups.map((o: any) => {
+        const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED');
+        return {
+          id: `pickup-${o.id}`,
+          displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
+          areaName: isRedirected ? (o.seller?.taluka || o.seller?.address?.taluka || 'N/A') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
+          flowType: 'shg_to_gmu' as FlowType,
+          shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
+          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.address?.village || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
+          dropPointName: 'Gadhinglaj Hub',
+          pickupCount: 1,
+          dropCount: 0,
+          totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
+          totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
+          status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
+            ? 'DROP_COMPLETED'
+            : (['PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
+              ? 'PICKUP_COMPLETED'
+              : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+                ? 'ACCEPTED_PICKUP'
+                : 'NEW_ORDER',
+          rejectReason: (() => {
+            const rawReason = o.tracking?.[0]?.remarks;
+            let reasonVal = rawReason;
+            if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.dropOrders?.[0]) {
+              const dropReason = o.masterOrder.dropOrders[0].tracking?.[0]?.remarks;
+              if (dropReason) reasonVal = dropReason;
             }
-            if (o.seller) {
-              const parts = [
-                o.seller.addressLine1,
-                o.seller.addressLine2,
-                o.seller.village,
-                o.seller.taluka,
-                o.seller.district,
-                o.seller.pincode
-              ].filter(Boolean);
-              if (parts.length > 0) return parts.join(', ');
-            }
-            return 'N/A';
+            const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
+            return finalReason ? cleanRejectReason(finalReason) : undefined;
           })(),
-          village: o.shg?.address?.village || o.seller?.village || 'N/A',
-          pincode: o.shg?.address?.pincode || o.seller?.pincode || 'N/A',
-          taluka: o.shg?.address?.taluka || o.seller?.taluka || 'N/A',
-          district: o.shg?.address?.district || o.seller?.district || 'N/A',
-        },
+          // Store the pickup's masterOrderId so we can look up the drop order later
+          masterOrderId: o.masterOrderId,
+          handoverCode: o.handoverCode,
+          isRTO: o.isRTO || false,
+          isRedirected: isRedirected,
+          shgContact: {
+            name: isRedirected
+              ? cleanPersonName(o.seller?.sellerName || o.seller?.fullName, 'Seller')
+              : cleanPersonName(o.shg?.fullName || o.shg?.shgName || o.seller?.sellerName || o.seller?.fullName, 'N/A'),
+            shgName: isRedirected
+              ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+              : (o.shg?.shgName || o.shg?.fullName || o.seller?.shgName || ''),
+            phone: isRedirected
+              ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.shg?.phoneNumber || '')
+              : (o.shg?.phoneNumber || o.shg?.mobileNumber || o.seller?.mobileNumber || o.seller?.phoneNumber || ''),
+            address: isRedirected
+              ? (o.seller?.fullAddress || (() => {
+                  if (o.seller) {
+                    const parts = [
+                      o.seller.addressLine1,
+                      o.seller.addressLine2,
+                      o.seller.village,
+                      o.seller.taluka,
+                      o.seller.district,
+                      o.seller.pincode
+                    ].filter(Boolean);
+                    if (parts.length > 0) return parts.join(', ');
+                  }
+                  return o.shg?.fullAddress || 'N/A';
+                })())
+              : (o.shg?.fullAddress || (() => {
+                  if (o.shg?.address) {
+                    const parts = [
+                      o.shg.address.addressLine1,
+                      o.shg.address.village,
+                      o.shg.address.taluka,
+                      o.shg.address.pincode
+                    ].filter(Boolean);
+                    if (parts.length > 0) return parts.join(', ');
+                  }
+                  if (o.seller) {
+                    const parts = [
+                      o.seller.addressLine1,
+                      o.seller.addressLine2,
+                      o.seller.village,
+                      o.seller.taluka,
+                      o.seller.district,
+                      o.seller.pincode
+                    ].filter(Boolean);
+                    if (parts.length > 0) return parts.join(', ');
+                  }
+                  return 'N/A';
+                })()),
+            village: isRedirected ? (o.seller?.village || o.shg?.address?.village || 'N/A') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
+            pincode: isRedirected ? (o.seller?.pincode || o.shg?.address?.pincode || 'N/A') : (o.shg?.address?.pincode || o.seller?.pincode || 'N/A'),
+            taluka: isRedirected ? (o.seller?.taluka || o.shg?.address?.taluka || 'N/A') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
+            district: isRedirected ? (o.seller?.district || o.shg?.address?.district || 'N/A') : (o.shg?.address?.district || o.seller?.district || 'N/A'),
+          },
         products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
           const pId = String(item.id || item.parcelId || Math.random());
           const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
@@ -328,7 +351,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         }],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: o.createdAt,
-      }));
+      };
+    });
 
       const mappedDrops = rawDrops.map((o: any) => {
         const rawId = String(o.orderId || o.id || '105');

@@ -1,3 +1,23 @@
+export const formatAddressString = (addr: any): string => {
+  if (!addr) return '';
+  if (typeof addr === 'string') return addr;
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.addressLine1,
+      addr.addressLine2,
+      addr.landmark,
+      addr.village,
+      addr.taluka,
+      addr.district,
+      addr.city,
+      addr.state,
+      addr.pincode
+    ].map(p => (p !== null && p !== undefined && typeof p !== 'object') ? String(p).trim() : '').filter(Boolean);
+    if (parts.length > 0) return parts.join(', ');
+  }
+  return typeof addr === 'object' ? '' : String(addr || '');
+};
+
 export const getRouteForOrder = (item: any) => {
   if (item.isRedirected || item.isPickupRedirected) {
     return `Seller > Transporter`;
@@ -6,38 +26,38 @@ export const getRouteForOrder = (item: any) => {
   // Use explicitly stored original route data for Return orders to prevent swapping
   if (item.id?.includes('RTO-') || item.orderId?.includes('RTO-') || item.id?.includes('RET-') || item.orderId?.includes('RET-')) {
     if (item.fromLocation && item.toLocation) {
-      return `${item.fromLocation} > ${item.toLocation}`;
+      return `${formatAddressString(item.fromLocation)} > ${formatAddressString(item.toLocation)}`;
     }
     // Fallback if fromLocation/toLocation are missing for some reason, reconstruct original based on sourceAddress
     if (item.sourceAddress === 'Transporter') {
-      return `Transporter > ${item.address}`;
+      return `Transporter > ${formatAddressString(item.address)}`;
     } else {
-      const source = item.sourceAddress || item.address;
+      const source = formatAddressString(item.sourceAddress || item.address);
       return `${source} > Transporter`;
     }
   }
 
-
+  const addrStr = formatAddressString(item.address);
 
   if (item.legType === 'pickup') {
     // Seller Address -> Transporter
-    return `${item.address} > Transporter`;
+    return `${addrStr} > Transporter`;
   } else if (item.legType === 'drop') {
-    const isToTransporter = item.address?.toLowerCase().includes('transporter');
+    const isToTransporter = addrStr.toLowerCase().includes('transporter');
     if (isToTransporter) {
       // Seller order delivery leg (Seller Address -> Transporter)
-      const source = item.sourceAddress || 'Seller';
+      const source = formatAddressString(item.sourceAddress || 'Seller');
       return `${source} > Transporter`;
     } else {
       // Transporter order delivery leg (Transporter -> Buyer Address)
-      return `Transporter > ${item.address}`;
+      return `Transporter > ${addrStr}`;
     }
   } else {
     // Fallback if no legType
     if (item.status === 'assigned') {
-      return `Transporter > ${item.address}`;
+      return `Transporter > ${addrStr}`;
     }
-    const source = item.sourceAddress || item.address;
+    const source = formatAddressString(item.sourceAddress || item.address);
     return `${source} > Transporter`;
   }
 };
@@ -80,8 +100,10 @@ export const getFormattedOrderId = (item: any) => {
   return formatOrderNumber(item);
 };
 
-export const translateRoutePart = (part: string, t: any) => {
-  const p = part.trim();
+export const translateRoutePart = (part: any, t: any) => {
+  if (!part) return '';
+  let p = typeof part === 'string' ? part : formatAddressString(part);
+  p = (p || '').trim();
   if (p === 'Transporter') return t('su_transporter_346') || p;
   if (p === 'Buyer') return t('su_buyer') || p;
   if (p === 'Seller') return t('su_seller') || p;

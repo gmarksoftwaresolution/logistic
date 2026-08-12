@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { View, Text, Modal, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LanguageContext } from '../context/LanguageContext';
+import { formatAddressString } from '../utils/orderHelpers';
 
 interface AddressDetailsModalProps {
   visible: boolean;
@@ -77,7 +78,7 @@ export const AddressDetailsModal: React.FC<AddressDetailsModalProps> = ({
               </Text>
             </View>
             <Text style={{ fontSize: 15, color: '#0F172A', lineHeight: 22, paddingLeft: 32 }}>
-              {pickupAddress || "N/A"}
+              {formatAddressString(pickupAddress) || "N/A"}
             </Text>
           </View>
 
@@ -92,7 +93,7 @@ export const AddressDetailsModal: React.FC<AddressDetailsModalProps> = ({
               </Text>
             </View>
             <Text style={{ fontSize: 15, color: '#0F172A', lineHeight: 22, paddingLeft: 32 }}>
-              {deliveryAddress || "N/A"}
+              {formatAddressString(deliveryAddress) || "N/A"}
             </Text>
           </View>
 

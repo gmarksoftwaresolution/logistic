@@ -271,11 +271,6 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 <Text style={styles.contactCardTitle}>
                   {t('orders.drop_details_title', { defaultValue: 'Drop-off Location & Contact' })}
                 </Text>
-                {batch?.isDropRedirected && (
-                  <View style={{ backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
-                    <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT BUYER DELIVERY (REDIRECTED)</Text>
-                  </View>
-                )}
               </View>
               {dropContact?.phone && (
                 <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${dropContact.phone}`)} activeOpacity={0.7}>

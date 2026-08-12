@@ -40,9 +40,9 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { deliveredOrders, highlightedOrders, refreshOrdersList } = useOrders();
   
-  const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && !o.isRedirected);
+  const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && !o.isRedirected && !o.isPickupRedirected && o.pickupShgStatus !== 'REDIRECTED');
   const returnCompletedOrders = deliveredOrders.filter(o => o.isReturn || o.id.startsWith('RTO-'));
-  const redirectedCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && o.isRedirected);
+  const redirectedCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && (o.isRedirected || o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED'));
   
   const [activeTab, setActiveTab] = useState<'new' | 'return' | 'redirected'>('new');
   
