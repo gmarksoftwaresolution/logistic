@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import {
   LayoutDashboard,
   ShoppingCart,
+  History,
   Package,
   Users,
   Truck,
@@ -92,6 +93,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'order-management', label: 'Order Management', icon: ShoppingCart },
+    { id: 'order-history', label: 'Order History', icon: History },
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
     { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },

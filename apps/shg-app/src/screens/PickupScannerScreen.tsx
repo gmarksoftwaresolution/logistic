@@ -67,6 +67,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const [scanned, setScanned] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const isScanningRef = useRef(false);
+  const activeScanPromisesRef = useRef<Promise<any>[]>([]);
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -152,7 +153,9 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         setHasScannedAny(true);
         triggerScanFeedback('success', `Syncing parcel scan...`);
         try {
-          await scanParcel('PICKUP', activeSession.sessionId, data);
+          const promise = scanParcel('PICKUP', activeSession.sessionId, data);
+          activeScanPromisesRef.current.push(promise);
+          await promise;
         } catch (err: any) {
           const errMsg = err.response?.data?.message || 'Sync failed.';
           triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
@@ -189,7 +192,9 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
       // Send backend request asynchronously
       try {
-        await scanParcel('PICKUP', activeSession.sessionId, data);
+        const promise = scanParcel('PICKUP', activeSession.sessionId, data);
+        activeScanPromisesRef.current.push(promise);
+        await promise;
         setLocalScannedItems(prev =>
           prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
         );
@@ -225,6 +230,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     const displayId = orderId.replace(/^pickup-/, '').replace(/^drop-/, '');
 
     try {
+      // Ensure all in-flight background scan HTTP requests finish landing in DB
+      if (activeScanPromisesRef.current.length > 0) {
+        await Promise.allSettled(activeScanPromisesRef.current);
+        activeScanPromisesRef.current = [];
+      }
+
       // Ensure any pending background parcel syncs finish before calling server confirm
       let retries = 0;
       while (retries < 15) {
@@ -309,12 +320,13 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         (cleanId && o.orderId?.includes(cleanId))
       );
 
+      const canonicalOrderId = matchingOrder?.orderId || matchingOrder?.id || (rawId.startsWith('ORD-') ? rawId : `ORD-${cleanId}`);
       const cleanDisplayId = matchingOrder?.orderId || (cleanId.length > 15 ? `ORD-${cleanId.slice(0, 8)}` : (rawId.startsWith('ORD-') ? rawId : `ORD-${rawId}`));
-      const key = matchingOrder?.uuid || matchingOrder?.id || rawId;
+      const key = canonicalOrderId;
 
       if (!ordersMap[key]) {
         ordersMap[key] = {
-          orderId: key,
+          orderId: canonicalOrderId,
           displayOrderId: cleanDisplayId,
           scanned: [],
           remaining: [],

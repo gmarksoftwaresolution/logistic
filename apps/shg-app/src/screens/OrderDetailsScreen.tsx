@@ -18,13 +18,14 @@ import { RescheduleModals } from '../components/RescheduleModals';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../api/axiosInstance';
 import { FloatingScannerButton } from '../components/FloatingScannerButton/FloatingScannerButton';
-
+import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
 
 type Props = NativeStackScreenProps<OrdersStackParamList, 'OrderDetails'>;
 const OrderDetailsScreen: React.FC<Props> = ({
   route,
   navigation
 }) => {
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const context = useContext(LanguageContext);
   const { t } = context!;
   const { isActive, currentStep, nextStep } = useOnboarding();
@@ -788,6 +789,23 @@ const OrderDetailsScreen: React.FC<Props> = ({
         )}
       </View>
 
+      {/* Tracking History Action Card */}
+      <TouchableOpacity
+        onPress={() => setShowTrackingModal(true)}
+        className="bg-[#073318] rounded-[20px] p-4 mb-6 flex-row items-center justify-between shadow-md"
+      >
+        <View className="flex-row items-center gap-3">
+          <View className="w-10 h-10 rounded-full bg-[#B2D534]/20 items-center justify-center">
+            <Ionicons name="location" size={20} color="#B2D534" />
+          </View>
+          <View>
+            <Text className="text-[13px] font-black text-white uppercase tracking-wider">Tracking History</Text>
+            <Text className="text-[10px] font-bold text-[#B2D534]">View audit logs & status progress</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#B2D534" />
+      </TouchableOpacity>
+
       {/* Dynamic Contact Details Card (Seller vs Transporter vs Buyer) */}
       <View className="bg-white rounded-[28px] p-5 border border-[#F1F5F9] mb-6" style={{
         shadowColor: '#000',
@@ -839,37 +857,15 @@ const OrderDetailsScreen: React.FC<Props> = ({
         </View>
 
         {activeType === 'transporter' ? (
-          <>
-            <View className="flex-row items-start mb-4">
-              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                <Ionicons name="car-outline" size={18} color="#073318" />
-              </View>
-              <View className="flex-1 justify-center mt-0.5">
-                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Vehicle Number</Text>
-                <Text className="text-[14px] font-black text-[#111827]">{order.vehicleNumber || 'N/A'}</Text>
-              </View>
+          <View className="flex-row items-start">
+            <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
+              <Ionicons name="car-outline" size={18} color="#073318" />
             </View>
-
-            <View className="flex-row items-start mb-4">
-              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                <Ionicons name="location-outline" size={18} color="#073318" />
-              </View>
-              <View className="flex-1 justify-center mt-0.5">
-                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Transporter Address</Text>
-                <Text className="text-[14px] font-black text-[#111827]">{order.transporterAddress || 'N/A'}</Text>
-              </View>
+            <View className="flex-1 justify-center mt-0.5">
+              <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Vehicle Number</Text>
+              <Text className="text-[14px] font-black text-[#111827]">{order.vehicleNumber || 'N/A'}</Text>
             </View>
-
-            <View className="flex-row items-start">
-              <View className="w-10 h-10 rounded-full bg-[#F8FAFC] items-center justify-center mr-3 border border-slate-100">
-                <Ionicons name="map-outline" size={18} color="#073318" />
-              </View>
-              <View className="flex-1 justify-center mt-0.5">
-                <Text className="text-[11px] font-bold text-slate-500 mb-0.5">Route Details</Text>
-                <Text className="text-[14px] font-black text-[#111827]">{order.transporterRoute || 'N/A'}</Text>
-              </View>
-            </View>
-          </>
+          </View>
         ) : (
           <>
             <View className="flex-row items-start mb-4">
@@ -1476,6 +1472,13 @@ const OrderDetailsScreen: React.FC<Props> = ({
         navigation={navigation}
       />
     )}
+
+    <TrackingHistoryModal
+      visible={showTrackingModal}
+      onClose={() => setShowTrackingModal(false)}
+      order={order}
+      role="SHG"
+    />
   </SafeAreaView>;
 };
 export default OrderDetailsScreen;

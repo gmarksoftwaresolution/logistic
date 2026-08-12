@@ -292,21 +292,39 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     buyerAddress: dbOrder.buyer?.fullAddress || actualDropAddress || '',
     seller: dbOrder.seller,
     buyer: dbOrder.buyer,
-    products: orderItems.map((item: any) => ({
-      code: `#P-${item.productId || item.id}`,
-      tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
-      name: item.product?.name || 'Item',
-      details: `${item.quantity} ${item.quantity > 1 ? 'items' : 'item'}`,
-      weightValue: (item.product?.weight || 0) * item.quantity,
-      qty: item.quantity,
-      unit: item.product?.unit || 'kg',
-      price: item.product?.price || 0,
-      category: item.product?.category || 'FOOD',
-      itemId: item.id,
-      productId: item.productId,
-      verificationCode: item.verificationCode || '',
-      verificationStatus: item.verificationStatus || 'PENDING',
-    })),
+    products: (() => {
+      const parcels = dbOrder.parcels || [];
+      if (parcels.length > 0) {
+        return parcels.map((p: any, idx: number) => ({
+          code: p.parcelId ? (p.parcelId.startsWith('#') ? p.parcelId : `#${p.parcelId}`) : `#P-${p.id || idx + 1}`,
+          tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
+          name: p.productName || p.name || dbOrder.parcelName || dbOrder.category || 'Agri Goods Product',
+          details: `${p.quantity || 1} ${p.quantity > 1 ? 'items' : 'item'} • ${p.weight || 1}kg`,
+          weightValue: parseFloat(p.weight) || 1,
+          qty: p.quantity || 1,
+          price: p.price || 0,
+        }));
+      }
+      return orderItems.map((item: any, idx: number) => {
+        const rawName = item.product?.name || item.productName || item.name || dbOrder.parcelName || dbOrder.category;
+        const name = (!rawName || rawName === 'Item') ? (dbOrder.parcelName || dbOrder.category || 'Agri Goods Product') : rawName;
+        return {
+          code: `#P-${item.productId || item.id || idx + 1}`,
+          tag: type === 'pickup' ? 'Pickup Order' : 'Delivery Order',
+          name,
+          details: `${item.quantity || 1} ${item.quantity > 1 ? 'items' : 'item'}`,
+          weightValue: (item.product?.weight || 0) * (item.quantity || 1),
+          qty: item.quantity || 1,
+          unit: item.product?.unit || 'kg',
+          price: item.product?.price || 0,
+          category: item.product?.category || 'FOOD',
+          itemId: item.id,
+          productId: item.productId,
+          verificationCode: item.verificationCode || '',
+          verificationStatus: item.verificationStatus || 'PENDING',
+        };
+      });
+    })(),
     transporterName: dbOrder.transporter?.fullName || '',
     transporterMobile: dbOrder.transporter?.phoneNumber || '',
     vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',

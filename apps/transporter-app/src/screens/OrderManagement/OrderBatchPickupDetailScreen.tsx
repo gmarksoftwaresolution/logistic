@@ -38,8 +38,11 @@ import {
   VerificationSuccessDialog,
   VerificationFailureDialog,
 } from '../../components/VerificationComponents';
+import { formatAddress } from '../../utils/orderUtils';
+import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
 const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
   const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, generateDropHandoverCode, showToast, refreshBatchesList } = useOrderManagement();
@@ -681,21 +684,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               );
             })()}
             {(() => {
-              const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
+              const formattedAddr = formatAddress(displayContact.address);
+              const addressPincode = typeof displayContact.address === 'string' ? displayContact.address?.match(/\d{6}/)?.[0] : (displayContact.address as any)?.pincode;
               const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
               const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
-                  <View style={styles.contactGridItem}>
-                    <View style={styles.contactIconCircle}>
-                      <User size={scale(14)} color={Colors.primary} />
-                    </View>
-                    <View style={styles.contactDetailCol}>
-                      <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name)}</Text>
-                    </View>
-                  </View>
-
                   {!!(displayContact as any).shgName && (
                     <View style={styles.contactGridItem}>
                       <View style={styles.contactIconCircle}>
@@ -707,6 +701,16 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                     </View>
                   )}
+
+                  <View style={styles.contactGridItem}>
+                    <View style={styles.contactIconCircle}>
+                      <User size={scale(14)} color={Colors.primary} />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Contact Person (CRP)' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName((displayContact as any).crpName || displayContact.name) || (isHubPoint ? 'Hub Manager' : 'SHG Lead')}</Text>
+                    </View>
+                  </View>
 
                   <View style={styles.contactGridItem}>
                     <View style={styles.contactIconCircle}>
@@ -769,7 +773,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>{formattedAddr}</Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
@@ -799,7 +803,35 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             </View>
           </View>
 
-            {/* Handover Progress Bar */}
+            {/* Section: Tracking History Action Card */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#073318',
+              borderRadius: scale(16),
+              padding: scale(14),
+              marginHorizontal: scale(16),
+              marginBottom: scale(14),
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              elevation: 3,
+            }}
+            onPress={() => setShowTrackingModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+              <View style={{ width: scale(36), height: scale(36), borderRadius: scale(18), backgroundColor: 'rgba(178, 213, 52, 0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <MapPin size={scale(18)} color="#B2D534" />
+              </View>
+              <View>
+                <Text style={{ fontSize: scale(13), fontWeight: '900', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Tracking History</Text>
+                <Text style={{ fontSize: scale(10), fontWeight: '700', color: '#B2D534', marginTop: scale(2) }}>View Transporter audit timeline</Text>
+              </View>
+            </View>
+            <ArrowRight size={scale(18)} color="#B2D534" />
+          </TouchableOpacity>
+
+          {/* Handover Progress Bar */}
             <View style={{
               backgroundColor: '#FFFFFF',
               borderRadius: scale(12),
@@ -1488,6 +1520,13 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           navigation={navigation}
         />
       )}
+
+      <TrackingHistoryModal
+        visible={showTrackingModal}
+        onClose={() => setShowTrackingModal(false)}
+        order={batch}
+        role="TRANSPORTER"
+      />
     </SafeAreaView>
   );
 };

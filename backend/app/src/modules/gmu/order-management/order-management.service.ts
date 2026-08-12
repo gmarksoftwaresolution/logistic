@@ -1370,15 +1370,14 @@ export class OrderManagementService implements OnModuleInit {
   async getDropCompletedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'] },
         OR: [
-          { phase: 'DROP' },
-          { dropShgId: { not: null } },
-          { dropTransporterId: { not: null } }
+          { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
+          { status: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
+          { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
         ]
       },
       filter,
-      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']
+      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER']
     );
     const defaultInclude = {
       assignments: true,
@@ -1489,9 +1488,34 @@ export class OrderManagementService implements OnModuleInit {
         assignments: true,
         seller: true,
         buyer: true,
+        parcels: {
+          include: { scanHistories: true }
+        }
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getOrderHistory(filter?: OrderFilterDto) {
+    const totalOrdersCount = await this.prisma.order.count();
+    const completedOrders = await this.getDropCompletedOrders(filter);
+    const transporterReturns = await this.getTransporterReturnOrders(filter);
+    const buyerReturns = await this.getBuyerReturnOrders(filter);
+
+    const allReturns = [...transporterReturns, ...buyerReturns];
+    const uniqueReturnsMap = new Map<string, any>();
+    allReturns.forEach(o => uniqueReturnsMap.set(o.id, o));
+    const returnOrdersList = Array.from(uniqueReturnsMap.values());
+
+    return {
+      metrics: {
+        totalOrders: totalOrdersCount,
+        completedOrders: completedOrders.length,
+        returnOrders: returnOrdersList.length,
+      },
+      completedOrders,
+      returnOrders: returnOrdersList,
+    };
   }
 
   async getInventoryStoredOrders(filter?: OrderFilterDto) {
@@ -2727,16 +2751,16 @@ export class OrderManagementService implements OnModuleInit {
       }
     }
 
-    // Fallback 2: If matching list is empty, broadcast to all approved transporters
-    if (matchingTransporters.length === 0) {
-      const allTransporters = await this.prisma.user.findMany({
-        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
-        select: { id: true }
-      });
-      allTransporters.forEach(t => {
+    // Always include all approved active transporters so every transporter receives the Phase 2 request
+    const allTransporters = await this.prisma.user.findMany({
+      where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
+      select: { id: true }
+    });
+    allTransporters.forEach(t => {
+      if (!matchingTransporters.some(m => String(m.id) === String(t.id))) {
         matchingTransporters.push({ id: String(t.id) });
-      });
-    }
+      }
+    });
 
     if (matchingTransporters.length === 0) {
       console.warn(`[broadcastDropTransporter] No active transporters found in system.`);

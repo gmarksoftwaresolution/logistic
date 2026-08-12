@@ -48,6 +48,49 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
   }
 };
 
+const CANONICAL_STATUS_MAP: Record<string, string> = {
+  'order placed': 'Order Placed & Registered',
+  'order placed & registered': 'Order Placed & Registered',
+  'pending': 'Order Placed & Registered',
+  'created': 'Order Placed & Registered',
+  'registered': 'Order Placed & Registered',
+  'collected & scanned by shg': 'Collected & Scanned by SHG',
+  'shg pickup': 'Collected & Scanned by SHG',
+  'shg scan': 'Collected & Scanned by SHG',
+  'parcel_at_shg': 'Collected & Scanned by SHG',
+  'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
+  'transporter accepted': 'Transporter Route Assigned & Accepted',
+  'accepted_pickup': 'Transporter Route Assigned & Accepted',
+  'picked up by transporter': 'Picked up by Transporter',
+  'parcel_picked': 'Picked up by Transporter',
+  'in_transit_to_hub': 'Picked up by Transporter',
+  'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
+  'at_gmu': 'Received & Quality Checked at GMU Hub',
+  'hub_received': 'Received & Quality Checked at GMU Hub',
+  'stored': 'Received & Quality Checked at GMU Hub',
+  'dispatched from hub': 'Dispatched from Hub',
+  'dispatched': 'Dispatched from Hub',
+  'out_for_delivery': 'Dispatched from Hub',
+  'transporter picked up from hub': 'Transporter Picked Up from Hub',
+  'received at destination shg center': 'Received at Destination SHG Center',
+  'at_buyer_shg': 'Received at Destination SHG Center',
+  'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
+  'delivered': 'Delivered & Handed Over to Buyer',
+  'completed': 'Delivered & Handed Over to Buyer',
+};
+
+const STAGE_ORDER: Record<string, number> = {
+  'Order Placed & Registered': 1,
+  'Collected & Scanned by SHG': 2,
+  'Transporter Route Assigned & Accepted': 3,
+  'Picked up by Transporter': 4,
+  'Received & Quality Checked at GMU Hub': 5,
+  'Dispatched from Hub': 6,
+  'Transporter Picked Up from Hub': 7,
+  'Received at Destination SHG Center': 8,
+  'Delivered & Handed Over to Buyer': 9,
+};
+
 const getUpdatedTimeAgo = (order: any) => {
   const updatedTime = order.rawUpdatedAt || order.updatedAt;
   if (!updatedTime) return 'Updated 1 min ago';
@@ -338,20 +381,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
   const handleSimulatedIntakeScan = async (parcel: any) => {
     setScanningParcel(parcel);
-    setTimeout(async () => {
-      try {
-        if (parcel.verificationToken) {
-          await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
-        }
-      } catch (err: any) {
-        console.warn('Verify QR error in intake scan:', err);
-      } finally {
-        setIntakeParcels(prev =>
-          prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'HUB_RECEIVED' } : p)
-        );
-        setScanningParcel(null);
+    // Instant optimistic UI update for 0ms visual responsiveness
+    setIntakeParcels(prev =>
+      prev.map(p => p.parcelId === parcel.parcelId ? { ...p, parcelStatus: 'HUB_RECEIVED' } : p)
+    );
+
+    try {
+      if (parcel.verificationToken) {
+        await api.orders.verifyQr(parcel.parcelId, parcel.verificationToken, 'GMU');
       }
-    }, 2000);
+    } catch (err: any) {
+      console.warn('Verify QR error in intake scan:', err);
+    } finally {
+      setScanningParcel(null);
+    }
   };
 
   // QR Scan Modal State for Returns
@@ -678,14 +721,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         setQrScanSuccess(true);
         setScanMessage('Buyer return scanned and moved to inventory successfully.');
       }
+      setIsQrModalOpen(false);
       await loadData();
     } catch (err: any) {
       setScanMessage(err.message || 'Failed to process return scan.');
     } finally {
       setIsScanning(false);
-      setTimeout(() => {
-        setIsQrModalOpen(false);
-      }, 1500);
     }
   };
 
