@@ -1028,7 +1028,8 @@ export class QrVerificationEngine {
         } else if (normalizedMainStatus === 'TRANSPORTER_ACCEPTED') {
           pickupShgStatus = 'COMPLETED';
           pickupTransporterStatus = 'ACCEPTED';
-        } else if (normalizedMainStatus === 'IN_TRANSIT') {
+        } else if (normalizedMainStatus === 'IN_TRANSIT' || (normalizedMainStatus as string) === 'IN_TRANSIT_TO_HUB' || mainStatus === 'IN_TRANSIT_TO_HUB') {
+          pickupShgStatus = 'DROPPED';
           pickupTransporterStatus = 'PICKED';
         } else if (normalizedMainStatus === 'AT_GMU') {
           pickupTransporterStatus = 'COMPLETED';
@@ -1277,6 +1278,7 @@ export class QrVerificationEngine {
           mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
         } else {
           // Transporter picking up from Pickup SHG to carry to GMU Hub
+          pickupShgStatus = 'DROPPED';
           pickupTransporterStatus = 'PICKED';
           pickupTransporterId = String(userIdFinal);
           mainStatus = 'IN_TRANSIT_TO_HUB';

@@ -320,17 +320,29 @@ export class OrderService {
                 in: [
                   'DELIVERED',
                   'COMPLETED',
-                  'RETURN_COMPLETED'
+                  'RETURN_COMPLETED',
+                  'IN_TRANSIT_TO_HUB',
+                  'HUB_RECEIVED',
+                  'STORED',
+                  'DISPATCHED',
+                  'IN_TRANSIT_TO_DROP_SHG',
+                  'PARCEL_AT_DROP_SHG',
+                  'AT_BUYER_SHG'
                 ]
               }
             },
             {
-              OR: [
-                { isPickupRedirected: true },
-                { pickupShgStatus: 'REDIRECTED' },
-                { mainStatus: 'REDIRECTED' }
-              ]
-            }
+              pickupShgStatus: {
+                in: ['DROPPED', 'COMPLETED', 'REDIRECTED', 'PARCEL_PICKED']
+              }
+            },
+            {
+              dropShgStatus: {
+                in: ['DROPPED', 'COMPLETED', 'DELIVERED']
+              }
+            },
+            { isPickupRedirected: true },
+            { mainStatus: 'REDIRECTED' }
           ]
         },
         include: {
@@ -342,11 +354,31 @@ export class OrderService {
       });
 
       const matchedOrders = orders.filter((o: any) => {
-        const isPhase2ActiveForDropShg = (o.dropShgId && String(o.dropShgId) === shgUuid) && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus);
+        const isPickupShgMatch = (o.pickupShgId && String(o.pickupShgId) === shgUuid);
+        const isDropShgMatch = (o.dropShgId && String(o.dropShgId) === shgUuid);
+        const isReturnShgMatch = (o.pickupReturnShgId && String(o.pickupReturnShgId) === shgUuid);
+
+        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
         if (isPhase2ActiveForDropShg) {
           return false;
         }
-        if (o.pickupShgId === shgUuid || o.dropShgId === shgUuid || o.pickupReturnShgId === shgUuid) {
+
+        const isPhase1ActiveForPickupShg = isPickupShgMatch && ['PENDING', 'ACCEPTED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'].includes(o.mainStatus) && o.pickupShgStatus !== 'DROPPED' && o.pickupShgStatus !== 'COMPLETED' && o.pickupShgStatus !== 'REDIRECTED' && !o.isPickupRedirected;
+        if (isPhase1ActiveForPickupShg) {
+          return false;
+        }
+
+        const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED' || o.mainStatus === 'REDIRECTED');
+        if (isRedirected && (isPickupShgMatch || (o.redirectedPickupShgId && String(o.redirectedPickupShgId) === shgUuid))) {
+          const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
+          const mainStat = (o.mainStatus || '').toUpperCase();
+          const isTransporterPickedUp = ['PARCEL_PICKED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(pTransStatus) || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(mainStat);
+          if (!isTransporterPickedUp) {
+            return false;
+          }
+        }
+
+        if (isPickupShgMatch || isDropShgMatch || isReturnShgMatch || (o.redirectedPickupShgId && String(o.redirectedPickupShgId) === shgUuid)) {
           return true;
         }
         if (o.seller) {
@@ -383,11 +415,14 @@ export class OrderService {
         const transId = o.pickupTransporterId || o.dropTransporterId;
         const transporterUser = transId ? transporterMap.get(transId) : null;
         const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+        const legType = (o.dropShgId && String(o.dropShgId) === shgUuid) ? 'drop' : 'pickup';
         return {
           id: cleanOrderId,
           uuid: o.id,
           orderId: cleanOrderId,
           orderNumber: cleanOrderId,
+          legType,
+          phase: legType === 'drop' ? 'DROP' : 'PICKUP',
           barcode: o.barcode,
           status: o.mainStatus,
           seller: o.seller ? {

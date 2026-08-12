@@ -736,6 +736,7 @@ model Earning {
   orderNumber     String    @map("order_number")
   
   amount          Decimal   @db.Decimal(10,2)
+  earningType     String?   @default("NORMAL") @map("earning_type")
   completedAt     DateTime  @map("completed_at")
   
   createdAt       DateTime  @default(now()) @map("created_at")
