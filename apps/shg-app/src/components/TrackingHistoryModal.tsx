@@ -105,12 +105,13 @@ const STAGE_ORDER: Record<string, number> = {
   'Delivered & Handed Over to Buyer': 9,
 };
 
-const formatISTDateTime = (dateInput?: any) => {
+const formatISTDateTime = (dateInput?: any): { time: string; date: string } => {
   if (!dateInput) {
     const now = new Date();
-    const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
-    const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
-    return { time, date };
+    return {
+      time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+      date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    };
   }
 
   try {
@@ -129,11 +130,10 @@ const formatISTDateTime = (dateInput?: any) => {
     }
 
     if (isNaN(dt.getTime())) {
-      const dateMatch = String(dateInput).match(/\b(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\b/);
-      const timeMatch = String(dateInput).match(/\b(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)\b/);
+      const now = new Date();
       return {
-        time: timeMatch ? timeMatch[1].toUpperCase() : '10:00 AM',
-        date: dateMatch ? dateMatch[1] : '11 Aug 2026',
+        time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+        date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
       };
     }
 
@@ -141,7 +141,11 @@ const formatISTDateTime = (dateInput?: any) => {
     const date = dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     return { time, date };
   } catch (e) {
-    return { time: '10:00 AM', date: '11 Aug 2026' };
+    const now = new Date();
+    return {
+      time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
+      date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    };
   }
 };
 
@@ -169,7 +173,7 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       eventsMap.set(canonical, {
         title: canonical,
         timestamp: validTimestamp,
-        remarks: remarks || 'Stage update completed',
+        remarks: remarks || '',
         orderIdx,
       });
     } else if (timestamp) {
@@ -193,12 +197,14 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
 
   // 2. Process product scan histories if available
   const products = Array.isArray(order.products) ? order.products : (Array.isArray(order.parcels) ? order.parcels : []);
+  const scanHistoriesList: any[] = [];
   products.forEach((p: any) => {
     if (Array.isArray(p.scanHistories)) {
       p.scanHistories.forEach((sh: any) => {
+        scanHistoriesList.push(sh);
         const rawAction = sh.action || sh.currentStage || sh.status || 'Parcel Scanned';
         const ts = sh.createdAt || sh.scanTime || sh.timestamp;
-        addEvent(rawAction, ts, sh.remarks || `Location: ${sh.location || 'Hub'}`);
+        addEvent(rawAction, ts, sh.remarks);
       });
     }
   });
@@ -274,23 +280,49 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
     stageLevel = Math.max(stageLevel, 8);
   }
 
-  const createdAt = order.createdAt || order.orderDate || order.created_at || order.date;
-  const acceptedAt = order.acceptedAt || order.shgAcceptedAt || order.pickupShgAcceptedAt || createdAt;
-  const pickedUpAt = order.collectedAt || order.shgPickedUpAt || order.pickedUpAt || (statusUpper === 'PARCEL_AT_SHG' ? (order.updatedAt || acceptedAt) : acceptedAt);
-  const transporterPickedAt = order.transporterPickedUpAt || order.transporterAcceptedAt || pickedUpAt;
-  const dispatchedAt = order.dispatchedAt || order.hubDispatchedAt || transporterPickedAt;
-  const dropTransporterPickedAt = order.dropTransporterPickedUpAt || dispatchedAt;
-  const dropShgReceivedAt = order.dropShgReceivedAt || order.dropShgAcceptedAt || dropTransporterPickedAt;
-  const deliveredAt = order.deliveredAt || order.completedAt || (statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? (order.updatedAt || dropShgReceivedAt) : dropShgReceivedAt);
+  const rawCreatedAt = order.createdAt || order.orderDate || order.created_at || order.date;
+  const baseDate = rawCreatedAt ? new Date(rawCreatedAt) : new Date();
+  const latestDate = order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date());
 
-  if (stageLevel >= 1) addEvent('Order Placed & Registered', createdAt, 'Order registered in system');
-  if (stageLevel >= 2) addEvent('Pickup SHG Assigned & Accepted', acceptedAt, 'Assigned to pickup SHG');
-  if (stageLevel >= 3) addEvent('Collected & Scanned by SHG', pickedUpAt, 'Picked up & scanned from seller');
-  if (stageLevel >= 4) addEvent('Picked up by Transporter', transporterPickedAt, 'Transferred to Transporter');
-  if (stageLevel >= 5) addEvent('Dispatched from Hub', dispatchedAt, 'Dispatched for buyer delivery');
-  if (stageLevel >= 6) addEvent('Transporter Picked Up from Hub', dropTransporterPickedAt, 'Loaded by drop transporter');
-  if (stageLevel >= 7) addEvent('Received at Destination SHG Center', dropShgReceivedAt, 'Received at buyer SHG center');
-  if (stageLevel >= 8) addEvent('Delivered & Handed Over to Buyer', deliveredAt, 'Final doorstep delivery completed');
+  const baseMs = !isNaN(baseDate.getTime()) ? baseDate.getTime() : Date.now();
+  const latestMs = !isNaN(latestDate.getTime()) ? latestDate.getTime() : Date.now();
+
+  const getStepTime = (explicitTime: any, stepIndex: number, totalActiveSteps: number) => {
+    if (explicitTime) return explicitTime;
+    if (stepIndex === 0) return new Date(baseMs).toISOString();
+    if (stepIndex === totalActiveSteps - 1 && latestMs > baseMs) return new Date(latestMs).toISOString();
+    const diff = Math.max(0, latestMs - baseMs);
+    if (diff > 0 && totalActiveSteps > 1) {
+      const stepMs = baseMs + Math.round((diff * stepIndex) / (totalActiveSteps - 1));
+      return new Date(stepMs).toISOString();
+    }
+    const offsetMs = baseMs + (stepIndex * 5 * 60 * 1000);
+    return new Date(Math.min(offsetMs, Date.now())).toISOString();
+  };
+
+  const shgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_PICKUP'))?.scanTime;
+  const transScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_PICKUP'))?.scanTime;
+  const dropTransScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_DROP'))?.scanTime;
+  const dropShgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_DROP'))?.scanTime;
+  const deliveryScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('FINAL_DELIVERY'))?.scanTime;
+
+  const createdAt = rawCreatedAt;
+  const acceptedAt = order.acceptedAt || order.shgAcceptedAt || order.pickupShgAcceptedAt || getStepTime(null, 1, stageLevel);
+  const pickedUpAt = shgScanTime || order.collectedAt || order.shgPickedUpAt || order.pickedUpAt || getStepTime(null, 2, stageLevel);
+  const transporterPickedAt = transScanTime || order.transporterPickedUpAt || order.transporterAcceptedAt || getStepTime(null, 3, stageLevel);
+  const dispatchedAt = order.dispatchedAt || order.hubDispatchedAt || getStepTime(null, 4, stageLevel);
+  const dropTransporterPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || getStepTime(null, 5, stageLevel);
+  const dropShgReceivedAt = dropShgScanTime || order.dropShgReceivedAt || order.dropShgAcceptedAt || getStepTime(null, 6, stageLevel);
+  const deliveredAt = deliveryScanTime || order.deliveredAt || order.completedAt || getStepTime(null, 7, stageLevel);
+
+  if (stageLevel >= 1) addEvent('Order Placed & Registered', createdAt);
+  if (stageLevel >= 2) addEvent('Pickup SHG Assigned & Accepted', acceptedAt);
+  if (stageLevel >= 3) addEvent('Collected & Scanned by SHG', pickedUpAt);
+  if (stageLevel >= 4) addEvent('Picked up by Transporter', transporterPickedAt);
+  if (stageLevel >= 5) addEvent('Dispatched from Hub', dispatchedAt);
+  if (stageLevel >= 6) addEvent('Transporter Picked Up from Hub', dropTransporterPickedAt);
+  if (stageLevel >= 7) addEvent('Received at Destination SHG Center', dropShgReceivedAt);
+  if (stageLevel >= 8) addEvent('Delivered & Handed Over to Buyer', deliveredAt);
 
   // Sort timeline list by stage order integer
   const timelineList = Array.from(eventsMap.values())
@@ -352,9 +384,6 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
                             </View>
                           </View>
                           <Text style={styles.titleText}>{item.title}</Text>
-                          {item.remarks ? (
-                            <Text style={styles.remarksText}>{item.remarks}</Text>
-                          ) : null}
                         </View>
                       </View>
                     );
