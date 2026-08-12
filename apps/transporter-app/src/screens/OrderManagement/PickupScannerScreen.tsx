@@ -102,7 +102,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
   // Set hasScannedAny dynamically on mount if there is already progress
   useEffect(() => {
-    if (activeSession && activeSession.scanned && activeSession.scanned.length > 0) {
+    if (activeSession && Array.isArray(activeSession.scanned) && activeSession.scanned.length > 0) {
       setHasScannedAny(true);
     }
   }, [activeSession]);
@@ -149,19 +149,17 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
     const { parcelId, verificationToken } = decoded;
 
-    // Compile master expected list from session
-    const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const cleanScannedVal = String(parcelId || '').trim();
-    const cleanNumId = cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '').replace(/^PCL-/, '');
-    const mappedPclId = cleanScannedVal.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2');
-
-    const parcel = allParcels.find((p: any) => 
+    const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+    const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+    const allParcels = [...safeScanned, ...safeRemaining];
+    const cleanScannedId = parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '');
+    const parcel = allParcels.find((p: any) =>
       p.parcelId === mappedPclId ||
       p.orderId === parcelId ||
       p.barcode === parcelId ||
       p.id === parcelId ||
       p.qrCodeValue === data ||
-      p.qrCodeValue === parcelId || 
+      p.qrCodeValue === parcelId ||
       p.verificationToken === parcelId ||
       (cleanNumId && p.parcelId && p.parcelId.includes(cleanNumId)) ||
       (cleanNumId && p.orderId && p.orderId.includes(cleanNumId))
@@ -190,8 +188,9 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     }
 
     // Check duplicate
-    const isDuplicate = localScannedItems.some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId) ||
-                        (activeSession.scanned || []).some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId);
+    const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+    const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId) ||
+      safeScanned.some((i: any) => i.parcelId === parcelId);
 
     if (isDuplicate) {
       triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
@@ -248,10 +247,10 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     try {
       // Filter out locally tracked scanned items immediately (< 1ms)
       setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
-      
+
       const res = await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
-      refreshBatchesList().catch(() => {});
-      
+      refreshBatchesList().catch(() => { });
+
       const cleanOrderId = orderId.replace('pickup-', '').replace('drop-', '').replace('ORD-', '');
       Alert.alert(
         'Pickup Confirmed',
@@ -297,16 +296,20 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const scannedGroupedOrders = React.useMemo(() => {
     if (!activeSession) return [];
 
-    const serverScannedIds = new Set((activeSession.scanned || []).map((p: any) => p.parcelId));
-    
+    const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+    const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+    const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+
+    const serverScannedIds = new Set(safeScanned.map((p: any) => p.parcelId));
+
     // Merge optimistic local scans and server scans
     const mergedScanned = [
-      ...(activeSession.scanned || []).map(p => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
-      ...localScannedItems.filter(p => !serverScannedIds.has(p.parcelId))
+      ...safeScanned.map((p: any) => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
+      ...safeLocalScanned.filter((p: any) => !serverScannedIds.has(p.parcelId))
     ];
 
-    const scannedIds = new Set(mergedScanned.map(p => p.parcelId));
-    const mergedRemaining = (activeSession.remaining || []).filter((p: any) => !scannedIds.has(p.parcelId));
+    const scannedIds = new Set(mergedScanned.map((p: any) => p.parcelId));
+    const mergedRemaining = safeRemaining.filter((p: any) => !scannedIds.has(p.parcelId));
 
     const ordersMap: Record<string, {
       orderId: string;
@@ -544,7 +547,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
                         <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
-                        
+
                         {/* Optimistic sync label */}
                         <Text style={[
                           styles.syncLabel,

@@ -96,7 +96,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
   // Set hasScannedAny dynamically on mount if there is already progress
   useEffect(() => {
-    if (activeSession && activeSession.scanned && activeSession.scanned.length > 0) {
+    if (activeSession && Array.isArray(activeSession.scanned) && activeSession.scanned.length > 0) {
       setHasScannedAny(true);
     }
   }, [activeSession]);
@@ -136,17 +136,18 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       const decoded = decodeQrData(data);
       const { parcelId, verificationToken } = decoded;
 
-      // Compile master expected list from session
-      const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
+      const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+      const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+      const allParcels = [...safeScanned, ...safeRemaining];
       const cleanScannedVal = String(parcelId || '').trim();
       const cleanNumId = cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '').replace(/^PCL-/, '');
       const mappedPclId = cleanScannedVal.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2');
 
-      const parcel = allParcels.find((p: any) => 
-        p.parcelId === parcelId || 
+      const parcel = allParcels.find((p: any) =>
+        p.parcelId === parcelId ||
         p.parcelId === mappedPclId ||
         p.qrCodeValue === data ||
-        p.qrCodeValue === parcelId || 
+        p.qrCodeValue === parcelId ||
         p.verificationToken === parcelId ||
         (cleanNumId && p.parcelId && p.parcelId.includes(cleanNumId)) ||
         (cleanNumId && p.orderId && p.orderId.includes(cleanNumId))
@@ -174,8 +175,9 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       }
 
       // Check duplicate
-      const isDuplicate = localScannedItems.some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId) ||
-                          (activeSession.scanned || []).some(i => i.parcelId === parcel.parcelId || i.parcelId === parcelId);
+      const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+      const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId) ||
+        safeScanned.some((i: any) => i.parcelId === parcelId);
 
       if (isDuplicate) {
         triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
@@ -260,7 +262,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
       await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
       Alert.alert('Success', `Order #${displayId} confirmed successfully! Moved to Delivery section.`);
-      refreshOrdersList().catch(() => {});
+      refreshOrdersList().catch(() => { });
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Confirmation failed';
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
@@ -291,16 +293,20 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const scannedGroupedOrders = React.useMemo(() => {
     if (!activeSession) return [];
 
-    const serverScannedIds = new Set((activeSession.scanned || []).map((p: any) => p.parcelId));
-    
+    const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+    const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+    const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+
+    const serverScannedIds = new Set(safeScanned.map((p: any) => p.parcelId));
+
     // Merge optimistic local scans and server scans
     const mergedScanned = [
-      ...(activeSession.scanned || []).map(p => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
-      ...localScannedItems.filter(p => !serverScannedIds.has(p.parcelId))
+      ...safeScanned.map((p: any) => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
+      ...safeLocalScanned.filter((p: any) => !serverScannedIds.has(p.parcelId))
     ];
 
-    const scannedIds = new Set(mergedScanned.map(p => p.parcelId));
-    const mergedRemaining = (activeSession.remaining || []).filter((p: any) => !scannedIds.has(p.parcelId));
+    const scannedIds = new Set(mergedScanned.map((p: any) => p.parcelId));
+    const mergedRemaining = safeRemaining.filter((p: any) => !scannedIds.has(p.parcelId));
 
     const ordersMap: Record<string, {
       orderId: string;
@@ -316,12 +322,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     const getOrderEntry = (rawId: string, defaultName: string) => {
       if (!rawId) return null;
       const cleanId = String(rawId).replace(/^pickup-/, '').replace(/^drop-/, '').replace(/^ORD-/, '');
-      
-      const matchingOrder = allContextOrders.find((o: any) => 
-        o.id === rawId || 
-        o.uuid === rawId || 
-        o.orderId === rawId || 
-        (cleanId && o.id?.includes(cleanId)) || 
+
+      const matchingOrder = allContextOrders.find((o: any) =>
+        o.id === rawId ||
+        o.uuid === rawId ||
+        o.orderId === rawId ||
+        (cleanId && o.id?.includes(cleanId)) ||
         (cleanId && o.orderId?.includes(cleanId))
       );
 
@@ -558,7 +564,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
                         <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
-                        
+
                         {/* Optimistic sync label */}
                         <Text style={[
                           styles.syncLabel,

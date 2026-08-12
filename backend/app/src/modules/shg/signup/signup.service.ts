@@ -87,20 +87,29 @@ export class SignupService {
   }
 
   private async trackStep(userId: number, step: number, status: StepStatus = 'COMPLETED', data?: any) {
-    await this.prisma.stepTracking.upsert({
-      where: { userId_step: { userId, step } },
-      create: {
-        userId,
-        step,
-        status,
-        data: data || {},
-      },
-      update: {
-        status,
-        data: data || {},
-        updatedAt: new Date(),
-      },
+    const existing = await this.prisma.stepTracking.findFirst({
+      where: { userId, step },
     });
+
+    if (existing) {
+      await this.prisma.stepTracking.update({
+        where: { id: existing.id },
+        data: {
+          status,
+          data: data || {},
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await this.prisma.stepTracking.create({
+        data: {
+          userId,
+          step,
+          status,
+          data: data || {},
+        },
+      });
+    }
   }
 
   // ─── STEP 1: Profile + Role ──────────────────────────────────────────────────
@@ -164,36 +173,42 @@ export class SignupService {
       shgLeaderContact = user.phoneNumber || null;
     }
 
-    await this.prisma.shgDetail.upsert({
+    const existingShg = await this.prisma.shgDetail.findFirst({
       where: { userId },
-      create: {
-        userId,
-        shgName: dto.shgName || null,
-        shgLeaderName,
-        shgLeaderContact,
-        shgRole: dto.shgRole as any,
-        crpName: dto.crpName || null,
-        crpMobile: dto.crpMobile || null,
-        crpEmail: dto.crpEmail || null,
-        groupSize: dto.shgGroupSize || null,
-        fullName: user.fullName || null,
-        imgUrl: user.profilePhoto || null,
-        memberCode: user.uniqueCode || null,
-      },
-      update: {
-        shgName: dto.shgName || null,
-        shgLeaderName,
-        shgLeaderContact,
-        shgRole: dto.shgRole as any,
-        crpName: dto.crpName || null,
-        crpMobile: dto.crpMobile || null,
-        crpEmail: dto.crpEmail || null,
-        groupSize: dto.shgGroupSize || null,
-        fullName: user.fullName || null,
-        imgUrl: user.profilePhoto || null,
-        memberCode: user.uniqueCode || null,
-      },
     });
+
+    if (existingShg) {
+      await this.prisma.shgDetail.update({
+        where: { id: existingShg.id },
+        data: {
+          shgName: dto.shgName || null,
+          shgLeaderName,
+          shgLeaderContact,
+          shgRole: dto.shgRole as any,
+          crpName: dto.crpName || null,
+          crpMobile: dto.crpMobile || null,
+          crpEmail: dto.crpEmail || null,
+          groupSize: dto.shgGroupSize || null,
+        },
+      });
+    } else {
+      await this.prisma.shgDetail.create({
+        data: {
+          userId,
+          shgName: dto.shgName || null,
+          shgLeaderName,
+          shgLeaderContact,
+          shgRole: dto.shgRole as any,
+          crpName: dto.crpName || null,
+          crpMobile: dto.crpMobile || null,
+          crpEmail: dto.crpEmail || null,
+          groupSize: dto.shgGroupSize || null,
+          fullName: user.fullName || null,
+          imgUrl: user.profilePhoto || null,
+          memberCode: user.uniqueCode || null,
+        },
+      });
+    }
 
     return {
       success: true,
@@ -250,18 +265,27 @@ export class SignupService {
     }
 
     // Save business detail
-    await this.prisma.businessDetail.upsert({
+    const existingBiz = await this.prisma.businessDetail.findFirst({
       where: { userId },
-      create: {
-        userId,
-        producesProduct: dto.producesProduct,
-        businessTeamSize: dto.businessTeamSize || null,
-      },
-      update: {
-        producesProduct: dto.producesProduct,
-        businessTeamSize: dto.businessTeamSize || null,
-      },
     });
+
+    if (existingBiz) {
+      await this.prisma.businessDetail.update({
+        where: { id: existingBiz.id },
+        data: {
+          producesProduct: dto.producesProduct,
+          businessTeamSize: dto.businessTeamSize || null,
+        },
+      });
+    } else {
+      await this.prisma.businessDetail.create({
+        data: {
+          userId,
+          producesProduct: dto.producesProduct,
+          businessTeamSize: dto.businessTeamSize || null,
+        },
+      });
+    }
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -516,27 +540,36 @@ export class SignupService {
         // 4. Mark signup as completed and update user fields
         const updatedUser = await tx.user.update({
           where: { id: userId },
-          data: { 
+          data: {
             currentStep: 7,
             uniqueCode: requestId,
             applicationStatus: 'PENDING'
           },
         });
 
-        await tx.stepTracking.upsert({
-          where: { userId_step: { userId, step: 7 } },
-          create: {
-            userId,
-            step: 7,
-            status: 'COMPLETED',
-            data: dto ? JSON.parse(JSON.stringify(dto)) : {},
-          },
-          update: {
-            status: 'COMPLETED',
-            data: dto ? JSON.parse(JSON.stringify(dto)) : {},
-            updatedAt: new Date(),
-          },
+        const existingSt7 = await tx.stepTracking.findFirst({
+          where: { userId, step: 7 },
         });
+
+        if (existingSt7) {
+          await tx.stepTracking.update({
+            where: { id: existingSt7.id },
+            data: {
+              status: 'COMPLETED',
+              data: dto ? JSON.parse(JSON.stringify(dto)) : {},
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          await tx.stepTracking.create({
+            data: {
+              userId,
+              step: 7,
+              status: 'COMPLETED',
+              data: dto ? JSON.parse(JSON.stringify(dto)) : {},
+            },
+          });
+        }
 
         // 5. Final Application upsert
         const application = await tx.application.create({
@@ -598,38 +631,47 @@ export class SignupService {
           fullName = updatedUser.fullName || null;
         }
 
-        await tx.shgDetail.upsert({
+        const existingShgDetail = await tx.shgDetail.findFirst({
           where: { userId },
-          create: {
-            userId,
-            shgName,
-            shgLeaderName,
-            shgLeaderContact,
-            shgRole: shgRole as any,
-            crpName,
-            crpMobile,
-            crpEmail,
-            groupSize,
-            fullName,
-            imgUrl,
-            age,
-            memberCode: requestId,
-          },
-          update: {
-            shgName,
-            shgLeaderName,
-            shgLeaderContact,
-            shgRole: shgRole as any,
-            crpName,
-            crpMobile,
-            crpEmail,
-            groupSize,
-            fullName,
-            imgUrl,
-            age,
-            memberCode: requestId,
-          },
         });
+
+        if (existingShgDetail) {
+          await tx.shgDetail.update({
+            where: { id: existingShgDetail.id },
+            data: {
+              shgName,
+              shgLeaderName,
+              shgLeaderContact,
+              shgRole: shgRole as any,
+              crpName,
+              crpMobile,
+              crpEmail,
+              groupSize,
+              fullName,
+              imgUrl,
+              age,
+              memberCode: requestId,
+            },
+          });
+        } else {
+          await tx.shgDetail.create({
+            data: {
+              userId,
+              shgName,
+              shgLeaderName,
+              shgLeaderContact,
+              shgRole: shgRole as any,
+              crpName,
+              crpMobile,
+              crpEmail,
+              groupSize,
+              fullName,
+              imgUrl,
+              age,
+              memberCode: requestId,
+            },
+          });
+        }
 
         return {
           requestId,

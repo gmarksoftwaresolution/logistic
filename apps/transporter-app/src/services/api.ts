@@ -11,8 +11,8 @@ const getLocalDevelopmentUrl = (): string => {
       const match = scriptURL.match(/^https?:\/\/([^:/]+)(:\d+)?/);
       if (match) {
         const host = match[1];
-        // The Transporter backend runs on port 3003
-        return `http://${host}:3003/api`;
+        // The Unified backend runs on port 3000
+        return `http://${host}:3000/api`;
       }
     }
   } catch (e) {
@@ -21,9 +21,9 @@ const getLocalDevelopmentUrl = (): string => {
 
   // Fallbacks based on platform
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3003/api'; // Android emulator host loopback
+    return 'http://10.0.2.2:3000/api'; // Android emulator host loopback
   }
-  return 'http://localhost:3003/api';
+  return 'http://localhost:3000/api';
 };
 
 const getBackendUrl = (): string => {
