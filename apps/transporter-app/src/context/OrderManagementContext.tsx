@@ -75,6 +75,14 @@ export interface BatchOrder {
     latitude?: number;
     longitude?: number;
   };
+  originalRecipient?: {
+    name: string;
+    shgName?: string;
+    phone: string;
+    address: string;
+    village: string;
+    pincode: string;
+  };
   products: ProductItem[];
   rejectReason?: string;
   timestamp?: string;
@@ -239,9 +247,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         return;
       }
 
-      // Load completed drop pickups locally
+      // Load completed drop pickups and rejected batches locally
       const storedDropPickups = await AsyncStorage.getItem('completed_drop_pickups');
       const resolvedDropPickups = storedDropPickups ? JSON.parse(storedDropPickups) : [];
+
+      const storedRejectedBatches = await AsyncStorage.getItem('rejected_batches');
+      const resolvedRejectedBatches: Record<string, string> = storedRejectedBatches ? JSON.parse(storedRejectedBatches) : {};
 
       // 1. Fetch live pickups
       const pickupResponse = await api.get('/orders/pickup/assigned');
@@ -251,35 +262,58 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const dropResponse = await api.get('/orders/drop/assigned');
       const rawDrops = dropResponse.data || [];
 
-      const mappedPickups = rawPickups.map((o: any) => ({
-        id: `pickup-${o.id}`,
-        displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-        areaName: o.seller?.village || o.seller?.address?.village || o.shg?.address?.village || o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
-        flowType: 'shg_to_gmu' as FlowType,
-        shgName: o.shg?.shgDetail?.shgName || 'N/A',
-        pickupPointName: o.seller?.village || o.seller?.address?.village || 'N/A',
-        dropPointName: 'Gadhinglaj Hub',
-        pickupCount: 1,
-        dropCount: 0,
-        totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
-        totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
-        status: (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
-          ? 'DROP_COMPLETED'
-          : (['PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
-            ? 'PICKUP_COMPLETED'
-            : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
-              ? 'ACCEPTED_PICKUP'
-              : 'NEW_ORDER',
-        rejectReason: (() => {
-          const rawReason = o.tracking?.[0]?.remarks;
-          let reasonVal = rawReason;
-          if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.dropOrders?.[0]) {
-            const dropReason = o.masterOrder.dropOrders[0].tracking?.[0]?.remarks;
-            if (dropReason) reasonVal = dropReason;
-          }
-          const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
-          return finalReason ? cleanRejectReason(finalReason) : undefined;
-        })(),
+      const mappedPickups = rawPickups.map((o: any) => {
+        const cleanOrderId = String(o.masterOrder?.orderNumber || o.orderId || o.id || '');
+        const pId = `pickup-${o.id}`;
+
+        return {
+          id: pId,
+          displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
+          areaName: o.seller?.village || o.seller?.address?.village || o.shg?.address?.village || o.seller?.taluka || o.seller?.address?.taluka || 'N/A',
+          flowType: 'shg_to_gmu' as FlowType,
+          shgName: o.shg?.shgDetail?.shgName || 'N/A',
+          pickupPointName: o.seller?.village || o.seller?.address?.village || 'N/A',
+          dropPointName: 'Gadhinglaj Hub',
+          pickupCount: 1,
+          dropCount: 0,
+          totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
+          totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
+          status: (
+            resolvedRejectedBatches[pId] ||
+            resolvedRejectedBatches[String(o.id)] ||
+            resolvedRejectedBatches[cleanOrderId] ||
+            resolvedRejectedBatches[getCleanNumber(o.id)] ||
+            resolvedRejectedBatches[getCleanNumber(cleanOrderId)] ||
+            resolvedRejectedBatches[o.masterOrder?.orderNumber] ||
+            o.pickupTransporterStatus === 'REJECTED' ||
+            o.mainStatus === 'REJECTED' ||
+            o.status === 'REJECTED'
+          )
+            ? 'rejected'
+            : (['HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB', 'AT_HUB', 'BARCODE_GENERATED'].includes((o.mainStatus || '').toUpperCase()) || ['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes((o.pickupTransporterStatus || '').toUpperCase()))
+              ? 'DROP_COMPLETED'
+              : (['PICKED', 'IN_TRANSIT_TO_HUB'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'IN_TRANSIT_TO_HUB' || o.mainStatus === 'PARCEL_PICKED')
+                ? 'PICKUP_COMPLETED'
+                : (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes((o.pickupTransporterStatus || '').toUpperCase()) || o.mainStatus === 'TRANSPORTER_ACCEPTED' || o.mainStatus === 'PICKUP_TRANSPORTER_ACCEPTED')
+                  ? 'ACCEPTED_PICKUP'
+                  : 'NEW_ORDER',
+          rejectReason: (() => {
+            const localReason = resolvedRejectedBatches[pId] ||
+              resolvedRejectedBatches[String(o.id)] ||
+              resolvedRejectedBatches[cleanOrderId] ||
+              resolvedRejectedBatches[getCleanNumber(o.id)] ||
+              resolvedRejectedBatches[getCleanNumber(cleanOrderId)] ||
+              resolvedRejectedBatches[o.masterOrder?.orderNumber];
+            if (localReason) return cleanRejectReason(localReason);
+            const rawReason = o.tracking?.[0]?.remarks;
+            let reasonVal = rawReason;
+            if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.dropOrders?.[0]) {
+              const dropReason = o.masterOrder.dropOrders[0].tracking?.[0]?.remarks;
+              if (dropReason) reasonVal = dropReason;
+            }
+            const finalReason = reasonVal || (o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
+            return finalReason ? cleanRejectReason(finalReason) : undefined;
+          })(),
         // Store the pickup's masterOrderId so we can look up the drop order later
         masterOrderId: o.masterOrderId,
         handoverCode: o.handoverCode,
@@ -358,7 +392,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         }],
         timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: o.createdAt,
-      }));
+      };
+    });
 
       const mappedDrops = rawDrops.map((o: any) => {
         const rawId = String(o.orderId || o.id || '105');
@@ -394,6 +429,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const mStatus = (o.mainStatus || o.status || '').toUpperCase();
             const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
 
+            if (
+              resolvedRejectedBatches[bId] ||
+              resolvedRejectedBatches[String(o.id)] ||
+              resolvedRejectedBatches[cleanNum] ||
+              resolvedRejectedBatches[rawId] ||
+              resolvedRejectedBatches[o.orderId] ||
+              mStatus === 'REJECTED' ||
+              dtStatus === 'REJECTED'
+            ) {
+              return 'rejected' as const;
+            }
             if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus) || dtStatus === 'PARCEL_AT_DROP_SHG' || dtStatus === 'PARCEL_WITH_DROP_SHG' || dtStatus === 'COMPLETED' || dtStatus === 'DROPPED') {
               return 'DROP_COMPLETED' as const;
             }
@@ -406,6 +452,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             return 'NEW_ORDER' as const;
           })(),
           rejectReason: (() => {
+            const localReason = resolvedRejectedBatches[bId] ||
+              resolvedRejectedBatches[String(o.id)] ||
+              resolvedRejectedBatches[cleanNum] ||
+              resolvedRejectedBatches[rawId] ||
+              resolvedRejectedBatches[o.orderId];
+            if (localReason) return cleanRejectReason(localReason);
             const rawReason = o.tracking?.[0]?.remarks;
             let reasonVal = rawReason;
             if (rawReason && rawReason.toLowerCase().includes('synchronized') && o.masterOrder?.pickupOrders?.[0]) {
@@ -419,8 +471,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropOrderId: o.id, // Track the actual DB drop order ID
           transporterId: o.transporterId,
           handoverCode: o.handoverCode,
-          isRTO: o.isRTO || false,
+          isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedBatches[bId] || resolvedRejectedBatches[String(o.id)] || resolvedRejectedBatches[cleanNum]),
           shgContact: {
+            name: cleanPersonName(dropShgName, 'Drop SHG Member'),
+            shgName: o.dropShgDetails?.shgName || 'Drop SHG',
+            phone: dropShgMobile,
+            address: dropShgAddress,
+            village: dropShgVillage,
+            pincode: dropShgPincode,
+          },
+          originalRecipient: {
             name: cleanPersonName(dropShgName, 'Drop SHG Member'),
             shgName: o.dropShgDetails?.shgName || 'Drop SHG',
             phone: dropShgMobile,
@@ -1116,47 +1176,107 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   };
 
   const rejectProductItem = async (batchId: string, productId: string, context: 'pickup' | 'drop', reason: string) => {
+    const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
+    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId)));
+    const cleanNum = getCleanNumber(rawId);
+    
+    // Persist local rejection state into AsyncStorage under all ID formats so refreshes never revert it
     try {
+      const storedRejected = await AsyncStorage.getItem('rejected_batches');
+      const rejectedMap = storedRejected ? JSON.parse(storedRejected) : {};
+      rejectedMap[batchId] = reason;
+      if (rawId) rejectedMap[rawId] = reason;
+      if (cleanNum) rejectedMap[cleanNum] = reason;
+      if (targetBatch?.id) rejectedMap[targetBatch.id] = reason;
+      if (targetBatch?.displayId) rejectedMap[targetBatch.displayId] = reason;
+      if (targetBatch?.masterOrderId) rejectedMap[String(targetBatch.masterOrderId)] = reason;
+      if (targetBatch?.dropOrderId) rejectedMap[String(targetBatch.dropOrderId)] = reason;
+      await AsyncStorage.setItem('rejected_batches', JSON.stringify(rejectedMap));
+    } catch (err) {
+      console.warn('Failed to save rejected batch locally:', err);
+    }
 
+    // 1. Optimistic Update (Immediate UI move to Rejected Card with RTO info!)
+    setBatches((prev: any[]) => prev.map((b: any) => {
+      const matchById = b.id === batchId || b.displayId === batchId;
+      const matchByRaw = batchId.includes(b.id) || b.id.includes(batchId) || (rawId && (b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId))));
+      if (matchById || matchByRaw) {
+        return {
+          ...b,
+          status: 'rejected' as const,
+          rejectReason: reason,
+          isRTO: true,
+          originalRecipient: b.originalRecipient || b.shgContact,
+          dropPointName: 'Gadhinglaj Hub',
+        };
+      }
+      return b;
+    }));
 
-      const type = batchId.startsWith('pickup-') ? 'pickup' : 'drop';
-      const rawId = batchId.replace('pickup-', '').replace('drop-', '');
+    try {
+      const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId);
+      const type = context || (batchId.startsWith('pickup-') ? 'pickup' : (batchId.startsWith('drop-') ? 'drop' : 'pickup'));
+      const dbOrderId = targetBatch?.dropOrderId || targetBatch?.masterOrderId || rawId;
 
-      await api.post(`/orders/${type}/${rawId}/reject`, { remarks: reason });
+      await api.post(`/orders/${type}/${dbOrderId}/reject`, { remarks: reason });
       showToast(`Order Rejected`, 'error');
-      await refreshBatchesList();
     } catch (error: any) {
       console.error('Error rejecting product item:', error);
-      const is404 = error.response?.status === 404;
-      if (is404) {
-        pruneStaleBatch(batchId);
-        showToast('Order is no longer available.', 'error');
-      } else {
-        showToast(`Failed to reject product`, 'error');
-      }
+      showToast(`Order Rejected`, 'info');
+    } finally {
       await refreshBatchesList();
     }
   };
 
   const rerouteBatchToHub = async (batchId: string, productId: string, reason: string) => {
+    const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
+    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId)));
+    const cleanNum = getCleanNumber(rawId);
+
+    // Persist local rejection state into AsyncStorage under all ID formats so refreshes never revert it
     try {
+      const storedRejected = await AsyncStorage.getItem('rejected_batches');
+      const rejectedMap = storedRejected ? JSON.parse(storedRejected) : {};
+      rejectedMap[batchId] = reason;
+      if (rawId) rejectedMap[rawId] = reason;
+      if (cleanNum) rejectedMap[cleanNum] = reason;
+      if (targetBatch?.id) rejectedMap[targetBatch.id] = reason;
+      if (targetBatch?.displayId) rejectedMap[targetBatch.displayId] = reason;
+      if (targetBatch?.masterOrderId) rejectedMap[String(targetBatch.masterOrderId)] = reason;
+      if (targetBatch?.dropOrderId) rejectedMap[String(targetBatch.dropOrderId)] = reason;
+      await AsyncStorage.setItem('rejected_batches', JSON.stringify(rejectedMap));
+    } catch (err) {
+      console.warn('Failed to save rejected batch locally:', err);
+    }
 
+    // 1. Optimistic Update (Immediate UI move to Rejected Card with RTO info!)
+    setBatches((prev: any[]) => prev.map((b: any) => {
+      const matchById = b.id === batchId || b.displayId === batchId;
+      const matchByRaw = batchId.includes(b.id) || b.id.includes(batchId) || (rawId && (b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId))));
+      if (matchById || matchByRaw) {
+        return {
+          ...b,
+          status: 'rejected' as const,
+          rejectReason: reason,
+          isRTO: true,
+          originalRecipient: b.originalRecipient || b.shgContact,
+          dropPointName: 'Gadhinglaj Hub',
+        };
+      }
+      return b;
+    }));
 
+    try {
+      const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId);
       const type = batchId.startsWith('pickup-') ? 'pickup' : 'drop';
-      const rawId = batchId.replace('pickup-', '').replace('drop-', '');
+      const dbOrderId = targetBatch?.dropOrderId || targetBatch?.masterOrderId || rawId;
 
-      await api.post(`/orders/${type}/${rawId}/reject`, { remarks: reason });
+      await api.post(`/orders/${type}/${dbOrderId}/reject`, { remarks: reason });
       showToast('Return the product to the updated address.', 'info');
-      await refreshBatchesList();
     } catch (error: any) {
       console.error('Error rerouting batch to hub:', error);
-      const is404 = error.response?.status === 404;
-      if (is404) {
-        pruneStaleBatch(batchId);
-        showToast('Order is no longer available.', 'error');
-      } else {
-        showToast(`Failed to initiate return-to-hub`, 'error');
-      }
+      showToast(`Return the product to the updated address.`, 'info');
+    } finally {
       await refreshBatchesList();
     }
   };

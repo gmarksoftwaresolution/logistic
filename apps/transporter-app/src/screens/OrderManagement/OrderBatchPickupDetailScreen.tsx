@@ -22,7 +22,7 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
-import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
+import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, UserX, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { FloatingScannerButton } from '../../components/FloatingScannerButton/FloatingScannerButton';
@@ -226,10 +226,15 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const scrollRef = useRef<ScrollView>(null);
 
-  const foundBatch = batches.find((b) => b.id === batchId) ||
-    (batchId.startsWith('pickup-')
-      ? batches.find((b) => b.id === `drop-${batchId.replace('pickup-', '')}`)
-      : batches.find((b) => b.id === `pickup-${batchId.replace('drop-', '')}`));
+  const cleanTargetId = String(batchId || '').replace(/^(pickup-|drop-)/, '');
+
+  const foundBatch = batches.find((b) =>
+    b.id === batchId ||
+    b.displayId === batchId ||
+    (cleanTargetId && (b.id?.includes(cleanTargetId) || (b.displayId && b.displayId.includes(cleanTargetId))))
+  ) || (batchId.startsWith('pickup-')
+    ? batches.find((b) => b.id === `drop-${cleanTargetId}`)
+    : batches.find((b) => b.id === `pickup-${cleanTargetId}`));
 
   const [localBatch, setLocalBatch] = useState<BatchOrder | undefined>(foundBatch);
 
@@ -454,6 +459,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     if (type === 'drop') {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);
       handleCloseModal();
+      navigation.goBack();
     } else {
       rejectProductItem(batch.id, rejectingProductId, type || 'pickup', finalReason);
       handleCloseModal();
@@ -546,14 +552,15 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
     return verifiedProductIds.includes(p.id) || isParcelVerifiedForTransporter(p);
   }).length;
 
-  // Contextual Contact Logic matching precisely with user requirements
   const isPickup = type === 'pickup';
-  const isRTOBatch = batch.products.some(p => (p as any).isRTO) || batch.isRTO || false;
+  const isRTOBatch = batch.products.some(p => (p as any).isRTO) || batch.isRTO || batch.status === 'rejected' || false;
   const isHubPoint = isPickup
     ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
     : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU' || isRTOBatch);
 
-  const displayContact = isRTOBatch ? batch.shgContact : (isHubPoint ? HUB_CONTACT : batch.shgContact);
+  const displayContact = isRTOBatch
+    ? HUB_CONTACT
+    : (isHubPoint ? HUB_CONTACT : batch.shgContact);
   const isSHG = !isHubPoint;
 
   const sectionTitle = type === 'pickup'
@@ -681,9 +688,16 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               );
             })()}
             {(() => {
-              const addressPincode = displayContact.address?.match(/\d{6}/)?.[0];
-              const resolvedVillage = (displayContact as any).village || batch.areaName || 'N/A';
-              const resolvedPincode = (displayContact as any).pincode || addressPincode || 'N/A';
+              const resolvedContact = displayContact || {};
+              const rawAddress = resolvedContact.address;
+              const addressStr = typeof rawAddress === 'string'
+                ? rawAddress
+                : (rawAddress && typeof rawAddress === 'object'
+                    ? Object.values(rawAddress).filter(Boolean).join(', ')
+                    : (rawAddress ? String(rawAddress) : ''));
+              const addressPincode = addressStr.match(/\d{6}/)?.[0];
+              const resolvedVillage = (resolvedContact as any).village || batch.areaName || 'N/A';
+              const resolvedPincode = (resolvedContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
                   <View style={styles.contactGridItem}>
@@ -692,18 +706,18 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                     <View style={styles.contactDetailCol}>
                       <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name)}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(resolvedContact.name)}</Text>
                     </View>
                   </View>
 
-                  {!!(displayContact as any).shgName && (
+                  {!!(resolvedContact as any).shgName && (
                     <View style={styles.contactGridItem}>
                       <View style={styles.contactIconCircle}>
                         <User size={scale(14)} color={Colors.primary} />
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).shgName}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{(resolvedContact as any).shgName}</Text>
                       </View>
                     </View>
                   )}
@@ -714,7 +728,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                     <View style={styles.contactDetailCol}>
                       <Text style={styles.contactItemLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{displayContact.phone}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{resolvedContact.phone || 'N/A'}</Text>
                     </View>
                   </View>
 
@@ -738,26 +752,26 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                   </View>
 
-                  {!!(displayContact as any).taluka && (
+                  {!!(resolvedContact as any).taluka && (
                     <View style={styles.contactGridItem}>
                       <View style={styles.contactIconCircle}>
                         <MapPin size={scale(14)} color={Colors.primary} />
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.taluka', { defaultValue: 'Taluka' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).taluka}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{(resolvedContact as any).taluka}</Text>
                       </View>
                     </View>
                   )}
 
-                  {!!(displayContact as any).district && (
+                  {!!(resolvedContact as any).district && (
                     <View style={styles.contactGridItem}>
                       <View style={styles.contactIconCircle}>
                         <MapPin size={scale(14)} color={Colors.primary} />
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.district', { defaultValue: 'District' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={1}>{(displayContact as any).district}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{(resolvedContact as any).district}</Text>
                       </View>
                     </View>
                   )}
@@ -769,7 +783,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>{displayContact.address}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>{addressStr || 'N/A'}</Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
@@ -781,6 +795,60 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             })()}
           </View>
         </View>
+
+        {/* RTO Original Recipient Audit Card */}
+        {isRTOBatch && (batch.originalRecipient || batch.shgContact) && (
+          <View style={[styles.masterSectionBox, { marginTop: verticalScale(12), borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }]}>
+            <View style={styles.boxHeaderRow}>
+              <View style={styles.boxHeaderLeft}>
+                <UserX size={scale(18)} color="#D97706" strokeWidth={2.5} />
+                <Text style={[styles.boxTitleText, { color: '#92400E' }]}>Original Recipient (Who Rejected)</Text>
+              </View>
+            </View>
+            <View style={styles.boxContentPadding}>
+              <View style={styles.contactGrid}>
+                <View style={styles.contactGridItem}>
+                  <View style={[styles.contactIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                    <User size={scale(14)} color="#D97706" />
+                  </View>
+                  <View style={styles.contactDetailCol}>
+                    <Text style={styles.contactItemLabel}>Person Name</Text>
+                    <Text style={styles.contactItemValue}>{batch.originalRecipient?.name || batch.shgContact?.name || 'N/A'}</Text>
+                  </View>
+                </View>
+                <View style={styles.contactGridItem}>
+                  <View style={[styles.contactIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                    <Phone size={scale(14)} color="#D97706" />
+                  </View>
+                  <View style={styles.contactDetailCol}>
+                    <Text style={styles.contactItemLabel}>Phone Number</Text>
+                    <Text style={styles.contactItemValue}>{batch.originalRecipient?.phone || batch.shgContact?.phone || 'N/A'}</Text>
+                  </View>
+                </View>
+                <View style={[styles.contactGridItem, { width: '100%' }]}>
+                  <View style={[styles.contactIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                    <MapPin size={scale(14)} color="#D97706" />
+                  </View>
+                  <View style={styles.contactDetailCol}>
+                    <Text style={styles.contactItemLabel}>Delivery Destination Address</Text>
+                    <Text style={styles.contactItemValue}>{batch.originalRecipient?.address || batch.shgContact?.address || 'N/A'}</Text>
+                  </View>
+                </View>
+                {!!(batch.rejectReason) && (
+                  <View style={[styles.contactGridItem, { width: '100%' }]}>
+                    <View style={[styles.contactIconCircle, { backgroundColor: '#FEE2E2' }]}>
+                      <XCircle size={scale(14)} color="#DC2626" />
+                    </View>
+                    <View style={styles.contactDetailCol}>
+                      <Text style={styles.contactItemLabel}>Rejection Reason</Text>
+                      <Text style={[styles.contactItemValue, { color: '#DC2626', fontWeight: '700' }]}>{batch.rejectReason}</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Section B: Items Master Box */}
         <View style={styles.masterSectionBox}>

@@ -37,6 +37,55 @@ import {
 } from 'lucide-react';
 import { api } from '../utils/api';
 
+const CANONICAL_STATUS_MAP: Record<string, string> = {
+  'order placed & registered': 'Order Placed & Registered',
+  'order placed': 'Order Placed & Registered',
+  'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
+  'shg accepted': 'Pickup SHG Assigned & Accepted',
+  'collected & scanned by shg': 'Collected & Scanned by SHG',
+  'shg pickup': 'Collected & Scanned by SHG',
+  'shg_pickup': 'Collected & Scanned by SHG',
+  'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
+  'transporter accepted': 'Transporter Route Assigned & Accepted',
+  'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+  'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
+  'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
+  'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
+  'hub intake': 'Received & Quality Checked at GMU Hub',
+  'hub_received': 'Received & Quality Checked at GMU Hub',
+  'stored in hub inventory': 'Stored in Hub Inventory',
+  'stored_in_hub': 'Stored in Hub Inventory',
+  'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
+  'drop shg accepted': 'Drop SHG Assigned & Accepted',
+  'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
+  'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
+  'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
+  'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+  'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+  'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
+  'received at destination shg center': 'Received at Destination SHG Center',
+  'drop shg pickup': 'Received at Destination SHG Center',
+  'shg drop pickup': 'Received at Destination SHG Center',
+  'shg_drop_pickup': 'Received at Destination SHG Center',
+  'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
+  'delivered': 'Delivered & Handed Over to Buyer',
+};
+
+const STAGE_ORDER: Record<string, number> = {
+  'Order Placed & Registered': 1,
+  'Pickup SHG Assigned & Accepted': 2,
+  'Collected & Scanned by SHG': 3,
+  'Transporter Route Assigned & Accepted': 4,
+  'Picked up by Transporter (In Transit to Hub)': 5,
+  'Received & Quality Checked at GMU Hub': 6,
+  'Stored in Hub Inventory': 7,
+  'Drop SHG Assigned & Accepted': 8,
+  'Drop Transporter Route Assigned & Accepted': 9,
+  'Dispatched from Hub (In Transit to Drop Center)': 10,
+  'Received at Destination SHG Center': 11,
+  'Delivered & Handed Over to Buyer': 12,
+};
+
 const getExpectedDeliveryDate = (startDate: string | undefined) => {
   if (!startDate) return '-';
   try {
@@ -770,54 +819,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       ...(retDComp?.tracking || []),
     ];
 
-    const CANONICAL_STATUS_MAP: Record<string, string> = {
-      'order placed & registered': 'Order Placed & Registered',
-      'order placed': 'Order Placed & Registered',
-      'pickup shg assigned & accepted': 'Pickup SHG Assigned & Accepted',
-      'shg accepted': 'Pickup SHG Assigned & Accepted',
-      'collected & scanned by shg': 'Collected & Scanned by SHG',
-      'shg pickup': 'Collected & Scanned by SHG',
-      'shg_pickup': 'Collected & Scanned by SHG',
-      'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
-      'transporter accepted': 'Transporter Route Assigned & Accepted',
-      'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
-      'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
-      'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
-      'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
-      'hub intake': 'Received & Quality Checked at GMU Hub',
-      'hub_received': 'Received & Quality Checked at GMU Hub',
-      'stored in hub inventory': 'Stored in Hub Inventory',
-      'stored_in_hub': 'Stored in Hub Inventory',
-      'drop shg assigned & accepted': 'Drop SHG Assigned & Accepted',
-      'drop shg accepted': 'Drop SHG Assigned & Accepted',
-      'drop transporter route assigned & accepted': 'Drop Transporter Route Assigned & Accepted',
-      'drop transporter accepted': 'Drop Transporter Route Assigned & Accepted',
-      'dispatched from hub (in transit to drop center)': 'Dispatched from Hub (In Transit to Drop Center)',
-      'drop transporter pickup': 'Dispatched from Hub (In Transit to Drop Center)',
-      'transporter drop pickup': 'Dispatched from Hub (In Transit to Drop Center)',
-      'transporter_drop_pickup': 'Dispatched from Hub (In Transit to Drop Center)',
-      'received at destination shg center': 'Received at Destination SHG Center',
-      'drop shg pickup': 'Received at Destination SHG Center',
-      'shg drop pickup': 'Received at Destination SHG Center',
-      'shg_drop_pickup': 'Received at Destination SHG Center',
-      'delivered & handed over to buyer': 'Delivered & Handed Over to Buyer',
-      'delivered': 'Delivered & Handed Over to Buyer',
-    };
 
-    const STAGE_ORDER: Record<string, number> = {
-      'Order Placed & Registered': 1,
-      'Pickup SHG Assigned & Accepted': 2,
-      'Collected & Scanned by SHG': 3,
-      'Transporter Route Assigned & Accepted': 4,
-      'Picked up by Transporter (In Transit to Hub)': 5,
-      'Received & Quality Checked at GMU Hub': 6,
-      'Stored in Hub Inventory': 7,
-      'Drop SHG Assigned & Accepted': 8,
-      'Drop Transporter Route Assigned & Accepted': 9,
-      'Dispatched from Hub (In Transit to Drop Center)': 10,
-      'Received at Destination SHG Center': 11,
-      'Delivered & Handed Over to Buyer': 12,
-    };
 
     const uniqueTrackingMap = new Map();
     allTracking.forEach((t) => {

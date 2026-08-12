@@ -22,7 +22,7 @@ export class OrderService {
         assigneeId: transporterUuid,
         assigneeType: 'TRANSPORTER',
         role: { in: ['PICKUP', 'RETURN'] },
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'] },
       },
       select: { orderId: true }
     });
@@ -54,7 +54,8 @@ export class OrderService {
             'STORED',
             'DISPATCHED',
             'DELIVERED',
-            'COMPLETED'
+            'COMPLETED',
+            'REJECTED'
           ]
         }
       },
@@ -164,7 +165,7 @@ export class OrderService {
         assigneeId: transporterUuid,
         assigneeType: 'TRANSPORTER',
         role: 'DROP',
-        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED'] },
+        status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'] },
       },
       select: { orderId: true }
     });
@@ -177,7 +178,7 @@ export class OrderService {
           { orderId: { in: assignedOrderIds } },
           { dropTransporterId: transporterUuid },
         ],
-        mainStatus: { in: ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'] }
+        mainStatus: { in: ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DISPATCHED', 'HUB_DELIVERED', 'IN_TRANSIT_TO_DROP', 'IN_TRANSIT_TO_BUYER', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED', 'REJECTED'] }
       },
       include: {
         seller: true,
@@ -459,7 +460,26 @@ export class OrderService {
   }
 
   async rejectPickup(orderId: any, transporterId: number, reason?: string) {
-    return { success: true, message: 'Pickup rejected.' };
+    const order = await this.findOrderFlexible(orderId);
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        pickupTransporterStatus: 'REJECTED',
+        mainStatus: 'REJECTED',
+      }
+    });
+
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+      },
+      data: {
+        status: 'REJECTED',
+      }
+    });
+
+    return { success: true, message: 'Pickup rejected successfully.' };
   }
 
   async generateDropHandoverCode(dropOrderId: any, transporterId: number) {
@@ -472,7 +492,27 @@ export class OrderService {
   }
 
   async rejectDrop(dropOrderId: any, transporterId: number, reason?: string) {
-    return { success: true, message: 'Drop rejected.' };
+    const order = await this.findOrderFlexible(dropOrderId);
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        dropTransporterStatus: 'REJECTED',
+        mainStatus: 'REJECTED',
+        returnType: 'TRANSPORTER_RETURN',
+      }
+    });
+
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+      },
+      data: {
+        status: 'REJECTED',
+      }
+    });
+
+    return { success: true, message: 'Drop rejected successfully. Return to origin initiated.' };
   }
 
   async bulkAccept(orders: { id: string | number; type: 'pickup' | 'drop' }[], transporterId: number) {
@@ -488,13 +528,25 @@ export class OrderService {
 
   private async findOrderFlexible(orderId: any) {
     const strId = String(orderId);
-    let order = await this.prisma.order.findUnique({ where: { id: strId } });
+    const rawId = strId.replace(/^(pickup|drop)-/, '');
+    const lastDigits = rawId.match(/\d+$/)?.[0] || rawId;
+
+    let order: any = null;
+    const isValidUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawId);
+    if (isValidUuid) {
+      order = await this.prisma.order.findUnique({ where: { id: rawId } }).catch(() => null);
+    }
+
     if (!order) {
       order = await this.prisma.order.findFirst({
         where: {
           OR: [
+            { id: strId },
+            { id: rawId },
             { orderId: strId },
-            { orderId: `ORD-${strId}` },
+            { orderId: rawId },
+            { orderId: `ORD-${rawId}` },
+            { orderId: { endsWith: lastDigits } },
           ]
         }
       });
