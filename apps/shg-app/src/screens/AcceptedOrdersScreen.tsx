@@ -47,9 +47,9 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
   if (!context || !user) return null;
   const { t } = context;
 
-  // Filter orders: 'Accepted' goes to Pickup tab, 'PickedUp' goes to Drop tab
-  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted' && !o.isPickupRedirected);
-  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp' && !o.isDropRedirected);
+  // Filter orders: 'Accepted' (waiting for pickup/receipt) goes to Pickup tab, 'PickedUp' (parcel in hand) goes to Drop tab
+  const pickupOrders = acceptedOrders.filter(o => o.status === 'Accepted');
+  const deliveryOrders = acceptedOrders.filter(o => o.status === 'PickedUp');
 
   // Swipe & Pager Tab Switcher State
   const initialTabParam = route.params?.initialTab as string | undefined;
@@ -293,7 +293,8 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
-            const isRedirected = !!item.isPickupRedirected || item.pickupShgStatus === 'REDIRECTED';
+            const isPickupFromSeller = (item.legType || 'pickup') === 'pickup' && source.toLowerCase() !== 'transporter' && !source.toLowerCase().includes('hub');
+            const isRedirected = item.legType === 'drop' ? false : (!!item.isPickupRedirected || item.pickupShgStatus === 'REDIRECTED');
 
             return (
               <OrderCard
@@ -311,7 +312,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
                 isRedirected={isRedirected}
-                onRedirect={() => handleRedirectOrder(item)}
+                onRedirect={isPickupFromSeller && !isRedirected ? () => handleRedirectOrder(item) : undefined}
               />
             );
           }}
@@ -362,7 +363,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
             const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
-            const isRedirected = !!item.isDropRedirected || item.dropShgStatus === 'REDIRECTED';
+            const isRedirected = false;
 
             return (
               <OrderCard
@@ -379,10 +380,7 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
                 isHighlighted={highlightedOrders[item.id]}
                 isRescheduled={!!item.rescheduledDate}
                 isRedirected={isRedirected}
-                transporterName={item.transporterName}
-                transporterMobile={item.transporterMobile}
-                vehicleNumber={item.vehicleNumber}
-                transporterId={item.transporterId}
+                hideTransporter={true}
                 verificationPending={item.legType === 'pickup'}
               />
             );

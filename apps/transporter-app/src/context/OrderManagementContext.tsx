@@ -63,7 +63,6 @@ export interface BatchOrder {
   handoverCode?: string;
   isRTO?: boolean;
   isPickupRedirected?: boolean;
-  isDropRedirected?: boolean;
   isRedirected?: boolean;
   shgContact: {
     name: string;
@@ -281,31 +280,38 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const rawDrops = dropResponse.data || [];
 
       const mappedPickups = rawPickups.map((o: any) => {
-        const pickupShgObj = o.pickupShgDetails || o.pickupShg || o.shg;
-        const pickupShgCrp = pickupShgObj?.crpName || pickupShgObj?.personName || pickupShgObj?.name || pickupShgObj?.fullName || 'SHG CRP Lead';
-        const pickupShgName = pickupShgObj?.shgName || `${pickupShgObj?.village || o.seller?.village || ''} SHG Center`;
-        const pickupShgPhone = pickupShgObj?.crpMobile || pickupShgObj?.phoneNumber || pickupShgObj?.mobileNumber || pickupShgObj?.phone || '';
-        const pickupShgVillage = pickupShgObj?.village || pickupShgObj?.address?.village || o.seller?.village || 'N/A';
-        const pickupShgPincode = pickupShgObj?.pincode || pickupShgObj?.address?.pincode || o.seller?.pincode || 'N/A';
-        const pickupShgTaluka = pickupShgObj?.taluka || pickupShgObj?.address?.taluka || o.seller?.taluka || 'N/A';
-        const pickupShgDistrict = pickupShgObj?.district || pickupShgObj?.address?.district || o.seller?.district || 'N/A';
-        const pickupShgAddress = pickupShgObj?.fullAddress || [
-          pickupShgObj?.address?.deliveryAddress || pickupShgObj?.address?.landmark || pickupShgObj?.address?.houseNo || pickupShgObj?.address?.addressLine1,
-          pickupShgObj?.address?.village || pickupShgVillage,
-          pickupShgObj?.address?.taluka || pickupShgTaluka,
-          pickupShgObj?.address?.district || pickupShgDistrict,
-          pickupShgObj?.address?.pincode || pickupShgPincode
-        ].filter(Boolean).join(', ') || o.seller?.fullAddress || 'N/A';
+        const isRedirected = !!(
+          o.isPickupRedirected ||
+          o.isRedirected ||
+          o.pickupShgStatus === 'REDIRECTED' ||
+          o.mainStatus === 'REDIRECTED'
+        );
 
-        const pickupPointVillage = pickupShgVillage !== 'N/A' ? pickupShgVillage : (o.seller?.village || pickupShgObj?.village || 'Local Village');
+        const shgObj = o.shg || o.pickupShg || o.pickupShgDetails || {};
+        const pickupShgCrp = isRedirected
+          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          : (shgObj.crpName || shgObj.personName || shgObj.fullName || shgObj.name || shgObj.shgDetail?.crpName || 'SHG CRP Lead');
+        const pickupShgName = isRedirected
+          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          : (shgObj.shgName || shgObj.shgDetail?.shgName || (shgObj.village ? `${shgObj.village} Center` : 'SHG Center'));
+        const pickupShgPhone = isRedirected
+          ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.seller?.phone || '')
+          : (shgObj.mobileNumber || shgObj.phoneNumber || shgObj.phone || shgObj.shgDetail?.crpMobile || '');
+        const pickupShgAddress = isRedirected
+          ? (o.seller?.fullAddress || o.seller?.addressLine1 || o.seller?.village || '')
+          : (shgObj.fullAddress || shgObj.addressLine1 || (shgObj.address?.deliveryAddress || shgObj.address?.landmark || shgObj.address?.village) || '');
+        const pickupShgVillage = isRedirected ? (o.seller?.village || '') : (shgObj.village || shgObj.address?.village || o.seller?.village || '');
+        const pickupShgPincode = isRedirected ? (o.seller?.pincode || '') : (shgObj.pincode || shgObj.address?.pincode || o.seller?.pincode || '');
+        const pickupShgTaluka = isRedirected ? (o.seller?.taluka || '') : (shgObj.taluka || shgObj.address?.taluka || o.seller?.taluka || '');
+        const pickupShgDistrict = isRedirected ? (o.seller?.district || '') : (shgObj.district || shgObj.address?.district || o.seller?.district || '');
 
         return {
           id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: pickupShgVillage !== 'N/A' ? pickupShgVillage : (o.seller?.taluka || 'N/A'),
+          areaName: isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
           flowType: 'shg_to_gmu' as FlowType,
-          shgName: pickupShgName,
-          pickupPointName: pickupPointVillage,
+          shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
+          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
           dropPointName: 'Gadhinglaj Hub',
           pickupCount: 1,
           dropCount: 0,
@@ -369,6 +375,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const finalReason = reasonVal || (o.mainStatus === 'REJECTED' || o.status === 'REJECTED' ? 'Vehicle Not Available' : undefined);
             return finalReason ? cleanRejectReason(finalReason) : undefined;
           })(),
+          // Store the pickup's masterOrderId so we can look up the drop order later
           masterOrderId: o.masterOrderId,
           handoverCode: o.handoverCode,
           isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)]),
@@ -482,8 +489,9 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const bId = `drop-${o.id}`;
             const cleanNum = getCleanNumber(o.id || o.orderId);
             const rawId = String(o.id || '');
+            const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(mStatus);
             const isLocalRejected = Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[rawId] || resolvedRejectedMap[cleanNum] || resolvedRejectedMap[o.orderId]);
-            const isRTO = o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected || mStatus === 'REJECTED' || dtStatus === 'REJECTED';
+            const isRTO = (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected) && isPickedUp;
 
             // Rule 2: If parcel WAS picked up (or delivery rejected), keep active in DROP section with updated hub return address until Hub takes in return parcel!
             if (isRTO) {
@@ -492,13 +500,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               }
               return 'PICKUP_COMPLETED' as const;
             }
+            // Rule 1: Accepted/assigned without pickup and rejected -> Move to REJECTED TAB!
+            if (mStatus === 'REJECTED' || ptStatus === 'REJECTED' || dtStatus === 'REJECTED' || dShgStatus === 'REJECTED' || (!isPickedUp && isLocalRejected)) {
+              return 'REJECTED' as const;
+            }
             // Normal completed drop
             if (dtStatus === 'COMPLETED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
               return 'DROP_COMPLETED' as const;
-            }
-            // Rule 1: Accepted/assigned without pickup and rejected -> Move to REJECTED TAB!
-            if (mStatus === 'REJECTED' || dtStatus === 'REJECTED' || dShgStatus === 'REJECTED') {
-              return 'REJECTED' as const;
             }
             if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || isPickupFinished) {
               return 'PICKUP_COMPLETED' as const;
@@ -677,7 +685,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const storedStr = await AsyncStorage.getItem('active_rto_batches');
         if (storedStr) {
           const rtoMap = JSON.parse(storedStr) || {};
-          const activeRtoList = Object.values(rtoMap).filter((b: any) => b && typeof b === 'object' && b.isRTO && b.status !== 'DROP_COMPLETED');
+          const rejectedBaseNums = new Set(serverRejectedOrders.map(b => getCleanNumber(b.id || b.displayId || (b as any).orderId)));
+          const activeRtoList = Object.values(rtoMap).filter((b: any) => {
+            if (!b || typeof b !== 'object' || !b.isRTO || b.status === 'DROP_COMPLETED') return false;
+            const num = getCleanNumber(b.id || b.displayId || b.orderId);
+            return num ? !rejectedBaseNums.has(num) : true;
+          });
           const processedNums = new Set<string>();
 
           activeRtoList.forEach((rtoBatch: any) => {
@@ -1325,12 +1338,28 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     }
   };
 
-  const rejectProductItem = async (batchId: string, productId: string, context: 'pickup' | 'drop', reason: string) => {
+  const declinePrePickup = async (batchId: string, reason: string) => {
     const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
-    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId)));
+    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId));
     const cleanNum = getCleanNumber(rawId);
 
-    // Persist local rejection state into AsyncStorage under all ID formats so refreshes never revert it
+    // Purge from active_rto_batches so it NEVER gets pushed as an RTO drop task
+    try {
+      const storedRto = await AsyncStorage.getItem('active_rto_batches');
+      if (storedRto) {
+        const rtoMap = JSON.parse(storedRto) || {};
+        delete rtoMap[batchId];
+        delete rtoMap[rawId];
+        delete rtoMap[`pickup-${rawId}`];
+        delete rtoMap[`drop-${rawId}`];
+        if (cleanNum) delete rtoMap[cleanNum];
+        if (targetBatch?.id) delete rtoMap[targetBatch.id];
+        if (targetBatch?.displayId) delete rtoMap[targetBatch.displayId];
+        await AsyncStorage.setItem('active_rto_batches', JSON.stringify(rtoMap));
+      }
+    } catch (err) { }
+
+    // Add to rejected_batches for Rejection Tab display
     try {
       const storedRejected = await AsyncStorage.getItem('rejected_batches');
       const rejectedMap = storedRejected ? JSON.parse(storedRejected) : {};
@@ -1339,21 +1368,58 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (cleanNum) rejectedMap[cleanNum] = reason;
       if (targetBatch?.id) rejectedMap[targetBatch.id] = reason;
       if (targetBatch?.displayId) rejectedMap[targetBatch.displayId] = reason;
-      if (targetBatch?.masterOrderId) rejectedMap[String(targetBatch.masterOrderId)] = reason;
-      if (targetBatch?.dropOrderId) rejectedMap[String(targetBatch.dropOrderId)] = reason;
       await AsyncStorage.setItem('rejected_batches', JSON.stringify(rejectedMap));
-    } catch (err) {
-      console.warn('Failed to save rejected batch locally:', err);
-    }
+    } catch (err) { }
 
-    // 1. Optimistic Update (Immediate UI move to Rejected Card with RTO info!)
+    setBatches((prev: any[]) => prev.map((b: any) => {
+      if (b.id === batchId || b.displayId === batchId || (rawId && b.id.includes(rawId))) {
+        return {
+          ...b,
+          status: 'REJECTED' as const,
+          rejectReason: reason,
+          isRTO: false,
+        };
+      }
+      return b;
+    }));
+
+    try {
+      const isDropLeg = batchId.startsWith('drop-') || targetBatch?.flowType === 'gmu_to_shg';
+      const endpoint = isDropLeg ? `/orders/drop/${rawId}/decline-pre-pickup` : `/orders/pickup/${rawId}/decline-pre-pickup`;
+      await api.post(endpoint, { remarks: reason }).catch(async () => {
+        const altEndpoint = isDropLeg ? `/orders/drop/${rawId}/reject` : `/orders/pickup/${rawId}/reject`;
+        await api.post(altEndpoint, { remarks: reason });
+      });
+      showToast('Assignment declined. Moved to Rejection tab.', 'info');
+    } catch (error: any) {
+      console.error('Error declining pre-pickup:', error);
+      showToast('Assignment declined.', 'info');
+    } finally {
+      await refreshBatchesList();
+    }
+  };
+
+  const rejectPostPickup = async (batchId: string, reason: string) => {
+    const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
+    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId));
+    const cleanNum = getCleanNumber(rawId);
+
+    try {
+      const storedRejected = await AsyncStorage.getItem('rejected_batches');
+      const rejectedMap = storedRejected ? JSON.parse(storedRejected) : {};
+      rejectedMap[batchId] = reason;
+      if (rawId) rejectedMap[rawId] = reason;
+      if (cleanNum) rejectedMap[cleanNum] = reason;
+      await AsyncStorage.setItem('rejected_batches', JSON.stringify(rejectedMap));
+    } catch (err) { }
+
     setBatches((prev: any[]) => prev.map((b: any) => {
       const matchById = b.id === batchId || b.displayId === batchId;
-      const matchByRaw = batchId.includes(b.id) || b.id.includes(batchId) || (rawId && (b.id.includes(rawId) || (b.displayId && b.displayId.includes(rawId))));
+      const matchByRaw = batchId.includes(b.id) || b.id.includes(batchId) || (rawId && b.id.includes(rawId));
       if (matchById || matchByRaw) {
         return {
           ...b,
-          status: 'rejected' as const,
+          status: 'PICKUP_COMPLETED' as const,
           rejectReason: reason,
           isRTO: true,
           originalRecipient: b.originalRecipient || b.shgContact,
@@ -1364,17 +1430,30 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     }));
 
     try {
-      const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId);
-      const type = context || (batchId.startsWith('pickup-') ? 'pickup' : (batchId.startsWith('drop-') ? 'drop' : 'pickup'));
-      const dbOrderId = targetBatch?.dropOrderId || targetBatch?.masterOrderId || rawId;
-
-      await api.post(`/orders/${type}/${dbOrderId}/reject`, { remarks: reason });
-      showToast(`Order Rejected`, 'error');
+      const type = batchId.startsWith('drop-') ? 'drop' : 'pickup';
+      await api.post(`/orders/${type}/${rawId}/reject-post-pickup`, { remarks: reason });
+      showToast('Rejection reported. Return to origin (RTO) task created.', 'error');
     } catch (error: any) {
-      console.error('Error rejecting product item:', error);
-      showToast(`Order Rejected`, 'info');
+      console.error('Error reporting post-pickup rejection:', error);
+      showToast('Rejection reported.', 'info');
     } finally {
       await refreshBatchesList();
+    }
+  };
+
+  const rejectProductItem = async (batchId: string, productId: string, context: 'pickup' | 'drop', reason: string) => {
+    const rawId = batchId.replace(/^pickup-/, '').replace(/^drop-/, '');
+    const targetBatch = batches.find(b => b.id === batchId || b.displayId === batchId || b.id.includes(rawId));
+
+    const isPickedUp = targetBatch && (
+      ['PICKUP_COMPLETED', 'DROP_COMPLETED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'IN_TRANSIT_TO_DROP_SHG'].includes(targetBatch.status) ||
+      targetBatch.products?.some(p => p.status === 'picked' || p.status === 'completed')
+    );
+
+    if (isPickedUp) {
+      return rejectPostPickup(batchId, reason);
+    } else {
+      return declinePrePickup(batchId, reason);
     }
   };
 

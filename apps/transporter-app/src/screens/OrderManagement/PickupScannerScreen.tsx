@@ -19,28 +19,44 @@ import api from '../../services/api';
 const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
 
 function decodeQrData(data: string) {
-  const trimmed = data.trim();
+  let trimmed = (data || '').trim();
+
+  // If payload is a QR server URL or contains query params like &data=...
+  if (trimmed.includes('data=')) {
+    try {
+      const match = trimmed.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        trimmed = decodeURIComponent(match[1]).trim();
+      }
+    } catch (_) { }
+  } else if (trimmed.startsWith('%7B') || trimmed.includes('%22')) {
+    try {
+      trimmed = decodeURIComponent(trimmed).trim();
+    } catch (_) { }
+  }
+
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || trimmed).trim();
+      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || '').trim();
       return {
-        parcelId,
-        verificationToken: parsed.verificationToken || parsed.verificationCode || '',
+        parcelId: parcelId || trimmed,
+        verificationToken: parsed.verificationToken || parsed.verificationCode || parsed.token || '',
       };
     } catch (err: any) {
-      return {
-        parcelId: trimmed,
-        verificationToken: '',
-      };
+      // Fallback if JSON parsing failed
     }
-  } else {
-    const parts = trimmed.split(/\s+/);
-    return {
-      parcelId: parts[0] || trimmed,
-      verificationToken: parts[1] || '',
-    };
   }
+
+  // Regex extraction for PCL / ORD identifiers if embedded in raw URL or text
+  const pclMatch = trimmed.match(/(PCL-[\w-]+|ORD-[\w-]+|QR-[\w-]+)/i);
+  const parts = trimmed.split(/\s+/);
+  const mainId = pclMatch ? pclMatch[1] : (parts[0] || trimmed);
+
+  return {
+    parcelId: mainId,
+    verificationToken: parts.length > 1 ? parts[1] : '',
+  };
 }
 
 export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
@@ -118,7 +134,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       } else {
         Vibration.vibrate(300);
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // Auto clear feedback after 1.5 seconds
     setTimeout(() => {
@@ -157,10 +173,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
       const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
       const allParcels = [...safeScanned, ...safeRemaining];
-      const cleanScannedId = parcelId ? parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '').replace(/^QR-/, '') : '';
-      const parcel = allParcels.find((p: any) => 
-        p.parcelId === parcelId || 
-        p.orderId === parcelId || 
+      const cleanScannedId = parcelId ? parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '').replace(/^QR-/, '').replace(/^PCL-/, '') : '';
+      const mappedPclId = parcelId ? parcelId.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2') : '';
+      const parcel = allParcels.find((p: any) =>
+        p.parcelId === parcelId ||
+        (mappedPclId && p.parcelId === mappedPclId) ||
+        p.orderId === parcelId ||
         p.barcode === parcelId ||
         p.id === parcelId ||
         (cleanScannedId && p.parcelId && String(p.parcelId).includes(cleanScannedId)) ||
@@ -191,7 +209,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       // Check duplicate
       const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
       const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId) ||
-                          safeScanned.some((i: any) => i.parcelId === parcelId);
+        safeScanned.some((i: any) => i.parcelId === parcelId);
 
       if (isDuplicate) {
         triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
@@ -251,10 +269,10 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     try {
       // Filter out locally tracked scanned items immediately (< 1ms)
       setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
-      
+
       const res = await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
-      refreshBatchesList().catch(() => {});
-      
+      refreshBatchesList().catch(() => { });
+
       const cleanOrderId = orderId.replace('pickup-', '').replace('drop-', '').replace('ORD-', '');
       Alert.alert(
         'Pickup Confirmed',
@@ -305,7 +323,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
 
     const serverScannedIds = new Set(safeScanned.map((p: any) => p.parcelId));
-    
+
     // Merge optimistic local scans and server scans
     const mergedScanned = [
       ...safeScanned.map((p: any) => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
@@ -551,7 +569,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
                         <Text style={styles.parcelRowId}>(P-{String(item.parcelId || '').substring(0, 6)})</Text>
-                        
+
                         {/* Optimistic sync label */}
                         <Text style={[
                           styles.syncLabel,

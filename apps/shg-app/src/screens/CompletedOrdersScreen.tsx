@@ -42,10 +42,11 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useUser();
   const { deliveredOrders, highlightedOrders, refreshOrdersList } = useOrders();
   
-  const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-'));
+  const normalCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && !o.isRedirected && !o.isPickupRedirected && o.pickupShgStatus !== 'REDIRECTED');
   const returnCompletedOrders = deliveredOrders.filter(o => o.isReturn || o.id.startsWith('RTO-'));
+  const redirectedCompletedOrders = deliveredOrders.filter(o => !o.isReturn && !o.id.startsWith('RTO-') && (o.isRedirected || o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED'));
   
-  const [activeTab, setActiveTab] = useState<'new' | 'return'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'return' | 'redirected'>('new');
   
   const [filterState, setFilterState] = useState<FilterState>({ type: 'today' });
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
@@ -114,7 +115,10 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
       >
         {/* New Tab Button */}
         <TouchableOpacity
-          onPress={() => setActiveTab('new')}
+          onPress={() => {
+            setActiveTab('new');
+            setVisibleCount(PAGE_SIZE);
+          }}
           activeOpacity={0.8}
           className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
             activeTab === 'new' ? 'bg-[#073318]' : 'bg-transparent'
@@ -133,7 +137,7 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             New
           </Text>
           <View 
-            className="px-2.5 py-0.5 rounded-full ml-2"
+            className="px-2 py-0.5 rounded-full ml-1.5"
             style={activeTab === 'new' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
             <Text className={`text-[10px] font-extrabold ${
@@ -146,7 +150,10 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Return Tab Button */}
         <TouchableOpacity
-          onPress={() => setActiveTab('return')}
+          onPress={() => {
+            setActiveTab('return');
+            setVisibleCount(PAGE_SIZE);
+          }}
           activeOpacity={0.8}
           className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
             activeTab === 'return' ? 'bg-[#073318]' : 'bg-transparent'
@@ -165,7 +172,7 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             Return
           </Text>
           <View 
-            className="px-2.5 py-0.5 rounded-full ml-2"
+            className="px-2 py-0.5 rounded-full ml-1.5"
             style={activeTab === 'return' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
           >
             <Text className={`text-[10px] font-extrabold ${
@@ -175,12 +182,52 @@ const CompletedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
         </TouchableOpacity>
+
+        {/* Redirected Tab Button */}
+        <TouchableOpacity
+          onPress={() => {
+            setActiveTab('redirected');
+            setVisibleCount(PAGE_SIZE);
+          }}
+          activeOpacity={0.8}
+          className={`flex-1 py-3 flex-row justify-center items-center rounded-[22px] ${
+            activeTab === 'redirected' ? 'bg-[#073318]' : 'bg-transparent'
+          }`}
+          style={activeTab === 'redirected' ? {
+            shadowColor: '#073318',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
+          } : undefined}
+        >
+          <Text className={`font-bold text-[12px] ${
+            activeTab === 'redirected' ? 'text-white' : 'text-slate-500'
+          }`}>
+            Redirected
+          </Text>
+          <View 
+            className="px-2 py-0.5 rounded-full ml-1.5"
+            style={activeTab === 'redirected' ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#F1F5F9' }}
+          >
+            <Text className={`text-[10px] font-extrabold ${
+              activeTab === 'redirected' ? 'text-white' : 'text-slate-500'
+            }`}>
+              {redirectedCompletedOrders.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Main Content Area */}
-      {/* Main Content Area */}
       {(() => {
-        const currentData = activeTab === 'new' ? normalCompletedOrders : returnCompletedOrders;
+        let currentData = normalCompletedOrders;
+        if (activeTab === 'return') {
+          currentData = returnCompletedOrders;
+        } else if (activeTab === 'redirected') {
+          currentData = redirectedCompletedOrders;
+        }
+
         const filteredOrders = currentData.filter(item => {
           const info = getInfoForOrder(item);
           const dateStr = item.date || info.date; 

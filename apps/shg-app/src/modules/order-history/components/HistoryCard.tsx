@@ -7,6 +7,8 @@ import { LanguageContext } from '../../../context/LanguageContext';
 import { HISTORY_STATUS_COLORS } from '../constants/history.constants';
 import { OrderDistance } from '../../../components/OrderDistance';
 
+import { formatAddressString } from '../../../utils/orderHelpers';
+
 interface Props {
   order: HistoryItem;
   onPress: (order: HistoryItem) => void;
@@ -53,9 +55,9 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
   const weight = (order as any).weight || (order as any).totalWeight || 1;
 
   return (
-    <View 
+    <View
       className="rounded-[24px] mb-4 overflow-hidden border border-white/60"
-      style={{ 
+      style={{
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -65,7 +67,7 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
       }}
     >
       <BlurView intensity={50} tint="light">
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => onPress(order)}
           activeOpacity={0.7}
           className="p-5 bg-white/70"
@@ -77,7 +79,7 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
               <Text className="text-[11px] font-bold" style={{ color: statusColor }}>{statusText}</Text>
             </View>
           </View>
-          
+
           {/* Route Row: Source -> Destination */}
           <View className="flex-row items-center justify-between mb-2 mt-1">
             <View className="flex-1 flex-row items-center pr-2">
@@ -90,11 +92,11 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
 
           {/* Action Buttons: View Address & Track Order */}
           <View className="flex-row items-center gap-2 mt-2 mb-4">
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
                 onViewAddress(order);
-              }} 
+              }}
               activeOpacity={0.7}
               className="flex-row items-center px-2.5 py-1 rounded-[8px] border border-[#22C55E]/40 bg-[#F0FDF4]"
             >
@@ -104,11 +106,11 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
                 onTrackOrder?.(order);
-              }} 
+              }}
               activeOpacity={0.7}
               className="flex-row items-center px-2.5 py-1 rounded-[8px] border border-blue-200 bg-blue-50"
             >
@@ -118,7 +120,7 @@ export const HistoryCard: React.FC<Props> = ({ order, onPress, onViewAddress, on
               </Text>
             </TouchableOpacity>
           </View>
-          
+
           {/* Bottom Footer: Products & Weight */}
           <View className="flex-row justify-between items-center pt-2 border-t border-slate-100/60">
             <Text className="text-[13px] text-[#8792A1] font-medium">

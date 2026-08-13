@@ -80,12 +80,25 @@ async function seedRealProducts() {
       const prod = selectedProducts[pIdx];
       const parcelNum = pIdx + 1;
       const parcelIdVal = `PCL-${cleanId}-${parcelNum}-${i + 1}`;
-      const barcodeValue = `QR-${cleanId}-PCL-${parcelNum}`;
       const verificationCode = `V-${cleanId}-0${parcelNum}`;
-      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
-
       const qtyVal = pIdx + 1;
       const weightVal = Number(prod.weight || 2.5);
+
+      const qrPayload = {
+        parcelId: parcelIdVal,
+        orderId: `ORD-${cleanId}`,
+        orderNo: `ORD-${cleanId}`,
+        productId: prod.id,
+        productName: prod.name,
+        quantity: qtyVal,
+        weight: `${weightVal} KG`,
+        verificationToken: verificationCode,
+        token: verificationCode,
+        version: 1,
+      };
+
+      const barcodeValue = JSON.stringify(qrPayload);
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
 
       totalQty += qtyVal;
       totalWeight += weightVal * qtyVal;

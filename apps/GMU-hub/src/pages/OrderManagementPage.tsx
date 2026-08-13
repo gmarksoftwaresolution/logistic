@@ -2052,8 +2052,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     {
       header: 'Reject Reason',
       accessor: (row: any) => {
-        const reason = row.rejectReason || row.remarks || row.dropRejectReason || row.pickupRejectReason || 'Recipient Unavailable - Return to Hub';
-        const rejectedBy = row.dropTransporterName || row.pickupTransporterName || row.dropTransporterDetails?.name || row.pickupTransporterDetails?.name || row.rejectedByName || 'Transporter';
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
+        
+        const isInvalidReason = (str?: string | null) => !str || str.toLowerCase().includes('registered') || str.toLowerCase().includes('synchronized');
+        const candidateReason = (!isInvalidReason(row.rejectReason) ? row.rejectReason : null) ||
+          (!isInvalidReason(row.remarks) ? row.remarks : null) ||
+          (!isInvalidReason(row.pickupRejectReason) ? row.pickupRejectReason : null) ||
+          (!isInvalidReason(row.dropRejectReason) ? row.dropRejectReason : null) ||
+          (!isInvalidReason(row.tracking?.[0]?.remarks) ? row.tracking[0].remarks : null);
+        const reason = candidateReason || (isPrePickup ? 'Pre-Pickup Declined by Transporter' : 'Recipient Unavailable - Return to Hub');
+          
+        const rejectedBy = row.rejectedByName || row.pickupTransporterName || row.pickupTransporterDetails?.name || row.dropTransporterName || row.dropTransporterDetails?.name || 'Transporter';
         return (
           <div className="flex flex-col gap-0.5 text-left max-w-[220px]">
             <span className="font-extrabold text-xs text-rose-700 leading-tight">
@@ -2068,18 +2080,28 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     },
     {
       header: 'Status',
-      accessor: (row: any) => (
-        <div className="flex flex-col gap-1 items-start">
-          <StatusBadge status={row.mainStatus} />
-          <span className="inline-flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded uppercase tracking-wider">
-            {isTransporterReturnOrder(row) ? '🚛 Transporter Return' : '👤 Buyer Return'}
-          </span>
-        </div>
-      )
+      accessor: (row: any) => {
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <StatusBadge status={row.mainStatus} />
+            <span className="inline-flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded uppercase tracking-wider">
+              {isPrePickup ? '⚠️ Pre-Pickup Rejection' : (isTransporterReturnOrder(row) ? '🚛 Transporter Return' : '👤 Buyer Return')}
+            </span>
+          </div>
+        );
+      }
     },
     {
       header: 'Action',
       accessor: (row: any) => {
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -2094,17 +2116,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>View</span>
             </button>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-              title="In Take"
-              className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-            >
-              <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-              <span>IN TAKE</span>
-            </button>
+            {!isPrePickup && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleIntakeClick(row, isTransporterReturnOrder(row) ? 'return-drop' : 'return-pickup');
+                }}
+                title="In Take"
+                className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+              >
+                <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                <span>IN TTAKE</span>
+              </button>
+            )}
           </div>
         );
       }
@@ -2389,8 +2414,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
                               {/* Stepper Nodes */}
                               {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED');
-                                const nodeLabel = isRedirectedSHG ? 'Pickup SHG (Redirected)' : node.label;
+                                const isRedirectedSHG = node.id === 'pickup_shg' && (
+                                  order.isPickupRedirected ||
+                                  order.isRedirected ||
+                                  order.pickupShgStatus === 'REDIRECTED' ||
+                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
+                                  (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
+                                );
+                                const nodeLabel = node.label;
                                 const isClickable = !isRedirectedSHG;
 
                                 let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
@@ -2411,9 +2442,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                 const iconElement = getIconForNode(node.label);
 
                                 if (isRedirectedSHG) {
-                                  nodeBg = 'bg-slate-100 border-slate-205/50 text-slate-300 opacity-25 border-dashed';
-                                  iconContent = iconElement;
-                                  labelColor = 'text-slate-350 opacity-40 font-medium';
+                                  nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
+                                  iconContent = (
+                                    <div className="relative">
+                                      {iconElement}
+                                      <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
+                                    </div>
+                                  );
+                                  labelColor = 'text-purple-800 font-extrabold';
                                 } else if (node.state === 'completed') {
                                   nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
                                   iconContent = (
@@ -2469,7 +2505,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                       {nodeLabel}
                                     </span>
                                     {/* Timestamp underneath completed/active nodes */}
-                                    {node.state === 'active' ? (
+                                    {isRedirectedSHG ? (
+                                      <span className="text-[8px] font-extrabold text-purple-700 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider">Redirected</span>
+                                    ) : node.state === 'active' ? (
                                       <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
                                     ) : dateDetails ? (
                                       <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
@@ -2489,8 +2527,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                           <div className="w-full lg:w-[320px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-6 self-stretch py-1 overflow-visible">
                             {/* Top row: Status info badge and time ago (centered) */}
                             <div className="flex flex-col items-center text-center space-y-0.5">
-                              <span className="inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 bg-[#073318]/10 text-[#073318] border border-[#073318]/20 rounded-full uppercase tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#073318]" />
+                              <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                  : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
+                                } rounded-full uppercase tracking-wider`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
+                                  }`} />
                                 {order.mainStatus.replace(/[-_]/g, ' ')}
                               </span>
                               <span className="block text-[10px] text-slate-400 font-semibold">
@@ -2693,20 +2735,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   setActiveReturnSubTab('transporter');
                   setReturnPage(1);
                 }}
-                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
-                  activeReturnSubTab === 'transporter'
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${activeReturnSubTab === 'transporter'
                     ? 'bg-[#073318] text-white shadow-md'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
-                }`}
+                  }`}
               >
                 <Truck className={`h-4 w-4 ${activeReturnSubTab === 'transporter' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
                 <span>Transporter Return</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                    activeReturnSubTab === 'transporter'
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeReturnSubTab === 'transporter'
                       ? 'bg-[#B2D534] text-[#073318]'
                       : 'bg-slate-200 text-slate-700'
-                  }`}
+                    }`}
                 >
                   {transporterReturnOrdersList.length}
                 </span>
@@ -2717,20 +2757,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   setActiveReturnSubTab('buyer');
                   setReturnPage(1);
                 }}
-                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
-                  activeReturnSubTab === 'buyer'
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${activeReturnSubTab === 'buyer'
                     ? 'bg-[#073318] text-white shadow-md'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
-                }`}
+                  }`}
               >
                 <User className={`h-4 w-4 ${activeReturnSubTab === 'buyer' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
                 <span>Buyer Return</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                    activeReturnSubTab === 'buyer'
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeReturnSubTab === 'buyer'
                       ? 'bg-[#B2D534] text-[#073318]'
                       : 'bg-slate-200 text-slate-700'
-                  }`}
+                    }`}
                 >
                   {buyerReturnOrdersList.length}
                 </span>
@@ -3396,8 +3434,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                     Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
                                   </span>
                                 </div>
-                                <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${
-                                  (parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
+                                <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${(parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
                                     ? 'bg-emerald-50 text-emerald-700'
                                     : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
                                       ? 'bg-blue-50 text-blue-700'
@@ -3452,7 +3489,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                             return (
                               <div key={idx} className="relative group">
                                 <span className="absolute -left-[27px] top-1.5 h-3.5 w-3.5 rounded-full bg-[#B2D534] border-2 border-[#073318] shadow-sm" />
-                                
+
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[11px] font-black text-[#B2D534]">{timeObj.time}</span>
                                   <span className="text-[10px] text-slate-300 font-semibold">{timeObj.date}</span>
@@ -4124,11 +4161,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
         {/* Floating Toast Notification */}
         {toastMessage && (
-          <div className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 transition-all transform animate-bounce-in ${
-            toastType === 'success'
+          <div className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 transition-all transform animate-bounce-in ${toastType === 'success'
               ? 'bg-[#073318] border-[#B2D534] text-white shadow-[#073318]/40'
               : 'bg-red-900 border-red-400 text-white shadow-red-900/40'
-          }`}>
+            }`}>
             <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-[#B2D534]/20 text-[#B2D534]' : 'bg-red-700 text-white'}`}>
               {toastType === 'success' ? <Check className="h-5 w-5 stroke-[3]" /> : <AlertTriangle className="h-5 w-5" />}
             </div>

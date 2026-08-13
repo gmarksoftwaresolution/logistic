@@ -37,14 +37,27 @@ async function updateAllOrdersCleanId() {
     for (let pIdx = 0; pIdx < parcels.length; pIdx++) {
       const parcel = parcels[pIdx];
       const parcelNum = pIdx + 1;
-      const barcodeValue = `QR-2026-${cleanNum}-PCL-${parcelNum}`;
       const verificationCode = `V-2026-${cleanNum}-0${parcelNum}`;
+      
+      const qrPayload = {
+        parcelId: parcel.parcelId,
+        orderId: cleanOrderId,
+        orderNo: cleanOrderId,
+        productId: parcel.productId,
+        productName: parcel.productName,
+        quantity: parcel.quantity,
+        weight: parcel.weight,
+        verificationToken: verificationCode,
+        token: verificationCode,
+        version: 1,
+      };
+
+      const barcodeValue = JSON.stringify(qrPayload);
       const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(barcodeValue)}`;
 
       await prisma.parcel.update({
         where: { parcelId: parcel.parcelId },
         data: {
-          orderId: cleanOrderId,
           qrCodeValue: barcodeValue,
           verificationToken: verificationCode,
           qrImage: qrImageUrl,

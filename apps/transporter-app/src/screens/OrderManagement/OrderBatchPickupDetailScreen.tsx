@@ -345,18 +345,24 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       let verificationToken = '';
 
       if (data.trim().startsWith('{')) {
-        const parsed = JSON.parse(data.trim());
-        parcelId = parsed.parcelId;
-        verificationToken = parsed.verificationToken;
-      } else {
+        try {
+          const parsed = JSON.parse(data.trim());
+          parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+          verificationToken = parsed.verificationToken || parsed.verificationCode || parsed.token || '';
+        } catch (_) {}
+      }
+      if (!parcelId) {
         const parts = data.trim().split(/\s+/);
+        parcelId = parts[0] || data.trim();
         if (parts.length >= 2) {
-          parcelId = parts[0];
           verificationToken = parts[1];
         }
       }
+      if (!verificationToken && activeScanningParcel?.verificationToken) {
+        verificationToken = activeScanningParcel.verificationToken;
+      }
 
-      if (!parcelId || !verificationToken) {
+      if (!parcelId) {
         Alert.alert('Invalid QR Code', 'This QR code does not contain a valid parcel ID and verification token.');
         setScanned(false);
         isScanningRef.current = false;
@@ -461,7 +467,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
     if (!finalReason) return;
 
-    const isDeliveryLeg = type === 'drop' || batch?.flowType === 'gmu_to_shg' || batch?.status === 'PICKUP_COMPLETED' || batch?.status === 'ACCEPTED_PICKUP';
+    const isPickedUp = batch?.status === 'PICKUP_COMPLETED' || batch?.products?.some((p: any) => p.status === 'picked' || p.status === 'completed');
+    const isDeliveryLeg = type === 'drop' || (batch?.flowType === 'gmu_to_shg' && isPickedUp);
 
     if (isDeliveryLeg) {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);
@@ -785,7 +792,9 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>{formattedAddr}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>
+                          {typeof displayContact.address === 'string' ? displayContact.address : (typeof displayContact.address === 'object' ? ([displayContact.address?.addressLine1, displayContact.address?.village, displayContact.address?.district, displayContact.address?.pincode].filter(Boolean).join(', ') || '') : String(displayContact.address || ''))}
+                        </Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
