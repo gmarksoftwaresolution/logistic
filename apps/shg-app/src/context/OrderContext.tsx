@@ -529,7 +529,15 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setAcceptedOrders(Array.from(uniqueAcceptedMap.values()));
 
-      const sortedRedirected = finalMapped.filter(o => o.isRedirected && o.status !== 'COMPLETED').sort((a, b) => {
+      const isRedirectedPickedUp = (o: any) => {
+        const isRedir = !!(o.isRedirected || o.isPickupRedirected);
+        if (!isRedir) return false;
+        const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
+        const mainStat = (o.mainStatus || o.status || '').toUpperCase();
+        return ['PARCEL_PICKED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(pTransStatus) || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(mainStat);
+      };
+
+      const sortedRedirected = finalMapped.filter(o => o.isRedirected && !isRedirectedPickedUp(o)).sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -585,10 +593,13 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const activeOrderIds = new Set(finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected).map(o => o.orderId));
       const mappedCompletedNew = (rawCompleted.newOrders || [])
-        .map((o: any) => mapDbOrderToUi(o, o.legType || 'pickup', false))
+        .map((o: any) => {
+          const isDrop = o.legType === 'drop' || o.phase === 'DROP' || o.dropShgStatus === 'DROPPED' || o.dropShgStatus === 'DELIVERED';
+          return mapDbOrderToUi(o, isDrop ? 'drop' : (o.legType || 'pickup'), false);
+        })
         .filter((o: any) => !activeOrderIds.has(o.orderId));
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
-      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED' || o.isRedirected || o.isPickupRedirected);
+      const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED' || isRedirectedPickedUp(o));
       const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
       const uniqueCompletedMap = new Map<string, Order>();
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));

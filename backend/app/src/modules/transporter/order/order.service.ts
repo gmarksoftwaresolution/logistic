@@ -466,6 +466,7 @@ export class OrderService {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
+        pickupShgStatus: 'DROPPED',
         pickupTransporterStatus: 'PARCEL_PICKED',
         mainStatus: 'IN_TRANSIT_TO_HUB',
       }
@@ -640,7 +641,6 @@ export class OrderService {
       },
       data: {
         status: 'REJECTED',
-        remarks: remarksStr,
       }
     });
 

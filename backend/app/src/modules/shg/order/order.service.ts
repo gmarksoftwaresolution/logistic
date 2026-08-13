@@ -262,10 +262,7 @@ export class OrderService {
           }
         }],
         isPickupRedirected: o.isPickupRedirected,
-<<<<<<< HEAD
-=======
         isDropRedirected: (o as any).isDropRedirected || false,
->>>>>>> mahendra-new
         pickupShgStatus: o.pickupShgStatus,
         pickupTransporterStatus: o.pickupTransporterStatus,
         dropShgStatus: o.dropShgStatus,
@@ -324,17 +321,29 @@ export class OrderService {
                 in: [
                   'DELIVERED',
                   'COMPLETED',
-                  'RETURN_COMPLETED'
+                  'RETURN_COMPLETED',
+                  'IN_TRANSIT_TO_HUB',
+                  'HUB_RECEIVED',
+                  'STORED',
+                  'DISPATCHED',
+                  'IN_TRANSIT_TO_DROP_SHG',
+                  'PARCEL_AT_DROP_SHG',
+                  'AT_BUYER_SHG'
                 ]
               }
             },
             {
-              OR: [
-                { isPickupRedirected: true },
-                { pickupShgStatus: 'REDIRECTED' },
-                { mainStatus: 'REDIRECTED' }
-              ]
-            }
+              pickupShgStatus: {
+                in: ['DROPPED', 'COMPLETED', 'REDIRECTED', 'PARCEL_PICKED']
+              }
+            },
+            {
+              dropShgStatus: {
+                in: ['DROPPED', 'COMPLETED', 'DELIVERED']
+              }
+            },
+            { isPickupRedirected: true },
+            { mainStatus: 'REDIRECTED' }
           ]
         },
         include: {
@@ -346,11 +355,31 @@ export class OrderService {
       });
 
       const matchedOrders = orders.filter((o: any) => {
-        const isPhase2ActiveForDropShg = (o.dropShgId && String(o.dropShgId) === shgUuid) && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus);
+        const isPickupShgMatch = (o.pickupShgId && String(o.pickupShgId) === shgUuid);
+        const isDropShgMatch = (o.dropShgId && String(o.dropShgId) === shgUuid);
+        const isReturnShgMatch = (o.pickupReturnShgId && String(o.pickupReturnShgId) === shgUuid);
+
+        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
         if (isPhase2ActiveForDropShg) {
           return false;
         }
-        if (o.pickupShgId === shgUuid || o.dropShgId === shgUuid || o.pickupReturnShgId === shgUuid) {
+
+        const isPhase1ActiveForPickupShg = isPickupShgMatch && ['PENDING', 'ACCEPTED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG'].includes(o.mainStatus) && o.pickupShgStatus !== 'DROPPED' && o.pickupShgStatus !== 'COMPLETED' && o.pickupShgStatus !== 'REDIRECTED' && !o.isPickupRedirected;
+        if (isPhase1ActiveForPickupShg) {
+          return false;
+        }
+
+        const isRedirected = !!(o.isPickupRedirected || o.pickupShgStatus === 'REDIRECTED' || o.mainStatus === 'REDIRECTED');
+        if (isRedirected && (isPickupShgMatch || (o.redirectedPickupShgId && String(o.redirectedPickupShgId) === shgUuid))) {
+          const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
+          const mainStat = (o.mainStatus || '').toUpperCase();
+          const isTransporterPickedUp = ['PARCEL_PICKED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(pTransStatus) || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED', 'DELIVERED'].includes(mainStat);
+          if (!isTransporterPickedUp) {
+            return false;
+          }
+        }
+
+        if (isPickupShgMatch || isDropShgMatch || isReturnShgMatch || (o.redirectedPickupShgId && String(o.redirectedPickupShgId) === shgUuid)) {
           return true;
         }
         if (o.seller) {
@@ -387,11 +416,14 @@ export class OrderService {
         const transId = o.pickupTransporterId || o.dropTransporterId;
         const transporterUser = transId ? transporterMap.get(transId) : null;
         const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
+        const legType = (o.dropShgId && String(o.dropShgId) === shgUuid) ? 'drop' : 'pickup';
         return {
           id: cleanOrderId,
           uuid: o.id,
           orderId: cleanOrderId,
           orderNumber: cleanOrderId,
+          legType,
+          phase: legType === 'drop' ? 'DROP' : 'PICKUP',
           barcode: o.barcode,
           status: o.mainStatus,
           seller: o.seller ? {
@@ -459,145 +491,6 @@ export class OrderService {
       console.error('[getCompletedOrders Error]:', err?.message || err);
       return { newOrders: [], returnOrders: [] };
     }
-
-    const shgUuid = String(numericShgId);
-    const userVillage = this.normalizeStr(user.address?.village);
-    const userPincode = user.address?.pincode ? user.address.pincode.trim().toLowerCase() : '';
-
-    const assignedOrders = await this.prisma.orderAssignment.findMany({
-      where: {
-        assigneeId: shgUuid,
-        assigneeType: 'SHG',
-      },
-      select: { orderId: true }
-    });
-
-    const assignedOrderIds = assignedOrders.map(a => a.orderId);
-
-    const orders = await this.prisma.order.findMany({
-      where: {
-        OR: [
-          { id: { in: assignedOrderIds } },
-          { orderId: { in: assignedOrderIds } },
-          { pickupShgId: shgUuid },
-          { dropShgId: shgUuid },
-          { pickupReturnShgId: shgUuid },
-        ],
-      },
-      include: {
-        seller: true,
-        buyer: true,
-        parcels: {
-          include: { scanHistories: true }
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    const matchedOrders = orders.filter((o: any) => {
-      const isPickupShg = (o.pickupShgId && String(o.pickupShgId) === shgUuid) || o.assignments?.some((a: any) => a.assigneeId === shgUuid && a.role === 'PICKUP');
-      const isDropShg = (o.dropShgId && String(o.dropShgId) === shgUuid) || o.assignments?.some((a: any) => a.assigneeId === shgUuid && a.role === 'DROP');
-
-      const isPickupCompleted = isPickupShg && (
-        ['PICKED', 'COMPLETED', 'DROPPED'].includes((o.pickupShgStatus || '').toUpperCase()) ||
-        ['PARCEL_AT_SHG', 'IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())
-      );
-
-      const isDropCompleted = isDropShg && (
-        ['DELIVERED', 'COMPLETED', 'DROPPED'].includes((o.dropShgStatus || '').toUpperCase()) ||
-        ['DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())
-      );
-
-      const isReturnCompleted = o.mainStatus === 'RETURN_COMPLETED' || o.pickupReturnShgId === shgUuid;
-
-      if (isPickupCompleted || isDropCompleted || isReturnCompleted || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED') {
-        return true;
-      }
-      return false;
-    });
-
-    const transporterIds = matchedOrders
-      .map(o => o.pickupTransporterId ? parseInt(o.pickupTransporterId, 10) : (o.dropTransporterId ? parseInt(o.dropTransporterId, 10) : null))
-      .filter((id): id is number => id !== null && !isNaN(id));
-
-    const transporters = transporterIds.length > 0
-      ? await this.prisma.user.findMany({
-        where: { id: { in: transporterIds } },
-        include: { transporterDetail: true, otherDetails: true }
-      })
-      : [];
-
-    const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
-
-    const formatted = matchedOrders.map((o: any) => {
-      const transId = o.pickupTransporterId || o.dropTransporterId;
-      const transporterUser = transId ? transporterMap.get(transId) : null;
-      const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      return {
-        id: cleanOrderId,
-        uuid: o.id,
-        orderId: cleanOrderId,
-        orderNumber: cleanOrderId,
-        barcode: o.barcode,
-        status: o.mainStatus,
-        seller: o.seller ? {
-          fullName: o.seller.sellerName,
-          phoneNumber: o.seller.mobileNumber,
-          village: o.seller.village,
-          pincode: o.seller.pincode,
-          addressLine1: o.seller.addressLine1,
-          fullAddress: [o.seller.addressLine1, o.seller.addressLine2, o.seller.village, o.seller.taluka, o.seller.district, o.seller.state ? `${o.seller.state} - ${o.seller.pincode}` : o.seller.pincode].filter(Boolean).join(', '),
-        } : null,
-        buyer: o.buyer ? {
-          fullName: o.buyer.buyerName,
-          phoneNumber: o.buyer.mobileNumber,
-          village: o.buyer.village,
-          pincode: o.buyer.pincode,
-          addressLine1: o.buyer.addressLine1,
-          fullAddress: [o.buyer.addressLine1, o.buyer.addressLine2, o.buyer.village, o.buyer.taluka, o.buyer.district, o.buyer.state ? `${o.buyer.state} - ${o.buyer.pincode}` : o.buyer.pincode].filter(Boolean).join(', '),
-        } : null,
-        items: o.parcels || [],
-        isPickupRedirected: o.isPickupRedirected,
-        isDropRedirected: (o as any).isDropRedirected || false,
-        pickupShgStatus: o.pickupShgStatus,
-        pickupTransporterStatus: o.pickupTransporterStatus,
-        dropShgStatus: o.dropShgStatus,
-        dropTransporterStatus: o.dropTransporterStatus,
-        mainStatus: o.mainStatus,
-        transporter: (() => {
-          const isPickupAccepted = ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'COMPLETED'].includes(o.pickupTransporterStatus || '');
-          const isDropAccepted = ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(o.dropTransporterStatus || '');
-          const isTransAccepted = o.phase === 'DROP' ? isDropAccepted : isPickupAccepted;
-
-          if (!isTransAccepted || !transporterUser) {
-            return null;
-          }
-
-          return {
-            fullName: transporterUser.fullName,
-            phoneNumber: transporterUser.phoneNumber,
-            transporterDetail: {
-              transporterCode: transporterUser.transporterDetail?.transporterCode || '',
-              vehicleNumber: (transporterUser.transporterDetail as any)?.vehicleNumber || (transporterUser.transporterDetail as any)?.registrationNumber || '',
-            },
-            otherDetails: transporterUser.otherDetails || [],
-          };
-        })(),
-        createdAt: o.createdAt,
-        updatedAt: o.updatedAt,
-        date: o.createdAt,
-        orderDate: o.createdAt,
-        deliveredAt: o.deliveredAt || o.updatedAt,
-        collectedAt: o.collectedAt || o.updatedAt,
-        products: o.parcels || [],
-        parcels: o.parcels || [],
-      };
-    });
-
-    return {
-      newOrders: formatted.filter(o => o.status !== 'RETURN_COMPLETED'),
-      returnOrders: formatted.filter(o => o.status === 'RETURN_COMPLETED'),
-    };
   }
 
   async getAssignedReturns(shgId: number | string) {

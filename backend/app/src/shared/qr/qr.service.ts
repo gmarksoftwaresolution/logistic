@@ -306,7 +306,8 @@ export class QrService {
       } else if (mainStatus === 'TRANSPORTER_ACCEPTED') {
         pickupShgStatus = 'COMPLETED';
         pickupTransporterStatus = 'ACCEPTED';
-      } else if (mainStatus === 'IN_TRANSIT') {
+      } else if (mainStatus === 'IN_TRANSIT' || mainStatus === 'IN_TRANSIT_TO_HUB') {
+        pickupShgStatus = 'DROPPED';
         pickupTransporterStatus = 'PICKED';
       } else if (mainStatus === 'AT_GMU') {
         pickupTransporterStatus = 'COMPLETED';

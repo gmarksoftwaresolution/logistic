@@ -2462,6 +2462,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
+        pickupShgStatus: 'DROPPED',
         pickupTransporterStatus: 'IN_TRANSIT_TO_HUB',
         mainStatus: 'IN_TRANSIT_TO_HUB',
       },

@@ -22,20 +22,13 @@ function decodeQrData(data: string) {
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-<<<<<<< HEAD
-      const parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || trimmed).trim();
       if (!parcelId) {
         throw new Error('Invalid QR payload');
       }
       return {
         parcelId,
-        verificationToken: parsed.verificationToken || parsed.token || '',
-=======
-      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || trimmed).trim();
-      return {
-        parcelId,
-        verificationToken: parsed.verificationToken || parsed.verificationCode || '',
->>>>>>> mahendra-new
+        verificationToken: parsed.verificationToken || parsed.verificationCode || parsed.token || '',
       };
     } catch (err: any) {
       return {
@@ -45,20 +38,13 @@ function decodeQrData(data: string) {
     }
   } else {
     const parts = trimmed.split(/\s+/);
-<<<<<<< HEAD
-    if (parts.length >= 1 && parts[0]) {
+    if (parts.length >= 1 && (parts[0] || trimmed)) {
       return {
-        parcelId: parts[0],
+        parcelId: parts[0] || trimmed,
         verificationToken: parts[1] || '',
       };
     }
     throw new Error('Invalid QR format');
-=======
-    return {
-      parcelId: parts[0] || trimmed,
-      verificationToken: parts[1] || '',
-    };
->>>>>>> mahendra-new
   }
 }
 

@@ -359,6 +359,7 @@ const DropScreen: React.FC<Props> = ({ navigation, route }) => {
                 onSendOtp={() => handleSendOtp(item)}
                 onPressCard={() => handleSendOtp(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
+                hideTransporter={true}
               />
             );
           }}
