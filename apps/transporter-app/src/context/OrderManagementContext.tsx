@@ -286,6 +286,25 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           o.pickupShgStatus === 'REDIRECTED' ||
           o.mainStatus === 'REDIRECTED'
         );
+
+        const shgObj = o.shg || o.pickupShg || o.pickupShgDetails || {};
+        const pickupShgCrp = isRedirected
+          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          : (shgObj.crpName || shgObj.personName || shgObj.fullName || shgObj.name || shgObj.shgDetail?.crpName || 'SHG CRP Lead');
+        const pickupShgName = isRedirected
+          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          : (shgObj.shgName || shgObj.shgDetail?.shgName || (shgObj.village ? `${shgObj.village} Center` : 'SHG Center'));
+        const pickupShgPhone = isRedirected
+          ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.seller?.phone || '')
+          : (shgObj.mobileNumber || shgObj.phoneNumber || shgObj.phone || shgObj.shgDetail?.crpMobile || '');
+        const pickupShgAddress = isRedirected
+          ? (o.seller?.fullAddress || o.seller?.addressLine1 || o.seller?.village || '')
+          : (shgObj.fullAddress || shgObj.addressLine1 || (shgObj.address?.deliveryAddress || shgObj.address?.landmark || shgObj.address?.village) || '');
+        const pickupShgVillage = isRedirected ? (o.seller?.village || '') : (shgObj.village || shgObj.address?.village || o.seller?.village || '');
+        const pickupShgPincode = isRedirected ? (o.seller?.pincode || '') : (shgObj.pincode || shgObj.address?.pincode || o.seller?.pincode || '');
+        const pickupShgTaluka = isRedirected ? (o.seller?.taluka || '') : (shgObj.taluka || shgObj.address?.taluka || o.seller?.taluka || '');
+        const pickupShgDistrict = isRedirected ? (o.seller?.district || '') : (shgObj.district || shgObj.address?.district || o.seller?.district || '');
+
         return {
           id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,

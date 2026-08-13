@@ -53,34 +53,52 @@ export function normalizeStatus(status: string): ParcelStatus {
  * Parses and decodes scanned QR code contents.
  */
 export function decodeQrData(data: string): QrContent {
-  const trimmed = (data || '').trim();
+  let trimmed = (data || '').trim();
+
+  // If payload is a URL containing data= query param or URL encoded
+  if (trimmed.includes('data=')) {
+    try {
+      const match = trimmed.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        trimmed = decodeURIComponent(match[1]).trim();
+      }
+    } catch (_) { }
+  } else if (trimmed.startsWith('%7B') || trimmed.includes('%22')) {
+    try {
+      trimmed = decodeURIComponent(trimmed).trim();
+    } catch (_) { }
+  }
+
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      const parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
-      if (!parcelId) {
-        throw new QrValidationError('Invalid QR payload: missing parcelId');
+      const parcelId = parsed.parcelId || parsed.id || parsed.orderId || parsed.qrCodeValue || '';
+      if (parcelId) {
+        return {
+          parcelId,
+          verificationToken: parsed.verificationToken || parsed.verificationCode || parsed.token || '',
+          version: parsed.version || 1,
+        };
       }
-      return {
-        parcelId,
-        verificationToken: parsed.verificationToken || parsed.token || '',
-        version: parsed.version || 1,
-      };
     } catch (err: any) {
-      if (err instanceof QrValidationError) throw err;
-      throw new QrValidationError('Malformed JSON in QR code: ' + err.message);
+      // Fall through to regex and fallback parsing
     }
-  } else {
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1 && parts[0]) {
-      return {
-        parcelId: parts[0],
-        verificationToken: parts[1] || '',
-        version: 1,
-      };
-    }
-    throw new QrValidationError('Invalid QR code format');
   }
+
+  // Regex extraction for PCL / ORD identifiers if embedded in URL or raw text
+  const pclMatch = trimmed.match(/(PCL-[\w-]+|ORD-[\w-]+|QR-[\w-]+)/i);
+  const parts = trimmed.split(/\s+/);
+  const mainId = pclMatch ? pclMatch[1] : (parts[0] || trimmed);
+
+  if (mainId) {
+    return {
+      parcelId: mainId,
+      verificationToken: parts.length > 1 ? parts[1] : '',
+      version: 1,
+    };
+  }
+
+  throw new QrValidationError('Invalid QR code format');
 }
 
 /**
@@ -1021,7 +1039,7 @@ export class QrVerificationEngine {
         let dropShgStatus = order.dropShgStatus;
         let dropTransporterStatus = order.dropTransporterStatus;
 
-        if (normalizedMainStatus === 'PARCEL_PICKED') {
+        if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG' || mainStatus === 'PARCEL_AT_SHG') {
           pickupShgStatus = 'PICKED';
           pickupTransporterStatus = 'PENDING';
           await triggerTransporterPickupBroadcast(tx, order.id);
@@ -1299,7 +1317,9 @@ export class QrVerificationEngine {
         } else {
           pickupShgStatus = 'PICKED';
           pickupShgId = String(userIdFinal);
+          pickupTransporterStatus = 'PENDING';
           mainStatus = 'PARCEL_AT_SHG';
+          await triggerTransporterPickupBroadcast(tx, order.id);
         }
       } else if (roleUpper === 'GMU' || roleUpper === 'ADMIN') {
         if (isPhase2DropLeg) {

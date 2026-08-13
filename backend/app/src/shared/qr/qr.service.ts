@@ -299,7 +299,7 @@ export class QrService {
       let dropShgStatus = order.dropShgStatus;
       let dropTransporterStatus = order.dropTransporterStatus;
 
-      if (mainStatus === 'PARCEL_PICKED') {
+      if (mainStatus === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG') {
         pickupShgStatus = 'PICKED';
         pickupTransporterStatus = 'PENDING';
         await triggerTransporterPickupBroadcast(tx, order.id);

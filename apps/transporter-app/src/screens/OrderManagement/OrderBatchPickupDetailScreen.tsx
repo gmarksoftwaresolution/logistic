@@ -345,18 +345,24 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       let verificationToken = '';
 
       if (data.trim().startsWith('{')) {
-        const parsed = JSON.parse(data.trim());
-        parcelId = parsed.parcelId;
-        verificationToken = parsed.verificationToken;
-      } else {
+        try {
+          const parsed = JSON.parse(data.trim());
+          parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+          verificationToken = parsed.verificationToken || parsed.verificationCode || parsed.token || '';
+        } catch (_) {}
+      }
+      if (!parcelId) {
         const parts = data.trim().split(/\s+/);
+        parcelId = parts[0] || data.trim();
         if (parts.length >= 2) {
-          parcelId = parts[0];
           verificationToken = parts[1];
         }
       }
+      if (!verificationToken && activeScanningParcel?.verificationToken) {
+        verificationToken = activeScanningParcel.verificationToken;
+      }
 
-      if (!parcelId || !verificationToken) {
+      if (!parcelId) {
         Alert.alert('Invalid QR Code', 'This QR code does not contain a valid parcel ID and verification token.');
         setScanned(false);
         isScanningRef.current = false;

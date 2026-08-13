@@ -570,10 +570,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const formattedParcels = (uniqueParcels.length > 0)
       ? uniqueParcels.map((p: any) => {
           const cleanId = (o.orderId || o.id || '2026').replace(/^ORD-/, '');
-          const qrData = p.qrImage || p.qrCodeValue || p.barcode || p.verificationToken || o.barcode || `QR-${cleanId}-PCL-1`;
-          const qrUri = (qrData && String(qrData).startsWith('http'))
-            ? String(qrData)
-            : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(String(qrData))}`;
+          const qrData = p.qrCodeValue || p.barcode || p.parcelId || p.verificationToken || o.barcode || `PCL-${cleanId}-1`;
+          const rawQrPayload = typeof qrData === 'object' ? JSON.stringify(qrData) : String(qrData);
+          const qrUri = (p.qrImage && (String(p.qrImage).startsWith('http') || String(p.qrImage).startsWith('data:image')))
+            ? String(p.qrImage)
+            : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(rawQrPayload)}`;
           return {
             ...p,
             qrImage: qrUri,

@@ -416,18 +416,24 @@ const OrderDetailsScreen: React.FC<Props> = ({
       let verificationToken = "";
 
       if (data.trim().startsWith("{")) {
-        const parsed = JSON.parse(data.trim());
-        parcelId = parsed.parcelId;
-        verificationToken = parsed.verificationToken;
-      } else {
+        try {
+          const parsed = JSON.parse(data.trim());
+          parcelId = parsed.parcelId || parsed.id || parsed.orderId || '';
+          verificationToken = parsed.verificationToken || parsed.verificationCode || parsed.token || '';
+        } catch (_) {}
+      }
+      if (!parcelId) {
         const parts = data.trim().split(/\s+/);
+        parcelId = parts[0] || data.trim();
         if (parts.length >= 2) {
-          parcelId = parts[0];
           verificationToken = parts[1];
         }
       }
+      if (!verificationToken && activeScanningParcel?.verificationToken) {
+        verificationToken = activeScanningParcel.verificationToken;
+      }
 
-      if (!parcelId || !verificationToken) {
+      if (!parcelId) {
         Alert.alert(
           "Invalid QR Code",
           "This QR code does not contain a valid parcel ID and verification token.",
@@ -1437,10 +1443,11 @@ const OrderDetailsScreen: React.FC<Props> = ({
 
           {(() => {
             const cleanId = (order.orderId || order.id || '2026').replace(/^ORD-/, '');
-            const rawQrVal = selectedQrParcel?.qrImage || selectedQrParcel?.qrCodeValue || selectedQrParcel?.barcode || selectedQrParcel?.verificationToken || `QR-${cleanId}-PCL-1`;
-            const qrUri = (rawQrVal && String(rawQrVal).startsWith('http'))
-              ? String(rawQrVal)
-              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(String(rawQrVal))}`;
+            const rawQrVal = selectedQrParcel?.qrCodeValue || selectedQrParcel?.barcode || selectedQrParcel?.parcelId || selectedQrParcel?.verificationToken || `PCL-${cleanId}-1`;
+            const rawQrPayload = typeof rawQrVal === 'object' ? JSON.stringify(rawQrVal) : String(rawQrVal);
+            const qrUri = (selectedQrParcel?.qrImage && (String(selectedQrParcel.qrImage).startsWith('http') || String(selectedQrParcel.qrImage).startsWith('data:image')))
+              ? String(selectedQrParcel.qrImage)
+              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(rawQrPayload)}`;
 
             return (
               <Image

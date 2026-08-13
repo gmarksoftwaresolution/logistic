@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { VehicleSuggestionService } from './vehicle-suggestion.service';
 import { EarningsService } from '../earnings/earnings.service';
+import { triggerTransporterPickupBroadcast } from '../../../shared/qr/qr-verification-engine';
 
 @Injectable()
 export class OrderService {
@@ -584,29 +585,14 @@ export class OrderService {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        pickupShgStatus: 'PARCEL_PICKED',
+        pickupShgStatus: 'PICKED',
+        pickupTransporterStatus: 'PENDING',
         mainStatus: 'PARCEL_AT_SHG',
       }
     });
 
-    // Auto-broadcast to approved transporters (Rahul Patil, etc.)
     try {
-      const approvedTransporters = await this.prisma.user.findMany({
-        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED' },
-        select: { id: true }
-      });
-
-      for (const t of approvedTransporters) {
-        await this.prisma.orderAssignment.create({
-          data: {
-            orderId: order.id,
-            assigneeId: String(t.id),
-            assigneeType: 'TRANSPORTER',
-            role: 'PICKUP',
-            status: 'PENDING',
-          }
-        }).catch(() => { });
-      }
+      await triggerTransporterPickupBroadcast(this.prisma, order.id);
     } catch (err: any) {
       console.warn(`[completePickup] Transporter assignment note:`, err?.message || err);
     }

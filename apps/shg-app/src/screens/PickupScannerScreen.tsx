@@ -18,34 +18,44 @@ import { Colors, Fonts } from '../constants/theme';
 const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
 
 function decodeQrData(data: string) {
-  const trimmed = (data || '').trim();
+  let trimmed = (data || '').trim();
+
+  // If payload is a QR server URL or contains query params like &data=...
+  if (trimmed.includes('data=')) {
+    try {
+      const match = trimmed.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        trimmed = decodeURIComponent(match[1]).trim();
+      }
+    } catch (_) { }
+  } else if (trimmed.startsWith('%7B') || trimmed.includes('%22')) {
+    try {
+      trimmed = decodeURIComponent(trimmed).trim();
+    } catch (_) { }
+  }
+
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || trimmed).trim();
-      if (!parcelId) {
-        throw new Error('Invalid QR payload');
-      }
+      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || '').trim();
       return {
-        parcelId,
+        parcelId: parcelId || trimmed,
         verificationToken: parsed.verificationToken || parsed.verificationCode || parsed.token || '',
       };
     } catch (err: any) {
-      return {
-        parcelId: trimmed,
-        verificationToken: '',
-      };
+      // Fallback if JSON parsing failed
     }
-  } else {
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1 && (parts[0] || trimmed)) {
-      return {
-        parcelId: parts[0] || trimmed,
-        verificationToken: parts[1] || '',
-      };
-    }
-    throw new Error('Invalid QR format');
   }
+
+  // Regex extraction for PCL / ORD identifiers if embedded in raw URL or text
+  const pclMatch = trimmed.match(/(PCL-[\w-]+|ORD-[\w-]+|QR-[\w-]+)/i);
+  const parts = trimmed.split(/\s+/);
+  const mainId = pclMatch ? pclMatch[1] : (parts[0] || trimmed);
+
+  return {
+    parcelId: mainId,
+    verificationToken: parts.length > 1 ? parts[1] : '',
+  };
 }
 
 export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
@@ -160,11 +170,12 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
       const allParcels = [...safeScanned, ...safeRemaining];
       const cleanScannedVal = String(parcelId || '').trim();
-      const cleanNumId = cleanScannedVal ? cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '') : '';
+      const cleanNumId = cleanScannedVal ? cleanScannedVal.replace(/^QR-/, '').replace(/-PCL-\d+$/, '').replace(/^ORD-/, '').replace(/^PCL-/, '') : '';
+      const mappedPclId = cleanScannedVal ? cleanScannedVal.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2') : '';
 
       const parcel = allParcels.find((p: any) =>
         p.parcelId === parcelId ||
-        p.parcelId === mappedPclId ||
+        (mappedPclId && p.parcelId === mappedPclId) ||
         p.qrCodeValue === data ||
         p.qrCodeValue === parcelId ||
         p.verificationToken === parcelId ||
@@ -198,8 +209,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
       // Check duplicate
       const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
-      const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId) ||
-        safeScanned.some((i: any) => i.parcelId === parcelId);
+      const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId || (mappedPclId && i.parcelId === mappedPclId)) ||
+        safeScanned.some((i: any) => i.parcelId === parcelId || (mappedPclId && i.parcelId === mappedPclId));
 
       if (isDuplicate) {
         triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
@@ -236,6 +247,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         resetScanLock(350);
       }
     } catch (err: any) {
+      console.error("Scan processing error:", err);
       triggerScanFeedback('error', 'Malformed QR scanned.');
       resetScanLock(1500);
     }
