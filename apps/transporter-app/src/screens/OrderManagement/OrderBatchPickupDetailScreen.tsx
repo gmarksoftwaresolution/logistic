@@ -467,7 +467,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
     if (!finalReason) return;
 
-    const isDeliveryLeg = type === 'drop' || batch?.flowType === 'gmu_to_shg' || batch?.status === 'PICKUP_COMPLETED' || batch?.status === 'ACCEPTED_PICKUP';
+    const isPickedUp = batch?.status === 'PICKUP_COMPLETED' || batch?.products?.some((p: any) => p.status === 'picked' || p.status === 'completed');
+    const isDeliveryLeg = type === 'drop' || (batch?.flowType === 'gmu_to_shg' && isPickedUp);
 
     if (isDeliveryLeg) {
       rerouteBatchToHub(batch.id, rejectingProductId, finalReason);

@@ -562,21 +562,34 @@ export class OrderService {
     return order;
   }
 
-  async rejectPickup(orderId: any, transporterId: number, reason?: string) {
+  async declinePrePickup(orderId: any, transporterId: number, reason?: string) {
     const order = await this.findOrderFlexible(orderId);
-    const remarksStr = reason || 'Rejected by Transporter';
+    const remarksStr = reason || 'Pre-pickup declined by Transporter';
 
+    const ptStatus = (order.pickupTransporterStatus || '').toUpperCase();
+    const mStatus = (order.mainStatus || '').toUpperCase();
+    const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB'].includes(mStatus);
+
+    if (isPickedUp) {
+      throw new BadRequestException('Parcel has already been picked up. Please use Post-Pickup RTO Rejection instead.');
+    }
+
+    // Reset transporter assignment so order is freed for re-assignment/re-broadcasting
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
+        pickupTransporterId: null,
         pickupTransporterStatus: 'REJECTED',
-        mainStatus: 'REJECTED',
+        mainStatus: order.pickupShgId ? 'PARCEL_AT_SHG' : 'PENDING',
+        rejectReason: remarksStr,
+        remarks: remarksStr,
       }
     });
 
     await this.prisma.orderAssignment.updateMany({
       where: {
         orderId: order.id,
+        assigneeId: String(transporterId),
       },
       data: {
         status: 'REJECTED',
@@ -601,32 +614,24 @@ export class OrderService {
           productName: p.productName,
           userRole: 'TRANSPORTER',
           userId: String(transporterId),
-          action: 'REJECT_PICKUP',
-          scanResult: 'REJECTED',
+          action: 'DECLINE_PRE_PICKUP',
+          scanResult: 'DECLINED',
           remarks: remarksStr,
         }
       }).catch(() => { });
     }
 
-    return { success: true, message: 'Pickup rejected successfully.' };
+    return { success: true, message: 'Pickup assignment declined successfully. Order released for re-assignment.' };
   }
 
-  async generateDropHandoverCode(dropOrderId: any, transporterId: number) {
-    const order = await this.findOrderFlexible(dropOrderId);
-    return { success: true, code: '5678', orderId: order.id };
-  }
-
-  async completeDropPickup(dropOrderId: any, transporterId: number, code?: string) {
-    return this.acceptDrop(dropOrderId, transporterId);
-  }
-
-  async rejectDrop(dropOrderId: any, transporterId: number, reason?: string) {
-    const order = await this.findOrderFlexible(dropOrderId);
-    const remarksStr = reason || 'Rejected by Transporter';
+  async rejectPostPickup(orderId: any, transporterId: number, reason?: string) {
+    const order = await this.findOrderFlexible(orderId);
+    const remarksStr = reason || 'Rejected by Transporter (Post-Pickup RTO)';
 
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
+        pickupTransporterStatus: 'REJECTED',
         dropTransporterStatus: 'REJECTED',
         mainStatus: 'REJECTED',
         returnType: 'TRANSPORTER_RETURN',
@@ -662,14 +667,103 @@ export class OrderService {
           productName: p.productName,
           userRole: 'TRANSPORTER',
           userId: String(transporterId),
-          action: 'REJECT_DROP',
+          action: 'REJECT_POST_PICKUP',
           scanResult: 'REJECTED',
           remarks: remarksStr,
         }
       }).catch(() => { });
     }
 
-    return { success: true, message: 'Drop rejected successfully. Return to origin initiated.' };
+    return { success: true, message: 'Rejection reported. Return to origin (RTO) task created.' };
+  }
+
+  async rejectPickup(orderId: any, transporterId: number, reason?: string) {
+    const order = await this.findOrderFlexible(orderId);
+    const ptStatus = (order.pickupTransporterStatus || '').toUpperCase();
+    const mStatus = (order.mainStatus || '').toUpperCase();
+    const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB'].includes(mStatus);
+
+    if (isPickedUp) {
+      return this.rejectPostPickup(orderId, transporterId, reason);
+    } else {
+      return this.declinePrePickup(orderId, transporterId, reason);
+    }
+  }
+
+  async generateDropHandoverCode(dropOrderId: any, transporterId: number) {
+    const order = await this.findOrderFlexible(dropOrderId);
+    return { success: true, code: '5678', orderId: order.id };
+  }
+
+  async completeDropPickup(dropOrderId: any, transporterId: number, code?: string) {
+    return this.acceptDrop(dropOrderId, transporterId);
+  }
+
+  async declinePrePickupDrop(dropOrderId: any, transporterId: number, reason?: string) {
+    const order = await this.findOrderFlexible(dropOrderId);
+    const remarksStr = reason || 'Pre-pickup drop assignment declined by Transporter';
+
+    // Reset drop transporter assignment so order is freed for re-assignment by GMU Hub
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        dropTransporterId: null,
+        dropTransporterStatus: 'REJECTED',
+        mainStatus: 'STORED',
+        rejectReason: remarksStr,
+        remarks: remarksStr,
+      }
+    });
+
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+        assigneeId: String(transporterId),
+      },
+      data: {
+        status: 'REJECTED',
+      }
+    });
+
+    const parcels = await this.prisma.parcel.findMany({
+      where: {
+        OR: [
+          { orderId: order.id },
+          { orderId: order.orderId }
+        ]
+      }
+    });
+
+    for (const p of parcels) {
+      await this.prisma.parcelScanHistory.create({
+        data: {
+          parcelId: p.parcelId,
+          orderId: order.orderId || order.id,
+          productId: p.productId,
+          productName: p.productName,
+          userRole: 'TRANSPORTER',
+          userId: String(transporterId),
+          action: 'DECLINE_PRE_PICKUP_DROP',
+          scanResult: 'DECLINED',
+          remarks: remarksStr,
+        }
+      }).catch(() => { });
+    }
+
+    return { success: true, message: 'Drop assignment declined successfully. Order released for re-assignment at Hub.' };
+  }
+
+  async rejectDrop(dropOrderId: any, transporterId: number, reason?: string) {
+    const order = await this.findOrderFlexible(dropOrderId);
+    const dtStatus = (order.dropTransporterStatus || '').toUpperCase();
+    const mStatus = (order.mainStatus || '').toUpperCase();
+    const isPickedUp = ['PICKED', 'IN_TRANSIT_TO_DROP_SHG', 'DELIVERED_TO_DROP_SHG', 'DROPPED', 'COMPLETED'].includes(dtStatus) || ['IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'DELIVERED'].includes(mStatus);
+
+    if (isPickedUp) {
+      return this.rejectPostPickup(dropOrderId, transporterId, reason);
+    } else {
+      return this.declinePrePickupDrop(dropOrderId, transporterId, reason);
+    }
   }
 
   async bulkAccept(orders: { id: string | number; type: 'pickup' | 'drop' }[], transporterId: number) {

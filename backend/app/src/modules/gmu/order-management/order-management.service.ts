@@ -845,12 +845,13 @@ export class OrderManagementService implements OnModuleInit {
   async getPickupRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        phase: 'PICKUP',
         OR: [
           { assignments: { some: { status: 'REJECTED' } } },
           { mainStatus: 'REJECTED' },
           { pickupTransporterStatus: 'REJECTED' },
-          { pickupShgStatus: 'REJECTED' }
+          { dropTransporterStatus: 'REJECTED' },
+          { pickupShgStatus: 'REJECTED' },
+          { dropShgStatus: 'REJECTED' }
         ],
         returnType: null,
       },
@@ -1295,14 +1296,23 @@ export class OrderManagementService implements OnModuleInit {
         return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       });
 
-      const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.scanResult === 'REJECTED');
+      const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.action === 'DECLINE_PRE_PICKUP' || s.scanResult === 'REJECTED' || s.scanResult === 'DECLINED');
       const rejectAssign = effectiveAssignments.find((a: any) => a.status === 'REJECTED');
-      const actualRejectReason = o.rejectReason || o.remarks || pOrder?.rejectReason || pOrder?.remarks || rejectScan?.remarks || rejectAssign?.remarks || null;
+      
+      const isRegistrationStr = (str?: string | null) => !str || str.toLowerCase().includes('registered') || str.toLowerCase().includes('synchronized');
+      const actualRejectReason = 
+        (!isRegistrationStr(o.rejectReason) ? o.rejectReason : null) ||
+        (!isRegistrationStr(rejectScan?.remarks) ? rejectScan?.remarks : null) ||
+        (!isRegistrationStr(pOrder?.rejectReason) ? pOrder?.rejectReason : null) ||
+        (!isRegistrationStr(rejectAssign?.remarks) ? rejectAssign?.remarks : null) ||
+        (!isRegistrationStr(o.remarks) ? o.remarks : null) ||
+        (!isRegistrationStr(pOrder?.remarks) ? pOrder?.remarks : null) ||
+        null;
 
       return {
         ...o,
-        rejectReason: actualRejectReason || o.rejectReason || o.remarks,
-        remarks: actualRejectReason || o.remarks || o.rejectReason,
+        rejectReason: actualRejectReason || o.rejectReason,
+        remarks: actualRejectReason || o.remarks,
         pickupShgDetails,
         pickupTransporterDetails,
         dropShgDetails,
@@ -1432,12 +1442,12 @@ export class OrderManagementService implements OnModuleInit {
   async getDropRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        phase: 'DROP',
         OR: [
           { assignments: { some: { status: 'REJECTED' } } },
           { mainStatus: 'REJECTED' },
           { dropTransporterStatus: 'REJECTED' },
-          { dropShgStatus: 'REJECTED' }
+          { dropShgStatus: 'REJECTED' },
+          { pickupTransporterStatus: 'REJECTED' }
         ],
         returnType: null,
       },
@@ -2151,77 +2161,7 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async shgReject(id: string, shgId: string) {
-    const order = await this.getOrderDetails(id);
-
-    const assignment = await this.prisma.orderAssignment.findFirst({
-      where: { orderId: order.id, assigneeId: shgId, role: 'PICKUP', assigneeType: 'SHG' },
-    });
-
-    if (assignment) {
-      await this.prisma.orderAssignment.update({
-        where: { id: assignment.id },
-        data: { status: 'REJECTED' },
-      });
-    } else {
-      // Create a rejected assignment record for tracking
-      await this.prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: shgId,
-          assigneeType: 'SHG',
-          role: 'PICKUP',
-          status: 'REJECTED',
-        },
-      });
-    }
-
-    // Auto re-broadcast to matching approved SHGs that haven't rejected yet
-    const rejections = await this.prisma.orderAssignment.findMany({
-      where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'REJECTED' },
-    });
-    const rejectedIds = rejections.map((r) => r.assigneeId);
-
-    const matchingShgs = await this.getMatchingShgs(
-      order.sellerVillage,
-      order.sellerPincode,
-      order.sellerPostOffice || '',
-      rejectedIds
-    );
-
-    if (matchingShgs.length > 0) {
-      // Delete existing pending ones
-      await this.prisma.orderAssignment.deleteMany({
-        where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'PENDING' },
-      });
-
-      // Create new auto-accepted assignments for SHG
-      await this.prisma.orderAssignment.createMany({
-        data: matchingShgs.map((shg) => ({
-          orderId: order.id,
-          assigneeId: shg.id,
-          assigneeType: 'SHG',
-          role: 'PICKUP',
-          status: 'ACCEPTED',
-        })),
-      });
-
-      return this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          mainStatus: 'PICKUP_SHG_ACCEPTED',
-          pickupShgStatus: 'ACCEPTED',
-        },
-      });
-    } else {
-      // All SHGs declined — set SHG_PICKUP_DECLINED, revert to ORDER_PLACED for re-broadcast
-      return this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          mainStatus: 'SHG_PICKUP_DECLINED',
-          pickupShgStatus: null,
-        },
-      });
-    }
+    throw new BadRequestException('SHG rejection is disabled. SHGs must fulfill or redirect orders.');
   }
 
   async shgReschedule(id: string, shgId: string, duration: string) {

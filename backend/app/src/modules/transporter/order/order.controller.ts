@@ -60,8 +60,28 @@ export class OrderController {
     return this.orderService.completePickupDrop(id, req.user.id);
   }
 
+  @Post('pickup/:id/decline-pre-pickup')
+  @ApiOperation({ summary: 'Decline a pickup assignment before picking up (Without Picking Rejection)' })
+  async declinePrePickup(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.declinePrePickup(id, req.user.id, remarks);
+  }
+
+  @Post('pickup/:id/reject-post-pickup')
+  @ApiOperation({ summary: 'Reject a parcel after picking up / in transit (Picked Rejection - Initiates RTO)' })
+  async rejectPostPickup(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.rejectPostPickup(id, req.user.id, remarks);
+  }
+
   @Post('pickup/:id/reject')
-  @ApiOperation({ summary: 'Reject a pickup order' })
+  @ApiOperation({ summary: 'Reject a pickup order (auto-detects pre vs post pickup phase)' })
   async rejectPickup(
     @Param('id') id: string,
     @Request() req: any,
@@ -133,6 +153,16 @@ export class OrderController {
     return this.orderService.completeDropPickup(id, req.user.id, code);
   }
 
+
+  @Post('drop/:id/decline-pre-pickup')
+  @ApiOperation({ summary: 'Decline a drop assignment before picking up from Hub' })
+  async declinePrePickupDrop(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('remarks') remarks?: string,
+  ) {
+    return this.orderService.declinePrePickupDrop(id, req.user.id, remarks);
+  }
 
   @Post('drop/:id/reject')
   @ApiOperation({ summary: 'Reject a drop order' })

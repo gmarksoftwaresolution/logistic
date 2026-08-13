@@ -2052,8 +2052,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     {
       header: 'Reject Reason',
       accessor: (row: any) => {
-        const reason = row.rejectReason || row.remarks || row.dropRejectReason || row.pickupRejectReason || 'Recipient Unavailable - Return to Hub';
-        const rejectedBy = row.dropTransporterName || row.pickupTransporterName || row.dropTransporterDetails?.name || row.pickupTransporterDetails?.name || row.rejectedByName || 'Transporter';
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
+        
+        const isInvalidReason = (str?: string | null) => !str || str.toLowerCase().includes('registered') || str.toLowerCase().includes('synchronized');
+        const candidateReason = (!isInvalidReason(row.rejectReason) ? row.rejectReason : null) ||
+          (!isInvalidReason(row.remarks) ? row.remarks : null) ||
+          (!isInvalidReason(row.pickupRejectReason) ? row.pickupRejectReason : null) ||
+          (!isInvalidReason(row.dropRejectReason) ? row.dropRejectReason : null) ||
+          (!isInvalidReason(row.tracking?.[0]?.remarks) ? row.tracking[0].remarks : null);
+        const reason = candidateReason || (isPrePickup ? 'Pre-Pickup Declined by Transporter' : 'Recipient Unavailable - Return to Hub');
+          
+        const rejectedBy = row.rejectedByName || row.pickupTransporterName || row.pickupTransporterDetails?.name || row.dropTransporterName || row.dropTransporterDetails?.name || 'Transporter';
         return (
           <div className="flex flex-col gap-0.5 text-left max-w-[220px]">
             <span className="font-extrabold text-xs text-rose-700 leading-tight">
@@ -2068,18 +2080,28 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     },
     {
       header: 'Status',
-      accessor: (row: any) => (
-        <div className="flex flex-col gap-1 items-start">
-          <StatusBadge status={row.mainStatus} />
-          <span className="inline-flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded uppercase tracking-wider">
-            {isTransporterReturnOrder(row) ? '🚛 Transporter Return' : '👤 Buyer Return'}
-          </span>
-        </div>
-      )
+      accessor: (row: any) => {
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <StatusBadge status={row.mainStatus} />
+            <span className="inline-flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded uppercase tracking-wider">
+              {isPrePickup ? '⚠️ Pre-Pickup Rejection' : (isTransporterReturnOrder(row) ? '🚛 Transporter Return' : '👤 Buyer Return')}
+            </span>
+          </div>
+        );
+      }
     },
     {
       header: 'Action',
       accessor: (row: any) => {
+        const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
+        const main = (row.mainStatus || '').toUpperCase();
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -2094,17 +2116,20 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>View</span>
             </button>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-              title="In Take"
-              className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-            >
-              <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-              <span>IN TAKE</span>
-            </button>
+            {!isPrePickup && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleIntakeClick(row, isTransporterReturnOrder(row) ? 'return-drop' : 'return-pickup');
+                }}
+                title="In Take"
+                className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
+              >
+                <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                <span>IN TTAKE</span>
+              </button>
+            )}
           </div>
         );
       }
