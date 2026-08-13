@@ -622,7 +622,7 @@ export class OrderService {
         returnType: 'TRANSPORTER_RETURN',
         rejectReason: remarksStr,
         remarks: remarksStr,
-      }
+      } as any
     });
 
     await this.prisma.orderAssignment.updateMany({
@@ -632,7 +632,7 @@ export class OrderService {
       data: {
         status: 'REJECTED',
         remarks: remarksStr,
-      }
+      } as any
     });
 
     const parcels = await this.prisma.parcel.findMany({

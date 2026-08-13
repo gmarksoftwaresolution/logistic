@@ -886,13 +886,13 @@ export class OrderManagementService implements OnModuleInit {
         })
       : [];
 
-    const pickupOrderMap = new Map(relatedPickupOrders.map(p => [p.orderId || p.id, p]));
+    const pickupOrderMap = new Map<string, any>(relatedPickupOrders.map((p: any) => [p.orderId || p.id, p]));
 
     // Collect all unique assignee / partner user IDs across all orders
     const userIds = new Set<number>();
 
     orders.forEach((o: any) => {
-      const pOrder = pickupOrderMap.get(o.orderId || o.id);
+      const pOrder: any = pickupOrderMap.get(o.orderId || o.id);
       const allAssigns = [...(o.assignments || []), ...(pOrder?.assignments || [])];
 
       const pShg = o.pickupShgId || pOrder?.pickupShgId || allAssigns.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
@@ -918,7 +918,7 @@ export class OrderManagementService implements OnModuleInit {
     const userMap = new Map<string, any>(userList.map(u => [String(u.id), u]));
 
     return orders.map((o: any) => {
-      const pOrder = pickupOrderMap.get(o.orderId || o.id);
+      const pOrder: any = pickupOrderMap.get(o.orderId || o.id);
       const effectiveAssignments = [...(o.assignments || []), ...(pOrder?.assignments || [])];
       const orderPlacedTime = pOrder?.createdAt || o.createdAt;
 
@@ -1265,7 +1265,7 @@ export class OrderManagementService implements OnModuleInit {
 
       const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.scanResult === 'REJECTED');
       const rejectAssign = effectiveAssignments.find((a: any) => a.status === 'REJECTED');
-      const actualRejectReason = o.rejectReason || o.remarks || pOrder?.rejectReason || pOrder?.remarks || rejectScan?.remarks || rejectAssign?.remarks || null;
+      const actualRejectReason = o.rejectReason || o.remarks || (pOrder as any)?.rejectReason || (pOrder as any)?.remarks || rejectScan?.remarks || rejectAssign?.remarks || null;
 
       return {
         ...o,
