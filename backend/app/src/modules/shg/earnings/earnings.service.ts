@@ -100,7 +100,7 @@ export class EarningsService {
         if (!existingOrderIds.has(earningKey) && !existingOrderIds.has(orderNumberStr) && !existingOrderIds.has(cleanNumber)) {
           const completedAt = p.updatedAt || p.createdAt || new Date();
           try {
-            await this.prisma.earning.create({
+            await (this.prisma as any).earning.create({
               data: {
                 shgId,
                 orderId: earningKey,
@@ -108,7 +108,7 @@ export class EarningsService {
                 amount: rate,
                 earningType,
                 completedAt,
-              }
+              } as any
             });
             existingOrderIds.add(earningKey);
           } catch (err) {
@@ -126,7 +126,7 @@ export class EarningsService {
         if (!existingOrderIds.has(earningKey) && !existingOrderIds.has(orderNumberStr) && !existingOrderIds.has(cleanNumber)) {
           const completedAt = d.deliveredAt || d.updatedAt || d.createdAt || new Date();
           try {
-            await this.prisma.earning.create({
+            await (this.prisma as any).earning.create({
               data: {
                 shgId,
                 orderId: earningKey,
@@ -134,7 +134,7 @@ export class EarningsService {
                 amount: PER_ORDER_RATE,
                 earningType: 'NORMAL',
                 completedAt,
-              }
+              } as any
             });
             existingOrderIds.add(earningKey);
           } catch (err) {
