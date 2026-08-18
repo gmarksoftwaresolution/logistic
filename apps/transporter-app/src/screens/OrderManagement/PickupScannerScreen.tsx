@@ -16,31 +16,47 @@ import { useOrderManagement } from '../../context/OrderManagementContext';
 import { Colors, Fonts } from '../../constants/Colors';
 import api from '../../services/api';
 
+const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
+
 function decodeQrData(data: string) {
-  const trimmed = data.trim();
+  let trimmed = (data || '').trim();
+
+  // If payload is a QR server URL or contains query params like &data=...
+  if (trimmed.includes('data=')) {
+    try {
+      const match = trimmed.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        trimmed = decodeURIComponent(match[1]).trim();
+      }
+    } catch (_) { }
+  } else if (trimmed.startsWith('%7B') || trimmed.includes('%22')) {
+    try {
+      trimmed = decodeURIComponent(trimmed).trim();
+    } catch (_) { }
+  }
+
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (!parsed.parcelId) {
-        throw new Error('Invalid QR payload');
-      }
+      const parcelId = String(parsed.parcelId || parsed.orderId || parsed.id || parsed.qrCodeValue || parsed.code || '').trim();
       return {
-        parcelId: parsed.parcelId,
-        verificationToken: parsed.verificationToken || '',
+        parcelId: parcelId || trimmed,
+        verificationToken: parsed.verificationToken || parsed.verificationCode || parsed.token || '',
       };
     } catch (err: any) {
-      throw new Error('Malformed JSON in QR: ' + err.message);
+      // Fallback if JSON parsing failed
     }
-  } else {
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 1) {
-      return {
-        parcelId: parts[0],
-        verificationToken: parts[1] || '',
-      };
-    }
-    throw new Error('Invalid QR format');
   }
+
+  // Regex extraction for PCL / ORD identifiers if embedded in raw URL or text
+  const pclMatch = trimmed.match(/(PCL-[\w-]+|ORD-[\w-]+|QR-[\w-]+)/i);
+  const parts = trimmed.split(/\s+/);
+  const mainId = pclMatch ? pclMatch[1] : (parts[0] || trimmed);
+
+  return {
+    parcelId: mainId,
+    verificationToken: parts.length > 1 ? parts[1] : '',
+  };
 }
 
 export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
@@ -101,7 +117,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
 
   // Set hasScannedAny dynamically on mount if there is already progress
   useEffect(() => {
-    if (activeSession && activeSession.scanned && activeSession.scanned.length > 0) {
+    if (activeSession && Array.isArray(activeSession.scanned) && activeSession.scanned.length > 0) {
       setHasScannedAny(true);
     }
   }, [activeSession]);
@@ -110,13 +126,15 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     setScanFeedback(type);
     setFeedbackMessage(message);
 
-    if (type === 'success') {
-      Vibration.vibrate(80);
-    } else if (type === 'duplicate') {
-      Vibration.vibrate([0, 80, 50, 80]);
-    } else {
-      Vibration.vibrate(300);
-    }
+    try {
+      if (type === 'success') {
+        Vibration.vibrate(80);
+      } else if (type === 'duplicate') {
+        Vibration.vibrate([0, 80, 50, 80]);
+      } else {
+        Vibration.vibrate(300);
+      }
+    } catch (_) { }
 
     // Auto clear feedback after 1.5 seconds
     setTimeout(() => {
@@ -125,8 +143,10 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     }, 1500);
   };
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+  const handleBarcodeScanned = async (event: any) => {
     if (scanned || isScanningRef.current || !activeSession || actionLoading) return;
+    const data = typeof event === 'string' ? event : event?.data;
+    if (!data) return;
 
     // Scan lock: prevent any further scans until this operation finishes
     isScanningRef.current = true;
@@ -137,86 +157,95 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       isScanningRef.current = false;
     };
 
-    let decoded;
     try {
-      decoded = decodeQrData(data);
-    } catch (err: any) {
-      triggerScanFeedback('error', 'Malformed QR payload scanned.');
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
-
-    const { parcelId, verificationToken } = decoded;
-
-    // Compile master expected list from session
-    const allParcels = [...(activeSession.scanned || []), ...(activeSession.remaining || [])];
-    const cleanScannedId = parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '');
-    const parcel = allParcels.find((p: any) => 
-      p.parcelId === parcelId || 
-      p.orderId === parcelId || 
-      p.barcode === parcelId ||
-      p.id === parcelId ||
-      (p.parcelId && p.parcelId.includes(cleanScannedId)) ||
-      (p.orderId && p.orderId.includes(cleanScannedId))
-    );
-
-    if (!parcel) {
-      setHasScannedAny(true);
-      triggerScanFeedback('success', `Syncing scanned parcel...`);
+      let decoded: any;
       try {
-        await scanParcel('PICKUP', activeSession.sessionId, data);
-        setTimeout(resetScanLock, 1500);
-        return;
+        decoded = decodeQrData(data);
       } catch (err: any) {
-        const errMsg = err.response?.data?.message || err.message || 'Parcel not in active scan list.';
-        triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+        triggerScanFeedback('error', 'Malformed QR payload scanned.');
         setTimeout(resetScanLock, 1500);
         return;
       }
-    }
 
-    // Validate verification token locally if available
-    if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
-      triggerScanFeedback('error', 'Invalid verification token.');
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
+      const parcelId = String(decoded?.parcelId || decoded?.orderId || '').trim();
+      const verificationToken = decoded?.verificationToken || '';
 
-    // Check duplicate
-    const isDuplicate = localScannedItems.some(i => i.parcelId === parcelId) ||
-                        (activeSession.scanned || []).some(i => i.parcelId === parcelId);
-
-    if (isDuplicate) {
-      triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName}`);
-      setTimeout(resetScanLock, 1500);
-      return;
-    }
-
-    // Valid scan! Optimistically add to UI list
-    setHasScannedAny(true);
-    triggerScanFeedback('success', `Scanned: ${parcel.productName}`);
-
-    const newOptimisticItem = {
-      ...parcel,
-      pendingSync: 'syncing',
-      lastScannedParcelId: parcelId
-    };
-
-    setLocalScannedItems(prev => [...prev, newOptimisticItem]);
-
-    // Send backend request asynchronously
-    try {
-      await scanParcel('PICKUP', activeSession.sessionId, data);
-      setLocalScannedItems(prev =>
-        prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
+      const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+      const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+      const allParcels = [...safeScanned, ...safeRemaining];
+      const cleanScannedId = parcelId ? parcelId.replace(/^P-/, '').replace(/-1$/, '').replace(/^ORD-/, '').replace(/^QR-/, '').replace(/^PCL-/, '') : '';
+      const mappedPclId = parcelId ? parcelId.replace(/^QR-/, 'PCL-').replace(/^QR-(\d+-\d+)-PCL-(\d+)$/, 'PCL-$1-$2') : '';
+      const parcel = allParcels.find((p: any) =>
+        p.parcelId === parcelId ||
+        (mappedPclId && p.parcelId === mappedPclId) ||
+        p.orderId === parcelId ||
+        p.barcode === parcelId ||
+        p.id === parcelId ||
+        (cleanScannedId && p.parcelId && String(p.parcelId).includes(cleanScannedId)) ||
+        (cleanScannedId && p.orderId && String(p.orderId).includes(cleanScannedId))
       );
+
+      if (!parcel) {
+        setHasScannedAny(true);
+        triggerScanFeedback('success', `Syncing scanned parcel...`);
+        try {
+          await scanParcel('PICKUP', activeSession.sessionId, data);
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message || err.message || 'Parcel not in active scan list.';
+          triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+        } finally {
+          setTimeout(resetScanLock, 1500);
+        }
+        return;
+      }
+
+      // Validate verification token locally if available
+      if (parcel.verificationToken && verificationToken && parcel.verificationToken !== verificationToken) {
+        triggerScanFeedback('error', 'Invalid verification token.');
+        setTimeout(resetScanLock, 1500);
+        return;
+      }
+
+      // Check duplicate
+      const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+      const isDuplicate = safeLocalScanned.some(i => i.parcelId === parcelId) ||
+        safeScanned.some((i: any) => i.parcelId === parcelId);
+
+      if (isDuplicate) {
+        triggerScanFeedback('duplicate', `Already scanned: ${parcel.productName || 'Parcel'}`);
+        setTimeout(resetScanLock, 1500);
+        return;
+      }
+
+      // Valid scan! Optimistically add to UI list
+      setHasScannedAny(true);
+      triggerScanFeedback('success', `Scanned: ${parcel.productName || 'Parcel'}`);
+
+      const newOptimisticItem = {
+        ...parcel,
+        pendingSync: 'syncing',
+        lastScannedParcelId: parcelId
+      };
+
+      setLocalScannedItems(prev => [...prev, newOptimisticItem]);
+
+      // Send backend request asynchronously
+      try {
+        await scanParcel('PICKUP', activeSession.sessionId, data);
+        setLocalScannedItems(prev =>
+          prev.map(item => item.parcelId === parcelId ? { ...item, pendingSync: 'synced' } : item)
+        );
+      } catch (err: any) {
+        // Revert optimistic state and present error feedback
+        setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
+        const errMsg = err.response?.data?.message || 'Sync failed.';
+        triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
+      } finally {
+        setTimeout(resetScanLock, 350);
+      }
     } catch (err: any) {
-      // Revert optimistic state and present error feedback
-      setLocalScannedItems(prev => prev.filter(item => item.parcelId !== parcelId));
-      const errMsg = err.response?.data?.message || 'Sync failed.';
-      triggerScanFeedback('error', Array.isArray(errMsg) ? errMsg[0] : errMsg);
-    } finally {
-      setTimeout(resetScanLock, 350);
+      triggerScanFeedback('error', 'Scanning error occurred.');
+      setTimeout(resetScanLock, 1500);
     }
   };
 
@@ -240,10 +269,10 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
     try {
       // Filter out locally tracked scanned items immediately (< 1ms)
       setLocalScannedItems(prev => prev.filter(item => item.orderId !== orderId));
-      
+
       const res = await confirmSessionOrder('PICKUP', activeSession.sessionId, orderId);
-      refreshBatchesList().catch(() => {});
-      
+      refreshBatchesList().catch(() => { });
+
       const cleanOrderId = orderId.replace('pickup-', '').replace('drop-', '').replace('ORD-', '');
       Alert.alert(
         'Pickup Confirmed',
@@ -289,16 +318,20 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const scannedGroupedOrders = React.useMemo(() => {
     if (!activeSession) return [];
 
-    const serverScannedIds = new Set((activeSession.scanned || []).map((p: any) => p.parcelId));
-    
+    const safeScanned = Array.isArray(activeSession?.scanned) ? activeSession.scanned : [];
+    const safeRemaining = Array.isArray(activeSession?.remaining) ? activeSession.remaining : [];
+    const safeLocalScanned = Array.isArray(localScannedItems) ? localScannedItems : [];
+
+    const serverScannedIds = new Set(safeScanned.map((p: any) => p.parcelId));
+
     // Merge optimistic local scans and server scans
     const mergedScanned = [
-      ...(activeSession.scanned || []).map(p => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
-      ...localScannedItems.filter(p => !serverScannedIds.has(p.parcelId))
+      ...safeScanned.map((p: any) => ({ ...p, pendingSync: 'synced', lastScannedParcelId: p.parcelId })),
+      ...safeLocalScanned.filter((p: any) => !serverScannedIds.has(p.parcelId))
     ];
 
-    const scannedIds = new Set(mergedScanned.map(p => p.parcelId));
-    const mergedRemaining = (activeSession.remaining || []).filter((p: any) => !scannedIds.has(p.parcelId));
+    const scannedIds = new Set(mergedScanned.map((p: any) => p.parcelId));
+    const mergedRemaining = safeRemaining.filter((p: any) => !scannedIds.has(p.parcelId));
 
     const ordersMap: Record<string, {
       orderId: string;
@@ -443,7 +476,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         <CameraView
           style={styles.camera}
           facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          barcodeScannerSettings={BARCODE_SETTINGS}
           onBarcodeScanned={handleBarcodeScanned}
         >
           <View style={styles.overlayContainer}>
@@ -504,7 +537,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                     <View style={styles.detailItem}>
                       <Text style={styles.detailLabel}>Last Parcel</Text>
                       <Text style={styles.detailValue}>
-                        {orderGroup.lastScannedParcelId ? `P-${orderGroup.lastScannedParcelId.substring(0, 6)}` : 'None'}
+                        {orderGroup.lastScannedParcelId ? `P-${String(orderGroup.lastScannedParcelId).substring(0, 6)}` : 'None'}
                       </Text>
                     </View>
                     <View style={styles.detailItem}>
@@ -535,8 +568,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                       <View key={`scanned-${item.parcelId || itemIdx}-${itemIdx}`} style={styles.parcelRow}>
                         <Check size={16} color="#10B981" />
                         <Text style={styles.parcelRowName} numberOfLines={1}>{item.productName}</Text>
-                        <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
-                        
+                        <Text style={styles.parcelRowId}>(P-{String(item.parcelId || '').substring(0, 6)})</Text>
+
                         {/* Optimistic sync label */}
                         <Text style={[
                           styles.syncLabel,
@@ -560,7 +593,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
                       <View key={`remaining-${item.parcelId || remIdx}-${remIdx}`} style={[styles.parcelRow, styles.parcelRowRemaining]}>
                         <RefreshCw size={14} color="#F59E0B" />
                         <Text style={[styles.parcelRowName, styles.remainingText]} numberOfLines={1}>{item.productName}</Text>
-                        <Text style={styles.parcelRowId}>(P-{item.parcelId.substring(0, 6)})</Text>
+                        <Text style={styles.parcelRowId}>(P-{String(item.parcelId || '').substring(0, 6)})</Text>
                         <Text style={styles.waitingBadge}>Waiting</Text>
                       </View>
                     ))}

@@ -97,14 +97,13 @@ model Order {
   returnType              String?           // TRANSPORTER_RETURN, BUYER_RETURN
   rescheduleType          String?           // PICKUP_SHG, PICKUP_TRANSPORTER, DROP_SHG, DROP_TRANSPORTER
   rescheduleDuration      String?           // e.g. "2 HOURS", "24 HOURS"
+  rejectReason            String?
+  remarks                 String?
   
   // Redirect indicators
   isPickupRedirected      Boolean?          @default(false)
-  isDropRedirected        Boolean?          @default(false)
   redirectedPickupAt      DateTime?
-  redirectedDropAt        DateTime?
   redirectedPickupShgId   String?
-  redirectedDropShgId     String?
   
   // Timestamps
   warehouseReceivedAt     DateTime?
@@ -118,7 +117,7 @@ model Order {
 
   assignments             OrderAssignment[]
   parcels                 Parcel[]
-  redirectedOrder         RedirectedOrder?
+  redirectedOrders        RedirectedOrder[]
 
   @@index([orderId])
   @@index([barcode])
@@ -739,6 +738,7 @@ model Earning {
   orderNumber     String    @map("order_number")
   
   amount          Decimal   @db.Decimal(10,2)
+  earningType     String?   @default("NORMAL") @map("earning_type")
   completedAt     DateTime  @map("completed_at")
   
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -988,12 +988,16 @@ model return_order_timeline {
 
 model RedirectedOrder {
   id            String   @id @default(uuid())
-  orderId       String   @unique
+  orderId       String
   order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legType       String   @default("PICKUP") // PICKUP or DROP
   shgId         String
   transporterId String?
   reason        String?
   status        String   @default("PENDING") // PENDING, ACCEPTED, COMPLETED
+  acceptedAt    DateTime?
+  pickedUpAt    DateTime?
+  completedAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

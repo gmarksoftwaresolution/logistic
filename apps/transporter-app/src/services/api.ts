@@ -11,8 +11,8 @@ const getLocalDevelopmentUrl = (): string => {
       const match = scriptURL.match(/^https?:\/\/([^:/]+)(:\d+)?/);
       if (match) {
         const host = match[1];
-        // The Transporter backend runs on port 3003
-        return `http://${host}:3003/api`;
+        // The Unified backend runs on port 3000
+        return `http://${host}:3000/api`;
       }
     }
   } catch (e) {
@@ -21,9 +21,9 @@ const getLocalDevelopmentUrl = (): string => {
 
   // Fallbacks based on platform
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3003/api'; // Android emulator host loopback
+    return 'http://10.0.2.2:3000/api'; // Android emulator host loopback
   }
-  return 'http://localhost:3003/api';
+  return 'http://localhost:3000/api';
 };
 
 const getBackendUrl = (): string => {
@@ -191,7 +191,7 @@ api.interceptors.response.use(
     // Enrich message for network errors (no response received)
     if (!error.response) {
       const currentURL = api.defaults.baseURL || BASE_URL;
-      error.message = `Network Error: Cannot connect to backend at ${currentURL}.\n\nTo fix this:\n1. Ensure the NestJS server is running on port 3001.\n2. If using a physical phone, ensure it's on the same Wi-Fi as your computer.\n3. Make sure Windows Defender Firewall allows Node.js on port 3001.`;
+      error.message = `Network Error: Cannot connect to backend at ${currentURL}.\n\nTo fix this:\n1. Ensure the NestJS server is running on port 3000.\n2. If using a physical phone, ensure it's on the same Wi-Fi as your computer.\n3. Make sure Windows Defender Firewall allows Node.js on port 3000.`;
     }
 
     return Promise.reject(error);

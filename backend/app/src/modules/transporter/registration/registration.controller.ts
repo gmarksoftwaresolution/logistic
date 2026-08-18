@@ -59,7 +59,8 @@ export class RegistrationController {
   @Get('me')
   @ApiOperation({ summary: 'Get current registration status and data' })
   getMe(@Request() req: any): Promise<any> {
-    return this.registrationService.getRegistrationStatus(req.user.phoneNumber);
+    const identifier = req.user?.id || req.user?.phoneNumber || req.user?.phone || req.user?.mobileNumber;
+    return this.registrationService.getRegistrationStatus(identifier);
   }
 
   // --- Authenticated Registration Steps ---

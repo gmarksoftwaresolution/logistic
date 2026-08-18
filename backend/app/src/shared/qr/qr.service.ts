@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as QRCode from 'qrcode';
-import { QrVerificationEngine, determineTransition, validateVerificationToken } from './qr-verification-engine';
+import { QrVerificationEngine, determineTransition, validateVerificationToken, triggerTransporterPickupBroadcast, triggerTransporterDropBroadcast } from './qr-verification-engine';
 
 @Injectable()
 export class QrService {
@@ -299,17 +299,26 @@ export class QrService {
       let dropShgStatus = order.dropShgStatus;
       let dropTransporterStatus = order.dropTransporterStatus;
 
-      if (mainStatus === 'PARCEL_PICKED') {
+      if (mainStatus === 'PARCEL_PICKED' || mainStatus === 'PARCEL_AT_SHG') {
         pickupShgStatus = 'PICKED';
+        pickupTransporterStatus = 'PENDING';
+        await triggerTransporterPickupBroadcast(tx, order.id);
       } else if (mainStatus === 'TRANSPORTER_ACCEPTED') {
         pickupShgStatus = 'COMPLETED';
         pickupTransporterStatus = 'ACCEPTED';
-      } else if (mainStatus === 'IN_TRANSIT') {
+      } else if (mainStatus === 'IN_TRANSIT' || mainStatus === 'IN_TRANSIT_TO_HUB') {
+        pickupShgStatus = 'DROPPED';
         pickupTransporterStatus = 'PICKED';
       } else if (mainStatus === 'AT_GMU') {
         pickupTransporterStatus = 'COMPLETED';
-      } else if (mainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'READY_FOR_DISPATCH' || mainStatus === 'IN_TRANSIT_TO_BUYER' || mainStatus === 'DISPATCHED') {
-        mainStatus = 'IN_TRANSIT_TO_BUYER';
+      } else if (mainStatus === 'STORED') {
+        pickupShgStatus = 'DROPPED';
+        pickupTransporterStatus = 'DROPPED';
+        dropShgStatus = 'ACCEPTED';
+        dropTransporterStatus = 'PENDING';
+        await triggerTransporterDropBroadcast(tx, order.id);
+      } else if (mainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'READY_FOR_DISPATCH' || mainStatus === 'IN_TRANSIT_TO_BUYER' || mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || mainStatus === 'DISPATCHED') {
+        mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
         dropTransporterStatus = 'PICKED';
       } else if (mainStatus === 'AT_BUYER_SHG' || mainStatus === 'PARCEL_AT_DROP_SHG' || mainStatus === 'PARCEL_WITH_DROP_SHG') {
         mainStatus = 'PARCEL_AT_DROP_SHG';

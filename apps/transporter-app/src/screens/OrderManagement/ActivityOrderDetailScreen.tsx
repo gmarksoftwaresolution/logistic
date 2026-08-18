@@ -16,7 +16,7 @@ import {
 import { Colors, Fonts } from '../../constants/Colors';
 import { useOrderManagement, HUB_CONTACT } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
-import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink } from 'lucide-react-native';
+import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink, Check } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -202,13 +202,15 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
           {/* Section: Pickup Location & Contact Details */}
           <View style={styles.contactCardContainer}>
             <View style={styles.contactCardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
-                <MapPin size={scale(18)} color="#3B82F6" strokeWidth={2.5} />
-                <Text style={styles.contactCardTitle}>
-                  {t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
-                </Text>
+              <View style={{ flex: 1, marginRight: scale(8) }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), flexWrap: 'wrap' }}>
+                  <MapPin size={scale(18)} color="#3B82F6" strokeWidth={2.5} />
+                  <Text style={styles.contactCardTitle}>
+                    {t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
+                  </Text>
+                </View>
                 {(batch?.isPickupRedirected || batch?.isRedirected) && (
-                  <View style={{ backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
+                  <View style={{ marginTop: scale(4), alignSelf: 'flex-start', backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
                     <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT SELLER PICKUP (REDIRECTED)</Text>
                   </View>
                 )}
@@ -315,11 +317,6 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 <Text style={styles.contactCardTitle}>
                   {t('orders.drop_details_title', { defaultValue: 'Drop-off Location & Contact' })}
                 </Text>
-                {batch?.isDropRedirected && (
-                  <View style={{ backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
-                    <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT BUYER DELIVERY (REDIRECTED)</Text>
-                  </View>
-                )}
               </View>
               {dropContact?.phone && (
                 <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${dropContact.phone}`)} activeOpacity={0.7}>
@@ -533,36 +530,26 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                 styles.bottomStickyBar,
                 { paddingBottom: insets.bottom > 0 ? insets.bottom + verticalScale(16) : verticalScale(28) }
               ]}>
-                <View style={styles.rowActions}>
-                  <TouchableOpacity
-                    style={[styles.actionBtnHalf, styles.acceptBtnNew]}
-                    activeOpacity={0.8}
-                    onPress={async () => {
-                      try {
-                        await acceptBatch(batch.id);
-                        navigation.goBack();
-                        navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
-                      } catch (err) {
-                        console.error('Failed to accept batch in detail view:', err);
-                      }
-                    }}
-                  >
-                    <Text style={styles.acceptBtnText}>{t('orders.accept', { defaultValue: 'Accept' }).toUpperCase()}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.actionBtnHalf, styles.rejectBtnNew]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      navigation.navigate('CategoryOrders', { 
-                        category: 'new', 
-                        triggerRejectBatchId: batch.id 
-                      });
-                    }}
-                  >
-                    <Text style={styles.rejectBtnText}>{t('orders.reject', { defaultValue: 'Reject' }).toUpperCase()}</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.stickyActionBtn}
+                  activeOpacity={0.85}
+                  onPress={async () => {
+                    try {
+                      await acceptBatch(batch.id);
+                      navigation.goBack();
+                      navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
+                    } catch (err) {
+                      console.error('Failed to accept batch in detail view:', err);
+                    }
+                  }}
+                >
+                  <View style={styles.btnContent}>
+                    <Text style={styles.stickyActionBtnText}>
+                      {t('orders.accept', { defaultValue: 'ACCEPT ORDER' }).toUpperCase()}
+                    </Text>
+                    <Check size={scale(18)} color="#FFFFFF" strokeWidth={3} style={styles.btnIcon} />
+                  </View>
+                </TouchableOpacity>
               </View>
             );
           }

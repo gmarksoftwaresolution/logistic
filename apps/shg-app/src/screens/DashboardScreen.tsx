@@ -1,14 +1,16 @@
 import { LanguageContext } from '../context/LanguageContext';
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal, Alert, ActivityIndicator, Animated } from 'react-native';
 import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useUser } from '../context/UserContext';
+import { useOrders } from '../context/OrderContext';
+import axiosInstance from '../api/axiosInstance';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +22,8 @@ export default function DashboardScreen({
 }: Props) {
   const context = useContext(LanguageContext);
   const { t } = context!;
+  const { incomingOrders = [], acceptedOrders = [], deliveredOrders = [], refreshOrdersList } = useOrders();
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([
     {
@@ -48,18 +52,66 @@ export default function DashboardScreen({
     },
   ]);
 
+  const [earningsSummary, setEarningsSummary] = useState<any>({
+    todayEarnings: 0,
+    weekEarnings: 0,
+    monthEarnings: 0,
+    totalEarnings: 0,
+    completedOrders: 0,
+    perOrderRate: 15,
+  });
+  const [recentEarnings, setRecentEarnings] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<'month' | 'today' | 'week'>('month');
+  const [showEarnings, setShowEarnings] = useState(true);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = React.useCallback(async () => {
-    setRefreshing(true);
-    // Simulate API reload for now
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
-  }, []);
 
-  const {
-    user
-  } = useUser();
+  const fetchEarningsData = async () => {
+    try {
+      const response = await axiosInstance.get(`/earnings?filter=${selectedFilter}`);
+      if (response.data?.success && response.data?.data) {
+        setEarningsSummary(response.data.data.summary || {});
+        setRecentEarnings(response.data.data.recentEarnings || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch dashboard earnings:', err);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchEarningsData();
+      refreshOrdersList();
+    }, [selectedFilter])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchEarningsData(), refreshOrdersList()]);
+    setRefreshing(false);
+  }, [selectedFilter]);
+
+  const { user } = useUser();
   if (!user) return null;
+
+  const formatCurrency = (val: number) => {
+    return '₹' + Number(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  };
+
+  const getDisplayedEarnings = () => {
+    if (selectedFilter === 'today') return earningsSummary.todayEarnings || 0;
+    if (selectedFilter === 'week') return earningsSummary.weekEarnings || 0;
+    return earningsSummary.totalEarnings || earningsSummary.monthEarnings || 0;
+  };
+
+  const getFilterLabel = () => {
+    if (selectedFilter === 'today') return "Today's";
+    if (selectedFilter === 'week') return "This Week";
+    return "This Month";
+  };
+
+  const pickupCount = incomingOrders.length + acceptedOrders.filter((o: any) => o.legType === 'pickup' || !o.legType).length;
+  const deliveryCount = acceptedOrders.filter((o: any) => o.legType === 'drop').length;
 
   return (
     <LinearGradient colors={['#F9FAFB', '#F3F4F6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="flex-1">
@@ -130,17 +182,48 @@ export default function DashboardScreen({
             }}
           >
             <View className="z-10">
-              <Text className="text-white/90 text-[12px] font-medium tracking-wide">Total Earnings</Text>
+              <Text className="text-white/90 text-[12px] font-medium tracking-wide">Total Earnings ({getFilterLabel()})</Text>
               <View className="flex-row items-center mt-1 mb-3">
-                <Text className="text-white text-[28px] font-bold">₹12,750.00</Text>
-                <TouchableOpacity className="ml-2">
-                  <Ionicons name="eye-outline" size={18} color="#fff" style={{ opacity: 0.9 }} />
+                <Text className="text-white text-[28px] font-bold">
+                  {showEarnings ? formatCurrency(getDisplayedEarnings()) : '₹ ••••••'}
+                </Text>
+                <TouchableOpacity className="ml-2" onPress={() => setShowEarnings(!showEarnings)}>
+                  <Ionicons name={showEarnings ? "eye-outline" : "eye-off-outline"} size={18} color="#fff" style={{ opacity: 0.9 }} />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity className="flex-row items-center">
-                <Text className="text-white/90 text-[12px] font-medium">This Month</Text>
+
+              <TouchableOpacity 
+                className="flex-row items-center bg-black/20 px-3 py-1.5 rounded-full align-self-start" 
+                style={{ alignSelf: 'flex-start' }}
+                onPress={() => setShowFilterDropdown(!showFilterDropdown)}
+              >
+                <Text className="text-white/90 text-[12px] font-medium">{getFilterLabel()}</Text>
                 <Ionicons name="chevron-down" size={14} color="#fff" className="ml-1 opacity-90" />
               </TouchableOpacity>
+
+              {/* Filter Dropdown */}
+              {showFilterDropdown && (
+                <View className="mt-2 bg-white rounded-xl p-1 shadow-lg z-30" style={{ alignSelf: 'flex-start' }}>
+                  <TouchableOpacity 
+                    className={`px-3 py-1.5 rounded-lg ${selectedFilter === 'month' ? 'bg-[#EBF7EE]' : ''}`} 
+                    onPress={() => { setSelectedFilter('month'); setShowFilterDropdown(false); }}
+                  >
+                    <Text className={`text-xs font-bold ${selectedFilter === 'month' ? 'text-[#297C11]' : 'text-slate-700'}`}>This Month</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    className={`px-3 py-1.5 rounded-lg ${selectedFilter === 'week' ? 'bg-[#EBF7EE]' : ''}`} 
+                    onPress={() => { setSelectedFilter('week'); setShowFilterDropdown(false); }}
+                  >
+                    <Text className={`text-xs font-bold ${selectedFilter === 'week' ? 'text-[#297C11]' : 'text-slate-700'}`}>This Week</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    className={`px-3 py-1.5 rounded-lg ${selectedFilter === 'today' ? 'bg-[#EBF7EE]' : ''}`} 
+                    onPress={() => { setSelectedFilter('today'); setShowFilterDropdown(false); }}
+                  >
+                    <Text className={`text-xs font-bold ${selectedFilter === 'today' ? 'text-[#297C11]' : 'text-slate-700'}`}>Today</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
             <View className="absolute right-[-10px] bottom-[-20px] opacity-10">
                <Text style={{ fontSize: 130, fontWeight: 'bold', color: '#000' }}>₹</Text>
@@ -172,44 +255,72 @@ export default function DashboardScreen({
 
           {/* Quick Action Grid */}
           <View className="mx-4 mt-5 flex-row justify-between">
-            {/* Card 1 */}
-            <TouchableOpacity activeOpacity={0.7} className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
+            {/* Card 1: Today's Earnings */}
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => navigation.navigate('Earnings')}
+              className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" 
+              style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}
+            >
               <View className="w-10 h-10 rounded-full bg-[#EBF7EE] items-center justify-center mb-2">
                 <Ionicons name="wallet" size={18} color="#297C11" />
               </View>
               <Text className="text-[9px] text-[#4B5563] font-medium text-center leading-[11px]" numberOfLines={2}>Today's{'\n'}Earnings</Text>
-              <Text className="text-[13px] font-bold text-[#111827] mt-1">₹450</Text>
-              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">vs yesterday</Text>
+              <Text className="text-[12px] font-bold text-[#111827] mt-1" numberOfLines={1}>
+                {formatCurrency(earningsSummary.todayEarnings || 0)}
+              </Text>
+              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">₹15/order</Text>
             </TouchableOpacity>
             
-            {/* Card 2 */}
-            <TouchableOpacity activeOpacity={0.7} className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
+            {/* Card 2: This Week */}
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => navigation.navigate('Earnings')}
+              className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" 
+              style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}
+            >
               <View className="w-10 h-10 rounded-full bg-[#F3E8FF] items-center justify-center mb-2">
                 <Ionicons name="calendar" size={18} color="#9333EA" />
               </View>
               <Text className="text-[9px] text-[#4B5563] font-medium text-center leading-[11px]" numberOfLines={2}>This{'\n'}Week</Text>
-              <Text className="text-[13px] font-bold text-[#111827] mt-1">₹1,250</Text>
-              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">vs last week</Text>
+              <Text className="text-[12px] font-bold text-[#111827] mt-1" numberOfLines={1}>
+                {formatCurrency(earningsSummary.weekEarnings || 0)}
+              </Text>
+              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">this week</Text>
             </TouchableOpacity>
 
-            {/* Card 3 */}
-            <TouchableOpacity activeOpacity={0.7} className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
+            {/* Card 3: This Month */}
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => navigation.navigate('Earnings')}
+              className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" 
+              style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}
+            >
               <View className="w-10 h-10 rounded-full bg-[#FFEDD5] items-center justify-center mb-2">
                 <Ionicons name="calendar-outline" size={18} color="#EA580C" />
               </View>
               <Text className="text-[9px] text-[#4B5563] font-medium text-center leading-[11px]" numberOfLines={2}>This{'\n'}Month</Text>
-              <Text className="text-[13px] font-bold text-[#111827] mt-1">₹12,750</Text>
-              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">vs last month</Text>
+              <Text className="text-[12px] font-bold text-[#111827] mt-1" numberOfLines={1}>
+                {formatCurrency(earningsSummary.monthEarnings || 0)}
+              </Text>
+              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">this month</Text>
             </TouchableOpacity>
 
-            {/* Card 4 */}
-            <TouchableOpacity activeOpacity={0.7} className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
+            {/* Card 4: Total Orders */}
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => navigation.navigate('OrderManagement')}
+              className="w-[23.5%] bg-white rounded-[16px] py-3 px-1 items-center justify-center border border-gray-50 shadow-sm" 
+              style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}
+            >
               <View className="w-10 h-10 rounded-full bg-[#DBEAFE] items-center justify-center mb-2">
                 <Ionicons name="cube-outline" size={18} color="#2563EB" />
               </View>
-              <Text className="text-[9px] text-[#4B5563] font-medium text-center leading-[11px]" numberOfLines={2}>Total{'\n'}Orders</Text>
-              <Text className="text-[13px] font-bold text-[#111827] mt-1">28</Text>
-              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">This Month</Text>
+              <Text className="text-[9px] text-[#4B5563] font-medium text-center leading-[11px]" numberOfLines={2}>Completed{'\n'}Orders</Text>
+              <Text className="text-[13px] font-bold text-[#111827] mt-1">
+                {earningsSummary.completedOrders || 0}
+              </Text>
+              <Text className="text-[8px] text-[#9CA3AF] mt-0.5">Completed</Text>
             </TouchableOpacity>
           </View>
 
@@ -217,43 +328,43 @@ export default function DashboardScreen({
           <View className="mx-4 mt-6">
             <View className="flex-row justify-between items-center mb-3">
               <Text className="text-[15px] font-bold text-[#111827]">Upcoming Activities</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('OrderManagement')}>
                 <Text className="text-[12px] font-semibold text-[#297C11]">View All</Text>
               </TouchableOpacity>
             </View>
             
             <View className="bg-white rounded-[16px] px-4 py-1 border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
-              {/* Row 1 */}
-              <TouchableOpacity activeOpacity={0.7} className="flex-row items-center justify-between py-3 border-b border-[#F3F4F6]">
+              {/* Row 1: Pickup Orders */}
+              <TouchableOpacity 
+                activeOpacity={0.7} 
+                onPress={() => navigation.navigate('OrderManagement')}
+                className="flex-row items-center justify-between py-3 border-b border-[#F3F4F6]"
+              >
                 <View className="flex-row items-center flex-1">
                   <View className="w-11 h-11 rounded-[10px] bg-[#EBF7EE] items-center justify-center mr-3 border border-[#D5EFE0]">
                     <Ionicons name="calendar-outline" size={20} color="#297C11" />
                   </View>
                   <View>
-                    <Text className="text-[14px] font-bold text-[#111827]">3 Orders</Text>
+                    <Text className="text-[14px] font-bold text-[#111827]">{pickupCount} {pickupCount === 1 ? 'Order' : 'Orders'}</Text>
                     <Text className="text-[12px] text-[#6B7280] mt-0.5">Scheduled for Pickup</Text>
-                    <View className="flex-row items-center mt-1">
-                      <Text className="text-[10px] font-bold text-[#111827]">Today</Text>
-                      <Text className="text-[10px] text-[#9CA3AF] ml-1">• 10:00 AM - 12:00 PM</Text>
-                    </View>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </TouchableOpacity>
 
-              {/* Row 2 */}
-              <TouchableOpacity activeOpacity={0.7} className="flex-row items-center justify-between py-3">
+              {/* Row 2: Delivery Orders */}
+              <TouchableOpacity 
+                activeOpacity={0.7} 
+                onPress={() => navigation.navigate('OrderManagement')}
+                className="flex-row items-center justify-between py-3"
+              >
                 <View className="flex-row items-center flex-1">
                   <View className="w-11 h-11 rounded-[10px] bg-[#FFEDD5] items-center justify-center mr-3 border border-[#FDE68A]">
                     <Ionicons name="calendar-outline" size={20} color="#EA580C" />
                   </View>
                   <View>
-                    <Text className="text-[14px] font-bold text-[#111827]">2 Orders</Text>
+                    <Text className="text-[14px] font-bold text-[#111827]">{deliveryCount} {deliveryCount === 1 ? 'Order' : 'Orders'}</Text>
                     <Text className="text-[12px] text-[#6B7280] mt-0.5">Scheduled for Delivery</Text>
-                    <View className="flex-row items-center mt-1">
-                      <Text className="text-[10px] font-bold text-[#111827]">Today</Text>
-                      <Text className="text-[10px] text-[#9CA3AF] ml-1">• 02:00 PM - 06:00 PM</Text>
-                    </View>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
@@ -261,62 +372,82 @@ export default function DashboardScreen({
             </View>
           </View>
 
-          {/* Recent Orders */}
+          {/* Recent Completed Orders / Earnings */}
           <View className="mx-4 mt-6 mb-8">
             <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-[15px] font-bold text-[#111827]">Recent Orders</Text>
-              <TouchableOpacity>
+              <Text className="text-[15px] font-bold text-[#111827]">Recent Completed Orders</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Earnings')}>
                 <Text className="text-[12px] font-semibold text-[#297C11]">View All</Text>
               </TouchableOpacity>
             </View>
             
             <View className="bg-white rounded-[16px] px-4 py-1 border border-gray-50 shadow-sm" style={{ elevation: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 }}>
-              {/* Order 1 */}
-              <TouchableOpacity activeOpacity={0.7} className="flex-row items-center justify-between py-3 border-b border-[#F3F4F6]">
-                <View className="flex-row items-center flex-1">
-                  <View className="w-11 h-11 rounded-[10px] bg-[#EBF7EE] items-center justify-center mr-3 border border-[#D5EFE0]">
-                    <Ionicons name="cube-outline" size={20} color="#297C11" />
-                  </View>
-                  <View className="flex-1 pr-1">
-                    <Text className="text-[14px] font-bold text-[#111827]" numberOfLines={1}>ORD-PICK-2002</Text>
-                    <Text className="text-[11px] text-[#6B7280] mt-0.5" numberOfLines={1}>Gadhinglaj <Text className="text-gray-300 mx-0.5">→</Text> Transporter</Text>
-                    <View className="flex-row items-center mt-1">
-                      <Text className="text-[10px] font-bold text-[#111827]">Today</Text>
-                      <Text className="text-[10px] text-[#9CA3AF] ml-1">• 10:42 AM</Text>
-                    </View>
-                  </View>
+              {recentEarnings.length > 0 ? (
+                recentEarnings.slice(0, 4).map((item: any, index: number) => {
+                  const orderNum = item.orderNumber || item.orderId || 'ORD';
+                  const isRedirectedItem = item.earningType === 'REDIRECTED' || Number(item.amount) === 5;
+                  const labelText = isRedirectedItem ? 'Redirected Completed' : 'Completed Order';
+                  return (
+                    <TouchableOpacity 
+                      key={item.id || index}
+                      activeOpacity={0.7} 
+                      onPress={() => navigation.navigate('Earnings')}
+                      className={`flex-row items-center justify-between py-3 ${index < recentEarnings.slice(0, 4).length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}
+                    >
+                      <View className="flex-row items-center flex-1">
+                        <View className={`w-11 h-11 rounded-[10px] ${isRedirectedItem ? 'bg-[#F3E8FF] border-[#E9D5FF]' : 'bg-[#EBF7EE] border-[#D5EFE0]'} items-center justify-center mr-3 border`}>
+                          <Ionicons name={isRedirectedItem ? "swap-horizontal" : "cube-outline"} size={20} color={isRedirectedItem ? "#9333EA" : "#297C11"} />
+                        </View>
+                        <View className="flex-1 pr-1">
+                          <Text className="text-[14px] font-bold text-[#111827]" numberOfLines={1}>{orderNum}</Text>
+                          <Text className="text-[11px] text-[#6B7280] mt-0.5" numberOfLines={1}>{labelText}</Text>
+                        </View>
+                      </View>
+                      <View className="items-end pl-1 justify-center">
+                        <View className={`px-2 py-0.5 rounded-full mb-1 border ${isRedirectedItem ? 'bg-[#F3E8FF] border-[#E9D5FF]' : 'bg-[#EBF7EE] border-[#D5EFE0]'}`}>
+                          <Text className={`text-[9px] font-bold ${isRedirectedItem ? 'text-[#9333EA]' : 'text-[#297C11]'}`}>{isRedirectedItem ? 'Redirected' : 'Completed'}</Text>
+                        </View>
+                        <Text className="text-[12px] font-bold text-[#297C11]">+{formatCurrency(item.amount || (isRedirectedItem ? 5 : 15))}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" className="ml-2" />
+                    </TouchableOpacity>
+                  );
+                })
+              ) : deliveredOrders.length > 0 ? (
+                deliveredOrders.slice(0, 4).map((item: any, index: number) => {
+                  const isRedirectedItem = !!(item.isRedirected || item.isPickupRedirected);
+                  return (
+                    <TouchableOpacity 
+                      key={item.id || index}
+                      activeOpacity={0.7} 
+                      onPress={() => navigation.navigate('OrderManagement')}
+                      className={`flex-row items-center justify-between py-3 ${index < deliveredOrders.slice(0, 4).length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}
+                    >
+                      <View className="flex-row items-center flex-1">
+                        <View className={`w-11 h-11 rounded-[10px] ${isRedirectedItem ? 'bg-[#F3E8FF] border-[#E9D5FF]' : 'bg-[#EBF7EE] border-[#D5EFE0]'} items-center justify-center mr-3 border`}>
+                          <Ionicons name={isRedirectedItem ? "swap-horizontal" : "cube-outline"} size={20} color={isRedirectedItem ? "#9333EA" : "#297C11"} />
+                        </View>
+                        <View className="flex-1 pr-1">
+                          <Text className="text-[14px] font-bold text-[#111827]" numberOfLines={1}>{item.orderId || item.id || 'ORD'}</Text>
+                          <Text className="text-[11px] text-[#6B7280] mt-0.5" numberOfLines={1}>{isRedirectedItem ? 'Redirected Completed' : 'Completed'}</Text>
+                        </View>
+                      </View>
+                      <View className="items-end pl-1 justify-center">
+                        <View className={`px-2 py-0.5 rounded-full mb-1 border ${isRedirectedItem ? 'bg-[#F3E8FF] border-[#E9D5FF]' : 'bg-[#EBF7EE] border-[#D5EFE0]'}`}>
+                          <Text className={`text-[9px] font-bold ${isRedirectedItem ? 'text-[#9333EA]' : 'text-[#297C11]'}`}>{isRedirectedItem ? 'Redirected' : 'Completed'}</Text>
+                        </View>
+                        <Text className="text-[12px] font-bold text-[#297C11]">+{isRedirectedItem ? '₹5' : '₹15'}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" className="ml-2" />
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View className="py-6 items-center justify-center">
+                  <Ionicons name="receipt-outline" size={24} color="#9CA3AF" />
+                  <Text className="text-[12px] font-semibold text-slate-400 mt-1">No completed orders yet</Text>
                 </View>
-                <View className="items-end pl-1 justify-center">
-                  <View className="bg-[#EBF7EE] px-2 py-0.5 rounded-full mb-1 border border-[#D5EFE0]">
-                    <Text className="text-[9px] font-bold text-[#297C11]">Completed</Text>
-                  </View>
-                  <Text className="text-[12px] font-bold text-[#297C11]">+₹15</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" className="ml-2" />
-              </TouchableOpacity>
-
-              {/* Order 2 */}
-              <TouchableOpacity activeOpacity={0.7} className="flex-row items-center justify-between py-3">
-                <View className="flex-row items-center flex-1">
-                  <View className="w-11 h-11 rounded-[10px] bg-[#FFEDD5] items-center justify-center mr-3 border border-[#FDE68A]">
-                    <Ionicons name="cube-outline" size={20} color="#EA580C" />
-                  </View>
-                  <View className="flex-1 pr-1">
-                    <Text className="text-[14px] font-bold text-[#111827]" numberOfLines={1}>ORD-PICK-2001</Text>
-                    <Text className="text-[11px] text-[#6B7280] mt-0.5" numberOfLines={1}>Gadhinglaj <Text className="text-gray-300 mx-0.5">→</Text> Transporter</Text>
-                    <View className="flex-row items-center mt-1">
-                      <Text className="text-[10px] font-bold text-[#111827]">Today</Text>
-                      <Text className="text-[10px] text-[#9CA3AF] ml-1">• 09:15 AM</Text>
-                    </View>
-                  </View>
-                </View>
-                <View className="items-end pl-1 justify-center">
-                  <View className="bg-[#FFEDD5] px-2 py-0.5 rounded-full mb-1 border border-[#FDE68A]">
-                    <Text className="text-[9px] font-bold text-[#EA580C]">In Progress</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" className="ml-2" />
-              </TouchableOpacity>
+              )}
             </View>
           </View>
 

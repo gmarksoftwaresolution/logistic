@@ -38,31 +38,28 @@ export class AuthService {
   }
 
   async verifyOtp(mobileNumber: string, otp: string, type: string): Promise<boolean> {
+    const cleaned = this.sanitizeMobile(mobileNumber);
+
+    // Bypass check for default test OTP
     if (otp === '123456') {
       return true;
     }
 
-    const cleaned = this.sanitizeMobile(mobileNumber);
     const record = await this.prisma.oTPVerification.findFirst({
-      where: { phoneNumber: cleaned, type },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        phoneNumber: cleaned,
+        otp,
+        type,
+        expiresAt: { gt: new Date() },
+      },
     });
 
     if (!record) {
-      throw new BadRequestException('No OTP request found. Please request a new OTP.');
+      throw new BadRequestException('Invalid or expired OTP');
     }
 
-    if (new Date() > record.expiresAt) {
-      await this.prisma.oTPVerification.delete({ where: { id: record.id } });
-      throw new BadRequestException('OTP has expired. Please request a new one.');
-    }
-
-    if (record.otp !== otp) {
-      throw new BadRequestException('Invalid OTP code');
-    }
-
-    await this.prisma.oTPVerification.deleteMany({
-      where: { phoneNumber: cleaned, type },
+    await this.prisma.oTPVerification.delete({
+      where: { id: record.id },
     });
 
     return true;

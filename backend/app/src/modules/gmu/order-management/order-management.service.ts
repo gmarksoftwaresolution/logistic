@@ -4,18 +4,42 @@ import { QrService } from '../../../shared/qr/qr.service';
 import { OrderFilterDto } from './dto/order-filter.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 
+import { LocationService } from '../../../shared/location/location.service';
+
 @Injectable()
 export class OrderManagementService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
-    private qrService: QrService
+    private qrService: QrService,
+    private locationService: LocationService
   ) { }
 
   private isLoopRunning = false;
 
-  onModuleInit() {
+  async onModuleInit() {
     // Automatic broadcast loop disabled to prevent mass-assigning historical seed orders on startup.
     // Live workflows broadcast on demand when orders change status.
+    this.fixPendingStoredOrders().catch(err => console.error('[onModuleInit] fixPendingStoredOrders error:', err.message));
+  }
+
+  async fixPendingStoredOrders() {
+    const pendingStored = await this.prisma.order.findMany({
+      where: {
+        mainStatus: 'STORED',
+        dropShgStatus: 'PENDING',
+      }
+    });
+
+    if (pendingStored.length > 0) {
+      console.log(`[fixPendingStoredOrders] Found ${pendingStored.length} orders with mainStatus=STORED and dropShgStatus=PENDING. Syncing dropShgStatus to ACCEPTED & broadcasting to Transporters.`);
+      for (const order of pendingStored) {
+        try {
+          await this.storeInventory(order.id);
+        } catch (err: any) {
+          console.error(`[fixPendingStoredOrders] Failed to sync stored order ${order.id}:`, err.message);
+        }
+      }
+    }
   }
 
   async runAutoBroadcastLoop() {
@@ -154,7 +178,7 @@ export class OrderManagementService implements OnModuleInit {
     const dropOrdersForTransporter = await this.prisma.order.findMany({
       where: {
         phase: 'DROP',
-        mainStatus: 'DROP_SHG_ACCEPTED',
+        mainStatus: { in: ['DROP_SHG_ACCEPTED', 'STORED'] },
         NOT: {
           returnType: 'BUYER_RETURN',
         },
@@ -597,7 +621,18 @@ export class OrderManagementService implements OnModuleInit {
         )
       }),
       // drop.completed — Phase 7-8
-      this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER']) }),
+      this.prisma.order.count({
+        where: this.applyFilters(
+          {
+            OR: [
+              { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
+              { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER', 'DROPPED'] } },
+              { dropTransporterStatus: { in: ['COMPLETED', 'DELIVERED'] } }
+            ]
+          },
+          undefined
+        )
+      }),
       // drop.rejected
       this.prisma.order.count({ where: this.applyFilters({ phase: 'DROP', assignments: { some: { role: 'DROP', status: 'REJECTED' } }, OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }] }, undefined, ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_SHG', 'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP']) }),
       // drop.rescheduled
@@ -813,21 +848,17 @@ export class OrderManagementService implements OnModuleInit {
   async getPickupRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        phase: 'PICKUP',
-        assignments: {
-          some: { role: 'PICKUP', status: 'REJECTED' },
-        },
+        OR: [
+          { assignments: { some: { status: 'REJECTED' } } },
+          { mainStatus: 'REJECTED' },
+          { pickupTransporterStatus: 'REJECTED' },
+          { dropTransporterStatus: 'REJECTED' },
+          { pickupShgStatus: 'REJECTED' },
+          { dropShgStatus: 'REJECTED' }
+        ],
         returnType: null,
       },
-      filter,
-      [
-        'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED',
-        'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED',
-        'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER',
-        'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB',
-        // legacy
-        'PENDING_PICKUP', 'PICKUP_SHG_PENDING',
-      ]
+      filter
     );
     const defaultInclude = {
       assignments: true,
@@ -877,18 +908,18 @@ export class OrderManagementService implements OnModuleInit {
 
     const relatedPickupOrders = dropOrderIds.length > 0
       ? await this.prisma.order.findMany({
-          where: {
-            OR: [
-              { orderId: { in: dropOrderIds }, phase: 'PICKUP' },
-              { id: { in: dropOrderIds }, phase: 'PICKUP' }
-            ]
-          },
-          include: {
-            assignments: true,
-            seller: true,
-            parcels: { include: { scanHistories: true } }
-          }
-        })
+        where: {
+          OR: [
+            { orderId: { in: dropOrderIds }, phase: 'PICKUP' },
+            { id: { in: dropOrderIds }, phase: 'PICKUP' }
+          ]
+        },
+        include: {
+          assignments: true,
+          seller: true,
+          parcels: { include: { scanHistories: true } }
+        }
+      })
       : [];
 
     const pickupOrderMap = new Map(relatedPickupOrders.map(p => [p.orderId || p.id, p]));
@@ -1002,7 +1033,7 @@ export class OrderManagementService implements OnModuleInit {
       const dShgUser = dShgId ? userMap.get(String(dShgId)) : null;
 
       // Find Drop Transporter user
-      const dTransId = o.dropTransporterId || pOrder?.dropTransporterId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && a.status === 'ACCEPTED')?.assigneeId;
+      const dTransId = o.dropTransporterId || pOrder?.dropTransporterId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER' && (a.status === 'ACCEPTED' || a.status === 'PICKED' || a.status === 'IN_TRANSIT'))?.assigneeId || effectiveAssignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER')?.assigneeId;
       const dTransUser = dTransId ? userMap.get(String(dTransId)) : null;
 
       const formatAddr = (u: any) => {
@@ -1268,8 +1299,23 @@ export class OrderManagementService implements OnModuleInit {
         return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       });
 
+      const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.action === 'DECLINE_PRE_PICKUP' || s.scanResult === 'REJECTED' || s.scanResult === 'DECLINED');
+      const rejectAssign = effectiveAssignments.find((a: any) => a.status === 'REJECTED');
+
+      const isRegistrationStr = (str?: string | null) => !str || str.toLowerCase().includes('registered') || str.toLowerCase().includes('synchronized');
+      const actualRejectReason =
+        (!isRegistrationStr(o.rejectReason) ? o.rejectReason : null) ||
+        (!isRegistrationStr(rejectScan?.remarks) ? rejectScan?.remarks : null) ||
+        (!isRegistrationStr(pOrder?.rejectReason) ? pOrder?.rejectReason : null) ||
+        (!isRegistrationStr(rejectAssign?.remarks) ? rejectAssign?.remarks : null) ||
+        (!isRegistrationStr(o.remarks) ? o.remarks : null) ||
+        (!isRegistrationStr(pOrder?.remarks) ? pOrder?.remarks : null) ||
+        null;
+
       return {
         ...o,
+        rejectReason: actualRejectReason || o.rejectReason,
+        remarks: actualRejectReason || o.remarks,
         pickupShgDetails,
         pickupTransporterDetails,
         dropShgDetails,
@@ -1372,11 +1418,11 @@ export class OrderManagementService implements OnModuleInit {
       {
         OR: [
           { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
+          { dropTransporterStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
           { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
         ]
       },
-      filter,
-      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER']
+      filter
     );
     const defaultInclude = {
       assignments: true,
@@ -1399,19 +1445,16 @@ export class OrderManagementService implements OnModuleInit {
   async getDropRejectedOrders(filter?: OrderFilterDto) {
     const where = this.applyFilters(
       {
-        phase: 'DROP',
-        assignments: {
-          some: { role: 'DROP', status: 'REJECTED' },
-        },
-        OR: [{ returnType: null }, { returnType: 'TRANSPORTER_RETURN' }],
+        OR: [
+          { assignments: { some: { status: 'REJECTED' } } },
+          { mainStatus: 'REJECTED' },
+          { dropTransporterStatus: 'REJECTED' },
+          { dropShgStatus: 'REJECTED' },
+          { pickupTransporterStatus: 'REJECTED' }
+        ],
+        returnType: null,
       },
-      filter,
-      [
-        'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-        'PARCEL_AT_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG',
-        // legacy
-        'DISPATCHED', 'DROP_SHG_PENDING', 'PENDING_DROP', 'IN_TRANSIT_TO_SHG',
-      ]
+      filter
     );
     const defaultInclude = {
       assignments: true,
@@ -1773,6 +1816,14 @@ export class OrderManagementService implements OnModuleInit {
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
 
+      const sellerAddr = `${dto.sellerVillage}, ${dto.sellerTaluka || ''}, ${dto.sellerDistrict || ''}, ${dto.sellerState || ''} ${dto.sellerPincode || ''}, India`;
+      const buyerAddr = `${dto.buyerVillage}, ${dto.buyerTaluka || ''}, ${dto.buyerDistrict || ''}, ${dto.buyerState || ''} ${dto.buyerPincode || ''}, India`;
+      let flowType = 'VIA_HUB';
+      try {
+        const isDirect = await this.locationService.evaluateDirectFlow(sellerAddr, buyerAddr);
+        if (isDirect) flowType = 'DIRECT_SHG_TO_SHG';
+      } catch (_) {}
+
       return tx.order.create({
         data: {
           id: orderId,
@@ -1780,6 +1831,7 @@ export class OrderManagementService implements OnModuleInit {
           barcode: null,
           sellerId: seller.id,
           buyerId: buyer.id,
+          flowType,
           productCount,
           totalQty,
           totalWeight,
@@ -2122,77 +2174,7 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async shgReject(id: string, shgId: string) {
-    const order = await this.getOrderDetails(id);
-
-    const assignment = await this.prisma.orderAssignment.findFirst({
-      where: { orderId: order.id, assigneeId: shgId, role: 'PICKUP', assigneeType: 'SHG' },
-    });
-
-    if (assignment) {
-      await this.prisma.orderAssignment.update({
-        where: { id: assignment.id },
-        data: { status: 'REJECTED' },
-      });
-    } else {
-      // Create a rejected assignment record for tracking
-      await this.prisma.orderAssignment.create({
-        data: {
-          orderId: order.id,
-          assigneeId: shgId,
-          assigneeType: 'SHG',
-          role: 'PICKUP',
-          status: 'REJECTED',
-        },
-      });
-    }
-
-    // Auto re-broadcast to matching approved SHGs that haven't rejected yet
-    const rejections = await this.prisma.orderAssignment.findMany({
-      where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'REJECTED' },
-    });
-    const rejectedIds = rejections.map((r) => r.assigneeId);
-
-    const matchingShgs = await this.getMatchingShgs(
-      order.sellerVillage,
-      order.sellerPincode,
-      order.sellerPostOffice || '',
-      rejectedIds
-    );
-
-    if (matchingShgs.length > 0) {
-      // Delete existing pending ones
-      await this.prisma.orderAssignment.deleteMany({
-        where: { orderId: order.id, role: 'PICKUP', assigneeType: 'SHG', status: 'PENDING' },
-      });
-
-      // Create new auto-accepted assignments for SHG
-      await this.prisma.orderAssignment.createMany({
-        data: matchingShgs.map((shg) => ({
-          orderId: order.id,
-          assigneeId: shg.id,
-          assigneeType: 'SHG',
-          role: 'PICKUP',
-          status: 'ACCEPTED',
-        })),
-      });
-
-      return this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          mainStatus: 'PICKUP_SHG_ACCEPTED',
-          pickupShgStatus: 'ACCEPTED',
-        },
-      });
-    } else {
-      // All SHGs declined — set SHG_PICKUP_DECLINED, revert to ORDER_PLACED for re-broadcast
-      return this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          mainStatus: 'SHG_PICKUP_DECLINED',
-          pickupShgStatus: null,
-        },
-      });
-    }
+    throw new BadRequestException('SHG rejection is disabled. SHGs must fulfill or redirect orders.');
   }
 
   async shgReschedule(id: string, shgId: string, duration: string) {
@@ -2433,6 +2415,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
+        pickupShgStatus: 'DROPPED',
         pickupTransporterStatus: 'IN_TRANSIT_TO_HUB',
         mainStatus: 'IN_TRANSIT_TO_HUB',
       },
@@ -2440,14 +2423,17 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async warehouseIntake(id: string) {
-    const order = await this.getOrderDetails(id, 'PICKUP');
+    const order = await this.getOrderDetails(id);
 
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
         mainStatus: 'STORED',
+        phase: 'DROP',
         pickupTransporterStatus: 'DROPPED',
         pickupShgStatus: 'DROPPED',
+        dropShgStatus: 'ACCEPTED',
+        dropTransporterStatus: 'PENDING',
         warehouseReceivedAt: new Date(),
         storedAt: new Date(),
       },
@@ -2457,41 +2443,69 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async storeInventory(id: string) {
-    const order = await this.getOrderDetails(id, 'PICKUP');
+    const order = await this.getOrderDetails(id);
 
-    // 1. Update status to STORED, pickupShgStatus=DROPPED, pickupTransporterStatus=DROPPED
+    // 1. Find matching Drop SHG for buyer
+    const matchingShgs = await this.getMatchingShgs(
+      order.buyerVillage || '',
+      order.buyerPincode || '',
+      order.buyerPostOffice || '',
+    );
+    let allocatedShgId = order.dropShgId;
+    if (!allocatedShgId && matchingShgs.length > 0) {
+      allocatedShgId = String(matchingShgs[0].id);
+    }
+    if (!allocatedShgId) {
+      const defaultShg = await this.prisma.user.findFirst({ where: { role: 'SHG' } });
+      if (defaultShg) allocatedShgId = String(defaultShg.id);
+    }
+
+    // 2. Update status to STORED, phase=DROP, dropShgStatus=ACCEPTED, dropShgId=allocatedShgId, dropTransporterStatus=PENDING
     const updated = await this.prisma.order.update({
       where: { id: order.id },
       data: {
         mainStatus: 'STORED',
+        phase: 'DROP',
         pickupShgStatus: 'DROPPED',
         pickupTransporterStatus: 'DROPPED',
+        dropShgStatus: 'ACCEPTED',
+        dropShgId: allocatedShgId,
+        dropTransporterStatus: 'PENDING',
         storedAt: new Date(),
         warehouseReceivedAt: new Date(),
       },
     });
 
-    // 2. Ensure Warehouse Inventory record
-    try {
-      let warehouse = await this.prisma.warehouse.findFirst();
-      if (!warehouse) {
-        warehouse = await this.prisma.warehouse.create({
-          data: {
-            name: 'GMU Hub Warehouse',
-            address: 'Kolhapur',
-          }
+    // 3. Ensure SHG OrderAssignment record exists with status ACCEPTED
+    if (allocatedShgId) {
+      const existingShgAssign = await this.prisma.orderAssignment.findFirst({
+        where: {
+          orderId: order.id,
+          assigneeId: allocatedShgId,
+          assigneeType: 'SHG',
+          role: 'DROP',
+        }
+      });
+      if (existingShgAssign) {
+        await this.prisma.orderAssignment.update({
+          where: { id: existingShgAssign.id },
+          data: { status: 'ACCEPTED' }
         });
+      } else {
+        await this.prisma.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: allocatedShgId,
+            assigneeType: 'SHG',
+            role: 'DROP',
+            status: 'ACCEPTED',
+          }
+        }).catch(() => { });
       }
-    } catch (wErr: any) {
-      console.warn(`[storeInventory] Warehouse creation note:`, wErr.message);
     }
 
-    // 3. Fast Asynchronous Phase 2 Partner Matching & Broadcasts on the SAME order
-    const dropId = order.id;
-    Promise.allSettled([
-      this.broadcastDropShg(dropId),
-      this.broadcastDropTransporter(dropId),
-    ]).catch(err => console.error('[storeInventory] Background broadcast note:', err));
+    // 4. Immediately broadcast delivery requests to Transporters
+    await this.broadcastDropTransporter(order.id).catch(err => console.error('[storeInventory] Transporter broadcast note:', err));
 
     return updated;
   }
@@ -2587,7 +2601,7 @@ export class OrderManagementService implements OnModuleInit {
       data: {
         dropShgId: allocatedShgId,
         dropShgStatus: 'ACCEPTED',
-        mainStatus: 'DROP_SHG_ACCEPTED',
+        mainStatus: order.mainStatus === 'STORED' ? 'STORED' : 'DROP_SHG_ACCEPTED',
       },
       include: { assignments: true },
     });
@@ -2794,7 +2808,7 @@ export class OrderManagementService implements OnModuleInit {
     return this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED',
+        mainStatus: order.mainStatus === 'STORED' ? 'STORED' : (order.mainStatus === 'DROP_SHG_ACCEPTED' ? 'DROP_SHG_ACCEPTED' : 'DROP_ASSIGNED'),
         dropTransporterStatus: 'PENDING',
         dropTransporterId: null,
       },

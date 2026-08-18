@@ -31,6 +31,7 @@ interface OrderCardProps {
   verificationPending?: boolean;
   onSendOtp?: () => void;
   rawOrder?: any;
+  hideTransporter?: boolean;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -57,6 +58,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   verificationPending,
   onSendOtp,
   rawOrder,
+  hideTransporter = false,
 }) => {
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const context = useContext(LanguageContext);
@@ -99,11 +101,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
           {/* Route Visual Section (Horizontal) */}
           <View className="flex-row items-center mt-2.5 pr-2">
-            <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{source}</Text>
+            <Text className="text-[13px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">
+              {typeof source === 'string' ? source : (typeof source === 'object' ? ([source['addressLine1'], source['village'], source['district'], source['pincode']].filter(Boolean).join(', ') || '') : String(source || ''))}
+            </Text>
             <Ionicons name="arrow-forward" size={12} color="#94A3B8" style={{
               marginHorizontal: 6
             }} />
-            <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">{destination}</Text>
+            <Text className="text-[12.5px] font-bold text-[#073318] flex-shrink" numberOfLines={1} ellipsizeMode="tail">
+              {typeof destination === 'string' ? destination : (typeof destination === 'object' ? ([destination['addressLine1'], destination['village'], destination['district'], destination['pincode']].filter(Boolean).join(', ') || '') : String(destination || ''))}
+            </Text>
           </View>
 
           {/* View Address & Action Buttons */}
@@ -197,7 +203,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           </View>
 
           {/* Transporter Details */}
-          {!!transporterName && transporterName !== 'N/A' && (
+          {!hideTransporter && !!transporterName && transporterName !== 'N/A' && (
             <View className="mt-2.5 pt-2.5 border-t border-slate-100 flex-col">
               <Text className="text-[10px] font-extrabold text-[#073318] uppercase tracking-wider mb-1">Assigned Transporter</Text>
               <View className="flex-row items-center gap-1.5 flex-wrap">

@@ -164,7 +164,7 @@ async function resetAndSeed20Orders() {
         pickupTransporterId: null,
         pickupTransporterStatus: 'PENDING',
         dropShgStatus: 'PENDING',
-        dropTransporterStatus: 'PENDING',
+        dropTransporterStatus: null,
       }
     });
 

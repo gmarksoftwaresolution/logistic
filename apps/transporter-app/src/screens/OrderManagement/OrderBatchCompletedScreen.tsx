@@ -36,8 +36,8 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
     const journeyMap: Record<string, any> = {};
 
     batches.forEach((b) => {
-      // We only care about orders that are fully drop completed
-      if (b.status !== 'DROP_COMPLETED') {
+      // We only care about orders that are fully drop completed and not in RTO/Return status
+      if (b.status !== 'DROP_COMPLETED' || b.isRTO || Boolean(b.rejectReason)) {
         return;
       }
 

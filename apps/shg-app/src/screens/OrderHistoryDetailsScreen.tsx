@@ -63,7 +63,7 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
 
   const isCompleted = order.status === 'COMPLETED';
   const isCancelled = order.status === 'CANCELLED';
-  
+
   let statusColor = HISTORY_STATUS_COLORS.DEFAULT.color;
   let statusBg = HISTORY_STATUS_COLORS.DEFAULT.bg;
   let statusText = t('in_progress') || 'In Progress';
@@ -79,71 +79,71 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
   }
 
   // Dynamic Contact Details (Seller vs Buyer)
-  const sellerNameVal = 
-    (order.sellerName && order.sellerName !== 'undefined' ? order.sellerName : null) || 
-    order.seller?.sellerName || 
-    order.seller?.fullName || 
-    order.seller?.name || 
+  const sellerNameVal =
+    (order.sellerName && order.sellerName !== 'undefined' ? order.sellerName : null) ||
+    order.seller?.sellerName ||
+    order.seller?.fullName ||
+    order.seller?.name ||
     'SHG Seller Partner';
 
-  const sellerMobileVal = 
-    (order.sellerMobile && order.sellerMobile !== 'undefined' ? order.sellerMobile : null) || 
-    order.seller?.mobileNumber || 
-    order.seller?.phoneNumber || 
-    order.seller?.mobile || 
-    (order.mobile && order.mobile !== 'undefined' ? order.mobile : null) || 
+  const sellerMobileVal =
+    (order.sellerMobile && order.sellerMobile !== 'undefined' ? order.sellerMobile : null) ||
+    order.seller?.mobileNumber ||
+    order.seller?.phoneNumber ||
+    order.seller?.mobile ||
+    (order.mobile && order.mobile !== 'undefined' ? order.mobile : null) ||
     'N/A';
 
-  const sellerVillageVal = 
-    (order.sellerVillage && order.sellerVillage !== 'undefined' ? order.sellerVillage : null) || 
-    order.seller?.village || 
-    order.seller?.address?.village || 
-    order.seller?.address?.district || 
+  const sellerVillageVal =
+    (order.sellerVillage && order.sellerVillage !== 'undefined' ? order.sellerVillage : null) ||
+    order.seller?.village ||
+    order.seller?.address?.village ||
+    order.seller?.address?.district ||
     (source && source !== 'undefined' ? source : 'N/A');
 
-  const sellerAddressVal = 
-    (order.sellerAddress && order.sellerAddress.length > 3 && order.sellerAddress !== 'undefined' ? order.sellerAddress : null) || 
-    order.seller?.fullAddress || 
+  const sellerAddressVal =
+    (order.sellerAddress && order.sellerAddress.length > 3 && order.sellerAddress !== 'undefined' ? order.sellerAddress : null) ||
+    order.seller?.fullAddress ||
     [
       order.seller?.addressLine1 || order.seller?.address?.houseNo,
       order.seller?.village || order.seller?.address?.village,
       order.seller?.taluka || order.seller?.address?.taluka,
       order.seller?.district || order.seller?.address?.district,
       (order.seller?.pincode || order.seller?.address?.pincode) ? `- ${order.seller?.pincode || order.seller?.address?.pincode}` : ''
-    ].filter(Boolean).join(', ') || 
+    ].filter(Boolean).join(', ') ||
     sellerVillageVal;
 
-  const buyerNameVal = 
-    (order.buyerName && order.buyerName !== 'undefined' ? order.buyerName : null) || 
-    order.buyer?.buyerName || 
-    order.buyer?.fullName || 
-    order.buyer?.name || 
+  const buyerNameVal =
+    (order.buyerName && order.buyerName !== 'undefined' ? order.buyerName : null) ||
+    order.buyer?.buyerName ||
+    order.buyer?.fullName ||
+    order.buyer?.name ||
     'Buyer Customer';
 
-  const buyerMobileVal = 
-    (order.buyerMobile && order.buyerMobile !== 'undefined' ? order.buyerMobile : null) || 
-    order.buyer?.mobileNumber || 
-    order.buyer?.phoneNumber || 
-    order.buyer?.mobile || 
+  const buyerMobileVal =
+    (order.buyerMobile && order.buyerMobile !== 'undefined' ? order.buyerMobile : null) ||
+    order.buyer?.mobileNumber ||
+    order.buyer?.phoneNumber ||
+    order.buyer?.mobile ||
     'N/A';
 
-  const buyerVillageVal = 
-    (order.buyerVillage && order.buyerVillage !== 'undefined' ? order.buyerVillage : null) || 
-    order.buyer?.village || 
-    order.buyer?.address?.village || 
-    order.buyer?.address?.district || 
+  const buyerVillageVal =
+    (order.buyerVillage && order.buyerVillage !== 'undefined' ? order.buyerVillage : null) ||
+    order.buyer?.village ||
+    order.buyer?.address?.village ||
+    order.buyer?.address?.district ||
     (destination && destination !== 'undefined' ? destination : 'N/A');
 
-  const buyerAddressVal = 
-    (order.buyerAddress && order.buyerAddress.length > 3 && order.buyerAddress !== 'undefined' ? order.buyerAddress : null) || 
-    order.buyer?.fullAddress || 
+  const buyerAddressVal =
+    (order.buyerAddress && order.buyerAddress.length > 3 && order.buyerAddress !== 'undefined' ? order.buyerAddress : null) ||
+    order.buyer?.fullAddress ||
     [
       order.buyer?.addressLine1 || order.buyer?.address?.houseNo,
       order.buyer?.village || order.buyer?.address?.village,
       order.buyer?.taluka || order.buyer?.address?.taluka,
       order.buyer?.district || order.buyer?.address?.district,
       (order.buyer?.pincode || order.buyer?.address?.pincode) ? `- ${order.buyer?.pincode || order.buyer?.address?.pincode}` : ''
-    ].filter(Boolean).join(', ') || 
+    ].filter(Boolean).join(', ') ||
     buyerVillageVal;
 
   let detailsTitle = isDelivery ? (t('su_buyer_details') || "Buyer Details") : (t('su_seller_details') || "Seller Details");
@@ -455,9 +455,9 @@ export default function OrderHistoryDetailsScreen({ route, navigation }: any) {
           <Text className="font-extrabold text-[15px] text-[#073318] ml-2">{t("su_download_invoice_386") || 'Download Invoice'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()} 
-          activeOpacity={0.8} 
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
           className="w-full bg-[#073318] py-4 rounded-[22px] items-center justify-center shadow-sm mb-12"
         >
           <Text className="font-extrabold text-[15px] text-white">{t("su_back_to_completed_or_387") || 'Back'}</Text>

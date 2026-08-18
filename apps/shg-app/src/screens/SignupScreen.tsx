@@ -3828,8 +3828,8 @@ export default function SignupScreen({
                       setVillageError('');
                     }
                     // Keep all villages under pincode available, prioritizing cleanOpt at the top
-                    const allPincodeVils = selectedData?.villages || villageList;
-                    const sortedVils = Array.from(new Set([cleanOpt, ...allPincodeVils].filter(Boolean)));
+                    const rawVils = [cleanOpt, ...(allPincodeVils || [])].filter(Boolean);
+                    const sortedVils = rawVils.filter((v, idx, arr) => arr.indexOf(v) === idx);
                     setVillageList(sortedVils);
                     setShowPostOfficeMenu(false);
                   }} className={`p-4 mb-3 rounded-[20px] border-2 flex-row items-center justify-between ${isSelected ? 'border-[#073318] bg-[#EEF5F0]' : 'border-gray-200 bg-white'}`}>
