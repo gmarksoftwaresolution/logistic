@@ -1536,7 +1536,6 @@ export class OrderManagementService implements OnModuleInit {
   }
 
   async getOrderHistory(filter?: OrderFilterDto) {
-    const totalOrdersCount = await this.prisma.order.count();
     const completedOrders = await this.getDropCompletedOrders(filter);
     const transporterReturns = await this.getTransporterReturnOrders(filter);
     const buyerReturns = await this.getBuyerReturnOrders(filter);
@@ -1545,6 +1544,8 @@ export class OrderManagementService implements OnModuleInit {
     const uniqueReturnsMap = new Map<string, any>();
     allReturns.forEach(o => uniqueReturnsMap.set(o.id, o));
     const returnOrdersList = Array.from(uniqueReturnsMap.values());
+
+    const totalOrdersCount = completedOrders.length + returnOrdersList.length;
 
     return {
       metrics: {
