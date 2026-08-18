@@ -793,7 +793,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
                         <Text style={styles.contactItemValue} numberOfLines={2}>
-                          {typeof displayContact.address === 'string' ? displayContact.address : (typeof displayContact.address === 'object' ? ([displayContact.address?.addressLine1, displayContact.address?.village, displayContact.address?.district, displayContact.address?.pincode].filter(Boolean).join(', ') || '') : String(displayContact.address || ''))}
+                          {typeof displayContact.address === 'string' ? displayContact.address : (typeof displayContact.address === 'object' ? ([(displayContact.address as any)?.addressLine1, (displayContact.address as any)?.village, (displayContact.address as any)?.district, (displayContact.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(displayContact.address || ''))}
                         </Text>
                       </View>
                     </View>
@@ -1182,15 +1182,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               </Text>
             </View>
           ) : (
-            <View style={{ gap: verticalScale(12) }}>
-              <TouchableOpacity
-                style={styles.bottomRejectBtn}
-                onPress={() => setRejectingProductId('all')}
-              >
-                <XCircle size={scale(16)} color="#DC2626" style={{ marginRight: scale(6) }} />
-                <Text style={styles.bottomRejectBtnText}>{type === 'pickup' ? 'Reject Collection' : 'Reject Delivery'}</Text>
-              </TouchableOpacity>
-            </View>
+            null
           )}
         </View>
       </ScrollView>

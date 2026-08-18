@@ -285,6 +285,7 @@ model OtherDetails {
   vehicleType           VehicleType
 
   vehicleName           String?
+  vehicleModel          String?
   registrationNumber    String?
   licenseNumber         String?
 
@@ -292,6 +293,7 @@ model OtherDetails {
   insuranceUrl          String?
   vehicleImageUrl       String?
 
+  length                Float?
   heihgt                Float?
   width                 Float?
   storageSpace          String?
@@ -566,7 +568,8 @@ model PincodeDirectory {
   @@index([district])
   @@index([taluka])
   @@index([village, pincode])
-  @@map("pincode_directory")
+
+  @@map("pincode")
 }
 
 model Seller {

@@ -9,12 +9,12 @@ interface TaskDetailsModalProps {
   onClose: () => void;
   task: any;
   onAccept: () => void;
-  onReject: () => void;
+  onReject?: () => void;
 }
 
 const MOCK_PRODUCTS: any[] = [];
 
-const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ visible, onClose, task, onAccept, onReject }) => {
+const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ visible, onClose, task, onAccept }) => {
   if (!task) return null;
 
   const renderProductItem = ({ item }: { item: any }) => (
@@ -118,16 +118,10 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ visible, onClose, t
                 <ArrowRight size={scale(22)} color="#FFFFFF" style={{ marginLeft: 8 }} strokeWidth={2.5} />
               </TouchableOpacity>
             ) : (
-              <>
-                <TouchableOpacity style={styles.acceptBtn} onPress={onAccept}>
-                  <CheckCircle2 size={scale(20)} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.acceptBtnText}>Accept Task</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.rejectBtn} onPress={onReject}>
-                  <X size={scale(20)} color={Colors.primary} style={{ marginRight: 8 }} />
-                  <Text style={styles.rejectBtnText}>Reject</Text>
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity style={styles.acceptBtn} onPress={onAccept}>
+                <CheckCircle2 size={scale(20)} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.acceptBtnText}>Accept Task</Text>
+              </TouchableOpacity>
             )}
           </View>
         </View>

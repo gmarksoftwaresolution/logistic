@@ -13,16 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, ProductStatus } from '../../context/OrderManagementContext';
-import RejectReasonBottomSheet from './RejectReasonBottomSheet';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Camera, CheckCircle, XCircle, Package } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 
 const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { shgId, shgName } = route.params;
-  const { shgProducts, rejectProduct, completeProduct, showToast } = useOrderManagement();
+  const { shgProducts, completeProduct, showToast } = useOrderManagement();
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>('pickup');
-  const [rejectingProductId, setRejectingProductId] = useState<string | null>(null);
   const [confirmCaptureProductId, setConfirmCaptureProductId] = useState<string | null>(null);
 
   // Retrieve products list for specific SHG ID
@@ -49,13 +47,6 @@ const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, nav
       }
     } catch (error) {
       console.warn('Camera Error:', error);
-    }
-  };
-
-  const handleRejectConfirm = (reason: string) => {
-    if (rejectingProductId) {
-      rejectProduct(rejectingProductId, 'shg', reason, shgId);
-      setRejectingProductId(null);
     }
   };
 
@@ -179,15 +170,6 @@ const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, nav
                           {activeTab === 'pickup' ? 'Picked Up' : 'Dropped'}
                         </Text>
                       </View>
-                      {activeTab === 'pickup' && (
-                        <TouchableOpacity
-                          style={styles.rejectButtonCompleted}
-                          activeOpacity={0.8}
-                          onPress={() => setRejectingProductId(product.id)}
-                        >
-                          <Text style={styles.rejectButtonCompletedText}>Reject</Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
                   ) : isRejected ? (
                     <View style={[styles.buttonDisabledState, { backgroundColor: '#FEE2E2' }]}>
@@ -197,26 +179,16 @@ const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, nav
                       </Text>
                     </View>
                   ) : (
-                    <>
-                      <TouchableOpacity
-                        style={styles.primaryActionButton}
-                        activeOpacity={0.8}
-                        onPress={() => setConfirmCaptureProductId(product.id)}
-                      >
-                        <Camera size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                        <Text style={styles.primaryActionText}>
-                          {activeTab === 'pickup' ? 'Pick Up' : 'Drop'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.rejectButton}
-                        activeOpacity={0.8}
-                        onPress={() => setRejectingProductId(product.id)}
-                      >
-                        <Text style={styles.rejectButtonText}>Reject</Text>
-                      </TouchableOpacity>
-                    </>
+                    <TouchableOpacity
+                      style={[styles.primaryActionButton, { flex: 1 }]}
+                      activeOpacity={0.8}
+                      onPress={() => setConfirmCaptureProductId(product.id)}
+                    >
+                      <Camera size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                      <Text style={styles.primaryActionText}>
+                        {activeTab === 'pickup' ? 'Pick Up' : 'Drop'}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               </View>
@@ -224,14 +196,6 @@ const ShgDetailScreen: React.FC<{ route: any; navigation: any }> = ({ route, nav
           })
         )}
       </ScrollView>
-
-      {/* Bottom Sheet Modal */}
-      <RejectReasonBottomSheet
-        visible={!!rejectingProductId}
-        context="shg"
-        onClose={() => setRejectingProductId(null)}
-        onConfirm={handleRejectConfirm}
-      />
 
       {/* Themed Confirmation Modal */}
       <Modal

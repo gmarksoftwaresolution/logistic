@@ -15,6 +15,8 @@ import MainTabNavigator from './MainTabNavigator';
 import { PickupScannerScreen } from '../screens/OrderManagement/PickupScannerScreen';
 import { Colors } from '../constants/Colors';
 
+import api from '../services/api';
+
 export type RootStackParamList = {
   GetStarted: undefined;
   Language: { fromProfile?: boolean } | undefined;
@@ -37,13 +39,35 @@ const AppNavigator = () => {
     async function checkAuthStatus() {
       try {
         const token = await AsyncStorage.getItem('access_token');
-        if (token) {
-          setInitialRoute('Main');
-        } else {
+        if (!token) {
           setInitialRoute('GetStarted');
+          return;
         }
-      } catch (e) {
-        setInitialRoute('GetStarted');
+
+        // Fetch live user registration status from backend
+        const response = await api.get('/registration/me');
+        const userData = response.data;
+        const status = (userData?.applicationStatus || userData?.status || '').toUpperCase();
+
+        // ONLY Admin APPROVED transporters are allowed into Main Dashboard!
+        if (status === 'APPROVED') {
+          setInitialRoute('Main');
+        } else if (status === 'UNDER_REVIEW' || status === 'PENDING' || status === 'SUBMITTED' || status === 'COMPLETED') {
+          setInitialRoute('ApprovalPending');
+        } else {
+          // Status is INCOMPLETE or mid-signup -> route to SignUp screen to resume steps
+          setInitialRoute('SignUp');
+        }
+      } catch (e: any) {
+        console.warn('Auth status check error:', e?.message || e);
+        if (e?.response?.status === 401) {
+          await AsyncStorage.removeItem('access_token');
+          setInitialRoute('GetStarted');
+        } else {
+          // On network glitch, fallback to SignUp if token exists
+          const token = await AsyncStorage.getItem('access_token');
+          setInitialRoute(token ? 'SignUp' : 'GetStarted');
+        }
       }
     }
     checkAuthStatus();

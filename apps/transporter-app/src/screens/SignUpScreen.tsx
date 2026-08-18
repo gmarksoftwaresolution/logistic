@@ -157,6 +157,10 @@ interface FormData {
   vehicleWheeler: string;
   vehicleType: string;
   vehicleMake: string;
+  vehicleModel: string;
+  deckLength: string;
+  deckWidth: string;
+  deckHeight: string;
   minWeight: string;
   maxWeight: string;
   vehicleNumber: string;
@@ -312,6 +316,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     vehicleWheeler: '',
     vehicleType: '',
     vehicleMake: '',
+    vehicleModel: '',
+    deckLength: '',
+    deckWidth: '',
+    deckHeight: '',
     minWeight: '',
     maxWeight: '',
     vehicleNumber: '',
@@ -355,6 +363,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const vehicleWheelerRef = useRef<TextInput>(null);
   const vehicleTypeRef = useRef<TextInput>(null);
   const vehicleMakeRef = useRef<TextInput>(null);
+  const vehicleModelRef = useRef<TextInput>(null);
+  const deckLengthRef = useRef<TextInput>(null);
+  const deckWidthRef = useRef<TextInput>(null);
+  const deckHeightRef = useRef<TextInput>(null);
   const vehicleNumberRef = useRef<TextInput>(null);
 
   const operatingAreaRef = useRef<TextInput>(null);
@@ -411,6 +423,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           vehicleWheeler: vehicleWheelerRef,
           vehicleType: vehicleTypeRef,
           vehicleMake: vehicleMakeRef,
+          vehicleModel: vehicleModelRef,
+          deckLength: deckLengthRef,
+          deckWidth: deckWidthRef,
+          deckHeight: deckHeightRef,
           vehicleNumber: vehicleNumberRef,
           operatingArea: operatingAreaRef,
           pickupLocations: pickupLocationsRef,
@@ -1572,6 +1588,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           wheeler: data.vehicleWheeler,
           type: data.vehicleType,
           make: data.vehicleMake,
+          model: data.vehicleModel,
+          deckLength: data.deckLength ? Number(data.deckLength) : undefined,
+          deckWidth: data.deckWidth ? Number(data.deckWidth) : undefined,
+          deckHeight: data.deckHeight ? Number(data.deckHeight) : undefined,
           number: data.vehicleNumber,
           rcUpload: rcUrl,
           insuranceUpload: insUrl,
@@ -1637,6 +1657,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         wheeler: data.vehicleWheeler,
         type: data.vehicleType,
         make: data.vehicleMake,
+        model: data.vehicleModel,
+        deckLength: data.deckLength ? Number(data.deckLength) : undefined,
+        deckWidth: data.deckWidth ? Number(data.deckWidth) : undefined,
+        deckHeight: data.deckHeight ? Number(data.deckHeight) : undefined,
         number: data.vehicleNumber,
         rcUpload: rcUrl,
         insuranceUpload: insUrl,
@@ -1675,7 +1699,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fieldsToValidate = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
+        fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleModel', 'deckLength', 'deckWidth', 'deckHeight', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
       }
     } else if (currentStep === 6) {
       if (formData.vehicleTypeSelection === 'Milk') {
@@ -1684,7 +1708,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fieldsToValidate = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
+      fieldsToValidate = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleModel', 'deckLength', 'deckWidth', 'deckHeight', 'minWeight', 'maxWeight', 'vehicleNumber', 'rcPhoto', 'insurancePhoto', 'ratePerKm'];
     }
 
     const stepErrors = fieldsToValidate.filter((f) => getError(f, true) || !formData[f]);
@@ -1803,7 +1827,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       if (formData.vehicleTypeSelection === 'Milk') {
         fields = ['milkSangathanName', 'milkCenterName'];
       } else {
-        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
+        fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleModel', 'deckLength', 'deckWidth', 'deckHeight', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
         if (!formData.rcPhoto || !formData.insurancePhoto) return false;
       }
     } else if (currentStep === 6) {
@@ -1813,7 +1837,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         fields = ['operatingArea', 'daysAvailable'];
       }
     } else if (currentStep === 7) {
-      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
+      fields = ['vehicleWheeler', 'vehicleType', 'vehicleMake', 'vehicleModel', 'deckLength', 'deckWidth', 'deckHeight', 'minWeight', 'maxWeight', 'vehicleNumber', 'ratePerKm'];
       if (!formData.rcPhoto || !formData.insurancePhoto) return false;
     }
 
@@ -1829,7 +1853,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         setOtpSent(false);
         setOtp(['', '', '', '', '', '']);
       } else {
-        navigation.goBack();
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('GetStarted');
+        }
       }
       return;
     }
@@ -1837,7 +1865,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     } else {
-      navigation.goBack();
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('GetStarted');
+      }
     }
   };
 
@@ -2681,14 +2713,14 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     } else if (dropdownType === 'type') {
       const wheeler = formData.vehicleWheeler;
       if (wheeler === '2 Wheeler') {
-        options = ['Bike', 'Scooter', 'Moped', 'Electric Bike', 'Others'];
+        options = ['Bike / Scooter (With Waterproof Box)', 'Bike / Scooter (Standard)', 'Electric Scooter / Bike', 'Others'];
       } else if (wheeler === '3 Wheeler') {
-        options = ['Auto Rickshaw', 'Mini Van', 'Loading Auto', 'Open Cargo', 'Electric Loader', 'Others'];
+        options = ['Loading Auto (Closed Cargo Box)', 'Loading Auto (Open Body - Tarpaulin Covered)', 'Loading Auto (Open Body - Uncovered)', 'Electric Loader (Closed Cargo)', 'Electric Loader (Open Body)', 'Auto Rickshaw', 'Mini Van', 'Others'];
       } else if (wheeler === '4 Wheeler') {
-        options = ['Mini Truck', 'Pickup', 'Tempo Traveler', 'Refrigerated Van', 'Open Body Truck', 'Closed Container', 'Others'];
+        options = ['Pickup (Closed Container)', 'Pickup (Open Body - Tarpaulin Covered)', 'Pickup (Open Body - Uncovered)', 'Mini Truck (Closed Container)', 'Mini Truck (Open Body - Tarpaulin Covered)', 'Mini Truck (Open Body - Uncovered)', 'Refrigerated Van', 'Tempo Traveler', 'Others'];
       } else {
         // 6 Wheeler and above
-        options = ['Open Truck', 'Closed Container', 'Trailer', 'Tanker', 'Tipper', 'Heavy Duty Truck', 'Flatbed', 'Others'];
+        options = ['Closed Container', 'Open Truck (Tarpaulin Covered)', 'Open Truck (Uncovered)', 'Flatbed Truck', 'Trailer', 'Tanker', 'Tipper', 'Heavy Duty Truck', 'Others'];
       }
       title = t('signup.select_vehicle_type');
       key = 'vehicleType';
@@ -2853,7 +2885,14 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                             updateFormData('vehicleType', '');
                           } else {
                             setIsCustomVehicleType(false);
-                            updateFormData('vehicleType', option);
+                            const w = (formData.vehicleWheeler || '').toLowerCase();
+                            const t = (option || '').toLowerCase();
+                            let autoL = '7.2', autoW = '4.8', autoH = '4.5';
+                            if (w.includes('2')) { autoL = '2.0'; autoW = '1.5'; autoH = '1.5'; }
+                            else if (w.includes('3')) { autoL = '5.0'; autoW = '4.0'; autoH = '3.5'; }
+                            else if (w.includes('4') && t.includes('mini truck')) { autoL = '9.0'; autoW = '5.5'; autoH = '5.0'; }
+                            else if (w.includes('6') || w.includes('8') || w.includes('10') || w.includes('12') || w.includes('14') || w.includes('16') || w.includes('18') || w.includes('22')) { autoL = '14.0'; autoW = '7.0'; autoH = '6.0'; }
+                            setFormData(prev => ({ ...prev, vehicleType: option, deckLength: autoL, deckWidth: autoW, deckHeight: autoH }));
                           }
                         } else if (key === 'vehicleMake') {
                           if (option === 'Others') {
@@ -3021,6 +3060,79 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           )}
           {getError('vehicleMake') && <Text style={styles.errorText}>{getError('vehicleMake')}</Text>}
+        </View>
+
+        <View 
+          style={styles.inputContainer}
+          onLayout={(e) => { fieldPositions.current['vehicleModel'] = e.nativeEvent.layout.y; }}
+        >
+          <Text style={styles.label}>{t("signup.vehicle_model", { defaultValue: 'Vehicle Model & Year' })} *</Text>
+          <View style={[styles.inputWrapper, getError('vehicleModel') && styles.inputError]}>
+            <Calendar size={20} color={Colors.iconSecondary} style={styles.inputIcon} />
+            <TextInput
+              ref={vehicleModelRef}
+              style={styles.input}
+              placeholder={t("signup.vehicle_model_placeholder", { defaultValue: 'e.g. Ace Gold (2022) or 2022' })}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={formData.vehicleModel}
+              onChangeText={(val) => updateFormData("vehicleModel", val)}
+              onBlur={() => handleBlur("vehicleModel")}
+            />
+          </View>
+          {getError('vehicleModel') && <Text style={styles.errorText}>{getError('vehicleModel')}</Text>}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: verticalScale(16) }}>
+          <View style={{ flex: 1 }} onLayout={(e) => { fieldPositions.current['deckLength'] = e.nativeEvent.layout.y; }}>
+            <Text style={styles.label}>{t("signup.deck_length", { defaultValue: 'Length (ft)' })} *</Text>
+            <View style={[styles.inputWrapper, getError('deckLength') && styles.inputError]}>
+              <TextInput
+                ref={deckLengthRef}
+                style={styles.input}
+                placeholder="e.g. 7.2"
+                placeholderTextColor={Colors.textPlaceholder}
+                keyboardType="decimal-pad"
+                value={formData.deckLength}
+                onChangeText={(val) => updateFormData("deckLength", val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                onBlur={() => handleBlur("deckLength")}
+              />
+            </View>
+            {getError('deckLength') && <Text style={styles.errorText}>{getError('deckLength')}</Text>}
+          </View>
+
+          <View style={{ flex: 1 }} onLayout={(e) => { fieldPositions.current['deckWidth'] = e.nativeEvent.layout.y; }}>
+            <Text style={styles.label}>{t("signup.deck_width", { defaultValue: 'Width (ft)' })} *</Text>
+            <View style={[styles.inputWrapper, getError('deckWidth') && styles.inputError]}>
+              <TextInput
+                ref={deckWidthRef}
+                style={styles.input}
+                placeholder="e.g. 4.8"
+                placeholderTextColor={Colors.textPlaceholder}
+                keyboardType="decimal-pad"
+                value={formData.deckWidth}
+                onChangeText={(val) => updateFormData("deckWidth", val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                onBlur={() => handleBlur("deckWidth")}
+              />
+            </View>
+            {getError('deckWidth') && <Text style={styles.errorText}>{getError('deckWidth')}</Text>}
+          </View>
+
+          <View style={{ flex: 1 }} onLayout={(e) => { fieldPositions.current['deckHeight'] = e.nativeEvent.layout.y; }}>
+            <Text style={styles.label}>{t("signup.deck_height", { defaultValue: 'Height (ft)' })} *</Text>
+            <View style={[styles.inputWrapper, getError('deckHeight') && styles.inputError]}>
+              <TextInput
+                ref={deckHeightRef}
+                style={styles.input}
+                placeholder="e.g. 4.5"
+                placeholderTextColor={Colors.textPlaceholder}
+                keyboardType="decimal-pad"
+                value={formData.deckHeight}
+                onChangeText={(val) => updateFormData("deckHeight", val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                onBlur={() => handleBlur("deckHeight")}
+              />
+            </View>
+            {getError('deckHeight') && <Text style={styles.errorText}>{getError('deckHeight')}</Text>}
+          </View>
         </View>
 
         <View 

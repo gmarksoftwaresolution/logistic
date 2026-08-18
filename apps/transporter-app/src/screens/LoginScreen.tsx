@@ -235,7 +235,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      const { accessToken } = response.data;
+      const { accessToken, userDetails } = response.data;
       await AsyncStorage.setItem('access_token', accessToken);
       await AsyncStorage.setItem('user_phone_number', mobileNumber);
       
@@ -250,7 +250,76 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       } catch (storageErr) {
         console.warn('Failed to handle onboarding storage during login:', storageErr);
       }
-      
+
+      // Fetch live registration status from backend
+      let appStatus = (userDetails?.applicationStatus || '').toUpperCase();
+      try {
+        const regRes = await api.get('/registration/me');
+        if (regRes.data?.applicationStatus) {
+          appStatus = regRes.data.applicationStatus.toUpperCase();
+        }
+      } catch (meErr) {
+        console.warn('Could not fetch registration status in LoginScreen:', meErr);
+      }
+
+      if (appStatus === 'INCOMPLETE') {
+        Alert.alert(
+          'Registration Incomplete',
+          'Your registration process is not complete. Please finish your registration steps.',
+          [
+            {
+              text: 'Complete Registration',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'SignUp' }],
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      if (appStatus === 'PENDING' || appStatus === 'UNDER_REVIEW' || appStatus === 'SUBMITTED' || appStatus === 'COMPLETED') {
+        Alert.alert(
+          'Approval Pending',
+          'Your application is pending admin approval.',
+          [
+            {
+              text: 'Check Status',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'ApprovalPending' }],
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      if (appStatus === 'REJECTED') {
+        Alert.alert(
+          'Application Rejected',
+          'Your application has been rejected by Admin.',
+          [
+            {
+              text: 'View Status',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'ApprovalPending' }],
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      // ONLY APPROVED transporters proceed to success / Main Dashboard
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setCurrentStep(3);
     } catch (err: any) {

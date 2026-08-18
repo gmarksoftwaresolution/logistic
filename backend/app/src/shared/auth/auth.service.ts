@@ -171,6 +171,20 @@ export class AuthService {
     const tokens = await this.getTokens(userAny.id, userAny.phoneNumber);
     const latestApp = userAny.applications ? userAny.applications[0] : null;
 
+    const rawStatus = (userAny.applicationStatus || latestApp?.status || '').toUpperCase();
+    let computedAppStatus = 'INCOMPLETE';
+    if (rawStatus === 'APPROVED') {
+      computedAppStatus = 'APPROVED';
+    } else if (rawStatus === 'REJECTED') {
+      computedAppStatus = 'REJECTED';
+    } else if (rawStatus === 'COMPLETED' || rawStatus === 'UNDER_REVIEW') {
+      computedAppStatus = 'PENDING';
+    } else if ((userAny.currentStep || 1) >= 7) {
+      computedAppStatus = 'PENDING';
+    } else {
+      computedAppStatus = 'INCOMPLETE';
+    }
+
     return {
       success: true,
       accessToken: tokens.accessToken,
@@ -181,9 +195,10 @@ export class AuthService {
         fullName: userAny.fullName || 'N/A',
         userType: userAny.role,
         signupStep: userAny.currentStep === 7 ? 'COMPLETED' : 'PROFILE',
+        currentStep: userAny.currentStep || 1,
         mobileNumber: userAny.phoneNumber,
-        applicationStatus: latestApp?.status || 'APPROVED',
-        rejectionReason: latestApp?.rejectionReason || null,
+        applicationStatus: computedAppStatus,
+        rejectionReason: userAny.rejectionReason || latestApp?.rejectionReason || null,
         role: userAny.role,
         shgUniqueId: userAny.uniqueCode,
         pincode: userAny.address?.pincode || '',

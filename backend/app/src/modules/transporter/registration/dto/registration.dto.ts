@@ -309,6 +309,27 @@ export class Step5PersonalVehicleDto {
   @Transform(({ value }) => value?.trim())
   make: string;
 
+  @ApiPropertyOptional({ example: 'Ace Gold (2022)' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  model?: string;
+
+  @ApiPropertyOptional({ example: 7.2, description: 'Deck length in feet' })
+  @IsOptional()
+  @IsNumber()
+  deckLength?: number;
+
+  @ApiPropertyOptional({ example: 4.8, description: 'Deck width in feet' })
+  @IsOptional()
+  @IsNumber()
+  deckWidth?: number;
+
+  @ApiPropertyOptional({ example: 4.5, description: 'Deck height in feet' })
+  @IsOptional()
+  @IsNumber()
+  deckHeight?: number;
+
   @ApiPropertyOptional({ example: 500, description: 'Minimum capacity weight' })
   @IsOptional()
   @IsNumber()

@@ -18,10 +18,10 @@ interface TaskCardProps {
   };
   onViewDetails: () => void;
   onAccept: () => void;
-  onReject: () => void;
+  onReject?: () => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onViewDetails, onAccept, onReject }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onViewDetails, onAccept }) => {
   return (
     <TouchableOpacity 
       style={styles.card} 
@@ -113,15 +113,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewDetails, onAccept, onRe
             <ArrowRight size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
           </TouchableOpacity>
         ) : (
-          <>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={onReject}>
-              <Text style={styles.secondaryBtnText}>Reject</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtn} onPress={onAccept}>
-              <Text style={styles.primaryBtnText}>Accept Task</Text>
-              <ArrowRight size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
-            </TouchableOpacity>
-          </>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 1 }]} onPress={onAccept}>
+            <Text style={styles.primaryBtnText}>Accept Task</Text>
+            <ArrowRight size={scale(18)} color="#FFFFFF" strokeWidth={2.5} />
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>

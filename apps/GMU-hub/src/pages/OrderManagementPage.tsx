@@ -2231,19 +2231,6 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 {returnOrdersList.length}
               </span>
             </button>
-
-            <button
-              onClick={() => handleTabChange('rejected')}
-              className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTopTab === 'rejected'
-                ? 'bg-[#073318] text-white shadow-md'
-                : 'text-slate-500 hover:text-slate-800'
-                }`}
-            >
-              <span>Transporter Reject</span>
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeTopTab === 'rejected' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'}`}>
-                {transporterRejectOrdersList.length}
-              </span>
-            </button>
           </div>
 
           {/* Shifted Filter Date & Refresh Component */}

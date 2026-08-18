@@ -111,7 +111,7 @@ export class RegistrationService {
       where: { phoneNumber: dto.mobileNumber }
     });
 
-    if (existing && existing.applicationStatus !== ApplicationStatus.PENDING) {
+    if (existing && (existing.applicationStatus === ApplicationStatus.APPROVED || existing.applicationStatus === ApplicationStatus.UNDER_REVIEW || existing.applicationStatus === ApplicationStatus.COMPLETED)) {
       throw new BadRequestException('this number is already registered so enter new number');
     }
 
@@ -124,6 +124,7 @@ export class RegistrationService {
           language: dto.language,
           role: UserRole.TRANSPORTER,
           applicationStatus: ApplicationStatus.PENDING,
+          currentStep: 1,
           authId: randomUUID(),
         },
       });
@@ -256,9 +257,24 @@ export class RegistrationService {
       // Safe fallback on invalid JSON format
     }
 
+    const rawStatus = (user.applicationStatus || '').toUpperCase();
+    let computedStatus = 'INCOMPLETE';
+    if (rawStatus === 'APPROVED') {
+      computedStatus = 'APPROVED';
+    } else if (rawStatus === 'REJECTED') {
+      computedStatus = 'REJECTED';
+    } else if (rawStatus === 'COMPLETED' || rawStatus === 'UNDER_REVIEW') {
+      computedStatus = 'PENDING';
+    } else if ((user.currentStep || 1) >= 7) {
+      computedStatus = 'PENDING';
+    } else {
+      computedStatus = 'INCOMPLETE';
+    }
+
     // Map back to frontend expected structure
     return {
       ...user,
+      applicationStatus: computedStatus,
       requestId: user.id,
       transporterUniqueId: user.uniqueCode,
       vehicleCategory,
@@ -627,10 +643,10 @@ export class RegistrationService {
       return VehicleType.OTHER;
     }
     const cleanType = type.toLowerCase().trim();
-    if (cleanType.includes('2') || cleanType.includes('two')) {
+    if (cleanType.includes('2') || cleanType.includes('two') || cleanType.includes('bike') || cleanType.includes('scooter')) {
       return VehicleType.TWO_WHEELER;
     }
-    if (cleanType.includes('3') || cleanType.includes('three')) {
+    if (cleanType.includes('3') || cleanType.includes('three') || cleanType.includes('auto') || cleanType.includes('rickshaw')) {
       return VehicleType.THREE_WHEELER;
     }
     if (cleanType.includes('4') || cleanType.includes('four') ||
@@ -641,6 +657,23 @@ export class RegistrationService {
       return VehicleType.FOUR_WHEELER;
     }
     return VehicleType.OTHER;
+  }
+
+  public parseVehicleBodyProtection(type: string) {
+    if (!type) {
+      return { isClosedContainer: false, isWaterproof: false, hasRoof: false };
+    }
+    const clean = type.toLowerCase().trim();
+    const isClosedContainer = clean.includes('closed container') || clean.includes('closed cargo') || clean.includes('closed');
+    const hasTarpaulin = clean.includes('tarpaulin') || clean.includes('waterproof');
+    const isWaterproof = isClosedContainer || hasTarpaulin;
+    const hasRoof = isClosedContainer || hasTarpaulin || clean.includes('van') || clean.includes('tempo');
+
+    return {
+      isClosedContainer,
+      isWaterproof,
+      hasRoof,
+    };
   }
 
   private async completeRegistration(id: number) {
@@ -852,6 +885,10 @@ export class RegistrationService {
         });
 
         const mappedType = this.mapVehicleType(vehicleInfo.type, vehicleCategory);
+        const lVal = vehicleInfo.deckLength ? Number(vehicleInfo.deckLength) : (vehicleInfo.length ? Number(vehicleInfo.length) : null);
+        const wVal = vehicleInfo.deckWidth ? Number(vehicleInfo.deckWidth) : (vehicleInfo.width ? Number(vehicleInfo.width) : null);
+        const hVal = vehicleInfo.deckHeight ? Number(vehicleInfo.deckHeight) : (vehicleInfo.heihgt ? Number(vehicleInfo.heihgt) : null);
+        const calcStorage = (lVal && wVal && hVal) ? `${(lVal * wVal * hVal).toFixed(1)} cu.ft` : null;
 
         if (existingVehicle) {
           await tx.otherDetails.update({
@@ -859,6 +896,11 @@ export class RegistrationService {
             data: {
               vehicleType: mappedType,
               vehicleName: vehicleInfo.make || null,
+              vehicleModel: vehicleInfo.model || vehicleInfo.vehicleModel || null,
+              length: lVal,
+              width: wVal,
+              heihgt: hVal,
+              storageSpace: calcStorage,
               registrationNumber: vehicleInfo.number || null,
               rcUrl: vehicleInfo.rcUpload || null,
               insuranceUrl: vehicleInfo.insuranceUpload || null,
@@ -866,7 +908,7 @@ export class RegistrationService {
               minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
               maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
               ratePerKm: vehicleInfo.ratePerKm ? Number(vehicleInfo.ratePerKm) : null,
-            },
+            } as any,
           });
         } else {
           await tx.otherDetails.create({
@@ -874,6 +916,11 @@ export class RegistrationService {
               userId: id,
               vehicleType: mappedType,
               vehicleName: vehicleInfo.make || null,
+              vehicleModel: vehicleInfo.model || vehicleInfo.vehicleModel || null,
+              length: lVal,
+              width: wVal,
+              heihgt: hVal,
+              storageSpace: calcStorage,
               registrationNumber: vehicleInfo.number || null,
               rcUrl: vehicleInfo.rcUpload || null,
               insuranceUrl: vehicleInfo.insuranceUpload || null,
@@ -881,7 +928,7 @@ export class RegistrationService {
               minWeight: vehicleInfo.minWeight ? Number(vehicleInfo.minWeight) : null,
               maxWeight: vehicleInfo.maxWeight ? Number(vehicleInfo.maxWeight) : null,
               ratePerKm: vehicleInfo.ratePerKm ? Number(vehicleInfo.ratePerKm) : null,
-            },
+            } as any,
           });
         }
       }
