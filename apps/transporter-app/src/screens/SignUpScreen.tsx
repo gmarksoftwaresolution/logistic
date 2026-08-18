@@ -564,6 +564,12 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         return null;
       case 'vehicleNumber':
         return !validateVehicleNumber(val as string) ? t('errors.vehicle_format') : null;
+      case 'vehicleModel':
+        if (!val) return 'Vehicle Model Year is required';
+        if (!/^\d{4}$/.test(String(val).trim())) {
+          return 'Vehicle Model Year must be exactly 4 digits (e.g. 2022)';
+        }
+        return null;
       case 'ratePerKm':
         if (!val) return t('errors.required_field', { field: 'Rate' });
         if (isNaN(Number(val)) || Number(val) <= 0) return 'Rate must be a positive number';
@@ -635,8 +641,19 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       const asset = result.assets[0];
       const MAX_SIZE = 5 * 1024 * 1024; // 5MB in bytes
 
+      let isOverSize = false;
       if (asset.fileSize && asset.fileSize > MAX_SIZE) {
-        alert(t('errors.file_too_large'));
+        isOverSize = true;
+      } else if (asset.base64 && asset.base64.length * 0.75 > MAX_SIZE) {
+        isOverSize = true;
+      }
+
+      if (isOverSize) {
+        Alert.alert(
+          'File Too Large',
+          'The selected image exceeds the 5 MB limit. Please select an image under 5 MB.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
@@ -3072,17 +3089,19 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             <TextInput
               ref={vehicleModelRef}
               style={styles.input}
-              placeholder={t("signup.vehicle_model_placeholder", { defaultValue: 'e.g. Ace Gold (2022) or 2022' })}
+              placeholder="e.g. 2022"
               placeholderTextColor={Colors.textPlaceholder}
+              keyboardType="numeric"
+              maxLength={4}
               value={formData.vehicleModel}
-              onChangeText={(val) => updateFormData("vehicleModel", val)}
+              onChangeText={(val) => updateFormData("vehicleModel", val.replace(/[^0-9]/g, ''))}
               onBlur={() => handleBlur("vehicleModel")}
             />
           </View>
           {getError('vehicleModel') && <Text style={styles.errorText}>{getError('vehicleModel')}</Text>}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: verticalScale(16) }}>
+        <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: verticalScale(6) }}>
           <View style={{ flex: 1 }} onLayout={(e) => { fieldPositions.current['deckLength'] = e.nativeEvent.layout.y; }}>
             <Text style={styles.label}>{t("signup.deck_length", { defaultValue: 'Length (ft)' })} *</Text>
             <View style={[styles.inputWrapper, getError('deckLength') && styles.inputError]}>
@@ -3134,6 +3153,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             {getError('deckHeight') && <Text style={styles.errorText}>{getError('deckHeight')}</Text>}
           </View>
         </View>
+
+        <Text style={{ fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(2), marginBottom: verticalScale(16), fontStyle: 'italic', paddingHorizontal: scale(4) }}>
+          💡 Note: These are tentative dimensions. You can edit length, width, and height according to your exact vehicle size.
+        </Text>
 
         <View 
           style={styles.inputContainer}

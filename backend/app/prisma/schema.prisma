@@ -31,6 +31,7 @@ enum VehicleType {
   THREE_WHEELER
   FOUR_WHEELER
   MILK_VAN
+  PERSONAL
   OTHER
 }
 
@@ -303,6 +304,7 @@ model OtherDetails {
   maxWeight             Float?
   ratePerKm             Float?
   carryingCapacity      String?
+  bodyType              String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

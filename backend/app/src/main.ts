@@ -41,6 +41,11 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // Set payload limits for Base64 document & profile photo uploads (5MB)
+  const { json, urlencoded } = require('express');
+  app.use(json({ limit: '5mb' }));
+  app.use(urlencoded({ limit: '5mb', extended: true }));
+
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   app.enableCors();

@@ -639,6 +639,9 @@ export class RegistrationService {
     if (category === 'MILK_VAN') {
       return VehicleType.MILK_VAN;
     }
+    if (category === 'PERSONAL') {
+      return 'PERSONAL' as any;
+    }
     if (!type) {
       return VehicleType.OTHER;
     }
@@ -693,6 +696,52 @@ export class RegistrationService {
 
     const transporterUniqueId = user.uniqueCode || (await this.generateTransporterUniqueId());
 
+    // Pre-fetch step tracking data to resolve pincodes BEFORE starting transaction
+    const steps = await this.prisma.stepTracking.findMany({ where: { userId: id } });
+    const stepData: Record<number, any> = {};
+    for (const s of steps) {
+      stepData[s.step] = typeof s.data === 'string' ? JSON.parse(s.data) : s.data;
+    }
+
+    const s4 = stepData[4];
+    const s6mv = stepData[6];
+    const s6p = stepData[6];
+    const vehicleCategory = (s4 && s4.vehicleCategory === 'MILK_VAN') ? 'MILK_VAN' : 'OTHER';
+
+    let villagesToResolve: string[] = [];
+    if (vehicleCategory === 'MILK_VAN' && s6mv) {
+      villagesToResolve = Array.isArray(s6mv.assignedVillages) ? s6mv.assignedVillages : [];
+    } else if (vehicleCategory !== 'MILK_VAN' && s6p) {
+      villagesToResolve = s6p.operatingArea ? s6p.operatingArea.split(',').map((s: string) => s.trim()) : [];
+    }
+
+    let resolvedPincodes: string[] = [];
+    const cleanVillages = villagesToResolve.map(v => v.trim()).filter(Boolean);
+    if (cleanVillages.length > 0) {
+      try {
+        let records: any[] = [];
+        try {
+          records = await this.prisma.pincodeDirectory.findMany({
+            where: { village: { in: cleanVillages, mode: 'insensitive' } },
+            select: { pincode: true },
+            take: 100,
+          });
+        } catch (pErr) {
+          try {
+            records = await this.prisma.$queryRawUnsafe(
+              `SELECT DISTINCT pincode FROM pincode WHERE LOWER(village) = ANY($1::text[]);`,
+              cleanVillages.map(v => v.toLowerCase())
+            ) as any[];
+          } catch (rawErr) {
+            records = [];
+          }
+        }
+        resolvedPincodes = [...new Set(records.map(r => r.pincode))].filter(Boolean);
+      } catch (e) {
+        console.warn('[resolvePincodesForVillages] Failed to fetch pincodes:', e);
+      }
+    }
+
     const txResult = await this.prisma.$transaction(async (tx) => {
       // 1. Update user details
       const updated = await tx.user.update({
@@ -703,13 +752,6 @@ export class RegistrationService {
           uniqueCode: transporterUniqueId,
         },
       });
-
-      // 2. Fetch step tracking data
-      const steps = await tx.stepTracking.findMany({ where: { userId: id } });
-      const stepData: Record<number, any> = {};
-      for (const s of steps) {
-        stepData[s.step] = typeof s.data === 'string' ? JSON.parse(s.data) : s.data;
-      }
 
       // 3. Driving Detail (Step 2)
       const s2 = stepData[2];
@@ -739,9 +781,6 @@ export class RegistrationService {
       }
 
       // 4. Transporter Detail (Step 4 & Step 2 driving experience)
-      const s4 = stepData[4];
-      const vehicleCategory = (s4 && s4.vehicleCategory === 'MILK_VAN') ? 'MILK_VAN' : 'OTHER';
-
       const existingTransporter = await tx.transporterDetail.findFirst({ where: { userId: id } });
       if (existingTransporter) {
         await tx.transporterDetail.update({
@@ -765,7 +804,6 @@ export class RegistrationService {
 
       // 5. Milk Van Detail (Step 5 Milk Van & Step 6 Milk Van)
       const s5mv = stepData[5];
-      const s6mv = stepData[6];
       if (vehicleCategory === 'MILK_VAN' && (s5mv || s6mv)) {
         const existingMilkVan = await tx.milkVanDetail.findFirst({ where: { userId: id } });
         if (existingMilkVan) {
@@ -793,34 +831,13 @@ export class RegistrationService {
         }
       }
 
-      // Helper to resolve pincodes for a list of villages (optimized batch query)
-      const resolvePincodesForVillages = async (villagesList: string[]): Promise<string[]> => {
-        const cleanVillages = villagesList.map(v => v.trim()).filter(Boolean);
-        if (cleanVillages.length === 0) return [];
-
-        try {
-          const records = await tx.pincodeDirectory.findMany({
-            where: { village: { in: cleanVillages, mode: 'insensitive' } },
-            select: { pincode: true },
-            take: 100,
-          });
-          return [...new Set(records.map(r => r.pincode))];
-        } catch (e) {
-          console.warn('[resolvePincodesForVillages] Failed to fetch pincodes:', e);
-          return [];
-        }
-      };
-
       // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
-      const s6p = stepData[6];
       const existingRoute = await tx.routeDetail.findFirst({ where: { userId: id } });
 
       if (vehicleCategory === 'MILK_VAN' && s6mv) {
         const operatingAreaVal = Array.isArray(s6mv.assignedVillages)
           ? s6mv.assignedVillages.join(', ')
           : 'Milk Van Route';
-        const villages = Array.isArray(s6mv.assignedVillages) ? s6mv.assignedVillages : [];
-        const resolvedPincodes = await resolvePincodesForVillages(villages);
 
         if (existingRoute) {
           await tx.routeDetail.update({
@@ -846,9 +863,6 @@ export class RegistrationService {
           });
         }
       } else if (vehicleCategory !== 'MILK_VAN' && s6p) {
-        const villages = s6p.operatingArea ? s6p.operatingArea.split(',').map((s: string) => s.trim()) : [];
-        const resolvedPincodes = await resolvePincodesForVillages(villages);
-
         if (existingRoute) {
           await tx.routeDetail.update({
             where: { id: existingRoute.id },
@@ -897,6 +911,7 @@ export class RegistrationService {
               vehicleType: mappedType,
               vehicleName: vehicleInfo.make || null,
               vehicleModel: vehicleInfo.model || vehicleInfo.vehicleModel || null,
+              bodyType: vehicleInfo.type || vehicleInfo.vehicleType || null,
               length: lVal,
               width: wVal,
               heihgt: hVal,
@@ -917,6 +932,7 @@ export class RegistrationService {
               vehicleType: mappedType,
               vehicleName: vehicleInfo.make || null,
               vehicleModel: vehicleInfo.model || vehicleInfo.vehicleModel || null,
+              bodyType: vehicleInfo.type || vehicleInfo.vehicleType || null,
               length: lVal,
               width: wVal,
               heihgt: hVal,
