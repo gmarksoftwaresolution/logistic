@@ -245,6 +245,14 @@
     "profile": "प्रोफाइल"
   },
   "orders": {
+    "incoming": "येणाऱ्या",
+    "upcoming": "आगामी",
+    "upcoming_desc": "आगामी ऑर्डर्स",
+    "return": "परत",
+    "return_desc": "परत / RTO वस्तू",
+    "redirected": "पुनर्निर्देशित",
+    "redirected_desc": "पुनर्निर्देशित ऑर्डर्स",
+    "completed_desc": "पूर्ण झालेले डिलिव्हरी",
     "new_orders": "नवीन ऑर्डर",
     "accepted_orders": "स्वीकृत ऑर्डर",
     "pickup_orders": "पिकअप ऑर्डर",

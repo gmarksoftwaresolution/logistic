@@ -777,6 +777,112 @@ export class OrderService {
     return { success: true, message: 'Orders accepted in bulk.' };
   }
 
+  async getUpcomingOrders(transporterUserId: number) {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        AND: [
+          // Must not be completed, delivered, or accepted by any transporter
+          {
+            mainStatus: {
+              notIn: [
+                'PICKUP_TRANSPORTER_ACCEPTED',
+                'IN_TRANSIT_TO_HUB',
+                'DROP_TRANSPORTER_ACCEPTED',
+                'IN_TRANSIT_TO_BUYER',
+                'AT_BUYER_SHG',
+                'DELIVERED',
+                'COMPLETED',
+                'REJECTED',
+              ]
+            }
+          },
+          {
+            OR: [
+              // Leg 1: SHG -> Hub expected requests (Order placed, at SHG, pending pickup)
+              {
+                phase: 'PICKUP',
+                mainStatus: { in: ['NEW', 'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PARCEL_AT_SHG', 'SHG_ACCEPTED', 'PENDING', 'CREATED'] },
+                pickupTransporterStatus: { notIn: ['TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'COMPLETED'] },
+              },
+              // Leg 2: Hub -> Drop SHG expected requests (Parcel at Hub, stored, pending drop)
+              {
+                phase: 'DROP',
+                mainStatus: { in: ['WAREHOUSE_RECEIVED', 'IN_HUB', 'PARCEL_AT_HUB', 'STORED', 'PENDING_DROP', 'PENDING'] },
+                dropTransporterStatus: { notIn: ['DROP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_BUYER', 'DELIVERED', 'COMPLETED'] },
+              },
+              // Rescheduled or reassigned expected requests
+              {
+                mainStatus: { in: ['RESCHEDULED', 'REASSIGNED'] },
+              }
+            ]
+          }
+        ]
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    }).catch(() => []);
+
+    const formattedUpcoming = orders.map((order: any) => {
+      const isPickupLeg = order.phase === 'PICKUP' || !order.warehouseReceivedAt;
+      const legType = isPickupLeg ? 'shg_to_hub' : 'hub_to_drop_shg';
+      
+      const originAddress = {
+        name: isPickupLeg ? (order.seller?.sellerName || 'Seller SHG') : 'Central GMU Hub',
+        phone: isPickupLeg ? (order.seller?.mobileNumber || '') : '9876543210',
+        address: isPickupLeg 
+          ? [order.seller?.addressLine1, order.seller?.village, order.seller?.taluka, order.seller?.district].filter(Boolean).join(', ')
+          : 'Central GMU Warehouse, Market Road',
+        village: isPickupLeg ? (order.seller?.village || 'Gadhinglaj Market Area') : 'Gadhinglaj',
+        taluka: isPickupLeg ? (order.seller?.taluka || 'Gadhinglaj') : 'Gadhinglaj',
+        district: isPickupLeg ? (order.seller?.district || 'Kolhapur') : 'Kolhapur',
+        pincode: isPickupLeg ? (order.seller?.pincode || '416502') : '416502',
+      };
+
+      const destinationAddress = {
+        name: isPickupLeg ? 'Central GMU Hub' : (order.buyer?.buyerName || 'Buyer / Drop SHG'),
+        phone: isPickupLeg ? '9876543210' : (order.buyer?.mobileNumber || ''),
+        address: isPickupLeg
+          ? 'Central GMU Warehouse, Market Road'
+          : [order.buyer?.addressLine1, order.buyer?.village, order.buyer?.taluka, order.buyer?.district].filter(Boolean).join(', '),
+        village: isPickupLeg ? 'Gadhinglaj' : (order.buyer?.village || 'Market Area'),
+        taluka: isPickupLeg ? 'Gadhinglaj' : (order.buyer?.taluka || 'Gadhinglaj'),
+        district: isPickupLeg ? 'Kolhapur' : (order.buyer?.district || 'Kolhapur'),
+        pincode: isPickupLeg ? '416502' : (order.buyer?.pincode || '416502'),
+      };
+
+      const displayOrderNumber = order.orderId ? (order.orderId.startsWith('#') ? order.orderId : `#${order.orderId}`) : `#ORD-2026-${order.id.slice(0, 4)}`;
+
+      return {
+        id: order.id,
+        orderId: order.orderId || order.id,
+        displayId: displayOrderNumber,
+        legType,
+        legTitle: isPickupLeg ? 'SHG ➔ GMU Hub' : 'GMU Hub ➔ Drop SHG',
+        status: 'UPCOMING',
+        statusText: isPickupLeg ? 'Expected Pickup Request' : 'Expected Delivery Request',
+        totalQty: order.totalQty || order.productCount || 1,
+        totalWeight: order.totalWeight ? `${order.totalWeight} kg` : '2.5 kg',
+        originAddress,
+        destinationAddress,
+        createdAt: order.createdAt,
+        expectedDate: order.createdAt 
+          ? new Date(new Date(order.createdAt).getTime() + 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+          : 'Today',
+      };
+    });
+
+    return {
+      success: true,
+      data: formattedUpcoming,
+      count: formattedUpcoming.length,
+    };
+  }
+
   private async findOrderFlexible(orderId: any) {
     const strId = String(orderId);
     const rawId = strId.replace(/^(pickup|drop)-/, '');

@@ -245,6 +245,14 @@
     "profile": "Profile"
   },
   "orders": {
+    "incoming": "Incoming",
+    "upcoming": "Upcoming",
+    "upcoming_desc": "Upcoming Orders",
+    "return": "Return",
+    "return_desc": "Return / RTO Items",
+    "redirected": "Redirected",
+    "redirected_desc": "Redirected Orders",
+    "completed_desc": "Completed Deliveries",
     "new_orders": "New Orders",
     "accepted_orders": "Accepted Orders",
     "pickup_orders": "Pickup Orders",

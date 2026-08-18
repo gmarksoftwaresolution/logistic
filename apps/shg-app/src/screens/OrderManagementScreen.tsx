@@ -113,10 +113,9 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
           {/* Dashboard Gradient Cards */}
           <View className="px-4 mt-4 flex-row flex-wrap justify-between">
 
-
-            {/* Accepted */}
+            {/* Incoming */}
             <TouchableOpacity
-              onPress={() => navigation.navigate('AcceptedOrders')}
+              onPress={() => navigation.navigate('IncomingOrders' as never)}
               className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
               style={{
                 shadowColor: '#3F1E9A',
@@ -128,18 +127,47 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             >
               <View className="rounded-2xl overflow-hidden flex-1">
                 <LinearGradient colors={['#3F1E9A', '#6D3CD8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
-
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_accepted")}</Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_incoming") || "Incoming"}</Text>
                     <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
                       <Feather name="clock" size={14} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
                     </View>
                   </View>
                   <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{acceptedOrders.length}</Text>
-                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_accepted_desc")}</Text>
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_incoming_desc") || "Incoming for Processing"}</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            </TouchableOpacity>
+
+            {/* Upcoming */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('AcceptedOrders' as never)}
+              className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
+              style={{
+                shadowColor: '#0284C7',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 2
+              }}
+            >
+              <View className="rounded-2xl overflow-hidden flex-1">
+                <LinearGradient colors={['#0284C7', '#38BDF8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_upcoming") || "Upcoming"}</Text>
+                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
+                      <Feather name="archive" size={14} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
+                    </View>
+                  </View>
+                  <View className="mt-1 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>0</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_upcoming_desc") || "Upcoming Orders"}</Text>
                   </View>
                 </LinearGradient>
               </View>
@@ -159,10 +187,9 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             >
               <View className="rounded-2xl overflow-hidden flex-1">
                 <LinearGradient colors={['#D34800', '#FFA400']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
-
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>Return </Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_return") || "Return"}</Text>
                     <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
                       <Feather name="corner-up-left" size={14} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
@@ -171,37 +198,6 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                   <View className="mt-1 relative z-10">
                     <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{returnedOrders.length}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>Return / RTO Items</Text>
-                  </View>
-                </LinearGradient>
-              </View>
-            </TouchableOpacity>
-
-            {/* Completed */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('CompletedOrders')}
-              className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
-              style={{
-                shadowColor: '#005A12',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 6,
-                elevation: 2
-              }}
-            >
-              <View className="rounded-2xl overflow-hidden flex-1">
-                <LinearGradient colors={['#005A12', '#159121']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
-
-                  {/* Content */}
-                  <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_completed")}</Text>
-                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
-                      <Feather name="check" size={14} color="#FFFFFF" />
-                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
-                    </View>
-                  </View>
-                  <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{deliveredOrders.length}</Text>
-                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_completed_desc")}</Text>
                   </View>
                 </LinearGradient>
               </View>
@@ -221,10 +217,9 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
             >
               <View className="rounded-2xl overflow-hidden flex-1">
                 <LinearGradient colors={['#7C3AED', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
-
                   {/* Content */}
                   <View className="flex-row justify-between items-start relative z-10">
-                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>Redirected</Text>
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_redirected") || "Redirected"}</Text>
                     <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
                       <Feather name="shuffle" size={14} color="#FFFFFF" />
                       <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
@@ -233,6 +228,36 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                   <View className="mt-1 relative z-10">
                     <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{redirectedOrders.length}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>Redirected Orders</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            </TouchableOpacity>
+
+            {/* Completed */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CompletedOrders')}
+              className="w-full rounded-2xl mb-2.5 shadow-sm"
+              style={{
+                shadowColor: '#005A12',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 2
+              }}
+            >
+              <View className="rounded-2xl overflow-hidden flex-1">
+                <LinearGradient colors={['#005A12', '#159121']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-3.5 flex-1 relative">
+                  {/* Content */}
+                  <View className="flex-row justify-between items-start relative z-10">
+                    <Text className="text-[15px] font-semibold text-white/90 tracking-wide" adjustsFontSizeToFit numberOfLines={1}>{t("overview_completed")}</Text>
+                    <View className="w-8 h-8 rounded-full border border-white/30 items-center justify-center relative overflow-hidden bg-white/20 -mt-1 -mr-1">
+                      <Feather name="check" size={14} color="#FFFFFF" />
+                      <View className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full shadow-sm" />
+                    </View>
+                  </View>
+                  <View className="mt-1 relative z-10">
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{deliveredOrders.length}</Text>
+                    <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_completed_desc")}</Text>
                   </View>
                 </LinearGradient>
               </View>

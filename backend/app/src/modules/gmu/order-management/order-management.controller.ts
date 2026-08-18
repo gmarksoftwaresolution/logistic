@@ -35,6 +35,14 @@ export class OrderManagementController {
     return this.service.getCounts();
   }
 
+  @Get('upcoming')
+  @Get('upcoming-orders')
+  @ApiOperation({ summary: 'Get upcoming expected orders for transporter' })
+  async getUpcomingOrders(@Request() req: any) {
+    const transporterId = req.user?.sub || req.user?.id;
+    return this.transporterOrderService.getUpcomingOrders(transporterId);
+  }
+
   @Get('new/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in SHG' })
   async getNewAssignedOrders(@Query() filter: OrderFilterDto, @Request() req: any) {
