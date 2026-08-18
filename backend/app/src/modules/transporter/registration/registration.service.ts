@@ -111,8 +111,15 @@ export class RegistrationService {
       where: { phoneNumber: dto.mobileNumber }
     });
 
-    if (existing && (existing.applicationStatus === ApplicationStatus.APPROVED || existing.applicationStatus === ApplicationStatus.UNDER_REVIEW || existing.applicationStatus === ApplicationStatus.COMPLETED)) {
-      throw new BadRequestException('this number is already registered so enter new number');
+    const isCompletedOrApproved = existing && (
+      existing.applicationStatus === ApplicationStatus.APPROVED ||
+      existing.applicationStatus === ApplicationStatus.UNDER_REVIEW ||
+      existing.applicationStatus === ApplicationStatus.COMPLETED ||
+      (existing.currentStep && existing.currentStep >= 7)
+    );
+
+    if (isCompletedOrApproved) {
+      throw new BadRequestException('This mobile number is already registered. Please login or try another number.');
     }
 
     console.log(`Sending OTP 123456 to ${dto.mobileNumber} in ${dto.language}`);

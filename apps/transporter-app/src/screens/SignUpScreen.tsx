@@ -1175,16 +1175,26 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       setOtpSent(true);
       setTimer(30);
     } catch (error: any) {
-      console.log('Send OTP error:', error);
-      const message = error.response?.data?.message || 'Failed to send OTP. Please try again.';
-      let displayMessage = Array.isArray(message) ? message[0] : message;
+      console.log('Send OTP error:', error?.response?.data || error);
+      const resData = error?.response?.data;
+      let displayMessage = '';
+
+      if (resData && typeof resData.message === 'string' && !resData.message.includes('status code')) {
+        displayMessage = resData.message;
+      } else if (resData && Array.isArray(resData.message) && resData.message.length > 0) {
+        displayMessage = String(resData.message[0]);
+      }
+
       const lowerMessage = displayMessage.toLowerCase();
       if (
+        !displayMessage ||
         lowerMessage.includes('already registered') || 
-        lowerMessage.includes('already rgistered') ||
-        lowerMessage.includes('already register')
+        lowerMessage.includes('already register') ||
+        lowerMessage.includes('already exist') ||
+        lowerMessage.includes('enter new number') ||
+        lowerMessage.includes('status code')
       ) {
-        displayMessage = t('errors.already_registered', { defaultValue: 'This number is already registered enter new number' });
+        displayMessage = 'This mobile number is already registered. Please login or try another number.';
       }
       setApiError(displayMessage);
     } finally {
@@ -1933,7 +1943,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                   onBlur={() => handleBlur('mobile')}
                 />
               </View>
-              {(getError('mobile') || apiError) && <Text style={styles.errorText}>{getError('mobile') || apiError}</Text>}
+              {(apiError || getError('mobile')) && <Text style={styles.errorText}>{apiError || getError('mobile')}</Text>}
             </View>
           ) : (
             <View style={styles.inputContainer}>
