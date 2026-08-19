@@ -28,7 +28,7 @@ type Props = CompositeScreenProps<
 const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
-  const { incomingOrders, incomingReturnOrders, acceptedOrders, deliveredOrders, returnedOrders, redirectedOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
+  const { incomingOrders, incomingReturnOrders, acceptedOrders, upcomingOrders, deliveredOrders, returnedOrders, redirectedOrders, refreshOrdersList, isOrdersLoading, highlightedOrders } = useOrders();
 
   useFocusEffect(
     useCallback(() => {
@@ -136,7 +136,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                   </View>
                   <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length}</Text>
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{incomingOrders.length + acceptedOrders.length}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_incoming_desc") || "Incoming for Processing"}</Text>
                   </View>
                 </LinearGradient>
@@ -145,7 +145,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
 
             {/* Upcoming */}
             <TouchableOpacity
-              onPress={() => navigation.navigate('AcceptedOrders' as never)}
+              onPress={() => navigation.navigate('UpcomingOrders' as never)}
               className="w-[48.5%] rounded-2xl mb-2.5 shadow-sm"
               style={{
                 shadowColor: '#0284C7',
@@ -166,7 +166,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                   </View>
                   <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>0</Text>
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{upcomingOrders?.length || 0}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>{t("overview_upcoming_desc") || "Upcoming Orders"}</Text>
                   </View>
                 </LinearGradient>
@@ -196,7 +196,7 @@ const OrderManagementScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                   </View>
                   <View className="mt-1 relative z-10">
-                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{returnedOrders.length}</Text>
+                    <Text className="text-[48px] font-bold text-white tracking-tight leading-[52px]" adjustsFontSizeToFit numberOfLines={1}>{returnedOrders.length + (incomingReturnOrders?.length || 0)}</Text>
                     <Text className="text-[11px] font-medium text-white/80 mt-1" numberOfLines={1}>Return / RTO Items</Text>
                   </View>
                 </LinearGradient>

@@ -17,9 +17,14 @@ export class OrderController {
   }
 
   @Get('upcoming')
-  @Get('upcoming-orders')
   @ApiOperation({ summary: 'Get upcoming expected orders (SHG -> Hub & Hub -> Drop SHG) for transporter' })
   async getUpcomingOrders(@Request() req: any) {
+    return this.orderService.getUpcomingOrders(req.user.id);
+  }
+
+  @Get('upcoming-orders')
+  @ApiOperation({ summary: 'Get upcoming expected orders alias for transporter' })
+  async getUpcomingOrdersAlias(@Request() req: any) {
     return this.orderService.getUpcomingOrders(req.user.id);
   }
 

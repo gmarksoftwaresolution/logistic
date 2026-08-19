@@ -780,43 +780,9 @@ export class OrderService {
   async getUpcomingOrders(transporterUserId: number) {
     const orders = await this.prisma.order.findMany({
       where: {
-        AND: [
-          // Must not be completed, delivered, or accepted by any transporter
-          {
-            mainStatus: {
-              notIn: [
-                'PICKUP_TRANSPORTER_ACCEPTED',
-                'IN_TRANSIT_TO_HUB',
-                'DROP_TRANSPORTER_ACCEPTED',
-                'IN_TRANSIT_TO_BUYER',
-                'AT_BUYER_SHG',
-                'DELIVERED',
-                'COMPLETED',
-                'REJECTED',
-              ]
-            }
-          },
-          {
-            OR: [
-              // Leg 1: SHG -> Hub expected requests (Order placed, at SHG, pending pickup)
-              {
-                phase: 'PICKUP',
-                mainStatus: { in: ['NEW', 'ORDER_PLACED', 'PICKUP_ASSIGNED', 'PARCEL_AT_SHG', 'SHG_ACCEPTED', 'PENDING', 'CREATED'] },
-                pickupTransporterStatus: { notIn: ['TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'COMPLETED'] },
-              },
-              // Leg 2: Hub -> Drop SHG expected requests (Parcel at Hub, stored, pending drop)
-              {
-                phase: 'DROP',
-                mainStatus: { in: ['WAREHOUSE_RECEIVED', 'IN_HUB', 'PARCEL_AT_HUB', 'STORED', 'PENDING_DROP', 'PENDING'] },
-                dropTransporterStatus: { notIn: ['DROP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_BUYER', 'DELIVERED', 'COMPLETED'] },
-              },
-              // Rescheduled or reassigned expected requests
-              {
-                mainStatus: { in: ['RESCHEDULED', 'REASSIGNED'] },
-              }
-            ]
-          }
-        ]
+        mainStatus: {
+          notIn: ['DELIVERED', 'COMPLETED', 'REJECTED', 'CANCELLED']
+        }
       },
       include: {
         seller: true,
@@ -824,16 +790,40 @@ export class OrderService {
         parcels: true,
       },
       orderBy: { createdAt: 'desc' },
-      take: 30,
+      take: 50,
     }).catch(() => []);
 
-    const formattedUpcoming = orders.map((order: any) => {
-      const isPickupLeg = order.phase === 'PICKUP' || !order.warehouseReceivedAt;
-      const legType = isPickupLeg ? 'shg_to_hub' : 'hub_to_drop_shg';
+    const matchedUpcoming: any[] = [];
+
+    for (const order of orders) {
+      const mainStatus = (order.mainStatus || '').toUpperCase();
+      const pTransStatus = (order.pickupTransporterStatus || '').toUpperCase();
+      const dTransStatus = (order.dropTransporterStatus || '').toUpperCase();
+
+      const isDropPhase = order.phase === 'DROP' || ['STORED', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'BARCODE_GENERATED', 'DISPATCHED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED'].includes(mainStatus);
+
+      if (isDropPhase) {
+        // Leg 2: Hub -> Drop SHG
+        const isDropAccepted = ['DROP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_BUYER', 'DELIVERED', 'COMPLETED'].includes(dTransStatus);
+        if (!isDropAccepted) {
+          matchedUpcoming.push({ ...order, legType: 'hub_to_drop_shg', isPickupLeg: false });
+        }
+      } else {
+        // Leg 1: SHG -> Hub
+        const isPickupAccepted = ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'STORED', 'COMPLETED'].includes(pTransStatus) || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'COMPLETED'].includes(mainStatus);
+        if (!isPickupAccepted) {
+          matchedUpcoming.push({ ...order, legType: 'shg_to_hub', isPickupLeg: true });
+        }
+      }
+    }
+
+    const formattedUpcoming = matchedUpcoming.map((order: any) => {
+      const isPickupLeg = order.isPickupLeg;
+      const legType = order.legType;
       
       const originAddress = {
-        name: isPickupLeg ? (order.seller?.sellerName || 'Seller SHG') : 'Central GMU Hub',
-        phone: isPickupLeg ? (order.seller?.mobileNumber || '') : '9876543210',
+        name: isPickupLeg ? (order.seller?.sellerName || order.seller?.fullName || 'Seller SHG') : 'Central GMU Hub',
+        phone: isPickupLeg ? (order.seller?.phoneNumber || order.seller?.mobileNumber || '') : '9876543210',
         address: isPickupLeg 
           ? [order.seller?.addressLine1, order.seller?.village, order.seller?.taluka, order.seller?.district].filter(Boolean).join(', ')
           : 'Central GMU Warehouse, Market Road',
@@ -844,8 +834,8 @@ export class OrderService {
       };
 
       const destinationAddress = {
-        name: isPickupLeg ? 'Central GMU Hub' : (order.buyer?.buyerName || 'Buyer / Drop SHG'),
-        phone: isPickupLeg ? '9876543210' : (order.buyer?.mobileNumber || ''),
+        name: isPickupLeg ? 'Central GMU Hub' : (order.buyer?.buyerName || order.buyer?.fullName || 'Buyer / Drop SHG'),
+        phone: isPickupLeg ? '9876543210' : (order.buyer?.phoneNumber || order.buyer?.mobileNumber || ''),
         address: isPickupLeg
           ? 'Central GMU Warehouse, Market Road'
           : [order.buyer?.addressLine1, order.buyer?.village, order.buyer?.taluka, order.buyer?.district].filter(Boolean).join(', '),
@@ -855,7 +845,7 @@ export class OrderService {
         pincode: isPickupLeg ? '416502' : (order.buyer?.pincode || '416502'),
       };
 
-      const displayOrderNumber = order.orderId ? (order.orderId.startsWith('#') ? order.orderId : `#${order.orderId}`) : `#ORD-2026-${order.id.slice(0, 4)}`;
+      const displayOrderNumber = order.orderId ? (order.orderId.startsWith('#') ? order.orderId : `#${order.orderId}`) : `#ORD-${order.id.slice(0, 6)}`;
 
       return {
         id: order.id,
@@ -865,7 +855,7 @@ export class OrderService {
         legTitle: isPickupLeg ? 'SHG ➔ GMU Hub' : 'GMU Hub ➔ Drop SHG',
         status: 'UPCOMING',
         statusText: isPickupLeg ? 'Expected Pickup Request' : 'Expected Delivery Request',
-        totalQty: order.totalQty || order.productCount || 1,
+        totalQty: order.totalQty || (order.parcels ? order.parcels.length : 1),
         totalWeight: order.totalWeight ? `${order.totalWeight} kg` : '2.5 kg',
         originAddress,
         destinationAddress,
