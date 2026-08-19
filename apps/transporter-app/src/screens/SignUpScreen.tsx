@@ -1298,6 +1298,32 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [currentStep, formData.vehicleTypeSelection]);
 
+const isRealVillageName = (name: string): boolean => {
+  if (!name || name.trim().length < 2) return false;
+  const n = name.toLowerCase().trim();
+
+  if (/[^\x00-\x7F]/.test(name)) return false;
+
+  const landmarkKeywords = [
+    'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
+    'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
+    'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
+    'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
+    'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
+    'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
+    'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
+    'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
+    'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
+    'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar'
+  ];
+
+  for (const kw of landmarkKeywords) {
+    if (n.includes(kw)) return false;
+  }
+
+  return true;
+};
+
   useEffect(() => {
     const fetchPincodeDetails = async () => {
       const pin = formData.pincode;
@@ -1333,25 +1359,20 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             }
           } catch (e) {}
 
-          const rawRecords: any[] = (infoData.records && infoData.records.length > 0)
-            ? infoData.records
-            : villagesData;
-
-          const stateVal = infoData.state || rawRecords[0]?.state || '';
-          const districtVal = infoData.district || rawRecords[0]?.district || '';
-          const talukaVal = infoData.taluka || rawRecords[0]?.taluka || '';
+          const stateVal = infoData.state || villagesData[0]?.state || '';
+          const districtVal = infoData.district || villagesData[0]?.district || '';
+          const talukaVal = infoData.taluka || villagesData[0]?.taluka || '';
 
           const allVillagesRaw: string[] = [];
           if (infoData.villages && Array.isArray(infoData.villages)) {
             allVillagesRaw.push(...infoData.villages);
           }
-          if (infoData.postOffices && Array.isArray(infoData.postOffices)) {
-            allVillagesRaw.push(...infoData.postOffices);
+          if (villagesData && Array.isArray(villagesData)) {
+            villagesData.forEach((r: any) => {
+              const vName = typeof r === 'string' ? r : (r.village || r.name || '');
+              if (vName) allVillagesRaw.push(vName);
+            });
           }
-          rawRecords.forEach((r: any) => {
-            const vName = typeof r === 'string' ? r : (r.village || r.name || r.postOffice || '');
-            if (vName) allVillagesRaw.push(vName);
-          });
 
           const getPhoneticKey = (s: string) => {
             return s.toLowerCase()
@@ -1374,7 +1395,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               .replace(/\s*\(.*?\)/g, '')
               .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
               .trim();
-            if (cleaned) {
+            if (cleaned && isRealVillageName(cleaned)) {
               const key = getPhoneticKey(cleaned);
               if (!phoneticMap.has(key)) {
                 phoneticMap.set(key, cleaned);
@@ -1475,7 +1496,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               .replace(/\s*\(.*?\)/g, '')
               .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
               .trim();
-            if (cleaned) {
+            if (cleaned && isRealVillageName(cleaned)) {
               const key = getPhoneticKey(cleaned);
               if (!phoneticMap.has(key)) {
                 phoneticMap.set(key, cleaned);

@@ -589,14 +589,15 @@ export class RegistrationService {
 
   async getPincodeVillages(pincode: string) {
     try {
-      const records = await this.locationService.findByPincode(pincode);
-      return (records || []).map(r => ({
-        name: r.village || '',
-        village: r.village || '',
-        taluka: r.taluka || r.district || '',
-        postOffice: r.postOffice || r.village || '',
-        district: r.district || '',
-        state: r.state || '',
+      const details = await this.locationService.getAddressFromPincode(pincode);
+      const villages = details?.villages || [];
+      return villages.map(v => ({
+        name: v,
+        village: v,
+        taluka: details?.taluka || details?.district || '',
+        postOffice: v,
+        district: details?.district || '',
+        state: details?.state || '',
       }));
     } catch (e) {
       console.error('getPincodeVillages error:', e);
