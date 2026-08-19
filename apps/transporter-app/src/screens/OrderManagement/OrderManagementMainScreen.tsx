@@ -14,7 +14,7 @@ import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, ActivityEntry } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, Clock, XCircle, CheckCircle, History } from 'lucide-react-native';
+import { Package, Clock, XCircle, CheckCircle, History, RotateCcw, Shuffle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +24,7 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
   const {
     newOrdersCount,
     acceptedOrdersCount,
+    upcomingOrdersCount,
     rejectedOrdersCount,
     completedOrdersCount,
     activities,
@@ -114,110 +115,136 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
         }
       >
 
-        {/* Top Section: 4 Premium Summary Cards using precisely tailored HSL user parameters */}
+        {/* Top Section: 5 Premium Summary Cards matching SHG & Transporter App Order Management design */}
         <View style={styles.statsGrid}>
-          {/* 🔵 Card 1: New Orders (Blue) */}
+          {/* 🔵 Card 1: Incoming */}
           <WalkthroughElement stepId="assigned_orders_card" style={{ width: '48%', height: verticalScale(125) }}>
             <TouchableOpacity
-              style={[styles.summaryCardWrapper, { width: '100%', shadowColor: '#1A2980' }]}
+              style={[styles.summaryCardWrapper, { width: '100%', shadowColor: '#3F1E9A' }]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('CategoryOrders', { category: 'new' })}
             >
               <LinearGradient
-                colors={['#1A2980', '#26D0CE']}
+                colors={['#3F1E9A', '#6D3CD8']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.gradientCardInner}
               >
                 <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.cardTitleCustom, { color: '#E0F7FA' }]}>{t('orders.new_orders')}</Text>
+                  <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.incoming') || 'Incoming'}</Text>
                   <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                    <Package size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                    <View style={[styles.badgeDotIndicator, { backgroundColor: '#00E5FF' }]} />
+                    <Clock size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                    <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
                   </View>
                 </View>
                 <View>
                   <Text style={styles.countNumberWhite}>{newOrdersCount}</Text>
-                  <Text style={[styles.subtitleTextCustom, { color: '#B2EBF2' }]}>{t('orders.incoming_items')}</Text>
+                  <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.incoming_items') || 'Incoming for Processing'}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>
           </WalkthroughElement>
 
-          {/* 🟣 Card 2: Accepted (Purple) */}
+          {/* 🩵 Card 2: Upcoming */}
           <TouchableOpacity
-            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#4A00E0' }]}
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#0284C7' }]}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('UpcomingOrders')}
+          >
+            <LinearGradient
+              colors={['#0284C7', '#38BDF8']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientCardInner}
+            >
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.upcoming') || 'Upcoming'}</Text>
+                <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <Package size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
+                </View>
+              </View>
+              <View>
+                <Text style={styles.countNumberWhite}>{upcomingOrdersCount || 0}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.upcoming_desc') || 'Upcoming Orders'}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* 🟠 Card 3: Accepted */}
+          <TouchableOpacity
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#D34800' }]}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('AcceptedOrders')}
           >
             <LinearGradient
-              colors={['#4A00E0', '#8E2DE2']}
+              colors={['#D34800', '#FFA400']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.gradientCardInner}
             >
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitleCustom, { color: '#EDE7F6' }]}>{t('orders.accepted')}</Text>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.accepted') || 'Accepted'}</Text>
                 <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                  <Clock size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#D500F9' }]} />
+                  <CheckCircle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
                 </View>
               </View>
               <View>
                 <Text style={styles.countNumberWhite}>{acceptedOrdersCount}</Text>
-                <Text style={[styles.subtitleTextCustom, { color: '#D1C4E9' }]}>{t('orders.accepted_to_process')}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.accepted_desc') || 'Accepted Orders'}</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* 🔴 Card 3: Rejected (Red) */}
+          {/* 🔴 Card 4: Rejected */}
           <TouchableOpacity
-            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#cb2d3e' }]}
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#DC2626' }]}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('OrderBatchRejected')}
           >
             <LinearGradient
-              colors={['#cb2d3e', '#ef473a']}
+              colors={['#DC2626', '#EF4444']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.gradientCardInner}
             >
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitleCustom, { color: '#FFEBEE' }]}>{t('orders.rejected')}</Text>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.rejected') || 'Rejected'}</Text>
                 <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
                   <XCircle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FF8A80' }]} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
                 </View>
               </View>
               <View>
                 <Text style={styles.countNumberWhite}>{rejectedOrdersCount}</Text>
-                <Text style={[styles.subtitleTextCustom, { color: '#FFCDD2' }]}>{t('orders.with_reason')}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.rejected_desc') || 'Rejected Orders'}</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* 🟢 Card 4: Completed (Green) */}
+          {/* 🟢 Card 5: Completed (Full Width) */}
           <TouchableOpacity
-            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#11998e' }]}
+            style={[styles.summaryCardWrapper, { width: '100%', shadowColor: '#005A12' }]}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('OrderBatchCompleted')}
           >
             <LinearGradient
-              colors={['#11998e', '#38ef7d']}
+              colors={['#005A12', '#159121']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.gradientCardInner}
             >
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitleCustom, { color: '#E8F5E9' }]}>{t('orders.completed')}</Text>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.completed') || 'Completed'}</Text>
                 <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
                   <CheckCircle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#69F0AE' }]} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
                 </View>
               </View>
               <View>
                 <Text style={styles.countNumberWhite}>{completedOrdersCount}</Text>
-                <Text style={[styles.subtitleTextCustom, { color: '#C8E6C9' }]}>{t('orders.successfully_delivered')}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.completed_desc') || 'Completed Deliveries'}</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>

@@ -100,12 +100,46 @@ export interface ActivityEntry {
 
 type NotificationType = 'success' | 'error' | 'info';
 
+export interface UpcomingOrder {
+  id: string;
+  orderId: string;
+  displayId: string;
+  legType: 'shg_to_hub' | 'hub_to_drop_shg';
+  legTitle: string;
+  status: string;
+  statusText: string;
+  totalQty: number;
+  totalWeight: string;
+  originAddress: {
+    name: string;
+    phone: string;
+    address: string;
+    village: string;
+    taluka: string;
+    district: string;
+    pincode: string;
+  };
+  destinationAddress: {
+    name: string;
+    phone: string;
+    address: string;
+    village: string;
+    taluka: string;
+    district: string;
+    pincode: string;
+  };
+  createdAt?: string;
+  expectedDate?: string;
+}
+
 interface OrderManagementContextType {
   batches: BatchOrder[];
   rejectedBatches?: BatchOrder[];
+  upcomingOrders: UpcomingOrder[];
   activities: ActivityEntry[];
   newOrdersCount: number;
   acceptedOrdersCount: number;
+  upcomingOrdersCount: number;
   rejectedOrdersCount: number;
   completedOrdersCount: number;
   vehicleDetails?: any;
@@ -123,6 +157,7 @@ interface OrderManagementContextType {
 
   showToast: (message: string, type: NotificationType) => void;
   refreshBatchesList: () => Promise<void>;
+  refreshUpcomingOrders: () => Promise<void>;
 
   // Legacy fallback bindings
   pendingOrdersCount: number;
@@ -156,10 +191,31 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const [batches, setBatches] = useState<BatchOrder[]>([]);
   const [rejectedBatches, setRejectedBatches] = useState<BatchOrder[]>([]);
   const [completedBatches, setCompletedBatches] = useState<BatchOrder[]>([]);
+  const [upcomingOrders, setUpcomingOrders] = useState<UpcomingOrder[]>([]);
   const [activitiesState, setActivities] = useState<ActivityEntry[]>([]);
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, { pickupPhoto?: string; pickupPhotoTime?: number; dropPhoto?: string; dropPhotoTime?: number }>>({});
   const [completedDropPickups, setCompletedDropPickups] = useState<string[]>([]);
   const [vehicleDetails, setVehicleDetails] = useState<any>(null);
+
+  const refreshUpcomingOrders = async () => {
+    try {
+      let response;
+      try {
+        response = await api.get('/orders/upcoming');
+      } catch (e: any) {
+        if (e.response?.status === 404) {
+          response = await api.get('/orders/upcoming-orders');
+        } else {
+          throw e;
+        }
+      }
+      if (response?.data?.success && Array.isArray(response.data.data)) {
+        setUpcomingOrders(response.data.data);
+      }
+    } catch (err) {
+      console.log('Note on fetching upcoming orders in context:', err);
+    }
+  };
 
   // Always-fresh ref so async functions avoid stale closures on batches and photos
   const batchesRef = useRef<BatchOrder[]>(batches);
@@ -717,6 +773,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       } catch (err) { }
 
       setBatches(combinedLiveBatches);
+      refreshUpcomingOrders().catch(() => {});
     } catch (error: any) {
       if (error.response?.status === 401) {
         console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
@@ -730,6 +787,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   useEffect(() => {
     const loadPersistedAndFetch = async () => {
+      try {
+        const storedPhotos = await AsyncStorage.getItem('captured_photos');
+        if (storedPhotos) setCapturedPhotos(JSON.parse(storedPhotos));
+
+        const storedDropPickups = await AsyncStorage.getItem('completed_drop_pickups');
+        if (storedDropPickups) setCompletedDropPickups(JSON.parse(storedDropPickups));
+
+        await refreshBatchesList();
+      } catch (err) {
+        console.error('Error loading persisted context data:', err);
+      }
       try {
         const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v10');
         if (!hasCleared) {
@@ -761,6 +829,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             setBatches([]);
             setRejectedBatches([]);
             setCompletedBatches([]);
+            setUpcomingOrders([]);
             setActivities([]);
             setCapturedPhotos({});
             setCompletedDropPickups([]);
@@ -870,14 +939,14 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             id: `act-dropped-${b.id}`,
             orderId: b.id,
             route: routeStr,
-            status: 'Dropped',
+            status: 'Completed',
             qty: b.totalQty,
             weight: b.totalWeight,
             timestamp: timeStr,
           },
           timeMs,
         });
-      } else if (b.status === 'rejected') {
+      } else if (b.status === 'REJECTED') {
         list.push({
           entry: {
             id: `act-rejected-${b.id}`,
@@ -913,6 +982,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   const newOrdersCount = activeBatches.filter(b => b.status === 'NEW_ORDER').length;
   const acceptedOrdersCount = activeBatches.filter(b => b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED').length;
+  const upcomingOrdersCount = upcomingOrders.length;
   const rejectedOrdersCount = safeRejected.length;
   const completedOrdersCount = useMemo(() => {
     const journeyMap: Record<string, boolean> = {};
@@ -945,28 +1015,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
       let updated: ActivityEntry[];
       if (existingIndex !== -1) {
-        const filtered = prev.filter(act => !(act.orderId === orderId && act.status === status));
-        updated = [newEntry, ...filtered];
+        updated = [...prev];
+        updated[existingIndex] = newEntry;
       } else {
         updated = [newEntry, ...prev];
       }
-      AsyncStorage.setItem('transporter_activities', JSON.stringify(updated)).catch(() => { });
       return updated;
     });
-  };
-
-  const pruneStaleBatch = (batchId: string) => {
-    setRejectedBatches(prev => {
-      const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('rejected_batches', JSON.stringify(updated)).catch(() => { });
-      return updated;
-    });
-    setCompletedBatches(prev => {
-      const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
-      return updated;
-    });
-    setBatches(prev => prev.filter(b => b.id !== batchId));
   };
 
   const acceptBatch = async (batchId: string, skipToast: boolean = false) => {
@@ -1554,8 +1609,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   return (
     <OrderManagementContext.Provider value={{
-      batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount, vehicleDetails,
-      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
+      batches: allBatches, upcomingOrders, activities, newOrdersCount, acceptedOrdersCount, upcomingOrdersCount, rejectedOrdersCount, completedOrdersCount, vehicleDetails,
+      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList, refreshUpcomingOrders,
       finalizePickup, finalizeDrop, generateDropHandoverCode,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],
       acceptShg: () => { }, completeProduct: () => { }, rejectProduct: () => { }, acceptAreaAssignment: () => { }, rejectAreaAssignment: () => { }, acceptAllRouteShgs: () => { }

@@ -16,6 +16,18 @@ export class OrderController {
     return this.orderService.getDashboardSummary(req.user.id, filter || 'Today');
   }
 
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Get upcoming expected orders (SHG -> Hub & Hub -> Drop SHG) for transporter' })
+  async getUpcomingOrders(@Request() req: any) {
+    return this.orderService.getUpcomingOrders(req.user.id);
+  }
+
+  @Get('upcoming-orders')
+  @ApiOperation({ summary: 'Get upcoming expected orders alias for transporter' })
+  async getUpcomingOrdersAlias(@Request() req: any) {
+    return this.orderService.getUpcomingOrders(req.user.id);
+  }
+
   @Get('pickup/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in transporter' })
   async getAssignedPickups(@Request() req: any) {

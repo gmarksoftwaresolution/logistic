@@ -26,6 +26,18 @@ export class OrderController {
     return this.orderService.getAssignedPickups(user.id, user.phoneNumber);
   }
 
+  @Get('shg-upcoming')
+  @ApiOperation({ summary: 'Get upcoming expected orders for the logged-in SHG' })
+  async getShgUpcomingOrders(@GetUser() user: User) {
+    return this.orderService.getUpcomingOrders(user);
+  }
+
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Get upcoming expected orders for the logged-in SHG' })
+  async getUpcomingOrders(@GetUser() user: User) {
+    return this.orderService.getUpcomingOrders(user);
+  }
+
   @Get('completed')
   @ApiOperation({ summary: 'Get all completed orders (Pickups, Regular Drops, Return Drops) for the logged-in SHG' })
   async getCompletedOrders(@GetUser() user: User) {
