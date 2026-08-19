@@ -171,11 +171,11 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* 🟠 Card 3: Return */}
+          {/* 🟠 Card 3: Accepted */}
           <TouchableOpacity
             style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#D34800' }]}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('OrderBatchRejected')}
+            onPress={() => navigation.navigate('AcceptedOrders')}
           >
             <LinearGradient
               colors={['#D34800', '#FFA400']}
@@ -184,41 +184,41 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
               style={styles.gradientCardInner}
             >
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.return') || 'Return'}</Text>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.accepted') || 'Accepted'}</Text>
                 <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                  <RotateCcw size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
-                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
-                </View>
-              </View>
-              <View>
-                <Text style={styles.countNumberWhite}>{rejectedOrdersCount}</Text>
-                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.return_desc') || 'Return / RTO Items'}</Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {/* 🟣 Card 4: Redirected */}
-          <TouchableOpacity
-            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#7C3AED' }]}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('AcceptedOrders')}
-          >
-            <LinearGradient
-              colors={['#7C3AED', '#C084FC']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.gradientCardInner}
-            >
-              <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.redirected') || 'Redirected'}</Text>
-                <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                  <Shuffle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                  <CheckCircle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
                   <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
                 </View>
               </View>
               <View>
                 <Text style={styles.countNumberWhite}>{acceptedOrdersCount}</Text>
-                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.redirected_desc') || 'Redirected Orders'}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.accepted_desc') || 'Accepted Orders'}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* 🔴 Card 4: Rejected */}
+          <TouchableOpacity
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#DC2626' }]}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('OrderBatchRejected')}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientCardInner}
+            >
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.rejected') || 'Rejected'}</Text>
+                <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <XCircle size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
+                </View>
+              </View>
+              <View>
+                <Text style={styles.countNumberWhite}>{rejectedOrdersCount}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.rejected_desc') || 'Rejected Orders'}</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
