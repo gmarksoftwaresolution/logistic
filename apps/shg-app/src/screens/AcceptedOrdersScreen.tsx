@@ -266,6 +266,10 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
           data={pickupOrders.length === 0 ? [] : pickupOrders.slice(0, pickupVisibleCount)}
           keyExtractor={(item, index) => `${item.id}-${item.legType || 'pickup'}-${index}`}
           ListEmptyComponent={
@@ -336,6 +340,10 @@ const AcceptedOrdersScreen: React.FC<Props> = ({ navigation, route }) => {
           style={{ width: SCREEN_WIDTH }}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
           data={deliveryOrders.length === 0 ? [] : deliveryOrders.slice(0, deliveryVisibleCount)}
           keyExtractor={(item, index) => `${item.id}-${item.legType || 'delivery'}-${index}`}
           ListEmptyComponent={

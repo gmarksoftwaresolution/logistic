@@ -20,6 +20,11 @@ export class OrderService {
             ...(UUID_REGEX.test(strId) ? [{ authId: strId }] : []),
             ...(mobileNumber ? [{ phoneNumber: mobileNumber }] : [])
           ]
+        },
+        select: {
+          id: true,
+          authId: true,
+          role: true,
         }
       });
       if (!user || user.role !== 'TRANSPORTER') {
@@ -70,18 +75,87 @@ export class OrderService {
             ]
           }
         },
-        include: {
-          seller: true,
-          buyer: true,
-          parcels: true,
-          assignments: true,
+        select: {
+          id: true,
+          orderId: true,
+          barcode: true,
+          phase: true,
+          sellerId: true,
+          buyerId: true,
+          productCount: true,
+          totalQty: true,
+          totalWeight: true,
+          pickupShgId: true,
+          pickupTransporterId: true,
+          dropShgId: true,
+          dropTransporterId: true,
+          mainStatus: true,
+          pickupShgStatus: true,
+          pickupTransporterStatus: true,
+          dropShgStatus: true,
+          dropTransporterStatus: true,
+          createdAt: true,
+          seller: {
+            select: {
+              id: true,
+              sellerName: true,
+              mobileNumber: true,
+              village: true,
+              taluka: true,
+              district: true,
+              state: true,
+              pincode: true,
+              addressLine1: true,
+            }
+          },
+          buyer: {
+            select: {
+              id: true,
+              buyerName: true,
+              mobileNumber: true,
+              village: true,
+              taluka: true,
+              district: true,
+              state: true,
+              pincode: true,
+              addressLine1: true,
+            }
+          },
+          parcels: {
+            select: {
+              parcelId: true,
+              productName: true,
+              quantity: true,
+              weight: true,
+              parcelStatus: true,
+              currentHolderId: true,
+              currentHolderType: true,
+              verificationToken: true,
+              qrCodeValue: true,
+            }
+          },
+          assignments: {
+            select: {
+              role: true,
+              assigneeId: true,
+              assigneeType: true,
+              status: true,
+            }
+          }
         },
         orderBy: { createdAt: 'desc' },
       });
 
       const allShgUsers = await this.prisma.user.findMany({
         where: { role: 'SHG', applicationStatus: 'APPROVED' },
-        include: { address: true, shgDetail: true }
+        select: {
+          id: true,
+          authId: true,
+          fullName: true,
+          phoneNumber: true,
+          address: { select: { village: true, pincode: true } },
+          shgDetail: { select: { shgName: true } }
+        }
       }).catch(() => []);
 
       const normalizeStr = (s?: string | null): string => {

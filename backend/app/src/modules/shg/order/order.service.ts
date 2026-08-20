@@ -21,7 +21,15 @@ export class OrderService {
     const numericShgId = typeof shgId === 'number' ? shgId : parseInt(String(shgId), 10);
     const user = await this.prisma.user.findUnique({
       where: { id: numericShgId },
-      include: { address: true }
+      select: {
+        id: true,
+        authId: true,
+        role: true,
+        applicationStatus: true,
+        address: {
+          select: { village: true, pincode: true }
+        }
+      }
     });
     if (!user || user.role !== 'SHG' || user.applicationStatus !== 'APPROVED') {
       return [];
@@ -111,12 +119,63 @@ export class OrderService {
           ]
         }
       },
-      include: {
-        seller: true,
-        buyer: true,
-        parcels: {
-          include: { scanHistories: true }
+      select: {
+        id: true,
+        orderId: true,
+        barcode: true,
+        phase: true,
+        sellerId: true,
+        buyerId: true,
+        productCount: true,
+        totalQty: true,
+        totalWeight: true,
+        pickupShgId: true,
+        pickupTransporterId: true,
+        dropShgId: true,
+        dropTransporterId: true,
+        mainStatus: true,
+        pickupShgStatus: true,
+        pickupTransporterStatus: true,
+        dropShgStatus: true,
+        dropTransporterStatus: true,
+        createdAt: true,
+        seller: {
+          select: {
+            id: true,
+            sellerName: true,
+            mobileNumber: true,
+            village: true,
+            taluka: true,
+            district: true,
+            state: true,
+            pincode: true,
+            addressLine1: true,
+          }
         },
+        buyer: {
+          select: {
+            id: true,
+            buyerName: true,
+            mobileNumber: true,
+            village: true,
+            taluka: true,
+            district: true,
+            state: true,
+            pincode: true,
+            addressLine1: true,
+          }
+        },
+        parcels: {
+          select: {
+            parcelId: true,
+            productName: true,
+            quantity: true,
+            weight: true,
+            parcelStatus: true,
+            verificationToken: true,
+            qrCodeValue: true,
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
     });

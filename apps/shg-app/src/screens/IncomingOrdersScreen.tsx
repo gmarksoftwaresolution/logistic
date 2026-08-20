@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated, Modal, LayoutAnimation, TextInput, FlatList, Platform } from 'react-native';
 import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -299,6 +299,10 @@ const IncomingOrdersScreen: React.FC<Props> = ({
         style={{ paddingHorizontal: Spacing.lg }} 
         className="flex-1 pt-2" 
         showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         data={activeTab === 'new' ? (incomingOrders.length === 0 ? [] : incomingOrders.slice(0, visibleCount)) : incomingReturnOrders.slice(0, visibleReturnCount)}
         keyExtractor={(item, index) => `${item.id}-${item.legType || 'inc'}-${index}`}
         ListHeaderComponent={<>

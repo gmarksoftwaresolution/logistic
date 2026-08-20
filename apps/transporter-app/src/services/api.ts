@@ -53,7 +53,7 @@ console.log('Transporter App IMAGE_BASE_URL resolved to:', IMAGE_BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 90000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     'bypass-tunnel-reminder': 'true',

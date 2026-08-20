@@ -27,6 +27,8 @@ import { OrderModule as TransporterOrderModule } from './modules/transporter/ord
 import { UserModule as TransporterUserModule } from './modules/transporter/user/user.module';
 import { ApplicationModule as TransporterApplicationModule } from './modules/transporter/application/application.module';
 
+import { HealthModule } from './modules/health/health.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -39,6 +41,7 @@ import { ApplicationModule as TransporterApplicationModule } from './modules/tra
     AuthModule,
     QrModule,
     UploadsModule,
+    HealthModule,
     CommunityManagementModule,
     TransporterManagementModule,
     OrderManagementModule,

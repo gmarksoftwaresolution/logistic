@@ -22,20 +22,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : (exception as Error).message || 'Internal server error';
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    let messageResponse: any;
+    if (exception instanceof HttpException) {
+      messageResponse = exception.getResponse();
+    } else {
+      const err = exception as Error;
+      this.logger.error(`Unhandled Exception: ${err.message}`, err.stack);
+      messageResponse = isProduction 
+        ? 'Internal server error' 
+        : err.message || 'Internal server error';
+    }
 
     this.logger.error(
-      `HTTP Status: ${status} Error Message: ${JSON.stringify(message)} Path: ${request.url}`,
+      `HTTP Status: ${status} | Path: ${request.url} | Details: ${JSON.stringify(messageResponse)}`,
     );
 
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      error: typeof message === 'object' ? message : { message },
+      error: typeof messageResponse === 'object' ? messageResponse : { message: messageResponse },
     });
   }
 }

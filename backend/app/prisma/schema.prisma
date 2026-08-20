@@ -127,6 +127,9 @@ model Order {
   @@index([pickupTransporterId])
   @@index([dropShgId])
   @@index([dropTransporterId])
+  @@index([sellerId])
+  @@index([buyerId])
+  @@index([createdAt])
 }
 
 model OrderAssignment {
@@ -200,6 +203,8 @@ model User {
 
   @@index([phoneNumber])
   @@index([role])
+  @@index([applicationStatus])
+  @@index([isVerified])
   shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
   transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
   return_order_assignments  return_order_assignments[]
@@ -233,6 +238,9 @@ model Address {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([pincode])
+  @@index([district, state])
 }
 
 model BankDetail {
@@ -593,6 +601,8 @@ model Seller {
 
   orders            Order[]
 
+  @@index([pincode])
+  @@index([mobileNumber])
   @@map("sellers")
   masterOrderItems  MasterOrderItem[]
   pickupOrders      PickupOrder[]
@@ -617,6 +627,8 @@ model Buyer {
 
   orders           Order[]
 
+  @@index([pincode])
+  @@index([mobileNumber])
   @@map("buyers")
   returnOrders ReturnOrder[]
   masterOrders MasterOrder[] @relation("BuyerOrders")
@@ -643,6 +655,8 @@ model VerificationRecord {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  @@index([generatedCode, status])
+  @@index([orderId])
   @@map("VerificationRecord")
 }
 
@@ -670,6 +684,8 @@ model Parcel {
   scanHistories      ParcelScanHistory[]
   scanSessionItems   ScanSessionItem[]
 
+  @@index([qrCodeValue])
+  @@index([orderId])
   @@map("Parcel")
 }
 
