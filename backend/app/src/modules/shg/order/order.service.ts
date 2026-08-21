@@ -91,6 +91,7 @@ export class OrderService {
             'ACCEPTED',
             'PICKUP_SHG_ACCEPTED',
             'PARCEL_AT_SHG',
+            'PARCEL_AT_PICKUP_SHG',
             'TRANSPORTER_ACCEPTED',
             'PICKUP_TRANSPORTER_ACCEPTED',
             'IN_TRANSIT_TO_HUB',
@@ -107,6 +108,8 @@ export class OrderService {
             'PARCEL_WITH_DROP_SHG',
             'AT_BUYER_SHG',
             'OUT_FOR_DELIVERY',
+            'IN_TRANSIT',
+            'IN_DIRECT_TRANSIT',
             'REDIRECTED'
           ]
         }
@@ -123,7 +126,8 @@ export class OrderService {
 
     // STRICT BUSINESS LOGIC FILTER: Village + Pincode matching per SHG
     const matchedOrders = orders.filter((o: any) => {
-      const isDropPhase = o.phase === 'DROP' || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
+      const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg';
+      const isDropPhase = o.phase === 'DROP' || (isDirectFlow && ['IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus)) || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
 
       if (isDropPhase) {
         // Drop Leg Completed Check: If delivered, exclude from active pickups
@@ -139,7 +143,7 @@ export class OrderService {
       } else {
         // Pickup Leg Completed Check: If picked up by SHG / handed to transporter, exclude from active pickups
         const pShgStatus = (o.pickupShgStatus || '').toUpperCase();
-        if (pShgStatus === 'DROPPED' || pShgStatus === 'COMPLETED' || ['IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())) {
+        if (pShgStatus === 'DROPPED' || pShgStatus === 'COMPLETED' || ['IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())) {
           return false;
         }
 
@@ -167,7 +171,8 @@ export class OrderService {
       const transId = o.pickupTransporterId || o.dropTransporterId;
       const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
-      const isDropLeg = (o.phase === 'DROP' || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
+      const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg';
+      const isDropLeg = (o.phase === 'DROP' || (isDirectFlow && ['IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus)) || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
       return {
         id: cleanOrderId,
         uuid: o.id,

@@ -7,21 +7,21 @@ export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByPincode(pincode: string) {
-    return this.prisma.pincodeDirectory.findMany({
+    return this.prisma.pincode.findMany({
       where: { pincode: pincode.trim() },
       orderBy: { village: 'asc' },
     });
   }
 
   async findByVillage(village: string) {
-    return this.prisma.pincodeDirectory.findMany({
+    return this.prisma.pincode.findMany({
       where: { village: { equals: village.trim(), mode: 'insensitive' } },
       orderBy: { pincode: 'asc' },
     });
   }
 
   async findVillageAndPincode(village: string, pincode: string) {
-    return this.prisma.pincodeDirectory.findFirst({
+    return this.prisma.pincode.findFirst({
       where: {
         village: { equals: village.trim(), mode: 'insensitive' },
         pincode: pincode.trim(),
@@ -31,7 +31,7 @@ export class LocationService {
 
   async searchVillage(query: string, limit = 10, page = 1) {
     const skip = (page - 1) * limit;
-    const items = await this.prisma.pincodeDirectory.findMany({
+    const items = await this.prisma.pincode.findMany({
       where: {
         village: { contains: query.trim(), mode: 'insensitive' },
       },
@@ -40,7 +40,7 @@ export class LocationService {
       skip: skip,
       orderBy: { village: 'asc' },
     });
-    const total = await this.prisma.pincodeDirectory.count({
+    const total = await this.prisma.pincode.count({
       where: {
         village: { contains: query.trim(), mode: 'insensitive' },
       },
@@ -50,7 +50,7 @@ export class LocationService {
 
   async searchPincode(query: string, limit = 10, page = 1) {
     const skip = (page - 1) * limit;
-    const items = await this.prisma.pincodeDirectory.findMany({
+    const items = await this.prisma.pincode.findMany({
       where: {
         pincode: { startsWith: query.trim() },
       },
@@ -59,7 +59,7 @@ export class LocationService {
       skip: skip,
       orderBy: { pincode: 'asc' },
     });
-    const total = await this.prisma.pincodeDirectory.count({
+    const total = await this.prisma.pincode.count({
       where: {
         pincode: { startsWith: query.trim() },
       },
@@ -83,19 +83,19 @@ export class LocationService {
           ],
         };
 
-    const items = await this.prisma.pincodeDirectory.findMany({
+    const items = await this.prisma.pincode.findMany({
       where,
       take: limit,
       skip: skip,
       orderBy: [{ pincode: 'asc' }, { village: 'asc' }],
     });
 
-    const total = await this.prisma.pincodeDirectory.count({ where });
+    const total = await this.prisma.pincode.count({ where });
     return { items, total, page, limit };
   }
 
   async getStates() {
-    const records = await this.prisma.pincodeDirectory.findMany({
+    const records = await this.prisma.pincode.findMany({
       select: { state: true },
       distinct: ['state'],
       orderBy: { state: 'asc' },
@@ -104,7 +104,7 @@ export class LocationService {
   }
 
   async getDistricts(state: string) {
-    const records = await this.prisma.pincodeDirectory.findMany({
+    const records = await this.prisma.pincode.findMany({
       where: { state: { equals: state.trim(), mode: 'insensitive' } },
       select: { district: true },
       distinct: ['district'],
@@ -114,7 +114,7 @@ export class LocationService {
   }
 
   async getBlocks(state: string, district: string) {
-    const records = await this.prisma.pincodeDirectory.findMany({
+    const records = await this.prisma.pincode.findMany({
       where: {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
@@ -127,7 +127,7 @@ export class LocationService {
   }
 
   async getVillages(state: string, district: string, block: string) {
-    const records = await this.prisma.pincodeDirectory.findMany({
+    const records = await this.prisma.pincode.findMany({
       where: {
         state: { equals: state.trim(), mode: 'insensitive' },
         district: { equals: district.trim(), mode: 'insensitive' },
@@ -146,7 +146,7 @@ export class LocationService {
     try {
       let record: any = null;
       try {
-        record = await this.prisma.pincodeDirectory.findFirst({
+        record = await this.prisma.pincode.findFirst({
           where: {
             pincode: cleanPin,
           },
@@ -224,7 +224,7 @@ export class LocationService {
       try {
         let dbPincodeRecords: any[] = [];
         try {
-          dbPincodeRecords = await this.prisma.pincodeDirectory.findMany({
+          dbPincodeRecords = await this.prisma.pincode.findMany({
             where: { pincode: cleanPincode }
           });
         } catch (pErr) {
@@ -405,7 +405,7 @@ export class LocationService {
         if (cleanPincode && state && finalDistrict && villages.length > 0) {
           Promise.all(
             villages.map(v =>
-              this.prisma.pincodeDirectory.create({
+              this.prisma.pincode.create({
                 data: {
                   pincode: cleanPincode,
                   village: v,
@@ -541,7 +541,7 @@ export class LocationService {
 
     if (village && pincode) {
       try {
-        const record = await this.prisma.pincodeDirectory.findFirst({
+        const record = await this.prisma.pincode.findFirst({
           where: {
             pincode: pincode.trim(),
             village: { equals: village.trim(), mode: 'insensitive' },
@@ -554,5 +554,57 @@ export class LocationService {
     }
 
     return null;
+  }
+
+  async evaluateDirectFlow(sellerAddr: string, buyerAddr: string) {
+    const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDNMv_sau3_koFOtAvkLkwsZgn_Y8iydy0';
+    const NESARI_HUB_ADDR = 'Nesari, Gadhinglaj, Kolhapur, Maharashtra 416504, India';
+
+    try {
+      const url = `https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix?key=${GOOGLE_API_KEY}`;
+      const payload = {
+        origins: [
+          { waypoint: { address: sellerAddr } },
+          { waypoint: { address: NESARI_HUB_ADDR } }
+        ],
+        destinations: [
+          { waypoint: { address: NESARI_HUB_ADDR } },
+          { waypoint: { address: buyerAddr } }
+        ],
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE'
+      };
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Goog-FieldMask': 'originIndex,destinationIndex,distanceMeters,duration'
+      };
+
+      const res = await axios.post(url, payload, { headers, timeout: 8000 });
+      const matrix = res.data || [];
+
+      let sellerToHubMeters: number | null = null;
+      let sellerToBuyerMeters: number | null = null;
+      let hubToBuyerMeters: number | null = null;
+
+      matrix.forEach((item: any) => {
+        const o = item.originIndex;
+        const d = item.destinationIndex;
+        const dist = item.distanceMeters || 0;
+
+        if (o === 0 && d === 0) sellerToHubMeters = dist;
+        if (o === 0 && d === 1) sellerToBuyerMeters = dist;
+        if (o === 1 && d === 1) hubToBuyerMeters = dist;
+      });
+
+      if (sellerToHubMeters !== null && sellerToBuyerMeters !== null && hubToBuyerMeters !== null) {
+        const isDirect = sellerToBuyerMeters <= (sellerToHubMeters + hubToBuyerMeters) * 0.70;
+        return { isDirect };
+      }
+    } catch (err: any) {
+      console.warn('[evaluateDirectFlow Notice] Google API calculation fallback:', err.message);
+    }
+
+    return { isDirect: false };
   }
 }

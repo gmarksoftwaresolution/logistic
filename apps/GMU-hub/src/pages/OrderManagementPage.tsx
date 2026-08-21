@@ -1437,39 +1437,52 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const sellerState = 'completed';
 
     // Check if Phase 1 has concluded or GMU Hub / Phase 2 has started
-    const isPhase1Concluded = [
+    const isDirectFlow = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
+    const mainUpper = (order.mainStatus || '').toUpperCase();
+    const pShgStatusUpper = (order.pickupShgStatus || '').toUpperCase();
+    const pTransStatusUpper = (order.pickupTransporterStatus || '').toUpperCase();
+
+    const isPhase1Concluded = !isDirectFlow && ([
       'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED',
       'DROP_PENDING', 'DROP_CREATED', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED',
       'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG',
       'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG',
       'DELIVERED', 'COMPLETED'
-    ].includes((order.mainStatus || '').toUpperCase()) ||
+    ].includes(mainUpper) ||
       order.phase === 'DROP' ||
-      Boolean(order.dropShgId || order.dropTransporterId || order.warehouseReceivedAt || order.storedAt);
+      Boolean(order.warehouseReceivedAt || order.storedAt));
 
     // 2. Pickup SHG: completed if order is picked or Phase 1 concluded
     let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
     const isShgPicked = isPhase1Concluded || [
       'PICKED', 'DROPPED', 'COMPLETED'
-    ].includes((order.pickupShgStatus || '').toUpperCase()) || [
-      'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'
-    ].includes((order.mainStatus || '').toUpperCase());
+    ].includes(pShgStatusUpper) || [
+      'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED',
+      'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER',
+      'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'
+    ].includes(mainUpper);
 
-    if (isShgPicked || order.isPickupRedirected || order.pickupShgStatus === 'REDIRECTED') {
+    if (isShgPicked || order.isPickupRedirected || pShgStatusUpper === 'REDIRECTED') {
       pickupShgState = 'completed';
-    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes((order.mainStatus || '').toUpperCase())) {
+    } else if (['NEW', 'ORDER_PLACED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED'].includes(mainUpper)) {
       pickupShgState = 'active';
     }
 
     // 3. Pickup Transporter: completed if parcel is delivered to hub or Phase 1 concluded
     let pickupTransporterState: 'completed' | 'active' | 'pending' = 'pending';
     const isTransPickupCompleted = isPhase1Concluded || [
-      'DROPPED', 'COMPLETED'
-    ].includes((order.pickupTransporterStatus || '').toUpperCase());
+      'DROPPED', 'COMPLETED', 'DELIVERED'
+    ].includes(pTransStatusUpper) || [
+      'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'
+    ].includes(mainUpper);
 
     if (isTransPickupCompleted) {
       pickupTransporterState = 'completed';
-    } else if (['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_SHG', 'REDIRECTED', 'IN_TRANSIT_TO_HUB'].includes((order.mainStatus || '').toUpperCase()) || ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKED'].includes((order.pickupTransporterStatus || '').toUpperCase())) {
+    } else if (
+      ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'].includes(mainUpper) ||
+      ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKED', 'PARCEL_PICKED'].includes(pTransStatusUpper) ||
+      (mainUpper === 'PARCEL_AT_PICKUP_SHG' && (order.pickupTransporterId || order.pickupTransporterDetails))
+    ) {
       pickupTransporterState = 'active';
     }
 
@@ -1561,6 +1574,79 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       if (st === 'ACCEPTED' || st === 'DROP_SHG_ACCEPTED') return 'Drop SHG Accepted';
       return 'Drop SHG Pending';
     };
+
+    if (isDirectFlow) {
+      return [
+        {
+          id: 'seller', label: 'Seller', state: sellerState, details: {
+            'Person Name': cleanPersonName(order.sellerName || order.seller?.fullName, 'N/A'),
+            'Role': 'Seller / Farmer',
+            'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
+            'Address': order.sellerAddress || order.seller?.address || 'N/A',
+            'Order ID': order.id,
+            'Parcel Information': `${order.productCount || 1} product(s), Weight: ${order.weight || '0.5'} KG, Qty: ${order.quantity || 1} units`,
+            'Flow Mode': '⚡ Direct SHG-to-SHG (Hub Bypassed)',
+            'Accepted (Date & Time)': formatIndianDateTime(order.orderDate || order.createdAt),
+            'Expected Delivery': getExpectedDeliveryDate(order.orderDate),
+            'Status': 'PLACED',
+            'History': getLogsForStage(['PLACED', 'PENDING_PICKUP', 'SELLER'])
+          }
+        },
+        {
+          id: 'pickup_shg', label: 'Pickup SHG', state: pickupShgState, details: {
+            'Person Name': cleanPersonName(foundPickupShg?.leader || foundPickupShg?.crpName || foundPickupShg?.name || order.shgDetails?.name, 'N/A'),
+            'Role': 'Pickup Self Help Group Member',
+            'Mobile': foundPickupShg?.mobile || foundPickupShg?.phone || order.shgDetails?.mobile || 'N/A',
+            'Address': foundPickupShg?.address || order.shgDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || (pickupShgState === 'completed' || pickupShgState === 'active' ? (order.createdAt || order.orderDate) : null)),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || (pickupShgState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
+            'Status': getExactPickupShgStatus(),
+            'History': getLogsForStage(['PICKUP_SHG', 'SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PICKED'])
+          }
+        },
+        {
+          id: 'pickup_transporter', label: 'Direct Transporter', state: pickupTransporterState, details: {
+            'Person Name': (foundPickupTransporter || order.pickupTransporterDetails) ? cleanPersonName(foundPickupTransporter?.name || foundPickupTransporter?.fullName || order.pickupTransporterDetails?.name, 'Waiting for Transporter') : 'Waiting for Transporter',
+            'Role': 'Direct Delivery Transporter',
+            'Mobile': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.mobile || foundPickupTransporter?.phone || order.pickupTransporterDetails?.mobile || 'N/A') : 'N/A',
+            'Address': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.address || order.pickupTransporterDetails?.address || 'N/A') : 'N/A',
+            'Vehicle': (foundPickupTransporter || order.pickupTransporterDetails) ? (foundPickupTransporter?.vehicle || foundPickupTransporter?.vehicleNumber || order.pickupTransporterDetails?.vehicle || 'N/A') : 'N/A',
+            'Order ID': order.id,
+            'Route': `Direct from ${order.seller?.village || order.sellerVillage || 'Seller Village'} ➔ ${order.buyer?.village || order.buyerVillage || 'Buyer Village'}`,
+            'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || (pickupTransporterState === 'completed' || pickupTransporterState === 'active' ? (order.createdAt || order.orderDate) : null)),
+            'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || (pickupTransporterState === 'completed' ? (order.storedAt || order.warehouseReceivedAt || order.updatedAt) : null)),
+            'Status': getExactPickupTransporterStatus(),
+            'History': getLogsForStage(['TRANSPORTER_PICKUP', 'IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER'])
+          }
+        },
+        {
+          id: 'drop_shg', label: 'Drop SHG', state: dropShgState, details: {
+            'Person Name': cleanPersonName(foundDropShg?.leader || foundDropShg?.crpName || foundDropShg?.name || order.dropShgDetails?.name, 'N/A'),
+            'Role': 'Drop Self Help Group Member',
+            'Mobile': foundDropShg?.mobile || foundDropShg?.phone || order.dropShgDetails?.mobile || 'N/A',
+            'Address': foundDropShg?.address || order.dropShgDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Accepted (Date & Time)': formatIndianDateTime(order.dropShgAcceptedAt || (dropShgState === 'completed' || dropShgState === 'active' ? (order.dispatchedAt || order.updatedAt) : null)),
+            'Pickup (Date & Time)': formatIndianDateTime(order.dropShgPickedAt || (dropShgState === 'completed' ? order.updatedAt : null)),
+            'Status': getExactDropShgStatus(),
+            'History': getLogsForStage(['DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'SHG_DROP_PICKUP'])
+          }
+        },
+        {
+          id: 'buyer', label: 'Buyer', state: buyerState, details: {
+            'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
+            'Role': 'Consignee / Buyer',
+            'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
+            'Address': order.buyerAddress || order.buyer?.address || 'N/A',
+            'Order ID': order.id,
+            'Receive (Date & Time)': formatIndianDateTime(order.buyerDeliveredAt || order.deliveredAt || (isBuyerCompleted ? order.updatedAt : null)),
+            'Status': isBuyerCompleted ? 'DELIVERED' : 'PENDING',
+            'History': getLogsForStage(['DELIVERED', 'COMPLETED', 'BUYER', 'FINAL_DELIVERY'])
+          }
+        }
+      ];
+    }
 
     const nodes: Array<{ id: string; label: string; state: string; details: Record<string, any> | null }> = [
       {
@@ -2352,8 +2438,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       const isExpanded = !!expandedOrders[order.id];
                       const nodes = getTimelineNodes(order);
 
-                      const needsIntake = ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
-                      const needsBarcode = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
+                      const isDirectFlowOrder = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
+                      const needsIntake = !isDirectFlowOrder && ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+                      const needsBarcode = !isDirectFlowOrder && ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
                       return (
                         <div

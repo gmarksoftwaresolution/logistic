@@ -5,8 +5,10 @@ import { QrModule } from '../../../shared/qr/qr.module';
 import { OrderModule as TransporterOrderModule } from '../../transporter/order/order.module';
 import { OrderModule as ShgOrderModule } from '../../shg/order/order.module';
 
+import { LocationModule } from '../../../shared/location/location.module';
+
 @Module({
-  imports: [QrModule, TransporterOrderModule, ShgOrderModule],
+  imports: [QrModule, TransporterOrderModule, ShgOrderModule, LocationModule],
   controllers: [OrderManagementController],
   providers: [OrderManagementService],
   exports: [OrderManagementService],

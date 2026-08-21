@@ -233,7 +233,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           'DELIVERED', 'COMPLETED',
           'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
           'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER',
-          'PARCEL_PICKED'
+          'PARCEL_PICKED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'
         ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
 
         if (isPickupCompleted) {
@@ -241,9 +241,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
         }
 
         const isPickedUpAtShg = [
-          'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
+          'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
           'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'
-        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
+        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'PARCEL_AT_PICKUP_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
 
         if (isPickedUpAtShg) {
           return 'PickedUp';
@@ -454,7 +454,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
-          if (hasDropOrder) {
+          if (hasDropOrder && ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED'].includes(order.mainStatus || '')) {
             return false;
           }
         }

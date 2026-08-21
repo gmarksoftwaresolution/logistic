@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder, HUB_CONTACT } from '../../context/OrderManagementContext';
+import { HUB_CONFIG, isHubPoint } from '../../constants/hub';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -70,11 +71,11 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
   const handleNavigate = (batch: BatchOrder, type: 'pickup' | 'drop') => {
     const isPickup = type === 'pickup';
-    const isHubPoint = isPickup 
-      ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
-      : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU');
+    const isHub = isPickup 
+      ? isHubPoint(batch.pickupPointName)
+      : isHubPoint(batch.dropPointName);
     
-    const contact = isHubPoint ? HUB_CONTACT : batch.shgContact;
+    const contact = isHub ? HUB_CONTACT : batch.shgContact;
     
     const queryAddress = [
       contact.address,
@@ -145,8 +146,8 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     // Phase 2: Village Pickups (From Village SHG) sorted by origin route rank
     // Same contact / location sit adjacent
     const sortedPickupEntries = [...pickupDisplayEntries].sort((a, b) => {
-      const isHubA = a.batch.pickupPointName === 'Gadhinglaj Hub' || a.batch.flowType === 'gmu_to_shg';
-      const isHubB = b.batch.pickupPointName === 'Gadhinglaj Hub' || b.batch.flowType === 'gmu_to_shg';
+      const isHubA = isHubPoint(a.batch.pickupPointName) || a.batch.flowType === 'gmu_to_shg';
+      const isHubB = isHubPoint(b.batch.pickupPointName) || b.batch.flowType === 'gmu_to_shg';
 
       if (isHubA !== isHubB) {
         return isHubA ? -1 : 1;
@@ -177,11 +178,11 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     });
 
     // Sort Drop Entries by Route Corridor Execution Order:
-    // Phase 1: Hub Drops (To Gadhinglaj Hub)
+    // Phase 1: Hub Drops
     // Phase 2: Village Drops sorted by destination route rank (closest to furthest destination)
     const sortedDropEntries = [...dropDisplayEntries].sort((a, b) => {
-      const isHubDropA = a.batch.dropPointName === 'Gadhinglaj Hub' || a.batch.flowType === 'shg_to_gmu';
-      const isHubDropB = b.batch.dropPointName === 'Gadhinglaj Hub' || b.batch.flowType === 'shg_to_gmu';
+      const isHubDropA = isHubPoint(a.batch.dropPointName) || a.batch.flowType === 'shg_to_gmu';
+      const isHubDropB = isHubPoint(b.batch.dropPointName) || b.batch.flowType === 'shg_to_gmu';
 
       if (isHubDropA !== isHubDropB) {
         return isHubDropA ? -1 : 1;

@@ -6,6 +6,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { Colors, Fonts } from '../constants/Colors';
 import api from '../services/api';
 import { cleanRejectReason } from '../utils/orderUtils';
+import { HUB_CONFIG, isHubPoint } from '../constants/hub';
 
 
 // ==========================================
@@ -142,11 +143,11 @@ interface OrderManagementContextType {
 export const HUB_CONTACT = {
   name: 'Prasad Patil (Hub Manager)',
   phone: '+91 9123456789',
-  address: 'Gadhinglaj Central GMU Hub, Near MIDC Area',
-  village: 'Gadhinglaj',
-  pincode: '416502',
-  latitude: 16.2238,
-  longitude: 74.3498,
+  address: 'Nesari Central GMU Hub, Near Main Station, Nesari',
+  village: 'Nesari',
+  pincode: '416504',
+  latitude: 16.0683,
+  longitude: 74.3298,
 };
 
 
@@ -290,7 +291,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const shgObj = o.shg || o.pickupShg || o.pickupShgDetails || {};
         const pickupShgCrp = isRedirected
           ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
-          : (shgObj.crpName || shgObj.personName || shgObj.fullName || shgObj.name || shgObj.shgDetail?.crpName || 'SHG CRP Lead');
+          : (shgObj.fullName || shgObj.name || shgObj.personName || shgObj.crpName || shgObj.shgDetail?.crpName || 'SHG Member');
         const pickupShgName = isRedirected
           ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
           : (shgObj.shgName || shgObj.shgDetail?.shgName || (shgObj.village ? `${shgObj.village} Center` : 'SHG Center'));
@@ -305,16 +306,21 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const pickupShgTaluka = isRedirected ? (o.seller?.taluka || '') : (shgObj.taluka || shgObj.address?.taluka || o.seller?.taluka || '');
         const pickupShgDistrict = isRedirected ? (o.seller?.district || '') : (shgObj.district || shgObj.address?.district || o.seller?.district || '');
 
+        const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
+        const pickupPoint = isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'Pickup Village');
+        const dropPoint = isDirect ? (o.buyer?.village || o.dropShgDetails?.village || o.buyerVillage || 'Buyer Village') : HUB_CONFIG.name;
+        const flowTypeVal = isDirect ? ('shg_to_shg' as FlowType) : ('shg_to_gmu' as FlowType);
+
         return {
           id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
-          flowType: 'shg_to_gmu' as FlowType,
+          areaName: isDirect ? (o.buyer?.village || o.seller?.village || 'Direct Delivery') : (isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A')),
+          flowType: flowTypeVal,
           shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
-          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
-          dropPointName: 'Gadhinglaj Hub',
+          pickupPointName: pickupPoint,
+          dropPointName: dropPoint,
           pickupCount: 1,
-          dropCount: 0,
+          dropCount: isDirect ? 1 : 0,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
           status: (() => {
@@ -382,7 +388,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)])) ? {
             name: HUB_CONTACT.name,
             crpName: HUB_CONTACT.name,
-            shgName: `Return Hub (Gadhinglaj Hub)`,
+            shgName: `Return Hub (${HUB_CONFIG.name})`,
             phone: HUB_CONTACT.phone,
             address: HUB_CONTACT.address,
             village: HUB_CONTACT.village,
@@ -400,6 +406,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             taluka: pickupShgTaluka,
             district: pickupShgDistrict,
           },
+          originalRecipient: isDirect ? {
+            name: cleanPersonName(o.dropShgDetails?.fullName || o.dropShgDetails?.name || o.dropShgDetails?.crpName || o.buyer?.buyerName || 'Drop SHG Member'),
+            shgName: o.dropShgDetails?.shgName || `${o.buyer?.village || 'Drop'} SHG`,
+            phone: o.dropShgDetails?.crpMobile || o.dropShgDetails?.phoneNumber || o.buyer?.mobileNumber || 'N/A',
+            address: o.dropShgDetails?.fullAddress || o.buyer?.fullAddress || o.buyer?.village || 'N/A',
+            village: o.dropShgDetails?.village || o.buyer?.village || 'N/A',
+            pincode: o.dropShgDetails?.pincode || o.buyer?.pincode || 'N/A',
+            taluka: o.dropShgDetails?.taluka || o.buyer?.taluka || 'N/A',
+            district: o.dropShgDetails?.district || o.buyer?.district || 'N/A',
+          } : undefined,
           products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
             const pId = String(item.id || item.parcelId || Math.random());
             const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
@@ -452,7 +468,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const isPickupFinished = resolvedDropPickups.includes(bId);
 
         const dropShgObj = o.dropShgDetails || o.dropShg || o.shg;
-        const dropShgCrp = dropShgObj?.crpName || dropShgObj?.personName || dropShgObj?.name || dropShgObj?.fullName || 'Drop SHG Lead';
+        const dropShgCrp = dropShgObj?.fullName || dropShgObj?.name || dropShgObj?.personName || dropShgObj?.crpName || 'Drop SHG Member';
         const dropShgName = dropShgObj?.shgName || `${dropShgObj?.village || o.buyer?.village || ''} Drop SHG`;
         const dropShgMobile = dropShgObj?.crpMobile || dropShgObj?.phoneNumber || dropShgObj?.mobileNumber || dropShgObj?.phone || 'N/A';
         const dropShgVillage = dropShgObj?.village || dropShgObj?.address?.village || o.buyer?.village || 'N/A';
@@ -475,7 +491,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           areaName: dropShgVillage,
           flowType: 'gmu_to_shg' as FlowType,
           shgName: dropShgName,
-          pickupPointName: 'Gadhinglaj Hub',
+          pickupPointName: HUB_CONFIG.name,
           dropPointName: dropPointVillage,
           pickupCount: 0,
           dropCount: 1,
@@ -543,7 +559,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[cleanNum] || (o.mainStatus === 'REJECTED' && (o.dropTransporterStatus === 'REJECTED' || o.pickupTransporterStatus === 'DROPPED')))) ? {
             name: HUB_CONTACT.name,
             crpName: HUB_CONTACT.name,
-            shgName: `Return Hub (Gadhinglaj Hub)`,
+            shgName: `Return Hub (${HUB_CONFIG.name})`,
             phone: HUB_CONTACT.phone,
             address: HUB_CONTACT.address,
             village: HUB_CONTACT.village,
@@ -709,7 +725,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               ...rtoBatch,
               status: 'PICKUP_COMPLETED',
               isRTO: true,
-              dropPointName: rtoBatch.pickupPointName || rtoBatch.dropPointName || 'Gadhinglaj Hub',
+              dropPointName: rtoBatch.pickupPointName || rtoBatch.dropPointName || HUB_CONFIG.name,
               shgContact: rtoBatch.shgContact || HUB_CONTACT,
             });
           });
@@ -1423,7 +1439,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           rejectReason: reason,
           isRTO: true,
           originalRecipient: b.originalRecipient || b.shgContact,
-          dropPointName: 'Gadhinglaj Hub',
+          dropPointName: HUB_CONFIG.name,
         };
       }
       return b;
@@ -1464,8 +1480,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const finalReason = reason || 'Recipient Unavailable - Return to Hub';
 
       // Construct RTO object with status PICKUP_COMPLETED so it stays active in the Drop section for return delivery
-      const pickedHubName = targetBatch?.pickupPointName || 'Gadhinglaj Hub';
-      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? pickedHubName : (targetBatch?.pickupPointName || 'Gadhinglaj Hub');
+      const pickedHubName = targetBatch?.pickupPointName || HUB_CONFIG.name;
+      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? pickedHubName : (targetBatch?.pickupPointName || HUB_CONFIG.name);
       const activeRtoObj: BatchOrder = {
         ...targetBatch,
         id: targetBatch?.id || batchId,

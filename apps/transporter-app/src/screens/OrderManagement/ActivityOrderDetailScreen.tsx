@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Colors, Fonts } from '../../constants/Colors';
 import { useOrderManagement, HUB_CONTACT } from '../../context/OrderManagementContext';
+import { HUB_CONFIG, isHubPoint } from '../../constants/hub';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
 import { X, Package, ClipboardList, AlertCircle, ArrowRight, MapPin, Phone, User, ExternalLink, Check } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,13 +64,18 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
     );
   }
 
+  const isDropCard = batch.id?.startsWith('drop-') || (batch.dropCount > 0 && batch.pickupCount === 0);
+
   // Resolve Pickup Contact details
-  const isPickupHub = batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU';
+  const isPickupHub = isHubPoint(batch.pickupPointName);
   const pickupContact = isPickupHub ? HUB_CONTACT : batch.shgContact;
 
   // Resolve Drop-off Contact details
-  const isDropHub = batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU';
-  const dropContact = isDropHub ? HUB_CONTACT : batch.shgContact;
+  const isDropHub = isHubPoint(batch.dropPointName);
+  const dropContact = isDropHub ? HUB_CONTACT : (batch.originalRecipient || batch.shgContact);
+
+  const activeContact = isDropCard ? dropContact : pickupContact;
+  const isTargetHub = isDropCard ? isDropHub : isPickupHub;
 
   // Determine dynamic badge colors based on batch status
   const getStatusBadgeStyle = (status: string) => {
@@ -199,24 +205,26 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
             <ArrowRight size={scale(18)} color="#B2D534" />
           </TouchableOpacity>
 
-          {/* Section: Pickup Location & Contact Details */}
+          {/* Section: Location & Contact Details */}
           <View style={styles.contactCardContainer}>
             <View style={styles.contactCardHeader}>
               <View style={{ flex: 1, marginRight: scale(8) }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), flexWrap: 'wrap' }}>
                   <MapPin size={scale(18)} color="#3B82F6" strokeWidth={2.5} />
                   <Text style={styles.contactCardTitle}>
-                    {t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
+                    {isDropCard
+                      ? t('orders.drop_details_title', { defaultValue: 'Drop Location & Contact' })
+                      : t('orders.pickup_details_title', { defaultValue: 'Pickup Location & Contact' })}
                   </Text>
                 </View>
-                {(batch?.isPickupRedirected || batch?.isRedirected) && (
+                {(!isDropCard && (batch?.isPickupRedirected || batch?.isRedirected)) && (
                   <View style={{ marginTop: scale(4), alignSelf: 'flex-start', backgroundColor: '#F3E8FF', borderColor: '#C084FC', borderWidth: 1, paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6) }}>
                     <Text style={{ fontSize: scale(9), fontWeight: '900', color: '#7E22CE' }}>DIRECT SELLER PICKUP (REDIRECTED)</Text>
                   </View>
                 )}
               </View>
-              {pickupContact?.phone && (
-                <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${pickupContact.phone}`)} activeOpacity={0.7}>
+              {activeContact?.phone && (
+                <TouchableOpacity style={styles.contactCallBtn} onPress={() => Linking.openURL(`tel:${activeContact.phone}`)} activeOpacity={0.7}>
                   <Phone size={scale(13)} color={Colors.primary} />
                   <Text style={styles.contactCallBtnText}>{t('orders.call', { defaultValue: 'Call' })}</Text>
                 </TouchableOpacity>
@@ -226,14 +234,14 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
             <View style={styles.contactCardBody}>
               <View style={styles.contactInfoGrid}>
                 {/* SHG Name Item (if not GMU Hub) */}
-                {!!(!isPickupHub && ((pickupContact as any)?.shgName || batch.shgName)) && (
+                {!!(!isTargetHub && ((activeContact as any)?.shgName || batch.shgName)) && (
                   <View style={styles.contactInfoRow}>
                     <View style={styles.contactIconBg}>
                       <User size={scale(14)} color={Colors.primary} />
                     </View>
                     <View style={styles.contactTextCol}>
                       <Text style={styles.contactTextLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                      <Text style={styles.contactTextValue}>{(pickupContact as any)?.shgName || batch.shgName}</Text>
+                      <Text style={styles.contactTextValue}>{(activeContact as any)?.shgName || batch.shgName}</Text>
                     </View>
                   </View>
                 )}
@@ -244,8 +252,8 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                     <User size={scale(14)} color={Colors.primary} />
                   </View>
                   <View style={styles.contactTextCol}>
-                    <Text style={styles.contactTextLabel}>{isPickupHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person (CRP)' })}</Text>
-                    <Text style={styles.contactTextValue}>{cleanPersonName((pickupContact as any)?.crpName || pickupContact?.name) || (isPickupHub ? 'Hub Manager' : 'SHG Lead')}</Text>
+                    <Text style={styles.contactTextLabel}>{isTargetHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName(activeContact?.name || activeContact?.fullName || (activeContact as any)?.crpName) || (isTargetHub ? 'Hub Manager' : (isDropCard ? 'Drop SHG Member' : 'Pickup SHG Member'))}</Text>
                   </View>
                 </View>
 
@@ -256,7 +264,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
-                    <Text style={styles.contactTextValue}>{pickupContact?.phone || ''}</Text>
+                    <Text style={styles.contactTextValue}>{activeContact?.phone || ''}</Text>
                   </View>
                 </View>
 
@@ -267,7 +275,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
-                    <Text style={styles.contactTextValue}>{pickupContact?.village || batch.pickupPointName || 'N/A'}</Text>
+                    <Text style={styles.contactTextValue}>{activeContact?.village || (isDropCard ? batch.dropPointName : batch.pickupPointName) || 'N/A'}</Text>
                   </View>
                 </View>
 
@@ -278,7 +286,7 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                   </View>
                   <View style={styles.contactTextCol}>
                     <Text style={styles.contactTextLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
-                    <Text style={styles.contactTextValue}>{pickupContact?.pincode || '416504'}</Text>
+                    <Text style={styles.contactTextValue}>{activeContact?.pincode || '416504'}</Text>
                   </View>
                 </View>
               </View>
@@ -347,8 +355,8 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
                     <User size={scale(14)} color={Colors.primary} />
                   </View>
                   <View style={styles.contactTextCol}>
-                    <Text style={styles.contactTextLabel}>{isDropHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person (CRP)' })}</Text>
-                    <Text style={styles.contactTextValue}>{cleanPersonName((dropContact as any)?.crpName || dropContact?.name) || (isDropHub ? 'Hub Manager' : 'Drop SHG Lead')}</Text>
+                    <Text style={styles.contactTextLabel}>{isDropHub ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.contact_person', { defaultValue: 'Contact Person' })}</Text>
+                    <Text style={styles.contactTextValue}>{cleanPersonName(dropContact?.name || dropContact?.fullName || (dropContact as any)?.crpName) || (isDropHub ? 'Hub Manager' : 'Drop SHG Member')}</Text>
                   </View>
                 </View>
 

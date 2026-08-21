@@ -3,12 +3,14 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { QrService } from '../../../shared/qr/qr.service';
 import { OrderFilterDto } from './dto/order-filter.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { LocationService } from '../../../shared/location/location.service';
 
 @Injectable()
 export class OrderManagementService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
-    private qrService: QrService
+    private qrService: QrService,
+    private locationService: LocationService
   ) { }
 
   private isLoopRunning = false;
@@ -557,10 +559,10 @@ export class OrderManagementService implements OnModuleInit {
           {
             phase: 'PICKUP',
             returnType: null,
-            mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'REDIRECTED'] }
+            mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'SHG_PICKUP_DECLINED', 'TRANSPORTER_DECLINED', 'PENDING_PICKUP', 'PICKUP_SHG_PENDING', 'REDIRECTED'] }
           },
           undefined,
-          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED']
+          ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED']
         )
       }),
       // pickup.warehouse — Phase 5
@@ -798,14 +800,14 @@ export class OrderManagementService implements OnModuleInit {
       {
         phase: 'PICKUP',
         returnType: null,
-        mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED'] }
+        mainStatus: { in: ['PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED', 'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED'] }
       },
       filter,
       [
         'PICKUP_ASSIGNED', 'PICKUP_SHG_ACCEPTED', 'SHG_PICKUP_DECLINED',
-        'PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED',
+        'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED',
         'PARCEL_AT_TRANSPORTER', 'TRANSPORTER_DECLINED',
-        'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED'
+        'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'PICKUP_SHG_PENDING', 'PENDING_PICKUP', 'REDIRECTED'
       ]
     );
     const defaultInclude = {
@@ -1377,8 +1379,8 @@ export class OrderManagementService implements OnModuleInit {
     const dropActiveStatuses = [
       'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_CREATED',
       'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED',
-      'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED',
-      'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'
+      'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED',
+      'PARCEL_AT_PICKUP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'
     ];
 
     const where = this.applyFilters(
@@ -1813,6 +1815,18 @@ export class OrderManagementService implements OnModuleInit {
       const totalQty = resolvedItems.reduce((sum, item) => sum + item.qty, 0);
       const totalWeight = parseFloat(orderItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 1) * Number(item.weight || 0.5), 0).toFixed(2));
 
+      let evaluatedFlowType = 'VIA_HUB';
+      try {
+        const sellerAddr = `${seller.village}, ${seller.taluka || 'Gadhinglaj'}, ${seller.district || 'Kolhapur'}, ${seller.state || 'Maharashtra'} ${seller.pincode || ''}, India`;
+        const buyerAddr = `${dto.buyerVillage || buyer.village}, ${dto.buyerTaluka || buyer.taluka || 'Gadhinglaj'}, ${dto.buyerDistrict || buyer.district || 'Kolhapur'}, ${dto.buyerState || buyer.state || 'Maharashtra'} ${dto.buyerPincode || buyer.pincode || ''}, India`;
+        const evalRes = await this.locationService.evaluateDirectFlow(sellerAddr, buyerAddr);
+        if (evalRes?.isDirect) {
+          evaluatedFlowType = 'DIRECT_SHG_TO_SHG';
+        }
+      } catch (err: any) {
+        console.warn('[createOrder Notice] evaluateDirectFlow calculation notice:', err.message);
+      }
+
       return tx.order.create({
         data: {
           id: orderId,
@@ -1823,6 +1837,7 @@ export class OrderManagementService implements OnModuleInit {
           productCount,
           totalQty,
           totalWeight,
+          flowType: evaluatedFlowType,
           pickupShgId: null,
           pickupTransporterId: null,
           mainStatus: 'ORDER_PLACED',

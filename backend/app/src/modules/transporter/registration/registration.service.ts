@@ -799,7 +799,7 @@ export class RegistrationService {
         if (cleanVillages.length === 0) return [];
 
         try {
-          const records = await tx.pincodeDirectory.findMany({
+          const records = await tx.pincode.findMany({
             where: { village: { in: cleanVillages, mode: 'insensitive' } },
             select: { pincode: true },
             take: 100,

@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMU Logistics Platform - Master Onboarding Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* === PRINT & PAGE LAYOUT SETUP === */
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "Gramuunati Logistics (GMU) Platform";
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            color: #0f172a;
+            background-color: #ffffff;
+            line-height: 1.6;
+            font-size: 10pt;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* === COVER PAGE === */
+        .cover-page {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            page-break-after: always;
+            break-after: page;
+            background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+            border: 2px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 40px;
+            margin-bottom: 40px;
+        }
+
+        .cover-badge {
+            background-color: #15803d;
+            color: #ffffff;
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+        }
+
+        .cover-title {
+            font-size: 28pt;
+            font-weight: 700;
+            color: #15803d;
+            margin: 0 0 12px 0;
+            line-height: 1.2;
+        }
+
+        .cover-subtitle {
+            font-size: 16pt;
+            font-weight: 500;
+            color: #334155;
+            margin: 0 0 40px 0;
+        }
+
+        .cover-meta {
+            margin-top: 40px;
+            border-top: 2px solid #e2e8f0;
+            padding-top: 24px;
+            width: 80%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            text-align: left;
+            font-size: 9.5pt;
+        }
+
+        .meta-item strong {
+            color: #166534;
+        }
+
+        /* === HEADINGS & SECTIONS === */
+        h1.section-title {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #15803d;
+            border-bottom: 2px solid #bbf7d0;
+            padding-bottom: 8px;
+            margin-top: 36px;
+            margin-bottom: 16px;
+            page-break-before: always;
+            break-before: page;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #166534;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            break-after: avoid;
+        }
+
+        h3 {
+            font-size: 11.5pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin-top: 18px;
+            margin-bottom: 8px;
+            break-after: avoid;
+        }
+
+        p {
+            margin-top: 0;
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+
+        /* === TABLE OF CONTENTS === */
+        .toc-container {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 32px;
+            page-break-after: always;
+            break-after: page;
+        }
+
+        .toc-title {
+            font-size: 16pt;
+            font-weight: 700;
+            color: #15803d;
+            margin-top: 0;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #15803d;
+            padding-bottom: 6px;
+        }
+
+        .toc-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .toc-item-1 {
+            font-weight: 600;
+            font-size: 10pt;
+            margin-top: 10px;
+            color: #15803d;
+        }
+
+        .toc-item-2 {
+            font-weight: 400;
+            font-size: 9pt;
+            margin-left: 20px;
+            margin-top: 4px;
+            color: #334155;
+        }
+
+        .toc-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .toc-link:hover {
+            text-decoration: underline;
+        }
+
+        /* === CALLOUT BOXES === */
+        .callout {
+            border-left: 4px solid #15803d;
+            background-color: #f0fdf4;
+            padding: 14px 18px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+            break-inside: avoid;
+            font-size: 9.5pt;
+        }
+
+        .callout-important {
+            border-left-color: #15803d;
+            background-color: #f0fdf4;
+        }
+
+        .callout-warning {
+            border-left-color: #d97706;
+            background-color: #fffbeb;
+        }
+
+        .callout-tip {
+            border-left-color: #0284c7;
+            background-color: #f0f9ff;
+        }
+
+        .callout-note {
+            border-left-color: #64748b;
+            background-color: #f8fafc;
+        }
+
+        .callout-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .callout-important .callout-title { color: #15803d; }
+        .callout-warning .callout-title { color: #b45309; }
+        .callout-tip .callout-title { color: #0369a1; }
+        .callout-note .callout-title { color: #475569; }
+
+        /* === TABLES === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 18px 0;
+            font-size: 9pt;
+            break-inside: avoid;
+        }
+
+        th {
+            background-color: #15803d;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 12px;
+            border: 1px solid #15803d;
+        }
+
+        td {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* === CODE BLOCKS & DIAGRAMS === */
+        pre {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            padding: 14px 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 16px 0;
+            break-inside: avoid;
+            line-height: 1.45;
+            border: 1px solid #1e293b;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            border: 1px solid #e2e8f0;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            border: none;
+        }
+
+        .mermaid-box {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #15803d;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            white-space: pre-wrap;
+            break-inside: avoid;
+            color: #1e293b;
+        }
+
+        /* === LISTS === */
+        ul, ol {
+            margin-top: 0;
+            margin-bottom: 12px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 4px;
+        }
+
+        /* === FOOTER PRINT === */
+        .page-footer {
+            margin-top: 40px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 8pt;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+
+    <div class="cover-page">
+        <div class="cover-badge">Gramuunati Logistics Monorepo</div>
+        <h1 class="cover-title">GMU Logistics Platform</h1>
+        <div class="cover-subtitle">Complete Project Documentation & Master Onboarding Guide</div>
+        
+        <div class="cover-meta">
+            <div class="meta-item"><strong>Document Version:</strong> 1.0.0</div>
+            <div class="meta-item"><strong>Company:</strong> Gramuunati Logistics (GMU)</div>
+            <div class="meta-item"><strong>Target Audience:</strong> Interns, Developers, QA & New Team Members</div>
+            <div class="meta-item"><strong>Published:</strong> August 2026</div>
+        </div>
+    </div>
+    
+<div class="toc-container"><div class="toc-title">Table of Contents</div><ul class="toc-list">
+<li class="toc-item-1"><a href="#gmu-hub-web-dashboard" class="toc-link">GMU HUB WEB DASHBOARD</a></li>
+<li class="toc-item-2"><a href="#how-to-use-this-guide" class="toc-link">How to use this guide</a></li>
+<li class="toc-item-1"><a href="#1-project-introduction" class="toc-link">1. Project Introduction</a></li>
+<li class="toc-item-1"><a href="#2-what-is-gmu-hub" class="toc-link">2. What is GMU Hub?</a></li>
+<li class="toc-item-1"><a href="#3-what-gmu-hub-does" class="toc-link">3. What GMU Hub Does</a></li>
+<li class="toc-item-1"><a href="#4-complete-business-flow" class="toc-link">4. Complete Business Flow</a></li>
+<li class="toc-item-1"><a href="#5-users-and-roles" class="toc-link">5. Users and Roles</a></li>
+<li class="toc-item-1"><a href="#6-technology-used" class="toc-link">6. Technology Used</a></li>
+<li class="toc-item-1"><a href="#7-project-structure" class="toc-link">7. Project Structure</a></li>
+<li class="toc-item-1"><a href="#8-requirements-and-installation" class="toc-link">8. Requirements and Installation</a></li>
+<li class="toc-item-1"><a href="#9-environment-configuration" class="toc-link">9. Environment Configuration</a></li>
+<li class="toc-item-1"><a href="#10-database-and-prisma" class="toc-link">10. Database and Prisma</a></li>
+<li class="toc-item-1"><a href="#11-how-to-run-the-project" class="toc-link">11. How to Run the Project</a></li>
+<li class="toc-item-1"><a href="#12-authentication-and-security" class="toc-link">12. Authentication and Security</a></li>
+<li class="toc-item-1"><a href="#13-master--reference-data" class="toc-link">13. Master & Reference Data</a></li>
+<li class="toc-item-1"><a href="#14-pickup-process" class="toc-link">14. Pickup Process</a></li>
+<li class="toc-item-1"><a href="#15-warehouse--storage-process" class="toc-link">15. Warehouse & Storage Process</a></li>
+<li class="toc-item-1"><a href="#16-drop--last-mile-delivery-process" class="toc-link">16. Drop & Last-Mile Delivery Process</a></li>
+<li class="toc-item-1"><a href="#17-return--reverse-logistics-process" class="toc-link">17. Return & Reverse Logistics Process</a></li>
+<li class="toc-item-1"><a href="#18-api-and-frontendbackend-communication" class="toc-link">18. API and Frontend/Backend Communication</a></li>
+<li class="toc-item-1"><a href="#19-file--asset-management" class="toc-link">19. File & Asset Management</a></li>
+<li class="toc-item-1"><a href="#20-how-to-debug-a-problem" class="toc-link">20. How to Debug a Problem</a></li>
+<li class="toc-item-1"><a href="#21-common-errors--fixes" class="toc-link">21. Common Errors & Fixes</a></li>
+<li class="toc-item-1"><a href="#22-git-and-development-workflow" class="toc-link">22. Git and Development Workflow</a></li>
+<li class="toc-item-1"><a href="#make-changes--test-locally" class="toc-link">Make changes & test locally</a></li>
+<li class="toc-item-1"><a href="#23-testing-checklist" class="toc-link">23. Testing Checklist</a></li>
+<li class="toc-item-1"><a href="#24-production-overview" class="toc-link">24. Production Overview</a></li>
+<li class="toc-item-1"><a href="#build-backend" class="toc-link">Build Backend</a></li>
+<li class="toc-item-1"><a href="#build-frontend" class="toc-link">Build Frontend</a></li>
+<li class="toc-item-1"><a href="#25-important-commands-cheat-sheet" class="toc-link">25. Important Commands Cheat Sheet</a></li>
+<li class="toc-item-1"><a href="#26-intern-learning-plan" class="toc-link">26. Intern Learning Plan</a></li>
+<li class="toc-item-1"><a href="#27-final-checklist" class="toc-link">27. Final Checklist</a></li>
+<li class="toc-item-1"><a href="#the-golden-rule" class="toc-link">THE GOLDEN RULE</a></li>
+</ul></div>
+<h1 class="section-title" id="gmu-hub-web-dashboard">GMU HUB WEB DASHBOARD</h1>
+<h2 id="complete-project-documentation--technical-onboarding-manual">Complete Project Documentation & Technical Onboarding Manual</h2>
+<p><strong>Easy-to-understand guide for interns, developers, testers and new team members</strong>  </p>
+<p><strong>Version:</strong> 1.0.0  </p>
+<p><strong>Company:</strong> Gramuunati Logistics (GMU)  </p>
+<p><strong>Target Audience:</strong> Interns, Frontend Engineers, Full-Stack Developers, & QA Testers  </p>
+<p><strong>Last Updated:</strong> August 2026  </p>
+<p>---</p>
+<h2 id="how-to-use-this-guide">How to use this guide</h2>
+<p>Welcome to the <strong>GMU Hub Engineering Team</strong>! If you are completely new, read <strong>Sections 1–6</strong> first. Then follow <strong>Section 8</strong> to install the project and <strong>Section 11</strong> to run it. Use the remaining sections as a reference while working.</p>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>Security Notice:</strong> Repository URLs, database passwords, JWT secrets, cloud credentials and production values must be obtained securely from the project owner. Never guess or commit secrets to Git repositories.</div></div>
+<p>---</p>
+<h1 class="section-title" id="1-project-introduction">1. Project Introduction</h1>
+<p><strong>GMU Hub</strong> (Gramuunati Logistics Hub Web Dashboard) is the central business management and logistics control application for rural and hyper-local supply chains. It connects village producers (Sellers), Self Help Group (SHG) members, commercial drivers (Transporters), warehouse staff, and end buyers into one unified system.</p>
+<p>The most important thing for a new team member to understand is that <strong>GMU Hub is a connected multi-leg logistics process</strong>. A status change in one stage (e.g. SHG Pickup) directly affects the next stage (Transporter Pickup, Warehouse Intake, Storage, Outbound Dispatch, and Doorstep Delivery).</p>
+<h3>Example Workflow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Seller -> Pickup SHG -> Pickup Transporter -> GMU Warehouse (QC & Storage) -> Drop Transporter -> Drop SHG -> Buyer Doorstep</div>
+<p>---</p>
+<h1 class="section-title" id="2-what-is-gmu-hub">2. What is GMU Hub?</h1>
+<p><strong>GMU Hub</strong> is an administrative command center web application (built with <strong>React 19</strong>, <strong>Vite 8</strong>, <strong>Tailwind CSS v4</strong>, and <strong>TypeScript</strong>). In simple words, it is software that helps operations managers and warehouse teams manage day-to-day rural logistics in one connected application.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Seller / Buyer Master
+↓
+Product / Village Pincode Master
+↓
+Master Order Creation
+↓
+Pickup Order & QR Parcel Generation
+↓
+Warehouse Intake & Bin Storage (QC_PASSED / STORED)
+↓
+Outbound Dispatch & Doorstep Delivery
+↓
+Settlement & Partner Earnings</div>
+<div class="callout callout-tip"><div class="callout-title">📌 TIP</div><div><strong>Core Developer Rule:</strong> When working on any feature, always ask: <strong>"What other logistical stage or partner depends on this status update?"</strong></div></div>
+<p>---</p>
+<h1 class="section-title" id="3-what-gmu-hub-does">3. What GMU Hub Does</h1>
+<table>
+<thead><tr><th>Area</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><strong>Order Management</strong></td><td>Oversees all active Pickup, Drop, and Return orders across all network stages.</td></tr>
+<tr><td><strong>Warehouse & Storage</strong></td><td>Digital parcel receiving (<code>HUB_RECEIVED</code>), Quality Control (<code>QC_PASSED</code>), bin placement (<code>STORED</code>), and dispatch.</td></tr>
+<tr><td><strong>Inventory Control</strong></td><td>Real-time tracking of incoming, stored, and return inventory items.</td></tr>
+<tr><td><strong>Community Management</strong></td><td>Review and approval of Self Help Groups (SHGs) and individual CRP members.</td></tr>
+<tr><td><strong>Transporter Management</strong></td><td>Onboarding route partners, personal vehicle drivers, milk van routes, and capacity management.</td></tr>
+<tr><td><strong>QR Code System</strong></td><td>Generating unique parcel QR images (<code>qrCodeValue</code>, <code>qrImage</code>) and verifying camera scans.</td></tr>
+<tr><td><strong>OTP Verification</strong></td><td>Handover PIN verification records (<code>VerificationRecord</code>) between senders and recipients.</td></tr>
+<tr><td><strong>Order History & Audit</strong></td><td>Searching historical orders, inspecting timeline events, and exporting delivery logs.</td></tr>
+<tr><td><strong>User & Security</strong></td><td>Phone OTP authentication, JWT session tokens, and Role-Based Access Control (<code>ADMIN</code>, <code>SUPER_ADMIN</code>).</td></tr>
+<tr><td><strong>Settings & Profile</strong></td><td>Managing admin profile, security passwords, regional language preferences, and notifications.</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="4-complete-business-flow">4. Complete Business Flow</h1>
+<p>Learn these flows before reading the code.</p>
+<h3>4.1 Sales & Delivery Pickup Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Buyer Places Order
+↓
+Master Order Created (MasterOrder)
+↓
+Split into Pickup Order (PickupOrder)
+↓
+Broadcast / Assigned to Village SHG
+↓
+SHG Collects Parcel & Generates QR (PARCEL_PICKED)
+↓
+Transporter Picks Up & In-Transit (IN_TRANSIT_TO_HUB)
+↓
+GMU Hub Warehouse Intake (HUB_RECEIVED)</div>
+<h3>4.2 Warehouse Storage & Outbound Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Parcels Received at Hub (HUB_RECEIVED)
+↓
+Quality Control Inspection (QC_PASSED / QC_FAILED)
+↓
+Shelf Bin Storage Allocation (STORED)
+↓
+Outbound Order Batching & Manifest Generation
+↓
+Assigned to Drop Transporter (DISPATCHED)
+↓
+In-Transit to Destination Village SHG</div>
+<h3>4.3 Last-Mile Delivery Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Drop Transporter Delivers to Destination SHG (PARCEL_AT_DROP_SHG)
+↓
+Destination SHG Visits Buyer Doorstep
+↓
+Buyer Verifies Parcel & Provides Delivery OTP
+↓
+Status Updated to DELIVERED
+↓
+Commission Credited to SHG & Transporter (Earning)</div>
+<h3>4.4 Reverse Logistics (Return Flow)</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Buyer / Transporter Initiates Return Request (RETURN_REQUESTED)
+↓
+Assigned to Return SHG / Transporter
+↓
+Return Parcel Scanned & Intaked at Hub (RETURN_PARCEL_AT_HUB)
+↓
+Returned to Seller / Restocked</div>
+<h3>Why the flow matters</h3>
+<p>If a Pickup Order status changes, the Warehouse Intake and Drop Order assignment depend on that status. Therefore, <strong>always test the complete affected flow, not only one screen.</strong></p>
+<p>---</p>
+<h1 class="section-title" id="5-users-and-roles">5. Users and Roles</h1>
+<table>
+<thead><tr><th>Role</th><th>Easy Explanation</th><th>Responsibilities</th></tr></thead><tbody>
+<tr><td><strong>Superadmin</strong></td><td>Highest-level administrative control.</td><td>Full system access, global analytics, system configuration, admin management.</td></tr>
+<tr><td><strong>Administrator (GMU Admin)</strong></td><td>Manages operations & network governance.</td><td>Order rerouting, SHG/Driver approvals, return resolution, SLA monitoring.</td></tr>
+<tr><td><strong>Warehouse Manager</strong></td><td>Manages physical hub storage.</td><td>Parcel receiving, quality control inspection, bin placement, outbound manifests.</td></tr>
+<tr><td><strong>SHG Member / CRP</strong></td><td>Village field partner (uses <code>SHG App</code>).</td><td>First-mile seller pickups, village package consolidation, doorstep delivery to buyer.</td></tr>
+<tr><td><strong>Transporter Driver</strong></td><td>Commercial driver (uses <code>Transporter App</code>).</td><td>Inter-village and hub cargo transport, route execution, vehicle capacity management.</td></tr>
+<tr><td><strong>Seller</strong></td><td>Village producer / artisan.</td><td>Stock listing, package handover to SHG, seller OTP generation.</td></tr>
+<tr><td><strong>Buyer</strong></td><td>Consumer.</td><td>Order placement, address input, parcel inspection, delivery OTP verification.</td></tr>
+</tbody></table>
+<p><em>For an access problem, check authentication (logged in?) and authorization (role allowed?).</em></p>
+<p>---</p>
+<h1 class="section-title" id="6-technology-used">6. Technology Used</h1>
+<table>
+<thead><tr><th>Technology</th><th>Simple Meaning</th><th>Use in Project</th></tr></thead><tbody>
+<tr><td><strong>React 19</strong></td><td>Frontend UI Library</td><td>Screens, forms, data tables, modals, and dynamic dashboard views.</td></tr>
+<tr><td><strong>Vite 8</strong></td><td>Frontend Build Tool</td><td>Runs development server (<code>http://localhost:5173</code>) and builds production code.</td></tr>
+<tr><td><strong>AppContext</strong></td><td>React Context API</td><td>Centralized application state management (orders, counts, user profile).</td></tr>
+<tr><td><strong>NestJS 10</strong></td><td>Backend API Framework</td><td>Server REST APIs, authentication guards, DTO validation, and business services.</td></tr>
+<tr><td><strong>TypeScript 6.0</strong></td><td>Typed JavaScript</td><td>Enforces type-safe interfaces across frontend and backend.</td></tr>
+<tr><td><strong>Prisma 6.19</strong></td><td>Database ORM</td><td>Communicates with PostgreSQL database using strongly-typed models.</td></tr>
+<tr><td><strong>PostgreSQL 15+</strong></td><td>Relational Database</td><td>Stores permanent data (orders, users, parcels, scan logs, earnings).</td></tr>
+<tr><td><strong>Tailwind CSS v4</strong></td><td>Utility CSS Framework</td><td>Modern responsive UI styling and dark/light color tokens.</td></tr>
+<tr><td><strong>Recharts</strong></td><td>Data Charting Library</td><td>Analytics trend graphs and order volume charts on the Dashboard page.</td></tr>
+<tr><td><strong>Framer Motion</strong></td><td>Animation Library</td><td>Micro-animations, drawer transitions, and smooth modal popups.</td></tr>
+<tr><td><strong>Lucide React</strong></td><td>Icon Suite</td><td>Navigation icons, status indicators, and button icons.</td></tr>
+<tr><td><strong>Swagger UI</strong></td><td>API Documentation</td><td>Endpoint testing harness at <code>http://localhost:3000/api/docs</code>.</td></tr>
+</tbody></table>
+<h3>Overall Architecture</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Browser (GMU Hub Web App)
+↓
+React Frontend (AppContext + Tailwind CSS)
+↓ HTTP / REST + JWT Bearer Token
+NestJS Backend API Gateway
+↓
+Services / Business Logic (Order, Vehicle, Community)
+↓
+Prisma ORM Client
+↓
+PostgreSQL Database</div>
+<p>---</p>
+<h1 class="section-title" id="7-project-structure">7. Project Structure</h1>
+<p>The project contains two primary workspaces: <strong>Frontend (<code>apps/GMU-hub</code>)</strong> and <strong>Backend (<code>backend/app</code>)</strong>.</p>
+<h3>Frontend Structure (`apps/GMU-hub/`)</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+apps/GMU-hub/
+■■■ src/
+■ ■■■ assets/           → Static images and brand logos
+■ ■■■ components/       → Reusable UI components (DataTable, Layout, Modal, StatusBadge, Tabs, TimeAgo)
+■ ■■■ context/          → Centralized state store (AppContext.tsx)
+■ ■■■ hooks/            → Custom React hooks (useGrabScroll.ts)
+■ ■■■ pages/            → Screen views (Dashboard, OrderManagement, Inventory, Community, Transporter, OrderHistory, Settings)
+■ ■■■ utils/            → API client wrapper (api.ts)
+■ ■■■ App.css           → Global CSS overrides
+■ ■■■ App.tsx           → State-driven router component
+■ ■■■ index.css         → Tailwind v4 import & font setup
+■ ■■■ main.tsx          → React DOM entry point
+■■■ index.html          → HTML template
+■■■ package.json        → Frontend dependencies & scripts
+■■■ vite.config.ts      → Vite configuration</div>
+<h3>Backend Structure (`backend/app/`)</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+backend/app/
+■■■ src/
+■ ■■■ common/           → Shared utilities, decorators, and JWT guards
+■ ■■■ modules/          → Feature modules
+■ ■ ■■■ gmu/            → GMU Admin APIs (order-management, community-management, transporter-management)
+■ ■ ■■■ shg/            → SHG Mobile APIs (order, user, earnings, pickup)
+■ ■ ■■■ transporter/    → Transporter Mobile APIs (order, registration, vehicle)
+■ ■■■ prisma/           → Database schema and seed scripts
+■ ■ ■■■ schema.prisma   → Database models and relations
+■ ■ ■■■ seed-pincode.ts → Pincode directory seeder
+■ ■■■ main.ts           → NestJS server startup file
+■■■ .env                → Backend environment variables
+■■■ package.json        → Backend dependencies</div>
+<p><em>For a feature, trace:</em> <strong>Frontend Page → <code>api.ts</code> → NestJS Controller → Service → Prisma → Database</strong>.</p>
+<p>---</p>
+<h1 class="section-title" id="8-requirements-and-installation">8. Requirements and Installation</h1>
+<h3>System Requirements</h3>
+<table>
+<thead><tr><th>Software</th><th>Requirement</th></tr></thead><tbody>
+<tr><td><strong>OS</strong></td><td>Windows 10/11, macOS 12+, or Ubuntu 20.04/22.04 LTS</td></tr>
+<tr><td><strong>Node.js</strong></td><td>v20.x LTS recommended (<code>node -v</code>)</td></tr>
+<tr><td><strong>npm</strong></td><td>v10.x or higher (<code>npm -v</code>)</td></tr>
+<tr><td><strong>PostgreSQL</strong></td><td>v15.x or v16.x (<code>psql --version</code>)</td></tr>
+<tr><td><strong>Browser</strong></td><td>Latest Google Chrome, Microsoft Edge, Firefox, or Safari</td></tr>
+<tr><td><strong>RAM</strong></td><td>Minimum 8 GB; 16 GB recommended</td></tr>
+<tr><td><strong>Free Storage</strong></td><td>At least 10 GB</td></tr>
+</tbody></table>
+<h3>Step 1 — Clone the Repository</h3>
+<pre><code>git clone <repository-url>
+cd GST-v1/logistic</code></pre>
+<h3>Step 2 — Verify Node.js</h3>
+<pre><code>node -v
+npm -v</code></pre>
+<h3>Step 3 — Install Dependencies</h3>
+<pre><code>npm install</code></pre>
+<p>---</p>
+<h1 class="section-title" id="9-environment-configuration">9. Environment Configuration</h1>
+<p>Environment files contain machine-specific settings. <strong>Never commit real passwords or cloud credentials.</strong></p>
+<h3>Backend: `backend/app/.env`</h3>
+<table>
+<thead><tr><th>Variable</th><th>Purpose</th><th>Example Value</th></tr></thead><tbody>
+<tr><td><code>PORT</code></td><td>Backend HTTP server port</td><td><code>3000</code></td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>PostgreSQL connection string</td><td><code>postgresql://postgres:postgres@localhost:5432/gmu_logistic?schema=public</code></td></tr>
+<tr><td><code>JWT_SECRET</code></td><td>Access-token signing key</td><td><code>super-secret-gmu-jwt-key-2026</code></td></tr>
+<tr><td><code>JWT_EXPIRATION</code></td><td>Access-token expiry duration</td><td><code>7d</code></td></tr>
+<tr><td><code>DEV_OTP_BYPASS</code></td><td>Enable local test OTP mode</td><td><code>true</code></td></tr>
+<tr><td><code>DEV_DEFAULT_OTP</code></td><td>Default local test OTP</td><td><code>1234</code></td></tr>
+</tbody></table>
+<h3>Frontend: `apps/GMU-hub/.env`</h3>
+<table>
+<thead><tr><th>Variable</th><th>Purpose</th><th>Example Value</th></tr></thead><tbody>
+<tr><td><code>VITE_API_URL</code></td><td>Base API URL endpoint</td><td><code>http://localhost:3000/api</code></td></tr>
+<tr><td><code>VITE_APP_ENV</code></td><td>Environment identifier</td><td><code>development</code></td></tr>
+</tbody></table>
+<p>> [!CAUTION]</p>
+<p>> <strong>Never commit .env files containing secrets.</strong></p>
+<p>---</p>
+<h1 class="section-title" id="10-database-and-prisma">10. Database and Prisma</h1>
+<p>PostgreSQL is the database. Prisma is the ORM tool used by NestJS to communicate with PostgreSQL.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+React (GMU Hub) -> NestJS API -> Prisma ORM -> PostgreSQL Database</div>
+<table>
+<thead><tr><th>Term</th><th>Easy Meaning</th></tr></thead><tbody>
+<tr><td><strong>Database</strong></td><td>Container holding application data (<code>gmu_logistic</code>).</td></tr>
+<tr><td><strong>Table</strong></td><td>Stores one type of information (e.g. <code>Order</code>, <code>Parcel</code>, <code>User</code>).</td></tr>
+<tr><td><strong>Row</strong></td><td>One individual record.</td></tr>
+<tr><td><strong>Column</strong></td><td>One field property.</td></tr>
+<tr><td><strong>Primary Key</strong></td><td>Unique record identifier (<code>id</code>).</td></tr>
+<tr><td><strong>Foreign Key</strong></td><td>Connects records between tables (e.g. <code>sellerId</code> referencing <code>Seller.id</code>).</td></tr>
+<tr><td><strong>Relation</strong></td><td>Describes connections between database models.</td></tr>
+</tbody></table>
+<h3>Prisma Schema Location</h3>
+<p><code>backend/app/prisma/schema.prisma</code></p>
+<h3>Database Commands</h3>
+<pre><code>cd backend/app
+npx prisma generate
+npx prisma db push
+npx ts-node src/reset-and-seed-20-orders.ts</code></pre>
+<p>---</p>
+<h1 class="section-title" id="11-how-to-run-the-project">11. How to Run the Project</h1>
+<p>Normal local-development process:</p>
+<h3>1. Start PostgreSQL</h3>
+<p>Ensure your local PostgreSQL server is running.</p>
+<h3>2. Start Backend (Terminal 1)</h3>
+<pre><code>cd backend/app
+npm run start:dev</code></pre>
+<ul>
+<li><strong>Backend API Base:</strong> <code>http://localhost:3000/api</code></li>
+<li><strong>Interactive Swagger Docs:</strong> <code>http://localhost:3000/api/docs</code></li>
+</ul>
+<h3>3. Start GMU Hub Frontend (Terminal 2)</h3>
+<p>From monorepo root:</p>
+<pre><code>npm run gmu-hub:dev</code></pre>
+<ul>
+<li><strong>Frontend Web Application:</strong> <code>http://localhost:5173</code></li>
+</ul>
+<h3>4. Open Frontend in Browser</h3>
+<p>Navigate to <code>http://localhost:5173</code> in Google Chrome. If the app opens but data does not load, verify backend status and <code>VITE_API_URL</code>.</p>
+<p>---</p>
+<h1 class="section-title" id="12-authentication-and-security">12. Authentication and Security</h1>
+<p>The project uses <strong>phone OTP authentication</strong>. Successful verification returns a signed JWT access token.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Phone Number Input -> Request OTP -> Verify OTP (1234 in DEV mode) -> JWT Access Token -> Authenticated Requests</div>
+<h3>Developer OTP</h3>
+<p><code>DEV_OTP_BYPASS=true</code> and <code>DEV_DEFAULT_OTP=1234</code> in <code>backend/app/.env</code> allows developers to test any mobile number using test OTP <code>1234</code> without real SMS credits.</p>
+<h3>JWT Session Handling</h3>
+<p>API requests pass the token in HTTP headers: <code>Authorization: Bearer <token></code>.  </p>
+<p>If an API returns <code>401 Unauthorized</code>, <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/GMU-hub/src/utils/api.ts" target="_blank">api.ts</a> automatically clears local storage and redirects the user to the landing screen.</p>
+<h3>Security Rules</h3>
+<ul>
+<li>Do not share passwords, JWT secrets or database credentials.</li>
+<li>Do not commit secrets to Git.</li>
+<li>Do not bypass authentication in production code.</li>
+<li>Check roles (<code>SUPER_ADMIN</code>, <code>ADMIN</code>) for permission issues.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="13-master--reference-data">13. Master & Reference Data</h1>
+<p>Master data is information created once and reused across transactions.</p>
+<table>
+<thead><tr><th>Master</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><strong>User / Partner Master</strong></td><td>Accounts for SHG members, CRPs, drivers, admins.</td></tr>
+<tr><td><strong>Seller Master</strong></td><td>Rural producers, addresses, and village location data.</td></tr>
+<tr><td><strong>Buyer Master</strong></td><td>End buyers, delivery addresses, pincodes.</td></tr>
+<tr><td><strong>Pincode Master</strong></td><td>Indian villages, talukas, districts, post offices, pincodes (<code>pincode</code> table).</td></tr>
+<tr><td><strong>Product Master</strong></td><td>Products, categories, daily/weekly production, weight, price (<code>products</code> table).</td></tr>
+</tbody></table>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Create Seller Master -> Product Listed -> Buyer Places Order -> MasterOrder Created -> Customer Transactions Affect Earnings</div>
+<p><em>If a transaction dropdown is empty, first check if the required master record exists.</em></p>
+<p>---</p>
+<h1 class="section-title" id="14-pickup-process">14. Pickup Process</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Buyer Places Order -> MasterOrder Created -> PickupOrder Broadcast -> SHG Accepts -> Seller Handover (OTP) -> PARCEL_PICKED -> Transporter Pickup -> IN_TRANSIT_TO_HUB</div>
+<ul>
+<li><strong><code>PickupOrder</code></strong> records the first-mile collection task from the seller.</li>
+<li><strong><code>Parcel</code></strong> records individual box items, generating unique QR images (<code>qrImage</code>).</li>
+<li><strong><code>VerificationRecord</code></strong> records dynamic 4-digit handover codes to ensure physical custody transfer.</li>
+</ul>
+<div class="callout callout-tip"><div class="callout-title">📌 TIP</div><div><strong>Development Rule:</strong> If Pickup Order status changes, verify that related Parcel status and Tracking timeline records are correctly updated.</div></div>
+<p>---</p>
+<h1 class="section-title" id="15-warehouse--storage-process">15. Warehouse & Storage Process</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Transporter Unloads at Hub -> Warehouse Intake (HUB_RECEIVED) -> Quality Control (QC_PASSED) -> Shelf Bin Storage (STORED) -> Outbound Manifest Batching -> Dispatched to Driver</div>
+<ul>
+<li><strong><code>WarehouseIntake</code></strong> records inward receipt of parcels from transporters.</li>
+<li><strong><code>WarehouseInventory</code></strong> records bin placement, storage date, and QC status.</li>
+<li><strong><code>Dispatched</code></strong> records outbound cargo loaded onto destination drop transporters.</li>
+</ul>
+<h3>Storage Quantity Example</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Incoming Parcels = 20 units
+QC Passed & Stored = 18 units
+QC Failed / Damaged = 2 units
+Remaining for Dispatch = 18 units</div>
+<p><em>Always test parcel status changes through the complete warehouse flow.</em></p>
+<p>---</p>
+<h1 class="section-title" id="16-drop--last-mile-delivery-process">16. Drop & Last-Mile Delivery Process</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Drop Transporter Transport -> Delivered to Destination Village SHG (PARCEL_AT_DROP_SHG) -> SHG Doorstep Visit -> Buyer Inspection -> Buyer Delivery OTP Verified -> DELIVERED</div>
+<ul>
+<li><strong><code>DropOrder</code></strong> records last-mile transportation and doorstep delivery.</li>
+<li><strong><code>Delivery OTP</code></strong> ensures the buyer received the box before status becomes <code>DELIVERED</code>.</li>
+<li><strong><code>Earning</code></strong> automatically credits commission to the SHG member and Transporter upon delivery completion.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="17-return--reverse-logistics-process">17. Return & Reverse Logistics Process</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Buyer / Driver Initiates Return (RETURN_REQUESTED) -> Return Pickup Assigned -> Scanned into Hub (RETURN_PARCEL_AT_HUB) -> Restocked or Returned to Seller</div>
+<ul>
+<li><strong><code>ReturnOrder</code></strong> manages reverse logistics tasks.</li>
+<li>Handles both <strong>Transporter Returns</strong> (failed delivery handoffs) and <strong>Buyer Returns</strong> (damaged/defective items).</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="18-api-and-frontendbackend-communication">18. API and Frontend/Backend Communication</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+User clicks Action -> React triggers AppContext -> api.ts sends HTTP Request -> NestJS Controller -> DTO / Guard -> Service Logic -> Prisma ORM -> PostgreSQL -> Response back to React UI</div>
+<h3>Swagger API Documentation</h3>
+<p>With backend running, open: <code>http://localhost:3000/api/docs</code></p>
+<table>
+<thead><tr><th>Area</th><th>Example Endpoints</th></tr></thead><tbody>
+<tr><td><strong>Auth</strong></td><td><code>POST /api/auth/login</code>, <code>POST /api/auth/send-otp</code>, <code>POST /api/auth/verify-otp</code></td></tr>
+<tr><td><strong>Pickup Orders</strong></td><td><code>GET /api/orders/pickup/new</code>, <code>POST /api/orders/:id/shg-accept</code>, <code>POST /api/orders/:id/warehouse-intake</code></td></tr>
+<tr><td><strong>Warehouse</strong></td><td><code>GET /api/orders/inventory/stored</code>, <code>POST /api/orders/:id/store</code>, <code>POST /api/qr/generate</code></td></tr>
+<tr><td><strong>Drop Orders</strong></td><td><code>GET /api/orders/drop/new</code>, <code>POST /api/orders/:id/drop-transporter-accept</code>, <code>POST /api/orders/:id/drop-complete</code></td></tr>
+<tr><td><strong>Community</strong></td><td><code>GET /api/community/shg/requests</code>, <code>PATCH /api/community/:id/approve</code></td></tr>
+<tr><td><strong>Transporters</strong></td><td><code>GET /api/transporters/route-partners/requests</code>, <code>PATCH /api/transporters/:id/approve</code></td></tr>
+</tbody></table>
+<p><em>When an API fails, inspect the browser Network tab first and then backend terminal logs.</em></p>
+<p>---</p>
+<h1 class="section-title" id="19-file--asset-management">19. File & Asset Management</h1>
+<ul>
+<li><strong>Uploaded KYC Documents:</strong> Stored under backend uploads (<code>Aadhaar</code>, <code>PAN</code>, <code>DL</code>, <code>RC</code>).</li>
+<li><strong>Parcel QR Images:</strong> Dynamically generated using Node <code>qrcode</code> and served as base64 or API data URIs.</li>
+<li><strong>Excel Data Exports:</strong> Powered by table export helpers in <code>DataTable.tsx</code>.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="20-how-to-debug-a-problem">20. How to Debug a Problem</h1>
+<p>Follow this 10-step debugging workflow when an issue occurs:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+1. Understand requirement
+↓
+2. Reproduce issue
+↓
+3. Check Browser Console (F12)
+↓
+4. Inspect Network request payload & status code
+↓
+5. Check Backend terminal logs
+↓
+6. Inspect Controller & DTO validation
+↓
+7. Inspect Service business logic
+↓
+8. Inspect Prisma query / PostgreSQL data
+↓
+9. Fix root cause
+↓
+10. Test complete affected flow again</div>
+<div class="callout callout-warning"><div class="callout-title">📌 WARNING</div><div><strong>Debugging Rule:</strong> Do not immediately change code. First identify where the request is failing.</div></div>
+<p>---</p>
+<h1 class="section-title" id="21-common-errors--fixes">21. Common Errors & Fixes</h1>
+<table>
+<thead><tr><th>Problem</th><th>Likely Reason</th><th>First Check</th></tr></thead><tbody>
+<tr><td><strong>Port 3000 in use</strong></td><td>Old backend process running.</td><td>Stop old Node process (`netstat -ano \</td><td>findstr :3000`).</td></tr>
+<tr><td><strong>Port 5173 in use</strong></td><td>Old Vite process running.</td><td>Stop old Vite process or let Vite pick next port.</td></tr>
+<tr><td><strong>DB Connection Error</strong></td><td>PostgreSQL stopped or wrong credentials.</td><td>Verify PostgreSQL service & <code>DATABASE_URL</code> in <code>backend/app/.env</code>.</td></tr>
+<tr><td><strong>401 Unauthorized</strong></td><td>Token missing, invalid, or expired.</td><td>Check <code>localStorage</code> for <code>gmu_token</code> & request Authorization header.</td></tr>
+<tr><td><strong>403 Forbidden</strong></td><td>User role lacks permission for endpoint.</td><td>Check user role in DB vs <code>@Roles()</code> decorator in controller.</td></tr>
+<tr><td><strong>404 Not Found</strong></td><td>Incorrect API URL path or endpoint.</td><td>Check <code>VITE_API_URL</code> and NestJS controller route mapping.</td></tr>
+<tr><td><strong>500 Internal Error</strong></td><td>Backend exception / service error.</td><td>Read full backend terminal stack trace.</td></tr>
+<tr><td><strong>Empty Data Table</strong></td><td>Master records or orders missing in DB.</td><td>Run seed script <code>npx ts-node src/reset-and-seed-20-orders.ts</code>.</td></tr>
+<tr><td><strong>Frontend Data Not Loading</strong></td><td>API URL misconfigured or CORS blocked.</td><td>Inspect Browser DevTools Network tab.</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="22-git-and-development-workflow">22. Git and Development Workflow</h1>
+<p>Use a feature branch for every task.</p>
+<pre><code>git pull origin main
+git status
+git checkout -b feature/my-hub-change
+
+# Make changes & test locally
+git add .
+git commit -m "feat(gmu-hub): describe the change"
+git push -u origin feature/my-hub-change</code></pre>
+<h3>Before Pushing Checklist</h3>
+<ul>
+<li>Test the changed feature.</li>
+<li>Test related order flows.</li>
+<li>Check browser console and backend logs.</li>
+<li>Review <code>git diff</code>.</li>
+<li>Make sure no secrets are included.</li>
+<li>Keep commits focused.</li>
+</ul>
+<p>> [!CAUTION]</p>
+<p>> <strong>Avoid git push --force, git reset --hard or rebase unless specifically instructed.</strong></p>
+<p>---</p>
+<h1 class="section-title" id="23-testing-checklist">23. Testing Checklist</h1>
+<table>
+<thead><tr><th>Check</th><th>Question</th></tr></thead><tbody>
+<tr><td><strong>Requirement</strong></td><td>Did I implement exactly what was requested?</td></tr>
+<tr><td><strong>UI</strong></td><td>Does the screen display correctly on all viewport sizes?</td></tr>
+<tr><td><strong>Validation</strong></td><td>Are invalid inputs rejected properly with clear messages?</td></tr>
+<tr><td><strong>API</strong></td><td>Does the correct endpoint receive the expected request body?</td></tr>
+<tr><td><strong>Database</strong></td><td>Is expected data saved/updated correctly in PostgreSQL?</td></tr>
+<tr><td><strong>Success</strong></td><td>Does the normal logistics flow work end-to-end?</td></tr>
+<tr><td><strong>Failure</strong></td><td>Does the system show a useful error message on failure?</td></tr>
+<tr><td><strong>Related Flow</strong></td><td>Could another order leg or module be affected by this change?</td></tr>
+<tr><td><strong>Permissions</strong></td><td>Does only the correct user role have access?</td></tr>
+<tr><td><strong>Logs</strong></td><td>Are there unexpected terminal or console errors?</td></tr>
+<tr><td><strong>Git</strong></td><td>Is the commit clean and focused?</td></tr>
+</tbody></table>
+<p><em>Example: After changing Pickup Order status logic, test Pickup Order, related Warehouse Intake, and Drop Order behavior.</em></p>
+<p>---</p>
+<h1 class="section-title" id="24-production-overview">24. Production Overview</h1>
+<p>Interns should not deploy to production without approval.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Developer Code -> Git Repository -> Build Step -> AWS / Production Server -> NestJS + PostgreSQL -> Nginx Reverse Proxy -> User Browser</div>
+<h3>Build Commands</h3>
+<pre><code># Build Backend
+cd backend/app
+npm run build
+
+# Build Frontend
+cd apps/GMU-hub
+npm run build</code></pre>
+<h3>Production Safety</h3>
+<ul>
+<li>Use production environment values.</li>
+<li>Never expose database passwords or JWT secrets.</li>
+<li>Do not run destructive database commands without approval.</li>
+<li>Follow backup and deployment procedures.</li>
+<li>Test thoroughly before deployment.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="25-important-commands-cheat-sheet">25. Important Commands Cheat Sheet</h1>
+<table>
+<thead><tr><th>Task</th><th>Command</th></tr></thead><tbody>
+<tr><td><strong>Install Dependencies</strong></td><td><code>npm install</code></td></tr>
+<tr><td><strong>Start Backend</strong></td><td><code>npm run backend:dev</code> (or <code>npm run start:dev</code> in <code>backend/app</code>)</td></tr>
+<tr><td><strong>Start Frontend</strong></td><td><code>npm run gmu-hub:dev</code></td></tr>
+<tr><td><strong>Generate Prisma Client</strong></td><td><code>npx prisma generate</code></td></tr>
+<tr><td><strong>Push DB Schema</strong></td><td><code>npx prisma db push</code></td></tr>
+<tr><td><strong>Seed 20 Sample Orders</strong></td><td><code>npx ts-node src/reset-and-seed-20-orders.ts</code></td></tr>
+<tr><td><strong>Build Backend</strong></td><td><code>npm run build --workspace=@logistic/backend</code></td></tr>
+<tr><td><strong>Build Frontend</strong></td><td><code>npm run build --workspace=frontend</code></td></tr>
+<tr><td><strong>Swagger API Docs</strong></td><td><code>http://localhost:3000/api/docs</code></td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="26-intern-learning-plan">26. Intern Learning Plan</h1>
+<table>
+<thead><tr><th>Stage</th><th>Learn Roadmap</th></tr></thead><tbody>
+<tr><td><strong>Day 1</strong></td><td>Logistics concept, project purpose, install tools and run project.</td></tr>
+<tr><td><strong>Days 2–3</strong></td><td>React pages/components in <code>apps/GMU-hub</code> and NestJS modules/controllers/services.</td></tr>
+<tr><td><strong>Days 4–5</strong></td><td>PostgreSQL, Prisma models, entity relationships, and Swagger APIs.</td></tr>
+<tr><td><strong>Week 2</strong></td><td>Order Management (Pickup, Warehouse, Drop, Return) and Community/Transporters.</td></tr>
+<tr><td><strong>Week 3</strong></td><td>Debugging, validation, QR scanning, and OTP verification workflows.</td></tr>
+<tr><td><strong>Week 4</strong></td><td>Small UI/API changes, end-to-end testing, Git feature branches, and pull requests.</td></tr>
+</tbody></table>
+<p><em>Do not try to memorize the whole codebase. Learn how a requirement moves from UI → API → business logic → database and back.</em></p>
+<p>---</p>
+<h1 class="section-title" id="27-final-checklist">27. Final Checklist</h1>
+<table>
+<thead><tr><th>I can...</th><th>Done</th></tr></thead><tbody>
+<tr><td>Explain what GMU Hub is.</td><td>[ ]</td></tr>
+<tr><td>Explain why master data and pincode coverage are important.</td><td>[ ]</td></tr>
+<tr><td>Explain Pickup Flow: Order -> Pickup SHG -> Transporter -> Hub.</td><td>[ ]</td></tr>
+<tr><td>Explain Warehouse Flow: Intake -> QC -> Bin Storage -> Outbound Dispatch.</td><td>[ ]</td></tr>
+<tr><td>Explain Last-Mile Drop Flow: Transporter -> Drop SHG -> Buyer Delivery OTP.</td><td>[ ]</td></tr>
+<tr><td>Explain Return Flow: Request -> Pickup -> Hub Intake.</td><td>[ ]</td></tr>
+<tr><td>Find a frontend page for a feature in <code>apps/GMU-hub/src/pages</code>.</td><td>[ ]</td></tr>
+<tr><td>Find the related backend module/service in <code>backend/app/src/modules</code>.</td><td>[ ]</td></tr>
+<tr><td>Find the Prisma schema models in <code>schema.prisma</code>.</td><td>[ ]</td></tr>
+<tr><td>Run PostgreSQL, backend and frontend locally.</td><td>[ ]</td></tr>
+<tr><td>Open Swagger and test an API endpoint.</td><td>[ ]</td></tr>
+<tr><td>Debug using Chrome Console and Network tab.</td><td>[ ]</td></tr>
+<tr><td>Use a Git feature branch.</td><td>[ ]</td></tr>
+<tr><td>Test success and error cases across connected order flows.</td><td>[ ]</td></tr>
+<tr><td>Keep secrets and production data safe.</td><td>[ ]</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="the-golden-rule">THE GOLDEN RULE</h1>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>THE GOLDEN RULE:</strong>   <em></em>Understand the business flow first $</div></div>
+<p>ightarrow$ understand the code $</p>
+<p>ightarrow$ make the smallest safe change $</p>
+<p>ightarrow$ test the complete affected flow.<em></em></p>
+<p><em>Prepared as an easy-to-understand complete project documentation for the Gramuunati Logistics (GMU) Hub platform.</em></p>
+</body></html>

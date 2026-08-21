@@ -13,6 +13,7 @@ import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye, XCircle } from 'lucide-react-native';
+import { HUB_CONFIG } from '../../constants/hub';
 import { useTranslation } from 'react-i18next';
 
 const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
@@ -152,7 +153,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                             
                             <View style={styles.routeRow}>
                               <Text style={styles.routeText} numberOfLines={2}>
-                                {isPickup ? `From - ${batch.pickupPointName} To Gadhinglaj Hub` : `From - Gadhinglaj Hub To ${batch.dropPointName}`}
+                                {isPickup ? `From - ${batch.pickupPointName} To ${HUB_CONFIG.name}` : `From - ${HUB_CONFIG.name} To ${batch.dropPointName}`}
                               </Text>
                             </View>
 
