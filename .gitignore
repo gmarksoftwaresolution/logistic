@@ -62,15 +62,15 @@ packages/db/test_db.js
 packages/db/test_orders.js
 dummy.prisma
 local_schema.sql
-Untracked files:
-backend/shg/validate_orders.ts
+
 
 
 # Prisma generated clients
 backend/shg/src/generated/
 packages/db/src/generated/
 
-
 backend/app/backups/
 backend/app/uploads/
-backend/app/.env.old-supabase-backupbackend/app/Locality_village_pincode_final_mar-2017.csv
+
+backend/app/.env.old-supabase-backup
+backend/app/Locality_village_pincode_final_mar-2017.csv
