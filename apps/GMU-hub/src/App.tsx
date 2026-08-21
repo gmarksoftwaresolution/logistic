@@ -1,17 +1,31 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 
-const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const OrderManagementPage = lazy(() => import('./pages/OrderManagementPage').then(m => ({ default: m.OrderManagementPage })));
-const OrderHistoryPage = lazy(() => import('./pages/OrderHistoryPage').then(m => ({ default: m.OrderHistoryPage })));
-const InventoryManagementPage = lazy(() => import('./pages/InventoryManagementPage').then(m => ({ default: m.InventoryManagementPage })));
-const CommunityManagementPage = lazy(() => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })));
-const TransporterManagementPage = lazy(() => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })));
-const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
-const SHGDemoPortalPage = lazy(() => import('./pages/SHGDemoPortalPage').then(m => ({ default: m.SHGDemoPortalPage })));
-const TransporterDemoPortalPage = lazy(() => import('./pages/TransporterDemoPortalPage').then(m => ({ default: m.TransporterDemoPortalPage })));
+const pageLoaders = {
+  landing: () => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })),
+  'forgot-password': () => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })),
+  dashboard: () => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })),
+  'order-management': () => import('./pages/OrderManagementPage').then(m => ({ default: m.OrderManagementPage })),
+  'order-history': () => import('./pages/OrderHistoryPage').then(m => ({ default: m.OrderHistoryPage })),
+  'inventory-management': () => import('./pages/InventoryManagementPage').then(m => ({ default: m.InventoryManagementPage })),
+  'shg-management': () => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })),
+  'transporter-management': () => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })),
+  settings: () => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
+  'shg-demo-portal': () => import('./pages/SHGDemoPortalPage').then(m => ({ default: m.SHGDemoPortalPage })),
+  'transporter-demo-portal': () => import('./pages/TransporterDemoPortalPage').then(m => ({ default: m.TransporterDemoPortalPage })),
+};
+
+const LandingPage = lazy(pageLoaders['landing']);
+const ForgotPasswordPage = lazy(pageLoaders['forgot-password']);
+const DashboardPage = lazy(pageLoaders['dashboard']);
+const OrderManagementPage = lazy(pageLoaders['order-management']);
+const OrderHistoryPage = lazy(pageLoaders['order-history']);
+const InventoryManagementPage = lazy(pageLoaders['inventory-management']);
+const CommunityManagementPage = lazy(pageLoaders['shg-management']);
+const TransporterManagementPage = lazy(pageLoaders['transporter-management']);
+const SettingsPage = lazy(pageLoaders['settings']);
+const SHGDemoPortalPage = lazy(pageLoaders['shg-demo-portal']);
+const TransporterDemoPortalPage = lazy(pageLoaders['transporter-demo-portal']);
 
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -21,6 +35,25 @@ const PageLoader = () => (
 
 function App() {
   const { currentPage, setCurrentPage } = useAppContext();
+
+  useEffect(() => {
+    // Pre-fetch all page chunks in background when browser is idle for 0ms instant tab switching
+    const prefetchPages = () => {
+      Object.values(pageLoaders).forEach(loader => {
+        try {
+          loader();
+        } catch (e) {
+          // Silent catch for network hiccups
+        }
+      });
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(prefetchPages);
+    } else {
+      setTimeout(prefetchPages, 1000);
+    }
+  }, []);
 
   const handleNavigate = (page: string) => {
     setCurrentPage(page);

@@ -172,6 +172,55 @@ export class LocationService {
     }
   }
 
+  public isRealVillageName(name: string, types?: string[]): boolean {
+    if (!name || name.trim().length < 2) return false;
+    const n = name.toLowerCase().trim();
+
+    // Reject non-English / non-ASCII commercial strings
+    if (/[^\x00-\x7F]/.test(name)) return false;
+
+    // Address prefixes / building / plot / region suffix patterns
+    if (/^(near|opp|opposite|behind|next to|front of|infront|beside|by|at|post|po|bo|so|via)\s+/i.test(n)) return false;
+    if (/\b(shop|plot|flat|house|door|survey|gat|hissa|room|office|sec|sector|phase|block|ward|lane)\s*(no|num|number)?\s*[\d\-]/i.test(n)) return false;
+    if (/\b(ta|tal|taluka|dist|district|post)\s*[\.:\s]/i.test(n)) return false;
+
+    // Google Place types check if types array provided
+    if (types && Array.isArray(types) && types.length > 0) {
+      const isLocalityType = types.some(t => ['locality', 'sublocality', 'sublocality_level_1', 'sublocality_level_2', 'neighborhood', 'administrative_area_level_3', 'political', 'village', 'postal_town'].includes(t));
+      const isEstablishmentType = types.some(t => ['establishment', 'point_of_interest', 'store', 'food', 'health', 'place_of_worship', 'lodging', 'gas_station', 'school', 'finance', 'car_repair', 'restaurant', 'bar', 'shopping_mall', 'bakery'].includes(t));
+      if (isEstablishmentType && !isLocalityType) return false;
+    }
+
+    const landmarkKeywords = [
+      'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
+      'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
+      'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
+      'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
+      'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
+      'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
+      'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
+      'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
+      'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
+      'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar',
+      'petrol', 'pump', 'fuel', 'hpcl', 'bpcl', 'iocl', 'garage', 'mechanic', 'workshop',
+      'enterprise', 'traders', 'agency', 'agencies', 'industries', 'industry', 'distributor', 'supplier', 'company', 'pvt', 'ltd', 'corp', 'corporation',
+      'building', 'tower', 'towers', 'enclave', 'residency', 'apartment', 'apartments', 'floors', 'heights', 'palace', 'chambers',
+      'hall', 'auditorium', 'stadium', 'grounds', 'ground', 'playground',
+      'police', 'chowki', 'post office', 'tehsil', 'panchayat', 'grampanchayat', 'talathi',
+      'nursery', 'dairy', 'bakery', 'sweets', 'sweet', 'saloon', 'parlour', 'parlor', 'spa', 'gym', 'fitness',
+      'haat', 'mandi', 'yard', 'godown', 'warehouse',
+      'crematorium', 'smashan', 'cemetery', 'kabristan',
+      'naka', 'bypass', 'highway', 'expressway', 'flyover', 'circle', 'ring road',
+      'sangh', 'vikri', 'kharedi', 'sahakari', 'coop', 'co-op', 'federation', 'association', 'private', 'limited'
+    ];
+
+    for (const kw of landmarkKeywords) {
+      if (n.includes(kw)) return false;
+    }
+
+    return true;
+  }
+
   async getAddressFromPincode(pincode: string) {
     if (!pincode || pincode.trim().length !== 6) {
       throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
@@ -185,33 +234,6 @@ export class LocationService {
         .replace(/\s*\(.*?\)/g, '')
         .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
         .trim();
-    };
-
-    const isRealVillageName = (name: string): boolean => {
-      if (!name || name.trim().length < 2) return false;
-      const n = name.toLowerCase().trim();
-
-      // Reject non-English / non-ASCII commercial strings
-      if (/[^\x00-\x7F]/.test(name)) return false;
-
-      const landmarkKeywords = [
-        'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
-        'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
-        'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
-        'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
-        'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
-        'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
-        'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
-        'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
-        'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
-        'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar'
-      ];
-
-      for (const kw of landmarkKeywords) {
-        if (n.includes(kw)) return false;
-      }
-
-      return true;
     };
 
     let state = '';
@@ -246,7 +268,7 @@ export class LocationService {
             const poName = r.postOffice || r.post_office;
             if (vName) {
               const cleaned = cleanVillageName(vName);
-              if (cleaned && isRealVillageName(cleaned)) {
+              if (cleaned && this.isRealVillageName(cleaned)) {
                 villageSet.add(cleaned);
                 if (cleaned.toLowerCase().includes('vaghrali') || cleaned.toLowerCase().includes('vagharali') || cleaned.toLowerCase().includes('waghrali')) {
                   villageSet.add('Vagharali');
@@ -259,7 +281,7 @@ export class LocationService {
               if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
               if (vName) {
                 const cleaned = cleanVillageName(vName);
-                if (cleaned && isRealVillageName(cleaned) && !postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
+                if (cleaned && this.isRealVillageName(cleaned) && !postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
               }
             }
           });
@@ -293,7 +315,7 @@ export class LocationService {
           if (poName) {
             postOfficesSet.add(poName);
             if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
-            if (cleaned && isRealVillageName(cleaned)) {
+            if (cleaned && this.isRealVillageName(cleaned)) {
               if (!postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
               villageSet.add(cleaned);
             }
@@ -325,7 +347,7 @@ export class LocationService {
             }
             if (types.includes('locality') || types.includes('sublocality') || types.includes('sublocality_level_1') || types.includes('sublocality_level_2') || types.includes('neighborhood') || types.includes('village')) {
               const cleaned = cleanVillageName(name);
-              if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+              if (cleaned && this.isRealVillageName(cleaned, types)) villageSet.add(cleaned);
             }
           });
         });
@@ -343,7 +365,7 @@ export class LocationService {
         googlePlacesRes.data.results.forEach((place: any) => {
           if (place.name) {
             const cleaned = cleanVillageName(place.name);
-            if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+            if (cleaned && this.isRealVillageName(cleaned, place.types)) villageSet.add(cleaned);
           }
         });
       }
@@ -357,7 +379,7 @@ export class LocationService {
             nearbyRes.data.results.forEach((place: any) => {
               if (place.name) {
                 const cleaned = cleanVillageName(place.name);
-                if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+                if (cleaned && this.isRealVillageName(cleaned, place.types)) villageSet.add(cleaned);
               }
             });
           }

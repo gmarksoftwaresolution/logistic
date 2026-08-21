@@ -520,7 +520,12 @@ export class RegistrationService {
   async getPincodeInfo(pincode: string) {
     try {
       let records = await this.locationService.findByPincode(pincode);
-      if (!records || records.length === 0) {
+      const validDbRecords = (records || []).filter(r => {
+        const v = r.village ? r.village.trim() : '';
+        return v && this.locationService.isRealVillageName(v);
+      });
+
+      if (!validDbRecords || validDbRecords.length === 0) {
         try {
           const live = await this.locationService.getAddressFromPincode(pincode);
           if (live && (live.state || live.district || live.villages?.length > 0)) {
@@ -554,9 +559,27 @@ export class RegistrationService {
           records: [],
         };
       }
-      const data = records[0];
-      const talukas = Array.from(new Set(records.map(r => String(r.taluka || r.district || '').trim()).filter(Boolean)));
-      const postOffices = Array.from(new Set(records.map(r => String(r.postOffice || r.village || '').trim()).filter(Boolean)));
+      const data = validDbRecords[0];
+      const talukas = Array.from(new Set(validDbRecords.map(r => String(r.taluka || r.district || '').trim()).filter(Boolean)));
+      const postOffices = Array.from(new Set(validDbRecords.map(r => String(r.postOffice || r.village || '').trim()).filter(Boolean)));
+      
+      const seenVillages = new Set<string>();
+      const cleanRecords: any[] = [];
+      validDbRecords.forEach(r => {
+        const v = r.village ? r.village.trim() : '';
+        if (v && !seenVillages.has(v.toLowerCase())) {
+          seenVillages.add(v.toLowerCase());
+          cleanRecords.push({
+            name: v,
+            village: v,
+            taluka: r.taluka || r.district || '',
+            postOffice: r.postOffice || r.village || '',
+            district: r.district || r.taluka || '',
+            state: r.state || '',
+          });
+        }
+      });
+
       return {
         success: true,
         state: data.state || '',
@@ -564,14 +587,7 @@ export class RegistrationService {
         taluka: data.taluka || data.district || '',
         talukas,
         postOffices,
-        records: records.map(r => ({
-          name: r.village || '',
-          village: r.village || '',
-          taluka: r.taluka || r.district || '',
-          postOffice: r.postOffice || r.village || '',
-          district: r.district || r.taluka || '',
-          state: r.state || '',
-        })),
+        records: cleanRecords,
       };
     } catch (e) {
       console.error('getPincodeInfo error:', e);

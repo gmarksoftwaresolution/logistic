@@ -1298,11 +1298,20 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [currentStep, formData.vehicleTypeSelection]);
 
-const isRealVillageName = (name: string): boolean => {
+const isRealVillageName = (name: string, types?: string[]): boolean => {
   if (!name || name.trim().length < 2) return false;
   const n = name.toLowerCase().trim();
 
   if (/[^\x00-\x7F]/.test(name)) return false;
+
+  if (/^(near|opp|opposite|behind|next to|front of|infront|beside|by|at|post|po|bo|so|via)\s+/i.test(n)) return false;
+  if (/\b(shop|plot|flat|house|door|survey|gat|hissa|room|office|sec|sector|phase|block|ward|lane)\s*(no|num|number)?\s*[\d\-]/i.test(n)) return false;
+
+  if (types && Array.isArray(types) && types.length > 0) {
+    const isLocalityType = types.some(t => ['locality', 'sublocality', 'sublocality_level_1', 'sublocality_level_2', 'neighborhood', 'administrative_area_level_3', 'political', 'village', 'postal_town'].includes(t));
+    const isEstablishmentType = types.some(t => ['establishment', 'point_of_interest', 'store', 'food', 'health', 'place_of_worship', 'lodging', 'gas_station', 'school', 'finance', 'car_repair', 'restaurant', 'bar', 'shopping_mall', 'bakery'].includes(t));
+    if (isEstablishmentType && !isLocalityType) return false;
+  }
 
   const landmarkKeywords = [
     'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
@@ -1314,7 +1323,16 @@ const isRealVillageName = (name: string): boolean => {
     'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
     'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
     'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
-    'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar'
+    'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar',
+    'petrol', 'pump', 'fuel', 'hpcl', 'bpcl', 'iocl', 'garage', 'mechanic', 'workshop',
+    'enterprise', 'traders', 'agency', 'agencies', 'industries', 'industry', 'distributor', 'supplier', 'company', 'pvt', 'ltd', 'corp', 'corporation',
+    'building', 'tower', 'towers', 'enclave', 'residency', 'apartment', 'apartments', 'floors', 'heights', 'palace', 'chambers',
+    'hall', 'auditorium', 'stadium', 'grounds', 'ground', 'playground',
+    'police', 'chowki', 'post office', 'tehsil', 'panchayat', 'grampanchayat', 'talathi',
+    'nursery', 'dairy', 'bakery', 'sweets', 'sweet', 'saloon', 'parlour', 'parlor', 'spa', 'gym', 'fitness',
+    'haat', 'mandi', 'yard', 'godown', 'warehouse',
+    'crematorium', 'smashan', 'cemetery', 'kabristan',
+    'naka', 'bypass', 'highway', 'expressway', 'flyover', 'circle', 'ring road'
   ];
 
   for (const kw of landmarkKeywords) {
