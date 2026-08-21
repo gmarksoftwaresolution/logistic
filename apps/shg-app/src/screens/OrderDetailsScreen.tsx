@@ -231,8 +231,109 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const [showRedirectModal, setShowRedirectModal] = useState<boolean>(false);
   const [selectedQrParcel, setSelectedQrParcel] = useState<any | null>(null);
   const [showOtpSection, setShowOtpSection] = useState<boolean>(false);
+  const [otpDeliveryMethod, setOtpDeliveryMethod] = useState<'whatsapp' | 'sms'>('whatsapp');
   const [otpInput, setOtpInput] = useState<string>('');
+  const [otpDigit1, setOtpDigit1] = useState<string>('');
+  const [otpDigit2, setOtpDigit2] = useState<string>('');
+  const [otpDigit3, setOtpDigit3] = useState<string>('');
+  const [otpDigit4, setOtpDigit4] = useState<string>('');
+
+  const otpInputRef1 = React.useRef<any>(null);
+  const otpInputRef2 = React.useRef<any>(null);
+  const otpInputRef3 = React.useRef<any>(null);
+  const otpInputRef4 = React.useRef<any>(null);
+
   const [isOtpSubmitting, setIsOtpSubmitting] = useState<boolean>(false);
+  const [isOtpModalVisible, setIsOtpModalVisible] = useState<boolean>(false);
+  const [otpTimerSeconds, setOtpTimerSeconds] = useState<number>(180);
+  const [isTimerActive, setIsTimerActive] = useState<boolean>(false);
+  const [otpErrorMsg, setOtpErrorMsg] = useState<string>('');
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isTimerActive && otpTimerSeconds > 0) {
+      interval = setInterval(() => {
+        setOtpTimerSeconds((prev) => prev - 1);
+      }, 1000);
+    } else if (otpTimerSeconds === 0) {
+      setIsTimerActive(false);
+      if (interval) clearInterval(interval);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTimerActive, otpTimerSeconds]);
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleOpenOtpModal = (method: 'whatsapp' | 'sms' | 'manual') => {
+    const activeMethod = method === 'manual' ? otpDeliveryMethod : method;
+    setOtpDeliveryMethod(activeMethod);
+    setOtpDigit1('');
+    setOtpDigit2('');
+    setOtpDigit3('');
+    setOtpDigit4('');
+    setOtpInput('');
+    setOtpErrorMsg('');
+    setOtpTimerSeconds(180);
+    setIsTimerActive(true);
+    setIsOtpModalVisible(true);
+    setTimeout(() => {
+      otpInputRef1.current?.focus();
+    }, 150);
+    Toast.show({
+      type: 'info',
+      text1: `OTP Sent via ${activeMethod === 'sms' ? 'SMS' : 'WhatsApp'}`,
+      text2: 'OTP code 1234 sent to buyer.'
+    });
+  };
+
+  const handleResendOtp = () => {
+    setOtpTimerSeconds(180);
+    setIsTimerActive(true);
+    setOtpErrorMsg('');
+    Toast.show({
+      type: 'success',
+      text1: 'OTP Resent!',
+      text2: `New OTP code 1234 sent via ${otpDeliveryMethod === 'sms' ? 'SMS' : 'WhatsApp'}.`
+    });
+  };
+
+  const handleVerifyAndSubmitOtp = async () => {
+    const fullOtp = `${otpDigit1}${otpDigit2}${otpDigit3}${otpDigit4}`.trim();
+    if (!fullOtp || fullOtp !== '1234') {
+      setOtpErrorMsg('Wrong OTP code! Please enter valid 4-digit code (Default: 1234).');
+      return;
+    }
+    setOtpErrorMsg('');
+    try {
+      setIsOtpSubmitting(true);
+      const cleanOrderId = (order.orderId || order.id || '').replace(/^drop-/, '').replace(/^pickup-/, '');
+      await axiosInstance.post(`/orders/new/delivery/${cleanOrderId}/complete`, { code: fullOtp });
+      if (refreshOrdersList) {
+        await refreshOrdersList().catch(() => {});
+      }
+      setIsOtpModalVisible(false);
+      Toast.show({
+        type: 'success',
+        text1: 'Delivery Completed!',
+        text2: 'Order has been successfully delivered to the buyer.'
+      });
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('AcceptedOrders', { initialTab: 'drop' });
+      }
+    } catch (err: any) {
+      setOtpErrorMsg(err.response?.data?.message || err.message || 'Failed to complete delivery.');
+    } finally {
+      setIsOtpSubmitting(false);
+    }
+  };
 
   const isProductVerified = (item: any) => {
     const matchingParcel = orderParcels.find((p: any) => p.productId === item.productId);
@@ -1111,79 +1212,316 @@ const OrderDetailsScreen: React.FC<Props> = ({
             </View>
           </View>
 
-          {!showOtpSection ? (
-            <TouchableOpacity
-              onPress={() => setShowOtpSection(true)}
-              className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center w-full active:bg-[#052210]"
-            >
-              <Ionicons name="paper-plane-outline" size={18} color="white" />
-              <Text className="text-[14px] font-bold text-white ml-2">Send OTP to Buyer</Text>
-            </TouchableOpacity>
-          ) : (
-            <View className="space-y-3 mt-2">
-              <Text className="text-[12px] font-bold text-slate-600 mb-1">Enter OTP Code received by Buyer (Default: 1234):</Text>
-              <TextInput
-                value={otpInput}
-                onChangeText={setOtpInput}
-                keyboardType="number-pad"
-                maxLength={4}
-                placeholder="1234"
-                placeholderTextColor="#94A3B8"
-                className="bg-slate-50 border border-slate-200 rounded-[14px] px-4 h-12 text-[16px] font-black text-[#111827] text-center tracking-widest mb-2"
-              />
+          <View className="space-y-3.5 mt-1">
+            {/* Header Title & Subtitle matching uploaded design */}
+            <View className="mb-1">
+              <Text className="text-[16px] font-black text-[#111827]">Select OTP Delivery Method</Text>
+              <Text className="text-[12.5px] font-medium text-slate-500 mt-0.5">
+                Choose how you want to send the OTP to the buyer.
+              </Text>
+            </View>
+
+            {/* Side-by-side Selectable Option Cards */}
+            <View className="flex-row gap-3">
+              {/* 1. Via WhatsApp Card (Recommended text badge removed as requested) */}
               <TouchableOpacity
-                onPress={async () => {
-                  if (!otpInput || otpInput.trim() !== '1234') {
-                    Toast.show({
-                      type: 'error',
-                      text1: 'Invalid OTP',
-                      text2: 'Please enter OTP 1234 to complete delivery.'
-                    });
-                    return;
-                  }
-                  try {
-                    setIsOtpSubmitting(true);
-                    const cleanOrderId = (order.orderId || order.id || '').replace(/^drop-/, '').replace(/^pickup-/, '');
-                    await axiosInstance.post(`/orders/new/delivery/${cleanOrderId}/complete`, { code: otpInput.trim() });
-                    if (refreshOrdersList) {
-                      await refreshOrdersList().catch(() => {});
-                    }
-                    Toast.show({
-                      type: 'success',
-                      text1: 'Delivery Completed!',
-                      text2: 'Order has been successfully delivered to the buyer.'
-                    });
-                    if (navigation.canGoBack()) {
-                      navigation.goBack();
-                    } else {
-                      navigation.navigate('AcceptedOrders', { initialTab: 'drop' });
-                    }
-                  } catch (err: any) {
-                    Toast.show({
-                      type: 'error',
-                      text1: 'Delivery Failed',
-                      text2: err.response?.data?.message || err.message || 'Failed to complete delivery.'
-                    });
-                  } finally {
-                    setIsOtpSubmitting(false);
-                  }
-                }}
-                disabled={isOtpSubmitting}
-                className="bg-[#059669] h-12 rounded-[16px] flex-row items-center justify-center w-full active:bg-[#047857]"
+                onPress={() => setOtpDeliveryMethod('whatsapp')}
+                activeOpacity={0.85}
+                className={`flex-1 p-3.5 rounded-[20px] border relative ${
+                  otpDeliveryMethod === 'whatsapp'
+                    ? 'bg-[#F4FBF7] border-[#16A34A]'
+                    : 'bg-white border-slate-200'
+                }`}
               >
-                {isOtpSubmitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={18} color="white" />
-                    <Text className="text-[14px] font-bold text-white ml-2">Confirm Delivery to Buyer</Text>
-                  </>
-                )}
+                {/* Top Row: Icon Box (Left) & Radio Circle (Right) */}
+                <View className="flex-row items-center justify-between mb-3">
+                  <View className="w-11 h-11 rounded-[14px] bg-[#DCFCE7] items-center justify-center">
+                    <Ionicons name="logo-whatsapp" size={22} color="#16A34A" />
+                  </View>
+                  <Ionicons
+                    name={otpDeliveryMethod === 'whatsapp' ? 'radio-button-on' : 'ellipse-outline'}
+                    size={20}
+                    color={otpDeliveryMethod === 'whatsapp' ? '#16A34A' : '#CBD5E1'}
+                  />
+                </View>
+
+                {/* Title */}
+                <Text className="text-[14.5px] font-black text-[#111827] mb-1">Via WhatsApp</Text>
+
+                {/* Description */}
+                <Text className="text-[11.5px] font-medium text-slate-500 leading-4">
+                  Send OTP instantly on WhatsApp
+                </Text>
+              </TouchableOpacity>
+
+              {/* 2. Via SMS Card */}
+              <TouchableOpacity
+                onPress={() => setOtpDeliveryMethod('sms')}
+                activeOpacity={0.85}
+                className={`flex-1 p-3.5 rounded-[20px] border relative ${
+                  otpDeliveryMethod === 'sms'
+                    ? 'bg-[#F0F7FF] border-[#2563EB]'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                {/* Top Row: Icon Box (Left) & Radio Circle (Right) */}
+                <View className="flex-row items-center justify-between mb-3">
+                  <View className="w-11 h-11 rounded-[14px] bg-[#EFF6FF] items-center justify-center">
+                    <Ionicons name="chatbox-ellipses-outline" size={22} color="#2563EB" />
+                  </View>
+                  <Ionicons
+                    name={otpDeliveryMethod === 'sms' ? 'radio-button-on' : 'ellipse-outline'}
+                    size={20}
+                    color={otpDeliveryMethod === 'sms' ? '#2563EB' : '#CBD5E1'}
+                  />
+                </View>
+
+                {/* Title */}
+                <Text className="text-[14.5px] font-black text-[#111827] mb-1">Via SMS</Text>
+
+                {/* Description */}
+                <Text className="text-[11.5px] font-medium text-slate-500 leading-4">
+                  Send OTP as a text message
+                </Text>
               </TouchableOpacity>
             </View>
-          )}
+
+            {/* Security Banner matching image: "OTP is secure and valid for 3 minutes only." */}
+            <View className="bg-[#F4FBF7] border border-[#DCFCE7] rounded-[16px] px-3.5 py-2.5 flex-row items-center">
+              <View className="w-7 h-7 rounded-full bg-[#DCFCE7] items-center justify-center mr-2.5">
+                <Ionicons name="lock-closed" size={14} color="#16A34A" />
+              </View>
+              <Text className="text-[12px] font-medium text-slate-600 flex-1">
+                OTP is secure and valid for <Text className="font-black text-[#16A34A]">3 minutes</Text> only.
+              </Text>
+            </View>
+
+            {/* Main Action Button for Selected Method (Updates text & icon dynamically for WhatsApp & SMS) */}
+            <TouchableOpacity
+              onPress={() => handleOpenOtpModal(otpDeliveryMethod)}
+              className="bg-[#073318] h-12 rounded-[16px] flex-row items-center justify-center w-full mt-1 active:bg-[#052210]"
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={otpDeliveryMethod === 'whatsapp' ? 'logo-whatsapp' : 'chatbox-ellipses-outline'}
+                size={18}
+                color="white"
+              />
+              <Text className="text-[14px] font-bold text-white ml-2">
+                Send OTP via {otpDeliveryMethod === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Manual Send OTP Option (Kept below for manual testing as requested) */}
+            <TouchableOpacity
+              onPress={() => handleOpenOtpModal('manual')}
+              className="bg-slate-100 h-10 rounded-[14px] flex-row items-center justify-center w-full mt-1 active:bg-slate-200 border border-slate-200"
+              activeOpacity={0.85}
+            >
+              <Ionicons name="paper-plane-outline" size={15} color="#475569" />
+              <Text className="text-[12.5px] font-extrabold text-slate-600 ml-2">Send OTP to Buyer (Manual)</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
+
+      {/* OTP Verification Popup Modal matching uploaded design */}
+      <Modal
+        visible={isOtpModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsOtpModalVisible(false)}
+      >
+        <View className="flex-1 bg-black/60 items-center justify-center p-4">
+          <View className="w-full bg-white rounded-[32px] p-6 shadow-2xl">
+
+            {/* Modal Header */}
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center flex-1 pr-2">
+                {/* Green Shield Lock Icon Circle */}
+                <View className="w-12 h-12 rounded-full bg-[#DCFCE7] items-center justify-center mr-3 border border-[#BBF7D0]">
+                  <Ionicons name="shield-checkmark" size={24} color="#059669" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[18px] font-extrabold text-[#111827]">Verify Buyer OTP</Text>
+                  <Text className="text-[12px] font-medium text-slate-500 mt-0.5" numberOfLines={1}>
+                    Sent via {otpDeliveryMethod === 'sms' ? 'SMS' : 'WhatsApp'} to {order.destinationAddress?.phone ? `+91 ${order.destinationAddress.phone}` : '+91 98XXX XXXXX'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Close Button (X) */}
+              <TouchableOpacity
+                onPress={() => setIsOtpModalVisible(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Timer Banner Box */}
+            <View className="bg-[#F0FDF4] border border-[#DCFCE7] rounded-[18px] px-4 py-3 items-center justify-between flex-row mb-5">
+              <View className="flex-row items-center">
+                <Ionicons name="time-outline" size={18} color="#16A34A" />
+                <Text className="text-[13px] font-bold text-slate-600 ml-2">OTP Expires in</Text>
+              </View>
+              <Text className={`text-[15px] font-black font-mono ${otpTimerSeconds > 0 ? 'text-[#16A34A]' : 'text-red-600'}`}>
+                {formatTimer(otpTimerSeconds)}
+              </Text>
+            </View>
+
+            {/* Title & Subtitle Labels */}
+            <View className="mb-4">
+              <Text className="text-[14.5px] font-black text-[#111827] mb-1">
+                Enter 4-Digit OTP code received by Buyer
+              </Text>
+              <Text className="text-[12px] font-bold text-slate-500">
+                Default OTP: 1234
+              </Text>
+            </View>
+
+            {/* 4 Separate OTP Box Inputs */}
+            <View className="flex-row gap-3 mb-3">
+              {/* Digit 1 */}
+              <TextInput
+                ref={otpInputRef1}
+                value={otpDigit1}
+                onChangeText={(val) => {
+                  const cleaned = val.replace(/[^0-9]/g, '');
+                  setOtpDigit1(cleaned);
+                  if (otpErrorMsg) setOtpErrorMsg('');
+                  if (cleaned) otpInputRef2.current?.focus();
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                className={`flex-1 h-14 bg-slate-50 rounded-[16px] border text-center text-[22px] font-black text-[#111827] ${
+                  otpDigit1 ? 'border-[#16A34A] bg-[#F4FBF7]' : 'border-slate-200'
+                }`}
+              />
+
+              {/* Digit 2 */}
+              <TextInput
+                ref={otpInputRef2}
+                value={otpDigit2}
+                onChangeText={(val) => {
+                  const cleaned = val.replace(/[^0-9]/g, '');
+                  setOtpDigit2(cleaned);
+                  if (otpErrorMsg) setOtpErrorMsg('');
+                  if (cleaned) otpInputRef3.current?.focus();
+                }}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === 'Backspace' && !otpDigit2) {
+                    otpInputRef1.current?.focus();
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                className={`flex-1 h-14 bg-slate-50 rounded-[16px] border text-center text-[22px] font-black text-[#111827] ${
+                  otpDigit2 ? 'border-[#16A34A] bg-[#F4FBF7]' : 'border-slate-200'
+                }`}
+              />
+
+              {/* Digit 3 */}
+              <TextInput
+                ref={otpInputRef3}
+                value={otpDigit3}
+                onChangeText={(val) => {
+                  const cleaned = val.replace(/[^0-9]/g, '');
+                  setOtpDigit3(cleaned);
+                  if (otpErrorMsg) setOtpErrorMsg('');
+                  if (cleaned) otpInputRef4.current?.focus();
+                }}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === 'Backspace' && !otpDigit3) {
+                    otpInputRef2.current?.focus();
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                className={`flex-1 h-14 bg-slate-50 rounded-[16px] border text-center text-[22px] font-black text-[#111827] ${
+                  otpDigit3 ? 'border-[#16A34A] bg-[#F4FBF7]' : 'border-slate-200'
+                }`}
+              />
+
+              {/* Digit 4 */}
+              <TextInput
+                ref={otpInputRef4}
+                value={otpDigit4}
+                onChangeText={(val) => {
+                  const cleaned = val.replace(/[^0-9]/g, '');
+                  setOtpDigit4(cleaned);
+                  if (otpErrorMsg) setOtpErrorMsg('');
+                }}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === 'Backspace' && !otpDigit4) {
+                    otpInputRef3.current?.focus();
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                className={`flex-1 h-14 bg-slate-50 rounded-[16px] border text-center text-[22px] font-black text-[#111827] ${
+                  otpDigit4 ? 'border-[#16A34A] bg-[#F4FBF7]' : 'border-slate-200'
+                }`}
+              />
+            </View>
+
+            {/* Wrong OTP Error Message Alert Banner */}
+            {!!otpErrorMsg && (
+              <View className="bg-red-50 border border-red-200 rounded-[14px] p-2.5 mb-3 flex-row items-center">
+                <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
+                <Text className="text-[11.5px] font-bold text-red-600 flex-1 ml-2">{otpErrorMsg}</Text>
+              </View>
+            )}
+
+            {/* Security Note */}
+            <View className="flex-row items-center mb-4">
+              <Ionicons name="shield-checkmark-outline" size={15} color="#16A34A" />
+              <Text className="text-[11.5px] font-medium text-slate-500 ml-1.5">
+                OTP is secure and valid for <Text className="font-black text-[#16A34A]">3 minutes</Text> only.
+              </Text>
+            </View>
+
+            {/* Resend OTP Row */}
+            <View className="flex-row items-center justify-between mb-5 px-0.5">
+              <Text className="text-[12px] font-semibold text-slate-500">Didn't receive code?</Text>
+              <TouchableOpacity
+                onPress={handleResendOtp}
+                disabled={isTimerActive && otpTimerSeconds > 0}
+                activeOpacity={0.7}
+              >
+                <Text
+                  className={`text-[12px] font-bold ${
+                    isTimerActive && otpTimerSeconds > 0 ? 'text-slate-400' : 'text-[#16A34A]'
+                  }`}
+                >
+                  {isTimerActive && otpTimerSeconds > 0 ? 'Resend OTP in ' : 'Resend OTP'}
+                  {isTimerActive && otpTimerSeconds > 0 && (
+                    <Text className="font-black text-[#16A34A] font-mono">{formatTimer(otpTimerSeconds)}</Text>
+                  )}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Confirm / Submit Button (Enlarged size) */}
+            <TouchableOpacity
+              onPress={handleVerifyAndSubmitOtp}
+              disabled={isOtpSubmitting}
+              className="bg-[#059669] h-14 rounded-[22px] flex-row items-center justify-center w-full active:bg-[#047857] shadow-md py-3.5"
+              activeOpacity={0.85}
+            >
+              {isOtpSubmitting ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={22} color="white" />
+                  <Text className="text-[16px] font-extrabold text-white ml-2">Verify & Complete Delivery</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Action Buttons Row */}
       <View className="flex-row mx-2 mt-3.5 mb-3 gap-3">

@@ -980,7 +980,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setPincodeFilter('all');
     setLocationFilter('all');
     setTransitPage(1);
+    setReturnPage(1);
   }, [activeTopTab]);
+
+  // Reset pagination to page 1 whenever search query or filters change
+  useEffect(() => {
+    setTransitPage(1);
+    setReturnPage(1);
+  }, [searchQuery, statusFilter, priorityFilter, villageFilter, pincodeFilter, locationFilter, dateFilter, transitStatusFilter]);
 
 
 
@@ -2343,129 +2350,133 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 <span className="text-4xl block">🚚</span>
                 <p className="text-sm">No orders currently in transit matching the filter criteria.</p>
               </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {inTransitOrdersList
-                    .slice((transitPage - 1) * transitItemsPerPage, transitPage * transitItemsPerPage)
-                    .map((order) => {
-                      const isExpanded = !!expandedOrders[order.id];
-                      const nodes = getTimelineNodes(order);
+            ) : (() => {
+              const totalTransitPages = Math.ceil(inTransitOrdersList.length / transitItemsPerPage) || 1;
+              const effectiveTransitPage = (transitPage > totalTransitPages || transitPage < 1) ? 1 : transitPage;
 
-                      const needsIntake = ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
-                      const needsBarcode = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
+              return (
+                <>
+                  <div className="space-y-4">
+                    {inTransitOrdersList
+                      .slice((effectiveTransitPage - 1) * transitItemsPerPage, effectiveTransitPage * transitItemsPerPage)
+                      .map((order) => {
+                        const isExpanded = !!expandedOrders[order.id];
+                        const nodes = getTimelineNodes(order);
 
-                      return (
-                        <div
-                          key={order.id}
-                          className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
-                        >
-                          {/* Decorative Left Border based on Priority */}
-                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
-                            ? 'bg-[#EF4444]'
-                            : order.priority?.toLowerCase() === 'medium'
-                              ? 'bg-[#F59E0B]'
-                              : 'bg-[#10B981]'
-                            }`} />
+                        const needsIntake = ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+                        const needsBarcode = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
-                          {/* Center Column (Visual Journey Stepper) */}
-                          <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
-                            <div className="min-w-[700px] relative flex items-center justify-between h-12">
+                        return (
+                          <div
+                            key={order.id}
+                            className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
+                          >
+                            {/* Decorative Left Border based on Priority */}
+                            <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
+                              ? 'bg-[#EF4444]'
+                              : order.priority?.toLowerCase() === 'medium'
+                                ? 'bg-[#F59E0B]'
+                                : 'bg-[#10B981]'
+                              }`} />
 
-                              {/* Horizontal Connecting Line Track */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
+                            {/* Center Column (Visual Journey Stepper) */}
+                            <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
+                              <div className="min-w-[700px] relative flex items-center justify-between h-12">
 
-                              {/* Segmented active/completed highlight line */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
-                                {nodes.slice(0, -1).map((node, idx) => {
-                                  const nextNode = nodes[idx + 1];
-                                  let segmentBg = 'bg-slate-200'; // Pending
+                                {/* Horizontal Connecting Line Track */}
+                                <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
 
-                                  if (node.state === 'completed' && nextNode.state === 'completed') {
-                                    segmentBg = 'bg-[#073318]'; // completed (sidebar green)
-                                  } else if (
-                                    (node.state === 'completed' && nextNode.state === 'active') ||
-                                    node.state === 'active'
-                                  ) {
-                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
+                                {/* Segmented active/completed highlight line */}
+                                <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
+                                  {nodes.slice(0, -1).map((node, idx) => {
+                                    const nextNode = nodes[idx + 1];
+                                    let segmentBg = 'bg-slate-200'; // Pending
+
+                                    if (node.state === 'completed' && nextNode.state === 'completed') {
+                                      segmentBg = 'bg-[#073318]'; // completed (sidebar green)
+                                    } else if (
+                                      (node.state === 'completed' && nextNode.state === 'active') ||
+                                      node.state === 'active'
+                                    ) {
+                                      segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
+                                    }
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Stepper Nodes */}
+                                {nodes.map((node, idx) => {
+                                  const isRedirectedSHG = node.id === 'pickup_shg' && (
+                                    order.isPickupRedirected ||
+                                    order.isRedirected ||
+                                    order.pickupShgStatus === 'REDIRECTED' ||
+                                    (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
+                                    (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
+                                  );
+                                  const nodeLabel = node.label;
+                                  const isClickable = !isRedirectedSHG;
+
+                                  let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
+                                  let iconContent = null;
+                                  let labelColor = 'text-slate-405';
+                                  let ringClass = '';
+
+                                  // Node Labels & Icons mapping
+                                  const getIconForNode = (label: string) => {
+                                    const lbl = label.toLowerCase();
+                                    if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
+                                    return <User className="h-3.5 w-3.5" />;
+                                  };
+
+                                  const iconElement = getIconForNode(node.label);
+
+                                  if (isRedirectedSHG) {
+                                    nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
+                                    iconContent = (
+                                      <div className="relative">
+                                        {iconElement}
+                                        <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
+                                      </div>
+                                    );
+                                    labelColor = 'text-purple-800 font-extrabold';
+                                  } else if (node.state === 'completed') {
+                                    nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
+                                    iconContent = (
+                                      <div className="relative">
+                                        {iconElement}
+                                        <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
+                                      </div>
+                                    );
+                                    labelColor = 'text-[#073318] font-bold';
+                                  } else if (node.state === 'active') {
+                                    nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
+                                    iconContent = (
+                                      <div className="relative animate-pulse">
+                                        {iconElement}
+                                      </div>
+                                    );
+                                    labelColor = 'text-[#0284C7] font-black';
+                                    ringClass = 'active-node-ring-blue';
+                                  } else {
+                                    nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
+                                    iconContent = iconElement;
                                   }
+
+                                  const dateDetails = getNodeTimeAndDate(order, node.label);
 
                                   return (
                                     <div
                                       key={idx}
-                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
-                                    />
-                                  );
-                                })}
-                              </div>
-
-                              {/* Stepper Nodes */}
-                              {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (
-                                  order.isPickupRedirected ||
-                                  order.isRedirected ||
-                                  order.pickupShgStatus === 'REDIRECTED' ||
-                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
-                                  (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
-                                );
-                                const nodeLabel = node.label;
-                                const isClickable = !isRedirectedSHG;
-
-                                let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
-                                let iconContent = null;
-                                let labelColor = 'text-slate-405';
-                                let ringClass = '';
-
-                                // Node Labels & Icons mapping
-                                const getIconForNode = (label: string) => {
-                                  const lbl = label.toLowerCase();
-                                  if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
-                                  return <User className="h-3.5 w-3.5" />;
-                                };
-
-                                const iconElement = getIconForNode(node.label);
-
-                                if (isRedirectedSHG) {
-                                  nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
-                                  iconContent = (
-                                    <div className="relative">
-                                      {iconElement}
-                                      <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
-                                    </div>
-                                  );
-                                  labelColor = 'text-purple-800 font-extrabold';
-                                } else if (node.state === 'completed') {
-                                  nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
-                                  iconContent = (
-                                    <div className="relative">
-                                      {iconElement}
-                                      <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#073318] font-bold';
-                                } else if (node.state === 'active') {
-                                  nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
-                                  iconContent = (
-                                    <div className="relative animate-pulse">
-                                      {iconElement}
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#0284C7] font-black';
-                                  ringClass = 'active-node-ring-blue';
-                                } else {
-                                  nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
-                                  iconContent = iconElement;
-                                }
-
-                                const dateDetails = getNodeTimeAndDate(order, node.label);
-
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
+                                      onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
                                     className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
                                   >
                                     {/* Current Location floating badge above active node */}
@@ -2660,30 +2671,31 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                         </div>
                       );
                     })}
-                </div>
-
-                {/* Pagination controls */}
-                {inTransitOrdersList.length > transitItemsPerPage && (
-                  <div className="flex justify-between items-center py-4 bg-slate-50 px-6 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600">
-                    <button
-                      disabled={transitPage === 1}
-                      onClick={() => setTransitPage((prev) => prev - 1)}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <span>Page {transitPage} of {Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}</span>
-                    <button
-                      disabled={transitPage >= Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}
-                      onClick={() => setTransitPage((prev) => prev + 1)}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
                   </div>
-                )}
-              </>
-            )}
+
+                  {/* Pagination controls */}
+                  {inTransitOrdersList.length > transitItemsPerPage && (
+                    <div className="flex justify-between items-center py-4 bg-slate-50 px-6 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 mt-4">
+                      <button
+                        disabled={effectiveTransitPage === 1}
+                        onClick={() => setTransitPage((prev) => Math.max(1, prev - 1))}
+                        className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <span>Page {effectiveTransitPage} of {totalTransitPages}</span>
+                      <button
+                        disabled={effectiveTransitPage >= totalTransitPages}
+                        onClick={() => setTransitPage((prev) => Math.min(totalTransitPages, prev + 1))}
+                        className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
