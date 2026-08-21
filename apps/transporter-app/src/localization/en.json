@@ -245,6 +245,18 @@
     "profile": "Profile"
   },
   "orders": {
+    "incoming": "Incoming",
+    "upcoming": "Upcoming",
+    "upcoming_desc": "Upcoming Orders",
+    "return": "Rejected",
+    "return_desc": "Rejected Orders",
+    "rejected": "Rejected",
+    "rejected_desc": "Rejected Orders",
+    "redirected": "Accepted",
+    "redirected_desc": "Accepted Orders",
+    "accepted": "Accepted",
+    "accepted_desc": "Accepted Orders",
+    "completed_desc": "Completed Deliveries",
     "new_orders": "New Orders",
     "accepted_orders": "Accepted Orders",
     "pickup_orders": "Pickup Orders",

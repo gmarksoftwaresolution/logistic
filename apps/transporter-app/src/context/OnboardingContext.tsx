@@ -61,6 +61,13 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   }, []);
 
   const checkFirstLaunch = async () => {
+    // Walkthrough auto-start disabled for new user logins as per production requirement
+    const ENABLE_WALKTHROUGH_AUTOSTART = false;
+    if (!ENABLE_WALKTHROUGH_AUTOSTART) {
+      setIsActive(false);
+      return;
+    }
+
     try {
       const hasLaunched = await AsyncStorage.getItem('HAS_COMPLETED_ONBOARDING');
       if (!hasLaunched) {

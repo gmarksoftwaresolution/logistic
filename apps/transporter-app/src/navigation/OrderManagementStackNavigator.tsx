@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import OrderManagementMainScreen from '../screens/OrderManagement/OrderManagementMainScreen';
 import CategoryOrdersScreen from '../screens/OrderManagement/CategoryOrdersScreen';
 import AcceptedOrdersScreen from '../screens/OrderManagement/AcceptedOrdersScreen';
+import UpcomingOrdersScreen from '../screens/OrderManagement/UpcomingOrdersScreen';
 import OrderBatchRejectedScreen from '../screens/OrderManagement/OrderBatchRejectedScreen';
 import OrderBatchCompletedScreen from '../screens/OrderManagement/OrderBatchCompletedScreen';
 import OrderBatchPickupDetailScreen from '../screens/OrderManagement/OrderBatchPickupDetailScreen';
@@ -18,6 +19,7 @@ export type OrderManagementStackParamList = {
   OrderManagementMain: undefined;
   CategoryOrders: { category: 'new' | 'accepted' | 'rejected' | 'completed' };
   AcceptedOrders: { activeTab?: 'pickup' | 'drop' } | undefined;
+  UpcomingOrders: undefined;
   OrderBatchRejected: undefined;
   OrderBatchCompleted: undefined;
   OrderBatchPickupDetail: { batchId: string };
@@ -37,6 +39,7 @@ const OrderManagementStackNavigator = () => {
       <Stack.Screen name="OrderManagementMain" component={OrderManagementMainScreen} />
       <Stack.Screen name="CategoryOrders" component={CategoryOrdersScreen} />
       <Stack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} />
+      <Stack.Screen name="UpcomingOrders" component={UpcomingOrdersScreen} />
       <Stack.Screen name="OrderBatchRejected" component={OrderBatchRejectedScreen} />
       <Stack.Screen name="OrderBatchCompleted" component={OrderBatchCompletedScreen} />
       <Stack.Screen name="OrderBatchPickupDetail" component={OrderBatchPickupDetailScreen} />

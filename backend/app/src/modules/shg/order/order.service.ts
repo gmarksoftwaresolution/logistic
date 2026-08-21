@@ -1249,6 +1249,149 @@ export class OrderService {
     });
   }
 
+  async getUpcomingOrders(shgUser: any) {
+    const userId = Number(shgUser?.id || shgUser?.sub || 0);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { address: true, shgDetail: true } as any,
+    }).catch(() => null);
+
+    if (!user || user.role !== 'SHG') {
+      return { success: true, data: [], count: 0 };
+    }
+
+    const shgUuid = String(userId);
+    const userVillage = this.normalizeStr(
+      user.address?.village || (user as any)?.shgDetail?.village || (user as any)?.village
+    );
+    const userPincode = user.address?.pincode ? user.address.pincode.trim().toLowerCase() : '';
+
+    const serviceAreas = await this.prisma.shgServiceArea.findMany({
+      where: {
+        OR: [
+          { shgUserId: String(userId) },
+          { shgUserId: user.authId }
+        ]
+      }
+    }).catch(() => []);
+
+    const isLocationMatched = (targetVillage?: string | null, targetPincode?: string | null, targetAddrLine?: string | null) => {
+      if (!targetVillage && !targetAddrLine) return false;
+      const vNorm = this.normalizeStr(targetVillage || targetAddrLine);
+      if (!vNorm) return false;
+
+      const pNorm = targetPincode ? targetPincode.trim().toLowerCase() : '';
+
+      // 1. Direct village match on user primary address
+      if (userVillage && (userVillage === vNorm || userVillage.includes(vNorm) || vNorm.includes(userVillage))) {
+        if (userPincode && pNorm) {
+          return userPincode === pNorm;
+        }
+        return true;
+      }
+
+      // 2. Village match on configured service areas
+      return serviceAreas.some(sa => {
+        const saV = this.normalizeStr(sa.village);
+        const saP = sa.pincode ? sa.pincode.trim().toLowerCase() : '';
+        if (saV && (saV === vNorm || saV.includes(vNorm) || vNorm.includes(saV))) {
+          if (saP && pNorm) {
+            return saP === pNorm;
+          }
+          return true;
+        }
+        return false;
+      });
+    };
+
+    // Query active orders in progress
+    const orders = await this.prisma.order.findMany({
+      where: {
+        mainStatus: {
+          notIn: ['DELIVERED', 'COMPLETED', 'REJECTED', 'CANCELLED']
+        }
+      },
+      include: {
+        seller: true,
+        buyer: true,
+        parcels: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    }).catch(() => []);
+
+    const matchedUpcoming: any[] = [];
+
+    for (const order of orders) {
+      const dropShgStatus = (order.dropShgStatus || '').toUpperCase();
+      const mainStatus = (order.mainStatus || '').toUpperCase();
+
+      // Buyer Delivery Address Matching
+      const buyerVillage = order.buyer?.village;
+      const buyerPincode = order.buyer?.pincode;
+      const buyerAddrLine = order.buyer?.addressLine1;
+
+      const isExplicitDropShg = order.dropShgId && String(order.dropShgId) === shgUuid;
+      const isDeliveryAddressMatch = isExplicitDropShg || isLocationMatched(buyerVillage, buyerPincode, buyerAddrLine);
+
+      // Only include as upcoming if delivery matches this SHG AND drop leg is not completed yet
+      const isUpcomingDeliveryActive = isDeliveryAddressMatch &&
+        !['DROPPED', 'COMPLETED', 'DELIVERED'].includes(dropShgStatus) &&
+        !['DELIVERED', 'COMPLETED'].includes(mainStatus);
+
+      if (isUpcomingDeliveryActive) {
+        const originAddress = {
+          name: order.seller?.sellerName || order.seller?.fullName || 'Seller',
+          phone: order.seller?.phoneNumber || order.seller?.mobileNumber || '',
+          address: [order.seller?.addressLine1, order.seller?.village, order.seller?.taluka, order.seller?.district].filter(Boolean).join(', '),
+          village: order.seller?.village || '',
+          taluka: order.seller?.taluka || '',
+          district: order.seller?.district || '',
+          pincode: order.seller?.pincode || '',
+        };
+
+        const destinationAddress = {
+          name: order.buyer?.buyerName || order.buyer?.fullName || 'Buyer / Drop Location',
+          phone: order.buyer?.phoneNumber || order.buyer?.mobileNumber || '',
+          address: [order.buyer?.addressLine1, order.buyer?.village, order.buyer?.taluka, order.buyer?.district].filter(Boolean).join(', '),
+          village: order.buyer?.village || userVillage || '',
+          taluka: order.buyer?.taluka || '',
+          district: order.buyer?.district || '',
+          pincode: order.buyer?.pincode || userPincode || '',
+        };
+
+        const displayOrderNumber = order.orderId
+          ? (order.orderId.startsWith('#') ? order.orderId : `#${order.orderId}`)
+          : `#ORD-${order.id.slice(0, 6)}`;
+
+        matchedUpcoming.push({
+          id: order.id,
+          orderId: order.orderId || order.id,
+          displayId: displayOrderNumber,
+          legType: 'drop',
+          legTitle: `Delivery to Buyer (${destinationAddress.village || 'Village'})`,
+          status: 'UPCOMING',
+          statusText: 'Expected Delivery Request',
+          totalQty: order.totalQty || (order.parcels ? order.parcels.length : 1),
+          totalWeight: order.totalWeight ? `${order.totalWeight} kg` : '2.5 kg',
+          originAddress,
+          destinationAddress,
+          createdAt: order.createdAt,
+          expectedDate: order.createdAt
+            ? new Date(new Date(order.createdAt).getTime() + 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+            : 'Today',
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: matchedUpcoming,
+      count: matchedUpcoming.length,
+    };
+  }
+
   private async findOrderFlexible(orderId: any) {
     const strId = String(orderId);
     let order = await this.prisma.order.findUnique({ where: { id: strId } });

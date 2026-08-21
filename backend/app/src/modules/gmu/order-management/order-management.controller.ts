@@ -35,6 +35,28 @@ export class OrderManagementController {
     return this.service.getCounts();
   }
 
+  @Get('shg-upcoming')
+  @ApiOperation({ summary: 'Get upcoming expected orders for SHG' })
+  async getShgUpcomingOrders(@Request() req: any) {
+    return this.shgOrderService.getUpcomingOrders(req.user);
+  }
+
+  @Get('upcoming')
+  @ApiOperation({ summary: 'Get upcoming expected orders for transporter or SHG' })
+  async getUpcomingOrders(@Request() req: any) {
+    if (req.user?.role === 'SHG') {
+      return this.shgOrderService.getUpcomingOrders(req.user);
+    }
+    const transporterId = req.user?.id || req.user?.sub;
+    return this.transporterOrderService.getUpcomingOrders(transporterId);
+  }
+
+  @Get('upcoming-orders')
+  @ApiOperation({ summary: 'Get upcoming expected orders alias' })
+  async getUpcomingOrdersAlias(@Request() req: any) {
+    return this.getUpcomingOrders(req);
+  }
+
   @Get('new/assigned')
   @ApiOperation({ summary: 'Get all active pickup assignments for the logged-in SHG' })
   async getNewAssignedOrders(@Query() filter: OrderFilterDto, @Request() req: any) {

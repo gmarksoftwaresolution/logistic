@@ -980,7 +980,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     setPincodeFilter('all');
     setLocationFilter('all');
     setTransitPage(1);
+    setReturnPage(1);
   }, [activeTopTab]);
+
+  // Reset pagination to page 1 whenever search query or filters change
+  useEffect(() => {
+    setTransitPage(1);
+    setReturnPage(1);
+  }, [searchQuery, statusFilter, priorityFilter, villageFilter, pincodeFilter, locationFilter, dateFilter, transitStatusFilter]);
 
 
 
@@ -2142,7 +2149,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         const main = (row.mainStatus || '').toUpperCase();
         const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
         const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
-        
+
         const isInvalidReason = (str?: string | null) => !str || str.toLowerCase().includes('registered') || str.toLowerCase().includes('synchronized');
         const candidateReason = (!isInvalidReason(row.rejectReason) ? row.rejectReason : null) ||
           (!isInvalidReason(row.remarks) ? row.remarks : null) ||
@@ -2150,7 +2157,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           (!isInvalidReason(row.dropRejectReason) ? row.dropRejectReason : null) ||
           (!isInvalidReason(row.tracking?.[0]?.remarks) ? row.tracking[0].remarks : null);
         const reason = candidateReason || (isPrePickup ? 'Pre-Pickup Declined by Transporter' : 'Recipient Unavailable - Return to Hub');
-          
+
         const rejectedBy = row.rejectedByName || row.pickupTransporterName || row.pickupTransporterDetails?.name || row.dropTransporterName || row.dropTransporterDetails?.name || 'Transporter';
         return (
           <div className="flex flex-col gap-0.5 text-left max-w-[220px]">
@@ -2429,348 +2436,352 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 <span className="text-4xl block">🚚</span>
                 <p className="text-sm">No orders currently in transit matching the filter criteria.</p>
               </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {inTransitOrdersList
-                    .slice((transitPage - 1) * transitItemsPerPage, transitPage * transitItemsPerPage)
-                    .map((order) => {
-                      const isExpanded = !!expandedOrders[order.id];
-                      const nodes = getTimelineNodes(order);
+            ) : (() => {
+              const totalTransitPages = Math.ceil(inTransitOrdersList.length / transitItemsPerPage) || 1;
+              const effectiveTransitPage = (transitPage > totalTransitPages || transitPage < 1) ? 1 : transitPage;
 
-                      const isDirectFlowOrder = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
-                      const needsIntake = !isDirectFlowOrder && ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
-                      const needsBarcode = !isDirectFlowOrder && ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
+              return (
+                <>
+                  <div className="space-y-4">
+                    {inTransitOrdersList
+                      .slice((effectiveTransitPage - 1) * transitItemsPerPage, effectiveTransitPage * transitItemsPerPage)
+                      .map((order) => {
+                        const isExpanded = !!expandedOrders[order.id];
+                        const nodes = getTimelineNodes(order);
 
-                      return (
-                        <div
-                          key={order.id}
-                          className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
-                        >
-                          {/* Decorative Left Border based on Priority */}
-                          <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
-                            ? 'bg-[#EF4444]'
-                            : order.priority?.toLowerCase() === 'medium'
-                              ? 'bg-[#F59E0B]'
-                              : 'bg-[#10B981]'
-                            }`} />
+                        const needsIntake = ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_TRANSPORTER', 'PARCEL_PICKED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'RETURN_PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus) && !['STORED', 'DROP_PENDING', 'DROP_CREATED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes(order.mainStatus);
+                        const needsBarcode = ['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(order.mainStatus) && !order.barcode;
 
-                          {/* Center Column (Visual Journey Stepper) */}
-                          <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
-                            <div className="min-w-[700px] relative flex items-center justify-between h-12">
+                        return (
+                          <div
+                            key={order.id}
+                            className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
+                          >
+                            {/* Decorative Left Border based on Priority */}
+                            <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
+                              ? 'bg-[#EF4444]'
+                              : order.priority?.toLowerCase() === 'medium'
+                                ? 'bg-[#F59E0B]'
+                                : 'bg-[#10B981]'
+                              }`} />
 
-                              {/* Horizontal Connecting Line Track */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
+                            {/* Center Column (Visual Journey Stepper) */}
+                            <div className="flex-1 w-full relative px-2 pt-9 pb-3 overflow-x-auto scrollbar-none select-none">
+                              <div className="min-w-[700px] relative flex items-center justify-between h-12">
 
-                              {/* Segmented active/completed highlight line */}
-                              <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
-                                {nodes.slice(0, -1).map((node, idx) => {
-                                  const nextNode = nodes[idx + 1];
-                                  let segmentBg = 'bg-slate-200'; // Pending
+                                {/* Horizontal Connecting Line Track */}
+                                <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] bg-slate-100 rounded-full -z-0" />
 
-                                  if (node.state === 'completed' && nextNode.state === 'completed') {
-                                    segmentBg = 'bg-[#073318]'; // completed (sidebar green)
-                                  } else if (
-                                    (node.state === 'completed' && nextNode.state === 'active') ||
-                                    node.state === 'active'
-                                  ) {
-                                    segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
+                                {/* Segmented active/completed highlight line */}
+                                <div className="absolute left-[30px] right-[30px] top-[16px] h-[3px] -z-0 flex">
+                                  {nodes.slice(0, -1).map((node, idx) => {
+                                    const nextNode = nodes[idx + 1];
+                                    let segmentBg = 'bg-slate-200'; // Pending
+
+                                    if (node.state === 'completed' && nextNode.state === 'completed') {
+                                      segmentBg = 'bg-[#073318]'; // completed (sidebar green)
+                                    } else if (
+                                      (node.state === 'completed' && nextNode.state === 'active') ||
+                                      node.state === 'active'
+                                    ) {
+                                      segmentBg = 'bg-gradient-to-r from-[#073318] to-[#0284C7]'; // active gradient
+                                    }
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Stepper Nodes */}
+                                {nodes.map((node, idx) => {
+                                  const isRedirectedSHG = node.id === 'pickup_shg' && (
+                                    order.isPickupRedirected ||
+                                    order.isRedirected ||
+                                    order.pickupShgStatus === 'REDIRECTED' ||
+                                    (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
+                                    (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
+                                  );
+                                  const nodeLabel = node.label;
+                                  const isClickable = !isRedirectedSHG;
+
+                                  let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
+                                  let iconContent = null;
+                                  let labelColor = 'text-slate-405';
+                                  let ringClass = '';
+
+                                  // Node Labels & Icons mapping
+                                  const getIconForNode = (label: string) => {
+                                    const lbl = label.toLowerCase();
+                                    if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
+                                    if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
+                                    return <User className="h-3.5 w-3.5" />;
+                                  };
+
+                                  const iconElement = getIconForNode(node.label);
+
+                                  if (isRedirectedSHG) {
+                                    nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
+                                    iconContent = (
+                                      <div className="relative">
+                                        {iconElement}
+                                        <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
+                                      </div>
+                                    );
+                                    labelColor = 'text-purple-800 font-extrabold';
+                                  } else if (node.state === 'completed') {
+                                    nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
+                                    iconContent = (
+                                      <div className="relative">
+                                        {iconElement}
+                                        <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
+                                      </div>
+                                    );
+                                    labelColor = 'text-[#073318] font-bold';
+                                  } else if (node.state === 'active') {
+                                    nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
+                                    iconContent = (
+                                      <div className="relative animate-pulse">
+                                        {iconElement}
+                                      </div>
+                                    );
+                                    labelColor = 'text-[#0284C7] font-black';
+                                    ringClass = 'active-node-ring-blue';
+                                  } else {
+                                    nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
+                                    iconContent = iconElement;
                                   }
+
+                                  const dateDetails = getNodeTimeAndDate(order, node.label);
 
                                   return (
                                     <div
                                       key={idx}
-                                      className={`flex-1 h-full transition-all duration-300 ${segmentBg}`}
-                                    />
+                                      onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
+                                      className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
+                                    >
+                                      {/* Current Location floating badge above active node */}
+                                      {node.state === 'active' && (
+                                        <div className="absolute -top-8 flex flex-col items-center gap-0.5 whitespace-nowrap z-50">
+                                          <span className="text-[9px] font-black text-[#073318] tracking-wide uppercase">Current Location</span>
+                                          <span className="text-[#073318] text-[8px] leading-none animate-bounce">▼</span>
+                                        </div>
+                                      )}
+
+                                      <div className={`h-[32px] w-[32px] rounded-full border-2 flex items-center justify-center font-bold transition-all relative ${nodeBg} ${ringClass} ${isClickable ? 'cursor-pointer' : ''}`}>
+                                        {iconContent}
+                                        {/* Orbiting Satellite Dots Radar Ring */}
+                                        {node.state === 'active' && (
+                                          <div className="absolute inset-0 -m-2.5 border border-[#0284C7]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
+                                            <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                            <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                            <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                            <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
+                                        {nodeLabel}
+                                      </span>
+                                      {/* Timestamp underneath completed/active nodes */}
+                                      {isRedirectedSHG ? (
+                                        <span className="text-[8px] font-extrabold text-purple-700 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider">Redirected</span>
+                                      ) : node.state === 'active' ? (
+                                        <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
+                                      ) : dateDetails ? (
+                                        <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
+                                          <span className="block font-bold text-slate-600">{dateDetails.time}</span>
+                                          <span className="block">{dateDetails.date}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-[8px] font-medium text-slate-305 mt-1">-</span>
+                                      )}
+                                    </div>
                                   );
                                 })}
                               </div>
-
-                              {/* Stepper Nodes */}
-                              {nodes.map((node, idx) => {
-                                const isRedirectedSHG = node.id === 'pickup_shg' && (
-                                  order.isPickupRedirected ||
-                                  order.isRedirected ||
-                                  order.pickupShgStatus === 'REDIRECTED' ||
-                                  (order.mainStatus || '').toUpperCase() === 'REDIRECTED' ||
-                                  (order.tracking && order.tracking.some((t: any) => String(t.status || t.remarks || t.action || '').toUpperCase().includes('REDIRECT')))
-                                );
-                                const nodeLabel = node.label;
-                                const isClickable = !isRedirectedSHG;
-
-                                let nodeBg = 'bg-slate-50 border-slate-200 text-slate-355';
-                                let iconContent = null;
-                                let labelColor = 'text-slate-405';
-                                let ringClass = '';
-
-                                // Node Labels & Icons mapping
-                                const getIconForNode = (label: string) => {
-                                  const lbl = label.toLowerCase();
-                                  if (lbl === 'seller') return <Store className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('shg')) return <Users className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('transporter')) return <Truck className="h-3.5 w-3.5" />;
-                                  if (lbl.includes('gmu') || lbl.includes('hub')) return <Home className="h-3.5 w-3.5" />;
-                                  return <User className="h-3.5 w-3.5" />;
-                                };
-
-                                const iconElement = getIconForNode(node.label);
-
-                                if (isRedirectedSHG) {
-                                  nodeBg = 'bg-purple-100 border-purple-400 text-purple-700 border-dashed shadow-xs';
-                                  iconContent = (
-                                    <div className="relative">
-                                      {iconElement}
-                                      <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none" title="Bypassed">↪</span>
-                                    </div>
-                                  );
-                                  labelColor = 'text-purple-800 font-extrabold';
-                                } else if (node.state === 'completed') {
-                                  nodeBg = 'bg-[#073318] border-[#073318] text-white shadow-xs';
-                                  iconContent = (
-                                    <div className="relative">
-                                      {iconElement}
-                                      <span className="absolute -bottom-1 -right-1 bg-[#B2D534] text-[#073318] border border-white rounded-full h-2.5 w-2.5 flex items-center justify-center text-[6px] font-black leading-none">✓</span>
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#073318] font-bold';
-                                } else if (node.state === 'active') {
-                                  nodeBg = 'bg-[#0284C7] border-[#0284C7] text-white shadow-md ring-4 ring-[#0284C7]/20';
-                                  iconContent = (
-                                    <div className="relative animate-pulse">
-                                      {iconElement}
-                                    </div>
-                                  );
-                                  labelColor = 'text-[#0284C7] font-black';
-                                  ringClass = 'active-node-ring-blue';
-                                } else {
-                                  nodeBg = 'bg-slate-50 border-slate-200 text-slate-350 opacity-60';
-                                  iconContent = iconElement;
-                                }
-
-                                const dateDetails = getNodeTimeAndDate(order, node.label);
-
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => isClickable && handleNodeClick(node.label, node.details, order)}
-                                    className={`flex flex-col items-center group relative z-10 transition-all duration-300 timeline-node-hover w-[60px] shrink-0 ${isClickable ? 'cursor-pointer' : ''}`}
-                                  >
-                                    {/* Current Location floating badge above active node */}
-                                    {node.state === 'active' && (
-                                      <div className="absolute -top-8 flex flex-col items-center gap-0.5 whitespace-nowrap z-50">
-                                        <span className="text-[9px] font-black text-[#073318] tracking-wide uppercase">Current Location</span>
-                                        <span className="text-[#073318] text-[8px] leading-none animate-bounce">▼</span>
-                                      </div>
-                                    )}
-
-                                    <div className={`h-[32px] w-[32px] rounded-full border-2 flex items-center justify-center font-bold transition-all relative ${nodeBg} ${ringClass} ${isClickable ? 'cursor-pointer' : ''}`}>
-                                      {iconContent}
-                                      {/* Orbiting Satellite Dots Radar Ring */}
-                                      {node.state === 'active' && (
-                                        <div className="absolute inset-0 -m-2.5 border border-[#0284C7]/60 border-dashed rounded-full animate-[spin_8s_linear_infinite] flex items-center justify-center pointer-events-none z-0">
-                                          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                          <div className="absolute -right-0.5 top-1/2 -translate-y-1/2 h-1 w-1 rounded-full bg-[#0284C7]" />
-                                        </div>
-                                      )}
-                                    </div>
-                                    <span className={`text-[9px] font-extrabold mt-1.5 uppercase tracking-widest ${labelColor} transition-colors group-hover:text-slate-905 whitespace-nowrap`}>
-                                      {nodeLabel}
-                                    </span>
-                                    {/* Timestamp underneath completed/active nodes */}
-                                    {isRedirectedSHG ? (
-                                      <span className="text-[8px] font-extrabold text-purple-700 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider">Redirected</span>
-                                    ) : node.state === 'active' ? (
-                                      <span className="text-[8px] font-extrabold text-[#0284C7] bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wider animate-pulse">In process</span>
-                                    ) : dateDetails ? (
-                                      <span className="text-[8px] font-medium text-slate-400 text-center leading-tight mt-1">
-                                        <span className="block font-bold text-slate-600">{dateDetails.time}</span>
-                                        <span className="block">{dateDetails.date}</span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-[8px] font-medium text-slate-305 mt-1">-</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
                             </div>
-                          </div>
 
-                          {/* Right Column (Status, ID & Actions) */}
-                          <div className="w-full lg:w-[320px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-6 self-stretch py-1 overflow-visible">
-                            {/* Top row: Status info badge and time ago (centered) */}
-                            <div className="flex flex-col items-center text-center space-y-0.5">
-                              <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED'
+                            {/* Right Column (Status, ID & Actions) */}
+                            <div className="w-full lg:w-[320px] shrink-0 flex flex-col items-center justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-6 self-stretch py-1 overflow-visible">
+                              {/* Top row: Status info badge and time ago (centered) */}
+                              <div className="flex flex-col items-center text-center space-y-0.5">
+                                <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED'
                                   ? 'bg-purple-100 text-purple-900 border border-purple-300'
                                   : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
-                                } rounded-full uppercase tracking-wider`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
-                                  }`} />
-                                {order.mainStatus.replace(/[-_]/g, ' ')}
-                              </span>
-                              <span className="block text-[10px] text-slate-400 font-semibold">
-                                • {getUpdatedTimeAgo(order)}
-                              </span>
-                            </div>
-
-                            {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
-                            <div className="w-full flex flex-row items-center justify-between gap-2 overflow-visible">
-                              {/* Order ID display styled as "ID - [id number]" */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-xs font-black text-slate-800 tracking-tight whitespace-nowrap">
-                                  {(() => {
-                                    const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
-                                    return `ID - ${match ? match[1] : order.id}`;
-                                  })()}
+                                  } rounded-full uppercase tracking-wider`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
+                                    }`} />
+                                  {order.mainStatus.replace(/[-_]/g, ' ')}
                                 </span>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(order.id);
-                                    alert(`Order ID ${order.id} copied to clipboard!`);
-                                  }}
-                                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
-                                  title="Copy Order ID"
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </button>
+                                <span className="block text-[10px] text-slate-400 font-semibold">
+                                  • {getUpdatedTimeAgo(order)}
+                                </span>
                               </div>
 
-                              <div className="flex flex-row gap-1.5 items-center shrink-0">
-                                {needsIntake && (
+                              {/* Bottom row: ID (left-aligned) & action buttons (right-aligned) */}
+                              <div className="w-full flex flex-row items-center justify-between gap-2 overflow-visible">
+                                {/* Order ID display styled as "ID - [id number]" */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="text-xs font-black text-slate-800 tracking-tight whitespace-nowrap">
+                                    {(() => {
+                                      const match = order.id.match(/(?:PICK|PH2|PICK-HEAVY)-(.+)$/i);
+                                      return `ID - ${match ? match[1] : order.id}`;
+                                    })()}
+                                  </span>
                                   <button
                                     onClick={() => {
-                                      const intakeKind = order.returnType
-                                        ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
-                                        : 'pickup';
-                                      handleIntakeClick(order, intakeKind);
+                                      navigator.clipboard.writeText(order.id);
+                                      alert(`Order ID ${order.id} copied to clipboard!`);
                                     }}
-                                    title="Scan to Intake"
-                                    className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
+                                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+                                    title="Copy Order ID"
                                   >
-                                    <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-                                    <span>Scan</span>
+                                    <Copy className="h-3 w-3" />
                                   </button>
-                                )}
-
-                                <button
-                                  onClick={() => handleViewOrder(order)}
-                                  title="View Details"
-                                  className="p-2 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
-                                >
-                                  <Eye className="h-4 w-4 text-[#B2D534]" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Expanded Details Section */}
-                          {isExpanded && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5 border-t border-slate-100 animate-in fade-in duration-200">
-                              {/* Product Details Table */}
-                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
-                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                  <Package className="h-3.5 w-3.5" />
-                                  Product Details
-                                </h5>
-
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-left text-xs border-collapse">
-                                    <thead>
-                                      <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[9px]">
-                                        <th className="pb-1.5">Item Name</th>
-                                        <th className="pb-1.5">Qty</th>
-                                        <th className="pb-1.5">Weight</th>
-                                        <th className="pb-1.5 text-right">Price</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
-                                      {order.items && order.items.length > 0 ? (
-                                        order.items.map((item: any, idx: number) => (
-                                          <tr key={idx}>
-                                            <td className="py-2 text-slate-800 font-bold">{item.name}</td>
-                                            <td className="py-2">{item.quantity}</td>
-                                            <td className="py-2">{item.weight} kg</td>
-                                            <td className="py-2 text-right">₹{item.price}</td>
-                                          </tr>
-                                        ))
-                                      ) : (
-                                        <tr>
-                                          <td colSpan={4} className="py-2 text-center text-slate-400 italic">
-                                            No items specified.
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </tbody>
-                                  </table>
                                 </div>
-                              </div>
 
-                              {/* Chronological History Log */}
-                              <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
-                                <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                  <Layers className="h-3.5 w-3.5" />
-                                  Chronological History
-                                </h5>
-
-                                <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
-                                  {order.tracking && order.tracking.length > 0 ? (
-                                    order.tracking.map((t: any, idx: number) => {
-                                      const timeStr = t.updatedAt
-                                        ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: true
-                                        })
-                                        : '08:30 AM';
-                                      return (
-                                        <div key={idx} className="flex gap-3 text-xs">
-                                          <span className="font-bold text-[#073318] shrink-0 font-mono">{timeStr}</span>
-                                          <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
-                                          <span className="text-slate-600 font-semibold font-sans">
-                                            {t.remarks || t.status.replace(/[-_]/g, ' ')}
-                                          </span>
-                                        </div>
-                                      );
-                                    })
-                                  ) : (
-                                    <div className="flex gap-3 text-xs">
-                                      <span className="font-bold text-[#073318] shrink-0 font-mono">08:30 AM</span>
-                                      <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
-                                      <span className="text-slate-655 font-semibold font-sans">Order Placed</span>
-                                    </div>
+                                <div className="flex flex-row gap-1.5 items-center shrink-0">
+                                  {needsIntake && (
+                                    <button
+                                      onClick={() => {
+                                        const intakeKind = order.returnType
+                                          ? (order.returnType === 'BUYER_RETURN' ? 'return-pickup' : 'return-drop')
+                                          : 'pickup';
+                                        handleIntakeClick(order, intakeKind);
+                                      }}
+                                      title="Scan to Intake"
+                                      className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white border border-[#073318]/20 rounded-xl font-bold flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm text-[10px] shrink-0 active-node-glow"
+                                    >
+                                      <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
+                                      <span>Scan</span>
+                                    </button>
                                   )}
+
+                                  <button
+                                    onClick={() => handleViewOrder(order)}
+                                    title="View Details"
+                                    className="p-2 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl transition-all duration-200 shadow-sm active:scale-95 flex items-center justify-center cursor-pointer shrink-0"
+                                  >
+                                    <Eye className="h-4 w-4 text-[#B2D534]" />
+                                  </button>
                                 </div>
                               </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
 
-                {/* Pagination controls */}
-                {inTransitOrdersList.length > transitItemsPerPage && (
-                  <div className="flex justify-between items-center py-4 bg-slate-50 px-6 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600">
-                    <button
-                      disabled={transitPage === 1}
-                      onClick={() => setTransitPage((prev) => prev - 1)}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <span>Page {transitPage} of {Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}</span>
-                    <button
-                      disabled={transitPage >= Math.ceil(inTransitOrdersList.length / transitItemsPerPage)}
-                      onClick={() => setTransitPage((prev) => prev + 1)}
-                      className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
+                            {/* Expanded Details Section */}
+                            {isExpanded && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5 border-t border-slate-100 animate-in fade-in duration-200">
+                                {/* Product Details Table */}
+                                <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                  <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                    <Package className="h-3.5 w-3.5" />
+                                    Product Details
+                                  </h5>
+
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs border-collapse">
+                                      <thead>
+                                        <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[9px]">
+                                          <th className="pb-1.5">Item Name</th>
+                                          <th className="pb-1.5">Qty</th>
+                                          <th className="pb-1.5">Weight</th>
+                                          <th className="pb-1.5 text-right">Price</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
+                                        {order.items && order.items.length > 0 ? (
+                                          order.items.map((item: any, idx: number) => (
+                                            <tr key={idx}>
+                                              <td className="py-2 text-slate-800 font-bold">{item.name}</td>
+                                              <td className="py-2">{item.quantity}</td>
+                                              <td className="py-2">{item.weight} kg</td>
+                                              <td className="py-2 text-right">₹{item.price}</td>
+                                            </tr>
+                                          ))
+                                        ) : (
+                                          <tr>
+                                            <td colSpan={4} className="py-2 text-center text-slate-400 italic">
+                                              No items specified.
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+
+                                {/* Chronological History Log */}
+                                <div className="bg-slate-50/50 border border-slate-150 rounded-2xl p-4 text-left space-y-3 shadow-xs">
+                                  <h5 className="font-extrabold text-[#073318] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                    <Layers className="h-3.5 w-3.5" />
+                                    Chronological History
+                                  </h5>
+
+                                  <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
+                                    {order.tracking && order.tracking.length > 0 ? (
+                                      order.tracking.map((t: any, idx: number) => {
+                                        const timeStr = t.updatedAt
+                                          ? new Date(t.updatedAt).toLocaleTimeString('en-US', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                          })
+                                          : '08:30 AM';
+                                        return (
+                                          <div key={idx} className="flex gap-3 text-xs">
+                                            <span className="font-bold text-[#073318] shrink-0 font-mono">{timeStr}</span>
+                                            <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
+                                            <span className="text-slate-600 font-semibold font-sans">
+                                              {t.remarks || t.status.replace(/[-_]/g, ' ')}
+                                            </span>
+                                          </div>
+                                        );
+                                      })
+                                    ) : (
+                                      <div className="flex gap-3 text-xs">
+                                        <span className="font-bold text-[#073318] shrink-0 font-mono">08:30 AM</span>
+                                        <div className="h-4 w-[1px] bg-slate-200 shrink-0" />
+                                        <span className="text-slate-655 font-semibold font-sans">Order Placed</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
-                )}
-              </>
-            )}
+
+                  {/* Pagination controls */}
+                  {inTransitOrdersList.length > transitItemsPerPage && (
+                    <div className="flex justify-between items-center py-4 bg-slate-50 px-6 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 mt-4">
+                      <button
+                        disabled={effectiveTransitPage === 1}
+                        onClick={() => setTransitPage((prev) => Math.max(1, prev - 1))}
+                        className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <span>Page {effectiveTransitPage} of {totalTransitPages}</span>
+                      <button
+                        disabled={effectiveTransitPage >= totalTransitPages}
+                        onClick={() => setTransitPage((prev) => Math.min(totalTransitPages, prev + 1))}
+                        className="px-3 py-1.5 border border-slate-200 hover:bg-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -2810,16 +2821,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   setReturnPage(1);
                 }}
                 className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${activeReturnSubTab === 'transporter'
-                    ? 'bg-[#073318] text-white shadow-md'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
                   }`}
               >
                 <Truck className={`h-4 w-4 ${activeReturnSubTab === 'transporter' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
                 <span>Transporter Return</span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeReturnSubTab === 'transporter'
-                      ? 'bg-[#B2D534] text-[#073318]'
-                      : 'bg-slate-200 text-slate-700'
+                    ? 'bg-[#B2D534] text-[#073318]'
+                    : 'bg-slate-200 text-slate-700'
                     }`}
                 >
                   {transporterReturnOrdersList.length}
@@ -2832,16 +2843,16 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   setReturnPage(1);
                 }}
                 className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${activeReturnSubTab === 'buyer'
-                    ? 'bg-[#073318] text-white shadow-md'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
                   }`}
               >
                 <User className={`h-4 w-4 ${activeReturnSubTab === 'buyer' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
                 <span>Buyer Return</span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[9px] font-black ${activeReturnSubTab === 'buyer'
-                      ? 'bg-[#B2D534] text-[#073318]'
-                      : 'bg-slate-200 text-slate-700'
+                    ? 'bg-[#B2D534] text-[#073318]'
+                    : 'bg-slate-200 text-slate-700'
                     }`}
                 >
                   {buyerReturnOrdersList.length}
@@ -3509,10 +3520,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                                   </span>
                                 </div>
                                 <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${(parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
-                                    ? 'bg-emerald-50 text-emerald-700'
-                                    : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
-                                      ? 'bg-blue-50 text-blue-700'
-                                      : 'bg-amber-50 text-amber-700'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-amber-50 text-amber-700'
                                   }`}>
                                   {(parcel.parcelStatus || 'PENDING').replace(/[-_]/g, ' ')}
                                 </span>
@@ -4236,8 +4247,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* Floating Toast Notification */}
         {toastMessage && (
           <div className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 transition-all transform animate-bounce-in ${toastType === 'success'
-              ? 'bg-[#073318] border-[#B2D534] text-white shadow-[#073318]/40'
-              : 'bg-red-900 border-red-400 text-white shadow-red-900/40'
+            ? 'bg-[#073318] border-[#B2D534] text-white shadow-[#073318]/40'
+            : 'bg-red-900 border-red-400 text-white shadow-red-900/40'
             }`}>
             <div className={`p-1.5 rounded-full ${toastType === 'success' ? 'bg-[#B2D534]/20 text-[#B2D534]' : 'bg-red-700 text-white'}`}>
               {toastType === 'success' ? <Check className="h-5 w-5 stroke-[3]" /> : <AlertTriangle className="h-5 w-5" />}

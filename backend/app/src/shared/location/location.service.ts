@@ -195,14 +195,16 @@ export class LocationService {
       if (/[^\x00-\x7F]/.test(name)) return false;
 
       const landmarkKeywords = [
-        'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math',
-        'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction',
+        'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
+        'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
         'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
-        'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary',
+        'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
         'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
-        'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater',
-        'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm',
-        'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue'
+        'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
+        'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
+        'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
+        'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
+        'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar'
       ];
 
       for (const kw of landmarkKeywords) {
