@@ -1173,11 +1173,20 @@ export default function SignupScreen({
       });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
-      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      if (displayMessage && displayMessage.toLowerCase().includes('already registered')) {
-        setMobileError(t("su_this_mobile_number_i_4"));
+      let displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || (error.message && !error.message.includes('status code') ? error.message : '');
+
+      if (!displayMessage) {
+        displayMessage = t("su_this_mobile_number_i_4") || 'Please check your mobile number and try again.';
+      }
+
+      if (displayMessage.toLowerCase().includes('waiting for') || displayMessage.toLowerCase().includes('approval')) {
+        setMobileError(t("su_mobile_waiting_approval") || displayMessage);
+      } else if (displayMessage.toLowerCase().includes('already approved')) {
+        setMobileError(t("su_mobile_already_approved") || displayMessage);
+      } else if (displayMessage.toLowerCase().includes('already registered')) {
+        setMobileError(t("su_this_mobile_number_i_4") || displayMessage);
       } else {
-        setMobileError(displayMessage || 'Please check your mobile number and try again.');
+        setMobileError(displayMessage);
       }
     } finally {
       setIsSubmitting(false);
@@ -1196,8 +1205,21 @@ export default function SignupScreen({
       });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message;
-      const displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || error.message;
-      setOtpError(displayMessage || t("su_please_try_again_aft_8"));
+      let displayMessage = Array.isArray(serverMessage) ? serverMessage[0] : serverMessage || (error.message && !error.message.includes('status code') ? error.message : '');
+
+      if (!displayMessage) {
+        displayMessage = t("su_please_try_again_aft_8") || 'Please try again after some time.';
+      }
+
+      if (displayMessage.toLowerCase().includes('waiting for') || displayMessage.toLowerCase().includes('approval')) {
+        setOtpError(t("su_mobile_waiting_approval") || displayMessage);
+      } else if (displayMessage.toLowerCase().includes('already approved')) {
+        setOtpError(t("su_mobile_already_approved") || displayMessage);
+      } else if (displayMessage.toLowerCase().includes('already registered')) {
+        setOtpError(t("su_this_mobile_number_i_4") || displayMessage);
+      } else {
+        setOtpError(displayMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }

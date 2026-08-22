@@ -193,6 +193,8 @@
   "su_invalid_ifsc_code_1": "Invalid IFSC Code",
   "su_otp_sent_successfull_3": "OTP Sent Successfully",
   "su_this_mobile_number_i_4": "This mobile number is already registered. Please log in or use a different number.",
+  "su_mobile_waiting_approval": "This mobile number has completed registration and is waiting for admin approval. Please wait for approval or log in.",
+  "su_mobile_already_approved": "This mobile number is already approved. Please log in to use the app.",
   "su_failed_to_send_otp_5": "Failed to send OTP",
   "su_otp_resent_successfu_6": "OTP Resent Successfully",
   "su_failed_to_resend_otp_7": "Failed to resend OTP",

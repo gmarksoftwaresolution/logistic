@@ -15,7 +15,7 @@ import {
 import { SendOtpDto, VerifyOtpDto } from '../../../shared/auth/dto/auth.dto';
 import { ShgUtil } from '../../../common/utils/shg.util';
 import { AuthService } from '../../../shared/auth/auth.service';
-import { UserRole, ShgRole, ProductCategory, VehicleType, StepStatus } from '@prisma/client';
+import { UserRole, ShgRole, ProductCategory, VehicleType, StepStatus, ApplicationStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { LocationService } from '../../../shared/location/location.service';
 
@@ -35,8 +35,27 @@ export class SignupService {
       where: { phoneNumber: dto.mobileNumber },
     });
 
-    if (existingUser && existingUser.currentStep === 7) {
-      throw new BadRequestException('This mobile number is already registered. Please log in or use a different number.');
+    if (existingUser) {
+      if (existingUser.role && existingUser.role !== UserRole.INDIVIDUAL && existingUser.role !== UserRole.SHG) {
+        throw new BadRequestException('This account is registered as a Transporter. Please open the Transporter app to log in.');
+      }
+
+      if (existingUser.applicationStatus === ApplicationStatus.APPROVED) {
+        throw new BadRequestException('This mobile number is already approved. Please log in to use the app.');
+      }
+
+      if (
+        existingUser.currentStep === 7 ||
+        existingUser.applicationStatus === ApplicationStatus.UNDER_REVIEW ||
+        existingUser.applicationStatus === ApplicationStatus.COMPLETED ||
+        (existingUser.applicationStatus === ApplicationStatus.PENDING && existingUser.currentStep === 7)
+      ) {
+        throw new BadRequestException('This mobile number has completed registration and is waiting for admin approval. Please wait for approval or log in.');
+      }
+
+      if (existingUser.applicationStatus === ApplicationStatus.REJECTED) {
+        throw new BadRequestException('Your registration application was rejected. Please contact support or use a different number.');
+      }
     }
 
     await this.otpService.generateOtp(dto.mobileNumber, 'SIGNUP');

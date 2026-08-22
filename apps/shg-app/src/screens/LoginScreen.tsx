@@ -169,7 +169,7 @@ export default function LoginScreen({ navigation }: Props) {
         'mr': 'Marathi'
       };
       const response = await authService.verifyLoginOtp(mobile, otpString, languageMap[locale] || 'English');
-      
+
       if (response.accessToken) {
         if (response.userDetails?.role === 'TRANSPORTER') {
           setOtpError('This account is registered as a Transporter. Please open the Transporter app to log in.');
@@ -184,9 +184,9 @@ export default function LoginScreen({ navigation }: Props) {
           name: response.userDetails.fullName ? response.userDetails.fullName.replace(/\s*\(.*\)\s*/g, '').trim() : '',
           mobile: response.userDetails.mobileNumber,
         };
-        
+
         await login(response.accessToken, mappedUser);
-        
+
         if (response.userDetails.signupStep === 'PROFILE') {
           try {
             const progressRes = await signupService.getProgress();
@@ -241,7 +241,7 @@ export default function LoginScreen({ navigation }: Props) {
       >
         {/* Modern Back Header */}
         <View className="px-6 pt-6 pb-2 flex-row items-center">
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               if (step === 2) {
                 setStep(1);
@@ -249,7 +249,7 @@ export default function LoginScreen({ navigation }: Props) {
               } else {
                 navigation.goBack();
               }
-            }} 
+            }}
             className="bg-white p-3 rounded-full shadow-sm mr-4"
             style={{
               shadowColor: "#000",
@@ -283,7 +283,7 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
 
           {/* Form Content Container */}
-          <View 
+          <View
             className="bg-white rounded-[32px] p-6 w-full border border-gray-100"
             style={{
               shadowColor: "#000",
@@ -307,9 +307,8 @@ export default function LoginScreen({ navigation }: Props) {
                     {t('mobile_number')}
                   </Text>
                   <View
-                    className={`bg-[#F9FAFB] h-[50px] px-4 rounded-[16px] border flex-row items-center ${
-                      mobileError ? 'border-[#EF4444]' : isMobileFocused ? 'border-[#073318]' : 'border-gray-200'
-                    }`}
+                    className={`bg-[#F9FAFB] h-[50px] px-4 rounded-[16px] border flex-row items-center ${mobileError ? 'border-[#EF4444]' : isMobileFocused ? 'border-[#073318]' : 'border-gray-200'
+                      }`}
                   >
                     <Text className="text-[#073318] text-[15px] font-bold mr-3">+91</Text>
                     <View className="h-5 w-[1px] bg-gray-200 mr-3" />
@@ -335,7 +334,7 @@ export default function LoginScreen({ navigation }: Props) {
                   ) : null}
                 </View>
 
-                 <TouchableOpacity
+                <TouchableOpacity
                   onPress={handleSendOtp}
                   disabled={loading}
                   className={`${loading ? 'bg-[#073318]/60' : 'bg-[#073318]'} py-4 rounded-2xl items-center justify-center flex-row mb-5`}
@@ -371,28 +370,27 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text className="text-[#6B7280] text-[13px] font-medium mb-8 text-center">
                   {t('enter_otp_sent')} <Text className="text-[#073318] font-bold">+91 {mobile || "XXXXXXXXXX"}</Text>
                 </Text>
-                
+
                 <View className="flex-row justify-between w-full mb-4">
                   {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <View 
-                      key={i} 
-                      className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${
-                        otpError ? 'border-red-500' : focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'
-                      }`}
+                    <View
+                      key={i}
+                      className={`w-[14%] aspect-square border-2 rounded-[16px] bg-[#F9FAFB] justify-center items-center relative ${otpError ? 'border-red-500' : focusedIndex === i ? 'border-[#073318]' : 'border-gray-200'
+                        }`}
                     >
-                      <Text 
-                        style={{ 
-                          textAlign: 'center', 
+                      <Text
+                        style={{
+                          textAlign: 'center',
                           textAlignVertical: 'center',
-                          includeFontPadding: false 
-                        }} 
+                          includeFontPadding: false
+                        }}
                         className="text-xl font-bold text-[#111827]"
                       >
                         {otp[i]}
                       </Text>
                       <TextInput
                         ref={(el) => { inputRefs.current[i] = el; }}
-                        style={{ 
+                        style={{
                           position: 'absolute',
                           top: 0,
                           left: 0,
@@ -464,7 +462,7 @@ export default function LoginScreen({ navigation }: Props) {
         {step === 1 && (
           <View className="items-center px-6 mb-6 mt-auto">
             <Text className="text-[#6B7280] text-xs text-center">
-              {t('i_accept')} 
+              {t('i_accept')}
               <Text className="text-[#073318] font-bold" onPress={() => navigation.navigate("Terms")}> {t('terms_conditions')} </Text>{t('and')}<Text className="text-[#073318] font-bold" onPress={() => navigation.navigate("Privacy")}> {t('privacy_title')}</Text>
             </Text>
           </View>

@@ -9,7 +9,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   private sanitizeMobile(mobile: string): string {
     return (mobile || '').replace(/\D/g, '').slice(-10);
@@ -236,7 +236,7 @@ export class AuthService {
 
   async getTokens(userId: number, mobile: string) {
     const payload = { sub: userId, mobile, phoneNumber: mobile };
-    
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_SECRET || 'logistic-platform-jwt-secret-key-2026',
