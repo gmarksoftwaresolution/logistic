@@ -27,6 +27,7 @@ import {
   Layers,
   QrCode,
   Plus,
+  ShoppingCart,
   ChevronDown,
   ChevronUp,
   RefreshCw,
@@ -2236,9 +2237,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* Modern Header Section */}
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1">Track every parcel from Seller to Buyer.</p>
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-[#073318]/80 to-[#073318] p-3.5 rounded-2xl border border-[#073318]/40 shadow-sm">
+                <ShoppingCart className="h-7 w-7 text-[#B2D534]" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
+                <p className="text-sm font-medium text-slate-500 mt-1">Track every parcel from Seller to Buyer.</p>
+              </div>
             </div>
           </div>
 

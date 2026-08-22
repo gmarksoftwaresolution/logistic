@@ -191,7 +191,7 @@ export class OrderService {
       if (isDropPhase) {
         // Drop Leg Completed Check: If delivered, exclude from active pickups
         const dShgStatus = (o.dropShgStatus || '').toUpperCase();
-        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED') {
+        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED' || o.mainStatus === 'PARCEL_AT_DROP_SHG') {
           return false;
         }
 
@@ -424,7 +424,7 @@ export class OrderService {
         const isDropShgMatch = (o.dropShgId && String(o.dropShgId) === shgUuid);
         const isReturnShgMatch = (o.pickupReturnShgId && String(o.pickupReturnShgId) === shgUuid);
 
-        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
+        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
         if (isPhase2ActiveForDropShg) {
           return false;
         }

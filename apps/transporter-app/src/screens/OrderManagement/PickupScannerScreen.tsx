@@ -178,11 +178,10 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
       const parcel = allParcels.find((p: any) =>
         p.parcelId === parcelId ||
         (mappedPclId && p.parcelId === mappedPclId) ||
-        p.orderId === parcelId ||
-        p.barcode === parcelId ||
-        p.id === parcelId ||
-        (cleanScannedId && p.parcelId && String(p.parcelId).includes(cleanScannedId)) ||
-        (cleanScannedId && p.orderId && String(p.orderId).includes(cleanScannedId))
+        (verificationToken && p.verificationToken === verificationToken) ||
+        (p.parcelId && parcelId && String(p.parcelId).toLowerCase() === String(parcelId).toLowerCase()) ||
+        p.qrCodeValue === data ||
+        p.qrCodeValue === parcelId
       );
 
       if (!parcel) {

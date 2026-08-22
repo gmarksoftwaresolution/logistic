@@ -226,6 +226,7 @@ export interface AppContextType {
   returnDropCompletedOrders: ReturnOrder[];
 
   incomingInventory: InventoryItem[];
+  dispatchedInventory: InventoryItem[];
   returnPickupInventory: InventoryItem[];
   dropInventory: InventoryItem[];
   returnDropInventory: InventoryItem[];
@@ -325,6 +326,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [returnAssignedOrders] = useState<ReturnOrder[]>([]);
 
   const [incomingInventory, setIncomingInventory] = useState<InventoryItem[]>([]);
+  const [dispatchedInventory, setDispatchedInventory] = useState<InventoryItem[]>([]);
   const [returnPickupInventory, setReturnPickupInventory] = useState<InventoryItem[]>([]);
   const [returnDropInventory, setReturnDropInventory] = useState<InventoryItem[]>([]);
   const [dropInventory] = useState<InventoryItem[]>([]);
@@ -826,6 +828,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIncomingInventory(sortNewestFirst(data.map(mapInventory)));
   };
 
+  const loadInventoryDispatched = async (status?: string, date?: string) => {
+    const data = await api.orders.getInventoryDispatched(status, date);
+    setDispatchedInventory(sortNewestFirst(data.map(mapInventory)));
+  };
+
   const loadInventoryTransporterReturn = async (status?: string, date?: string) => {
     const data = await api.orders.getInventoryTransporterReturn(status, date);
     setReturnDropInventory(sortNewestFirst(data.map(mapInventory)));
@@ -1160,6 +1167,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         returnDropNewOrders,
         returnDropCompletedOrders,
         incomingInventory,
+        dispatchedInventory,
         returnPickupInventory,
         dropInventory,
         returnDropInventory,

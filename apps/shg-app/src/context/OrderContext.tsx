@@ -259,7 +259,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       } else {
         // Drop leg mapping for SHG (Phase 2)
         const dShgStatus = (dbOrder.dropShgStatus || dbOrder.drop_shg_status || '').toUpperCase();
-        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED') {
+        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED') {
           return 'COMPLETED';
         }
 
@@ -612,7 +612,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const activeOrderIds = new Set(finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected).map(o => o.orderId));
       const mappedCompletedNew = (rawCompleted.newOrders || [])
         .map((o: any) => {
-          const isDrop = o.legType === 'drop' || o.phase === 'DROP' || o.dropShgStatus === 'DROPPED' || o.dropShgStatus === 'DELIVERED';
+          const isDrop = o.legType === 'drop' || o.phase === 'DROP' || o.dropShgStatus === 'DROPPED' || o.dropShgStatus === 'DELIVERED' || o.dropShgStatus === 'COMPLETED' || o.mainStatus === 'PARCEL_AT_DROP_SHG';
           return mapDbOrderToUi(o, isDrop ? 'drop' : (o.legType || 'pickup'), false);
         })
         .filter((o: any) => !activeOrderIds.has(o.orderId));

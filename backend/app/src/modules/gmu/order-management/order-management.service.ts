@@ -1416,9 +1416,8 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       {
         OR: [
-          { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { dropTransporterStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
+          { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER', 'PARCEL_AT_DROP_SHG'] } },
+          { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER', 'DROPPED'] } }
         ]
       },
       filter
@@ -1564,7 +1563,26 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       { returnType: null },
       filter,
-      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_HUB', 'DELIVERED', 'COMPLETED']
+      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'PARCEL_AT_HUB', 'PARCEL_AT_GMU', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED']
+    );
+    const orders = await this.prisma.order.findMany({
+      where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const filtered = orders.filter(o => o.dropTransporterStatus !== 'PICKED' && o.mainStatus !== 'DISPATCHED' && o.mainStatus !== 'IN_TRANSIT_TO_DROP_SHG' && o.mainStatus !== 'PARCEL_AT_DROP_SHG' && o.mainStatus !== 'DELIVERED' && o.mainStatus !== 'COMPLETED');
+    return this.enrichOrdersWithPickupAssignments(filtered);
+  }
+
+  async getInventoryDispatchedOrders(filter?: OrderFilterDto) {
+    const where = this.applyFilters(
+      { returnType: null },
+      filter,
+      ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'OUT_FOR_DELIVERY', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']
     );
     const orders = await this.prisma.order.findMany({
       where,

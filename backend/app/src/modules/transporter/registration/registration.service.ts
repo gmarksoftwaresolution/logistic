@@ -745,7 +745,7 @@ export class RegistrationService {
       try {
         let records: any[] = [];
         try {
-          records = await this.prisma.pincodeDirectory.findMany({
+          records = await this.prisma.pincode.findMany({
             where: { village: { in: cleanVillages, mode: 'insensitive' } },
             select: { pincode: true },
             take: 100,
@@ -866,7 +866,7 @@ export class RegistrationService {
             select: { pincode: true },
             take: 100,
           });
-          return [...new Set(records.map(r => r.pincode))];
+          return [...new Set(records.map((r: any) => r.pincode as string))];
         } catch (e) {
           console.warn('[resolvePincodesForVillages] Failed to fetch pincodes:', e);
           return [];

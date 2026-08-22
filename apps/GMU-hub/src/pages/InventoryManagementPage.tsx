@@ -84,16 +84,21 @@ const formatFullAddress = (
 export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
   const {
     incomingInventory,
+    dispatchedInventory,
+    dropNewOrders,
+    dropAssignedOrders,
+    dropCompletedOrders,
     returnPickupInventory,
     returnDropInventory,
     loadInventoryStored,
+    loadInventoryDispatched,
     loadInventoryTransporterReturn,
     loadInventoryBuyerReturn,
     counts,
     loadCounts,
   } = useAppContext();
 
-  // Sub-tabs: incoming | returnDrop | returnPickup
+  // Sub-tabs: incoming | dispatched | returnDrop | returnPickup
   const [activeSubTab, setActiveSubTab] = useState('incoming');
 
   // Modals state
@@ -112,6 +117,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
       try {
         await Promise.all([
           loadInventoryStored(),
+          loadInventoryDispatched ? loadInventoryDispatched() : Promise.resolve(),
           loadInventoryTransporterReturn(),
           loadInventoryBuyerReturn(),
           loadCounts()
@@ -125,6 +131,32 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     const interval = setInterval(fetchInventoryData, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const isOrderDispatched = (o: any) => {
+    const ms = (o.mainStatus || o.status || '').toUpperCase();
+    const dt = (o.dropTransporterStatus || '').toUpperCase();
+    return ms === 'DISPATCHED' || ms === 'IN_TRANSIT_TO_DROP_SHG' || ms === 'IN_TRANSIT_TO_BUYER' || ms === 'OUT_FOR_DELIVERY' || ms === 'PARCEL_AT_DROP_SHG' || ms === 'DELIVERED' || ms === 'COMPLETED' || dt === 'PICKED' || o.phase === 'DROP';
+  };
+
+  const storedOrdersList = (incomingInventory || []).filter((o: any) => !isOrderDispatched(o));
+
+  const rawDispatchedList = [
+    ...(dispatchedInventory || []),
+    ...(incomingInventory || []),
+    ...(dropNewOrders || []),
+    ...(dropAssignedOrders || []),
+    ...(dropCompletedOrders || [])
+  ];
+
+  const dispatchedOrdersList = rawDispatchedList
+    .filter((o: any) => isOrderDispatched(o))
+    .reduce((acc: any[], curr: any) => {
+      const cleanKey = String(curr.orderId || curr.id || curr.uuid || '').replace(/^(pickup|drop|return)-/, '');
+      if (cleanKey && !acc.some(item => String(item.orderId || item.id || item.uuid || '').replace(/^(pickup|drop|return)-/, '') === cleanKey)) {
+        acc.push(curr);
+      }
+      return acc;
+    }, []);
 
   const handleDownloadAllQr = (parcelsList: any[]) => {
     if (!parcelsList || parcelsList.length === 0) return;
@@ -271,6 +303,18 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
     { header: 'Action', accessor: (row: InventoryItem) => getActionButtons(row) },
   ];
 
+  const dispatchedColumns = [
+    { header: 'Order ID', accessor: 'id' as keyof InventoryItem },
+    { header: 'Start Date', accessor: (row: InventoryItem) => (row.orderDate ? row.orderDate.split(' ')[0] : (row as any).created_at ? (row as any).created_at.split(' ')[0] : '-') },
+    { header: 'Expected Delivery Date', accessor: (row: InventoryItem) => getExpectedDeliveryDate(row.orderDate || (row as any).created_at) },
+    { header: 'Warehouse Received Date', accessor: (row: InventoryItem) => (row as any).warehouseReceivedDate ? (row as any).warehouseReceivedDate.split(' ')[0] : (row.storeDate ? row.storeDate.split(' ')[0] : '-') },
+    { header: 'Product Count', accessor: 'productCount' as keyof InventoryItem },
+    { header: 'Total Qty', accessor: 'totalQty' as keyof InventoryItem },
+    { header: 'Total Weight (KG)', accessor: 'totalWeight' as keyof InventoryItem },
+    { header: 'Status', accessor: () => <StatusBadge status="Dispatched" /> },
+    { header: 'Action', accessor: (row: InventoryItem) => getActionButtons(row) },
+  ];
+
   const returnDropColumns = [
     { header: 'Order ID', accessor: 'id' as keyof InventoryItem },
     { header: 'Start Date', accessor: (row: InventoryItem) => (row.orderDate ? row.orderDate.split(' ')[0] : (row as any).created_at ? (row as any).created_at.split(' ')[0] : '-') },
@@ -299,19 +343,22 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const getCurrentTableProps = () => {
     switch (activeSubTab) {
       case 'incoming':
-        return { data: incomingInventory, columns: incomingColumns };
+        return { data: storedOrdersList, columns: incomingColumns };
+      case 'dispatched':
+        return { data: dispatchedOrdersList, columns: dispatchedColumns };
       case 'returnDrop':
         return { data: returnDropInventory, columns: returnDropColumns };
       case 'returnPickup':
         return { data: returnPickupInventory, columns: returnPickupColumns };
       default:
-        return { data: incomingInventory, columns: incomingColumns };
+        return { data: storedOrdersList, columns: incomingColumns };
     }
   };
 
   const { data: currentData, columns: currentColumns } = getCurrentTableProps();
 
-  const storedCount = counts?.inventory?.stored ?? incomingInventory.length;
+  const storedCount = storedOrdersList.length;
+  const dispatchedCount = dispatchedOrdersList.length;
   const transReturnCount = counts?.inventory?.transporterReturn ?? returnDropInventory.length;
   const buyerReturnCount = counts?.inventory?.buyerReturn ?? returnPickupInventory.length;
 
@@ -321,9 +368,14 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
         {/* Header Section */}
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Inventory Management</h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1">Track inventory across all warehouse staging cycles.</p>
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-[#073318]/80 to-[#073318] p-3.5 rounded-2xl border border-[#073318]/40 shadow-sm">
+                <Package className="h-7 w-7 text-[#B2D534]" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Inventory Management</h2>
+                <p className="text-sm font-medium text-slate-500 mt-1">Track inventory across all warehouse staging cycles.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -343,6 +395,22 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
               activeSubTab === 'incoming' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'
             }`}>
               {storedCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('dispatched')}
+            className={`py-2 px-4 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'dispatched'
+                ? 'bg-[#073318] text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <span>Dispatched Orders</span>
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+              activeSubTab === 'dispatched' ? 'bg-[#B2D534] text-[#073318]' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {dispatchedCount}
             </span>
           </button>
 

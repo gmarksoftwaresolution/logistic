@@ -214,6 +214,12 @@ export class OrderManagementController {
     return this.service.getInventoryStoredOrders(filter);
   }
 
+  @Get('inventory/dispatched')
+  @ApiOperation({ summary: 'Get dispatched orders from inventory' })
+  async getInventoryDispatchedOrders(@Query() filter: OrderFilterDto) {
+    return this.service.getInventoryDispatchedOrders(filter);
+  }
+
   @Get('inventory/transporter-return')
   @ApiOperation({ summary: 'Get stored transporter return orders' })
   async getInventoryTransporterReturnOrders(@Query() filter: OrderFilterDto) {

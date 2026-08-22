@@ -11,8 +11,6 @@ const pageLoaders = {
   'shg-management': () => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })),
   'transporter-management': () => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })),
   settings: () => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
-  'shg-demo-portal': () => import('./pages/SHGDemoPortalPage').then(m => ({ default: m.SHGDemoPortalPage })),
-  'transporter-demo-portal': () => import('./pages/TransporterDemoPortalPage').then(m => ({ default: m.TransporterDemoPortalPage })),
 };
 
 const LandingPage = lazy(pageLoaders['landing']);
@@ -24,8 +22,6 @@ const InventoryManagementPage = lazy(pageLoaders['inventory-management']);
 const CommunityManagementPage = lazy(pageLoaders['shg-management']);
 const TransporterManagementPage = lazy(pageLoaders['transporter-management']);
 const SettingsPage = lazy(pageLoaders['settings']);
-const SHGDemoPortalPage = lazy(pageLoaders['shg-demo-portal']);
-const TransporterDemoPortalPage = lazy(pageLoaders['transporter-demo-portal']);
 
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -87,12 +83,6 @@ function App() {
         )}
         {currentPage === 'transporter-management' && (
           <TransporterManagementPage onNavigate={handleNavigate} />
-        )}
-        {currentPage === 'shg-demo-portal' && (
-          <SHGDemoPortalPage onNavigate={handleNavigate} />
-        )}
-        {currentPage === 'transporter-demo-portal' && (
-          <TransporterDemoPortalPage onNavigate={handleNavigate} />
         )}
         {currentPage === 'settings' && (
           <SettingsPage onNavigate={handleNavigate} />

@@ -405,11 +405,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               return 'REJECTED' as const;
             }
             // Normal completed pickup
-            if (['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes(ptStatus) || mStatus === 'DELIVERED_TO_HUB' || mStatus === 'STORED') {
-              if (mStatus === 'REJECTED' || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected || ptStatus === 'REJECTED' || dtStatus === 'REJECTED') {
-                return 'PICKUP_COMPLETED' as const;
-              }
-              return 'DROP_COMPLETED' as const;
+            if (['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes(ptStatus) || mStatus === 'DELIVERED_TO_HUB' || mStatus === 'STORED' || mStatus === 'IN_TRANSIT_TO_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG') {
+              return 'PICKUP_COMPLETED' as const;
             }
             if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED'].includes(mStatus)) {
               return 'PICKUP_COMPLETED' as const;
@@ -580,7 +577,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             if (dtStatus === 'COMPLETED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
               return 'DROP_COMPLETED' as const;
             }
-            if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus) || isPickupFinished) {
+            if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus)) {
               return 'PICKUP_COMPLETED' as const;
             }
             // 3. Move to ACCEPTED section when Transporter accepts drop assignment from GMU Hub

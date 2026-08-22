@@ -594,8 +594,10 @@ export class OrderService {
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        mainStatus: 'AT_BUYER_SHG',
-        dropTransporterStatus: 'PARCEL_AT_DROP_SHG',
+        phase: 'DROP',
+        mainStatus: 'PARCEL_AT_DROP_SHG',
+        dropTransporterStatus: 'COMPLETED',
+        dropShgStatus: 'COMPLETED',
       }
     });
 

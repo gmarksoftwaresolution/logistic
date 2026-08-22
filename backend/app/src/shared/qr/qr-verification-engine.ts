@@ -758,9 +758,6 @@ export class QrVerificationEngine {
             { qrCodeValue: mappedPclId },
             { verificationToken: decoded.parcelId },
             { verificationToken: decoded.verificationToken },
-            { orderId: rawScan },
-            { orderId: cleanScanId },
-            { orderId: `ORD-${cleanScanId}` },
           ]
         }
       });
@@ -1089,6 +1086,7 @@ export class QrVerificationEngine {
         let dropShgStatus = order.dropShgStatus;
         let dropTransporterStatus = order.dropTransporterStatus;
 
+        let orderPhase = order.phase || 'PICKUP';
         if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG' || mainStatus === 'PARCEL_AT_SHG') {
           pickupShgStatus = 'PICKED';
           pickupTransporterStatus = 'PENDING';
@@ -1112,18 +1110,24 @@ export class QrVerificationEngine {
           dropTransporterStatus = 'PENDING';
           await triggerTransporterDropBroadcast(tx, order.id);
         } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER' || mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || mainStatus === 'IN_TRANSIT_TO_SHG') {
+          orderPhase = 'DROP';
+          pickupTransporterStatus = 'COMPLETED';
           dropTransporterStatus = 'PICKED';
+          if (!dropShgStatus || dropShgStatus === 'PENDING') dropShgStatus = 'ACCEPTED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG' || mainStatus === 'PARCEL_WITH_DROP_SHG' || mainStatus === 'PARCEL_AT_DROP_SHG') {
+          orderPhase = 'DROP';
           dropTransporterStatus = 'COMPLETED';
-          dropShgStatus = 'PICKED';
+          dropShgStatus = 'COMPLETED';
         } else if (normalizedMainStatus === 'DELIVERED') {
-          dropShgStatus = 'DROPPED';
+          orderPhase = 'DROP';
+          dropShgStatus = 'COMPLETED';
           dropTransporterStatus = 'COMPLETED';
         }
 
         await tx.order.update({
           where: { id: order.id },
           data: {
+            phase: orderPhase,
             mainStatus,
             pickupShgStatus,
             pickupTransporterStatus,
@@ -1136,14 +1140,15 @@ export class QrVerificationEngine {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET 
-            "mainStatus" = $1,
-            "pickupShgStatus" = $2,
-            "pickupTransporterStatus" = $3,
-            "dropShgStatus" = $4,
-            "dropTransporterStatus" = $5,
+            "phase" = $1,
+            "mainStatus" = $2,
+            "pickupShgStatus" = $3,
+            "pickupTransporterStatus" = $4,
+            "dropShgStatus" = $5,
+            "dropTransporterStatus" = $6,
             "updatedAt" = NOW()
-          WHERE id = $6;
-        `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
+          WHERE id = $7;
+        `, orderPhase, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
 
         if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
           await tx.orderAssignment.updateMany({

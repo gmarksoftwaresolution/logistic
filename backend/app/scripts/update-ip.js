@@ -39,19 +39,19 @@ const shgEnvPath = path.join(__dirname, '..', '..', '..', 'apps', 'shg-app', '.e
 updateEnvFile(shgEnvPath, apiUrlValue);
 
 function updateEnvFile(filePath, value) {
-  if (!fs.existsSync(filePath)) {
-    console.log(`[IP Auto-Config] Env file not found at ${filePath}, skipping.`);
-    return;
-  }
-
   try {
-    let content = fs.readFileSync(filePath, 'utf8');
-    const regex = /^EXPO_PUBLIC_API_URL=.*$/m;
+    let content = '';
+    if (fs.existsSync(filePath)) {
+      content = fs.readFileSync(filePath, 'utf8');
+      const regex = /^EXPO_PUBLIC_API_URL=.*$/m;
 
-    if (regex.test(content)) {
-      content = content.replace(regex, `EXPO_PUBLIC_API_URL=${value}`);
+      if (regex.test(content)) {
+        content = content.replace(regex, `EXPO_PUBLIC_API_URL=${value}`);
+      } else {
+        content += `\nEXPO_PUBLIC_API_URL=${value}\n`;
+      }
     } else {
-      content += `\nEXPO_PUBLIC_API_URL=${value}\n`;
+      content = `EXPO_PUBLIC_API_URL=${value}\n`;
     }
 
     fs.writeFileSync(filePath, content, 'utf8');

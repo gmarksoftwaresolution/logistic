@@ -936,7 +936,6 @@ export const TransporterManagementPage = ({ onNavigate }: { onNavigate: (page: s
           <DataTable 
             columns={activeTab === 'requests' ? requestColumns : activeTab === 'rejected' ? rejectedColumns : memberColumns} 
             data={tabData} 
-            statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
             onRefresh={() => fetchData(true)}
             isRefreshing={isRefreshing}

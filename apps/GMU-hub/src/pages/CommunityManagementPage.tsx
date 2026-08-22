@@ -1013,7 +1013,6 @@ export const CommunityManagementPage = ({ onNavigate }: { onNavigate: (page: str
           <DataTable
             columns={activeTab === 'requests' ? requestColumns : activeTab === 'rejected' ? rejectedColumns : memberColumns}
             data={tabData}
-            statusFilterField="status"
             onRowDoubleClick={navigateToDetails}
             onRefresh={() => fetchData(true)}
             isRefreshing={isRefreshing}
