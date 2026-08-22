@@ -21,8 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, FlowType, HUB_CONTACT, BatchOrder } from '../../context/OrderManagementContext';
+import { HUB_CONFIG, isHubPoint as checkHubPoint } from '../../constants/hub';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../../utils/responsive';
-import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, UserX, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle } from 'lucide-react-native';
+import { Check, CheckCircle, XCircle, Package, MapPin, Phone, User, UserX, X, ArrowRight, ChevronDown, ChevronRight, Info, AlertTriangle, Truck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import WalkthroughElement from '../../components/WalkthroughElement';
 import { FloatingScannerButton } from '../../components/FloatingScannerButton/FloatingScannerButton';
@@ -521,49 +522,19 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const isBatchRejected = batch.status === 'REJECTED' || batch.status === 'rejected' || (batch as any)?.mainStatus === 'REJECTED' || (batch as any)?.mainStatus === 'rejected' || (batch as any)?.isRejected || batch.status?.toLowerCase() === 'rejected';
 
   const canConfirm = displayProducts.length > 0 && !isCurrentLegCompleted && !isBatchRejected;
+  const batchParcels = (batch as any)?.parcels || orderParcels || [];
+
   const isParcelVerifiedForTransporter = (product: any) => {
     if (isCurrentLegCompleted) return true;
-    const matchingParcel = orderParcels.find((p: any) => p.productId === (product as any).productId);
+    const matchingParcel = batchParcels.find((p: any) => p.productId === (product as any).productId);
     if (!matchingParcel) return false;
 
     const status = matchingParcel.parcelStatus;
-    const isPickupFlow = batch.flowType !== 'gmu_to_shg';
-
-    if (type === 'pickup') {
-      if (isPickupFlow) {
-        // Step 3: Transporter pickup from SHG
-        return status === 'IN_TRANSIT_TO_HUB' ||
-          status === 'HUB_RECEIVED' ||
-          status === 'DELIVERED' ||
-          status === 'COMPLETED' ||
-          status === 'VERIFIED';
-      } else {
-        // Step 7: Transporter pickup from GMU Hub
-        return status === 'IN_TRANSIT_TO_BUYER' ||
-          status === 'PARCEL_AT_DROP_SHG' ||
-          status === 'DELIVERED' ||
-          status === 'COMPLETED' ||
-          status === 'VERIFIED';
-      }
-    } else {
-      if (isPickupFlow) {
-        // Step 4: Transporter delivery to GMU Hub
-        return status === 'HUB_RECEIVED' ||
-          status === 'DELIVERED' ||
-          status === 'COMPLETED' ||
-          status === 'VERIFIED';
-      } else {
-        // Step 8: Transporter delivery to Drop SHG
-        return status === 'PARCEL_AT_DROP_SHG' ||
-          status === 'DELIVERED' ||
-          status === 'COMPLETED' ||
-          status === 'VERIFIED';
-      }
-    }
+    return status === 'DELIVERED' || status === 'COMPLETED';
   };
 
   const verifiedCount = displayProducts.filter(p => {
-    return verifiedProductIds.includes(p.id) || isParcelVerifiedForTransporter(p);
+    return verifiedProductIds.includes(p.id) || (isCurrentLegCompleted && isParcelVerifiedForTransporter(p));
   }).length;
 
   const isPickup = type === 'pickup';
@@ -583,17 +554,10 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
       ? t('orders.items_for_handover', { defaultValue: 'Items for Handover' })
       : t('orders.associated_shipment_products', { defaultValue: 'Associated Shipment Products' });
 
-  // Auto-populate verified lists if items are already completed on load
+  // Auto-populate verified lists ONLY if current leg is actually completed
   useEffect(() => {
-    if (!batch) return;
-    const completedIds = displayProducts
-      .filter(p => {
-        const isPicked = p.status === 'picked';
-        const isCompleted = p.status === 'completed';
-        const isItemVerified = isParcelVerifiedForTransporter(p);
-        return type === 'pickup' ? (isPicked || isCompleted || isItemVerified) : (isCompleted || isItemVerified);
-      })
-      .map(p => p.id);
+    if (!batch || !isCurrentLegCompleted) return;
+    const completedIds = displayProducts.map(p => p.id);
 
     if (completedIds.length > 0) {
       setVerifiedProductIds(prev => {
@@ -606,7 +570,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
         return next;
       });
     }
-  }, [batch?.id, type]);
+  }, [batch?.id, type, isCurrentLegCompleted]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -626,27 +590,30 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           end={{ x: 1, y: 1 }}
           style={styles.masterSummaryCard}
         >
-          <View style={styles.summaryTopRow}>
-            <View style={styles.summaryIconBox}>
-              <Package size={scale(18)} color="#FFFFFF" />
-            </View>
-            <View style={styles.summaryTitleCol}>
-              <Text style={styles.summaryBatchId} numberOfLines={1} adjustsFontSizeToFit>{batch.displayId || batch.id}</Text>
-              <Text style={styles.summaryAreaTag}>{batch.areaName} {t('orders.transit', { defaultValue: 'Transit' })}</Text>
-            </View>
-            <View style={styles.summaryStatusPill}>
-              <Text style={styles.summaryStatusText}>{t('orders.status_' + batch.status.toLowerCase(), { defaultValue: batch.status }).toUpperCase()}</Text>
-            </View>
-          </View>
-
-          <View style={styles.summaryDivider} />
-
           <WalkthroughElement stepId={type === 'pickup' ? 'navigation_map' : 'navigation_map_drop'}>
+            <View style={styles.summaryTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.summaryBatchId} numberOfLines={1} adjustsFontSizeToFit>{batch.displayId || batch.id}</Text>
+                <Text style={styles.summaryAreaTag}>
+                  {batch.flowType === 'shg_to_shg'
+                    ? '⚡ Direct SHG-to-SHG Delivery'
+                    : (type === 'pickup'
+                      ? (batch.flowType === 'shg_to_gmu' ? 'Village SHG ➔ GMU Hub' : 'GMU Hub ➔ Village SHG')
+                      : (batch.flowType === 'shg_to_gmu' ? 'Village SHG ➔ GMU Hub' : 'GMU Hub ➔ Village SHG'))}
+                </Text>
+              </View>
+              <View style={[styles.summaryStatusPill, { backgroundColor: isPickup ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)' }]}>
+                <Text style={[styles.summaryStatusText, { color: isPickup ? '#60A5FA' : '#34D399' }]}>
+                  {batch.flowType === 'shg_to_shg' ? 'Direct Delivery' : (isPickup ? 'Pickup Step' : 'Drop Step')}
+                </Text>
+              </View>
+            </View>
+
             <View style={styles.routeDisplayRow}>
               <View style={styles.routePointCol}>
                 <Text style={styles.routeLabel}>{t('orders.from', { defaultValue: 'FROM' })}</Text>
                 <Text style={styles.routeNameText} numberOfLines={1}>
-                  {type === 'pickup' ? batch.pickupPointName : (batch.flowType === 'shg_to_gmu' ? batch.pickupPointName : 'Gadhinglaj Hub')}
+                  {batch.pickupPointName}
                 </Text>
               </View>
               <View style={styles.routeArrowBox}>
@@ -655,7 +622,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               <View style={styles.routePointCol}>
                 <Text style={styles.routeLabel}>{t('orders.to', { defaultValue: 'TO' })}</Text>
                 <Text style={styles.routeNameText} numberOfLines={1}>
-                  {type === 'pickup' ? (batch.flowType === 'shg_to_gmu' ? 'Gadhinglaj Hub' : batch.dropPointName) : batch.dropPointName}
+                  {batch.dropPointName}
                 </Text>
               </View>
             </View>
@@ -726,8 +693,8 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       <User size={scale(14)} color={Colors.primary} />
                     </View>
                     <View style={styles.contactDetailCol}>
-                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Contact Person (CRP)' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName((displayContact as any).crpName || displayContact.name) || (isHubPoint ? 'Hub Manager' : 'SHG Lead')}</Text>
+                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Contact Person' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name || displayContact.fullName || (displayContact as any).crpName) || (isHubPoint ? 'Hub Manager' : 'SHG Member')}</Text>
                     </View>
                   </View>
 

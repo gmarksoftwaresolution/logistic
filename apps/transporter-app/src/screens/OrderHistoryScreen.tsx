@@ -21,9 +21,10 @@ import { useOrderManagement, ActivityEntry, BatchOrder } from '../context/OrderM
 import { useTranslation } from 'react-i18next';
 import { scale, verticalScale, moderateScale, cleanPersonName } from '../utils/responsive';
 import { formatAddress } from '../utils/orderUtils';
+import { HUB_CONFIG } from '../constants/hub';
 import { Ionicons } from '@expo/vector-icons';
 import { TrackingHistoryModal } from '../components/TrackingHistoryModal';
-import { Search, MapPin, Package, Clock, Filter, XCircle, CheckCircle, History as HistoryIcon, X, ChevronRight, Hash, Phone, User, Globe, AlertCircle, TrendingUp, Calendar, ChevronLeft } from 'lucide-react-native';
+import { Search, MapPin, Package, Clock, Filter, XCircle, CheckCircle, History as HistoryIcon, X, ChevronRight, Hash, Phone, User, Globe, AlertCircle, TrendingUp, Calendar, ChevronLeft, Truck, ArrowRight, Check } from 'lucide-react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -722,7 +723,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'gmu_to_shg' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([(detailsBatch?.shgContact?.address as any)?.addressLine1, (detailsBatch?.shgContact?.address as any)?.village, (detailsBatch?.shgContact?.address as any)?.district, (detailsBatch?.shgContact?.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
+                        {detailsBatch?.flowType === 'gmu_to_shg' ? HUB_CONFIG.address : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([(detailsBatch?.shgContact?.address as any)?.addressLine1, (detailsBatch?.shgContact?.address as any)?.village, (detailsBatch?.shgContact?.address as any)?.district, (detailsBatch?.shgContact?.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
                       </Text>
                     </View>
                   </View>
@@ -760,7 +761,7 @@ const OrderHistoryScreen = () => {
                     <View style={styles.contactRow}>
                       <MapPin size={scale(18)} color={Colors.textSecondary} />
                       <Text style={styles.contactAddress}>
-                        {detailsBatch?.flowType === 'shg_to_gmu' ? 'Gadhinglaj Central GMU Hub, Near MIDC Area, Gadhinglaj' : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([(detailsBatch?.shgContact?.address as any)?.addressLine1, (detailsBatch?.shgContact?.address as any)?.village, (detailsBatch?.shgContact?.address as any)?.district, (detailsBatch?.shgContact?.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
+                        {detailsBatch?.flowType === 'shg_to_gmu' ? HUB_CONFIG.address : (typeof detailsBatch?.shgContact?.address === 'string' ? detailsBatch?.shgContact?.address : (typeof detailsBatch?.shgContact?.address === 'object' ? ([(detailsBatch?.shgContact?.address as any)?.addressLine1, (detailsBatch?.shgContact?.address as any)?.village, (detailsBatch?.shgContact?.address as any)?.district, (detailsBatch?.shgContact?.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(detailsBatch?.shgContact?.address || '')))}
                       </Text>
                     </View>
                   </View>

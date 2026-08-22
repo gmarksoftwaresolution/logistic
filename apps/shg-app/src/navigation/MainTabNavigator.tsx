@@ -21,6 +21,7 @@ import StockManagementScreen from '../screens/StockManagementScreen';
 import CompletedOrdersScreen from '../screens/CompletedOrdersScreen';
 import OrderHistoryScreen from '../modules/order-history/screens/OrderHistoryScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
+import UpcomingOrdersScreen from '../screens/UpcomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
 import DropScreen from '../screens/DropScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
@@ -186,6 +187,7 @@ function OrdersStackNavigator() {
     <OrdersStack.Navigator screenOptions={{ headerShown: false }}>
       <OrdersStack.Screen name="OrderManagement" component={OrderManagementScreen} />
       <OrdersStack.Screen name="IncomingOrders" component={IncomingOrdersScreen} options={{ gestureEnabled: false }} />
+      <OrdersStack.Screen name="UpcomingOrders" component={UpcomingOrdersScreen} />
       <OrdersStack.Screen name="AcceptedOrders" component={AcceptedOrdersScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="Drop" component={DropRedirectScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <OrdersStack.Screen name="CompletedOrders" component={CompletedOrdersScreen} />

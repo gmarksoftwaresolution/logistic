@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMU Logistics Platform - Master Onboarding Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* === PRINT & PAGE LAYOUT SETUP === */
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "Gramuunati Logistics (GMU) Platform";
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            color: #0f172a;
+            background-color: #ffffff;
+            line-height: 1.6;
+            font-size: 10pt;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* === COVER PAGE === */
+        .cover-page {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            page-break-after: always;
+            break-after: page;
+            background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+            border: 2px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 40px;
+            margin-bottom: 40px;
+        }
+
+        .cover-badge {
+            background-color: #15803d;
+            color: #ffffff;
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+        }
+
+        .cover-title {
+            font-size: 28pt;
+            font-weight: 700;
+            color: #15803d;
+            margin: 0 0 12px 0;
+            line-height: 1.2;
+        }
+
+        .cover-subtitle {
+            font-size: 16pt;
+            font-weight: 500;
+            color: #334155;
+            margin: 0 0 40px 0;
+        }
+
+        .cover-meta {
+            margin-top: 40px;
+            border-top: 2px solid #e2e8f0;
+            padding-top: 24px;
+            width: 80%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            text-align: left;
+            font-size: 9.5pt;
+        }
+
+        .meta-item strong {
+            color: #166534;
+        }
+
+        /* === HEADINGS & SECTIONS === */
+        h1.section-title {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #15803d;
+            border-bottom: 2px solid #bbf7d0;
+            padding-bottom: 8px;
+            margin-top: 36px;
+            margin-bottom: 16px;
+            page-break-before: always;
+            break-before: page;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #166534;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            break-after: avoid;
+        }
+
+        h3 {
+            font-size: 11.5pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin-top: 18px;
+            margin-bottom: 8px;
+            break-after: avoid;
+        }
+
+        p {
+            margin-top: 0;
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+
+        /* === TABLE OF CONTENTS === */
+        .toc-container {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 32px;
+            page-break-after: always;
+            break-after: page;
+        }
+
+        .toc-title {
+            font-size: 16pt;
+            font-weight: 700;
+            color: #15803d;
+            margin-top: 0;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #15803d;
+            padding-bottom: 6px;
+        }
+
+        .toc-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .toc-item-1 {
+            font-weight: 600;
+            font-size: 10pt;
+            margin-top: 10px;
+            color: #15803d;
+        }
+
+        .toc-item-2 {
+            font-weight: 400;
+            font-size: 9pt;
+            margin-left: 20px;
+            margin-top: 4px;
+            color: #334155;
+        }
+
+        .toc-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .toc-link:hover {
+            text-decoration: underline;
+        }
+
+        /* === CALLOUT BOXES === */
+        .callout {
+            border-left: 4px solid #15803d;
+            background-color: #f0fdf4;
+            padding: 14px 18px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+            break-inside: avoid;
+            font-size: 9.5pt;
+        }
+
+        .callout-important {
+            border-left-color: #15803d;
+            background-color: #f0fdf4;
+        }
+
+        .callout-warning {
+            border-left-color: #d97706;
+            background-color: #fffbeb;
+        }
+
+        .callout-tip {
+            border-left-color: #0284c7;
+            background-color: #f0f9ff;
+        }
+
+        .callout-note {
+            border-left-color: #64748b;
+            background-color: #f8fafc;
+        }
+
+        .callout-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .callout-important .callout-title { color: #15803d; }
+        .callout-warning .callout-title { color: #b45309; }
+        .callout-tip .callout-title { color: #0369a1; }
+        .callout-note .callout-title { color: #475569; }
+
+        /* === TABLES === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 18px 0;
+            font-size: 9pt;
+            break-inside: avoid;
+        }
+
+        th {
+            background-color: #15803d;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 12px;
+            border: 1px solid #15803d;
+        }
+
+        td {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* === CODE BLOCKS & DIAGRAMS === */
+        pre {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            padding: 14px 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 16px 0;
+            break-inside: avoid;
+            line-height: 1.45;
+            border: 1px solid #1e293b;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            border: 1px solid #e2e8f0;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            border: none;
+        }
+
+        .mermaid-box {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #15803d;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            white-space: pre-wrap;
+            break-inside: avoid;
+            color: #1e293b;
+        }
+
+        /* === LISTS === */
+        ul, ol {
+            margin-top: 0;
+            margin-bottom: 12px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 4px;
+        }
+
+        /* === FOOTER PRINT === */
+        .page-footer {
+            margin-top: 40px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 8pt;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+
+    <div class="cover-page">
+        <div class="cover-badge">Gramuunati Logistics Monorepo</div>
+        <h1 class="cover-title">GMU Logistics Platform</h1>
+        <div class="cover-subtitle">Complete Project Documentation & Master Onboarding Guide</div>
+        
+        <div class="cover-meta">
+            <div class="meta-item"><strong>Document Version:</strong> 1.0.0</div>
+            <div class="meta-item"><strong>Company:</strong> Gramuunati Logistics (GMU)</div>
+            <div class="meta-item"><strong>Target Audience:</strong> Interns, Developers, QA & New Team Members</div>
+            <div class="meta-item"><strong>Published:</strong> August 2026</div>
+        </div>
+    </div>
+    
+<div class="toc-container"><div class="toc-title">Table of Contents</div><ul class="toc-list">
+<li class="toc-item-1"><a href="#gmu-logistics-platform" class="toc-link">GMU Logistics Platform</a></li>
+<li class="toc-item-2"><a href="#how-to-use-this-guide" class="toc-link">How to Use this Guide</a></li>
+<li class="toc-item-2"><a href="#section-1-project-introduction" class="toc-link">Section 1: Project Introduction</a></li>
+<li class="toc-item-2"><a href="#section-2-what-is-gmu-logistics" class="toc-link">Section 2: What is GMU Logistics?</a></li>
+<li class="toc-item-2"><a href="#section-3-what-the-platform-does" class="toc-link">Section 3: What the Platform Does</a></li>
+<li class="toc-item-2"><a href="#section-4-complete-business-flow" class="toc-link">Section 4: Complete Business Flow</a></li>
+<li class="toc-item-2"><a href="#section-5-user-roles" class="toc-link">Section 5: User Roles</a></li>
+<li class="toc-item-2"><a href="#section-6-technology-used" class="toc-link">Section 6: Technology Used</a></li>
+<li class="toc-item-2"><a href="#section-7-system-architecture" class="toc-link">Section 7: System Architecture</a></li>
+<li class="toc-item-2"><a href="#section-8-project-structure" class="toc-link">Section 8: Project Structure</a></li>
+<li class="toc-item-2"><a href="#section-9-requirements--installation" class="toc-link">Section 9: Requirements & Installation</a></li>
+<li class="toc-item-2"><a href="#section-10-environment-configuration" class="toc-link">Section 10: Environment Configuration</a></li>
+<li class="toc-item-2"><a href="#section-11-database--prisma-orm" class="toc-link">Section 11: Database & Prisma ORM</a></li>
+<li class="toc-item-2"><a href="#section-12-how-to-run-the-project" class="toc-link">Section 12: How to Run the Project</a></li>
+<li class="toc-item-1"><a href="#1-start-backend-api-server-nestjs-dev-mode" class="toc-link">1. Start Backend API Server (NestJS dev mode)</a></li>
+<li class="toc-item-1"><a href="#2-start-gmu-hub-web-dashboard-vite-dev-server" class="toc-link">2. Start GMU Hub Web Dashboard (Vite dev server)</a></li>
+<li class="toc-item-1"><a href="#3-start-shg-mobile-app-expo-metro-bundler" class="toc-link">3. Start SHG Mobile App (Expo Metro bundler)</a></li>
+<li class="toc-item-1"><a href="#4-start-transporter-mobile-app-expo-metro-bundler" class="toc-link">4. Start Transporter Mobile App (Expo Metro bundler)</a></li>
+<li class="toc-item-2"><a href="#section-13-authentication--security" class="toc-link">Section 13: Authentication & Security</a></li>
+<li class="toc-item-2"><a href="#section-14-complete-module-documentation" class="toc-link">Section 14: Complete Module Documentation</a></li>
+<li class="toc-item-2"><a href="#section-15-order-status-lifecycle" class="toc-link">Section 15: Order Status Lifecycle</a></li>
+<li class="toc-item-2"><a href="#section-16-qr-code--otp-handover-workflow" class="toc-link">Section 16: QR Code & OTP Handover Workflow</a></li>
+<li class="toc-item-2"><a href="#section-17-api-communication--request-lifecycle" class="toc-link">Section 17: API Communication & Request Lifecycle</a></li>
+<li class="toc-item-2"><a href="#section-18-debugging-guide" class="toc-link">Section 18: Debugging Guide</a></li>
+<li class="toc-item-2"><a href="#section-19-common-errors--troubleshooting" class="toc-link">Section 19: Common Errors & Troubleshooting</a></li>
+<li class="toc-item-2"><a href="#section-20-git--branching-workflow" class="toc-link">Section 20: Git & Branching Workflow</a></li>
+<li class="toc-item-1"><a href="#1-always-start-by-fetching-the-latest-main-branch" class="toc-link">1. Always start by fetching the latest main branch</a></li>
+<li class="toc-item-1"><a href="#2-create-a-feature-branch-using-standard-naming-conventions" class="toc-link">2. Create a feature branch using standard naming conventions</a></li>
+<li class="toc-item-1"><a href="#formats-featurename-fixissue-choretask" class="toc-link">Formats: feature/<name>, fix/<issue>, chore/<task></a></li>
+<li class="toc-item-1"><a href="#3-make-small-logical-commits-with-clear-descriptive-messages" class="toc-link">3. Make small, logical commits with clear descriptive messages</a></li>
+<li class="toc-item-1"><a href="#4-push-your-branch-to-github" class="toc-link">4. Push your branch to GitHub</a></li>
+<li class="toc-item-1"><a href="#5-open-a-pull-request-pr-on-github-against-the-main-branch" class="toc-link">5. Open a Pull Request (PR) on GitHub against the main branch</a></li>
+<li class="toc-item-2"><a href="#section-21-testing--qa-checklist" class="toc-link">Section 21: Testing & QA Checklist</a></li>
+<li class="toc-item-2"><a href="#section-22-production-overview" class="toc-link">Section 22: Production Overview</a></li>
+<li class="toc-item-2"><a href="#section-23-commands-cheat-sheet" class="toc-link">Section 23: Commands Cheat Sheet</a></li>
+<li class="toc-item-2"><a href="#section-24-four-week-intern-learning-plan" class="toc-link">Section 24: Four-Week Intern Learning Plan</a></li>
+<li class="toc-item-2"><a href="#section-25-final-checklist--the-golden-rule" class="toc-link">Section 25: Final Checklist & The Golden Rule</a></li>
+</ul></div>
+<h1 class="section-title" id="gmu-logistics-platform">GMU Logistics Platform</h1>
+<h2 id="complete-project-documentation--master-onboarding-guide">Complete Project Documentation & Master Onboarding Guide</h2>
+<p><strong>Version:</strong> 1.0.0  </p>
+<p><strong>Company:</strong> Gramuunati Logistics (GMU)  </p>
+<p><strong>Target Audience:</strong> Interns, Developers, QA Testers, & New Engineering Team Members  </p>
+<p><strong>Last Updated:</strong> August 2026  </p>
+<p>---</p>
+<h2 id="how-to-use-this-guide">How to Use this Guide</h2>
+<p>Welcome to the <strong>GMU Logistics Engineering Team</strong>! This guide serves as your comprehensive handbook to understand the business operations, system architecture, database schema, mobile & web applications, and developer workflows of the GMU Logistics Monorepo platform.</p>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>Reading Roadmap for New Team Members:</strong> 1. <strong>Day 1 (Mandatory Start):</strong> Read <strong>Section 1 (Project Introduction)</strong> through <strong>Section 5 (User Roles)</strong> to understand <em>why</em> the platform exists and <em>how</em> rural logistics operates. 2. <strong>Day 2 (Environment Setup):</strong> Work through <strong>Section 8 (Project Structure)</strong>, <strong>Section 9 (Requirements & Installation)</strong>, <strong>Section 10 (Environment Configuration)</strong>, and <strong>Section 12 (How to Run the Project)</strong>. 3. <strong>Week 1 (Core Concepts):</strong> Study <strong>Section 11 (Database & Prisma)</strong>, <strong>Section 14 (Complete Module Documentation)</strong>, <strong>Section 15 (Order Status Lifecycle)</strong>, and <strong>Section 16 (QR & OTP Workflow)</strong>. 4. <strong>Reference Material:</strong> Keep <strong>Section 19 (Common Errors)</strong>, <strong>Section 23 (Commands Cheat Sheet)</strong>, and <strong>Section 25 (Final Checklist)</strong> bookmarked for daily engineering work.</div></div>
+<div class="callout callout-warning"><div class="callout-title">📌 WARNING</div><div><strong>Security Notice regarding Secrets & Credentials:</strong> Never commit real database URLs, JWT secret keys, API keys, or production environment files (<code>.env</code>) to GitHub or public repositories. Always use <code>.env.example</code> templates and keep actual credentials stored securely in password managers or developer secret vaults.</div></div>
+<p>---</p>
+<h2 id="section-1-project-introduction">Section 1: Project Introduction</h2>
+<h3>1.1 What is GMU Logistics?</h3>
+<p><strong>GMU Logistics</strong> (Gramuunati Logistics) is a hyper-local, multi-leg supply chain and logistics engine engineered specifically for rural and semi-urban India. It empowers micro-entrepreneurs, Self Help Groups (SHGs), local village producers, and regional transporters by connecting them to broader commercial markets.</p>
+<h3>1.2 Why it Was Built: The Rural Logistics Problem</h3>
+<p>In traditional logistics networks, major courier services (like BlueDart, Delhivery, or FedEx) operate effectively between tier-1 and tier-2 cities. However, they struggle with <strong>rural first-mile pickup</strong> and <strong>last-mile delivery</strong> due to:</p>
+<ul>
+<li><strong>Unstructured Geography:</strong> High cost of picking up small product batches from remote villages.</li>
+<li><strong>Lack of Aggregation:</strong> Rural artisans, farmers, and SHGs produce goods in small quantities without localized consolidation centers.</li>
+<li><strong>Transport Fragmentation:</strong> Regional drivers and local vehicles (pickups, milk vans, 3-wheelers) operate on fixed routes without integration into digital tracking platforms.</li>
+</ul>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+[Rural Artisans / SHGs] ---> (Unorganized Village Transport) ---> [High Freight Costs] ---> [Limited Market Access]</div>
+<h3>1.3 Business Objective</h3>
+<p>GMU Logistics bridge this gap by digitizing the village ecosystem:</p>
+<ul>
+<li><strong>First-Mile Aggregation:</strong> Local SHG members and Community Resource Persons (CRPs) collect packages directly from village producers.</li>
+<li><strong>Middle-Mile Efficiency:</strong> Regional transporters load consolidated cargo from village pickup nodes and transport it to the central <strong>Gramuunati (GMU) Warehouse Hub</strong>.</li>
+<li><strong>Last-Mile Delivery:</strong> Goods are dispatched from the central hub to target district SHG nodes for direct delivery to end buyers.</li>
+</ul>
+<h3>1.4 How GMU Hub Connects SHGs and Transporters</h3>
+<p>The <strong>GMU Hub</strong> acts as the central intelligence server and physical sorting node. It orchestrates:</p>
+<ul>
+<li>Automated routing of orders based on service pincodes.</li>
+<li>Intelligent vehicle matching for transporters based on parcel weights.</li>
+<li>Dual-sided OTP and QR code handovers to prevent theft or parcel misplacement.</li>
+</ul>
+<h3>1.5 Real-World Example</h3>
+<ul>
+<li><strong>Scenario:</strong> An SHG in a remote village in Odisha produces 20 kg of handmade organic turmeric. A buyer in a nearby city orders this product online.</li>
+<li><strong>Execution:</strong></li>
+</ul>
+<p>  1. The local SHG CRP accepts the order on the <code>SHG Mobile App</code> and visits the seller to package and generate QR labels.</p>
+<p>  2. A local milk van driver registered on the <code>Transporter Mobile App</code> picks up the box while on their morning route and drops it at the central <code>GMU Hub</code>.</p>
+<p>  3. The <code>GMU Hub Web Dashboard</code> logs receipt, performs quality checks, and assigns a last-mile delivery transporter.</p>
+<p>  4. The last-mile transporter drops the box to the destination village SHG, who delivers it to the buyer's doorstep.</p>
+<h3>Why This Matters</h3>
+<p>Understanding the business motivation ensures that every line of code you write—whether a database index or a mobile screen button—serves the real-world goal of empowering rural producers and eliminating delivery friction.</p>
+<p>---</p>
+<h2 id="section-2-what-is-gmu-logistics">Section 2: What is GMU Logistics?</h2>
+<p>The GMU Logistics network is divided into four distinct logistical legs plus reverse logistics:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+flowchart LR
+    A[First-Mile: Seller to SHG Node] --> B[Middle-Mile: Transporter to GMU Hub]
+    B --> C[Central Warehousing & QC]
+    C --> D[Middle-Mile: GMU Hub to Drop SHG]
+    D --> E[Last-Mile: Drop SHG to Buyer]
+    E -.-> F[Reverse Logistics: Buyer Return to Seller]</div>
+<h3>2.1 Logistics Breakdown</h3>
+<table>
+<thead><tr><th>Logistics Leg</th><th>Description</th><th>Real-World Example</th><th>Primary Technology</th></tr></thead><tbody>
+<tr><td><strong>First-Mile</strong></td><td>Collection of goods from individual village sellers by a local SHG member.</td><td>CRP visits a village artisan's home, verifies 5 terracotta pots, affixes QR codes, and records pickup.</td><td><code>SHG Mobile App</code></td></tr>
+<tr><td><strong>Middle-Mile</strong></td><td>Transportation of aggregated goods between village SHG points and the central GMU Warehouse Hub.</td><td>A 3-wheeler pickup driver collects 10 parcels from 3 village SHGs and transports them to the central hub.</td><td><code>Transporter Mobile App</code> & <code>GMU Hub</code></td></tr>
+<tr><td><strong>Last-Mile</strong></td><td>Final delivery of parcels from the destination SHG node to the buyer's home.</td><td>Destination SHG member carries the parcel to the buyer's doorstep and collects the delivery OTP.</td><td><code>SHG Mobile App</code></td></tr>
+<tr><td><strong>Reverse Logistics</strong></td><td>Return flow for damaged, defective, or rejected items back to the hub/seller.</td><td>Buyer rejects a parcel due to transit damage; SHG scans the barcode and initiates a <code>ReturnOrder</code>.</td><td><code>SHG App</code>, <code>Transporter App</code>, <code>GMU Hub</code></td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Logistics is modular. Recognizing which leg a backend endpoint or app screen belongs to prevents bugs in order assignment, status tracking, and commission calculations.</p>
+<p>---</p>
+<h2 id="section-3-what-the-platform-does">Section 3: What the Platform Does</h2>
+<table>
+<thead><tr><th>Area</th><th>Purpose</th><th>Key Functionality</th></tr></thead><tbody>
+<tr><td><strong>GMU Hub</strong></td><td>Central administrative control center web dashboard.</td><td>Warehouse inventory management, QC approval, order dispatching, driver approvals, system analytics.</td></tr>
+<tr><td><strong>SHG App</strong></td><td>Mobile app for Self Help Group members / CRPs.</td><td>First-mile seller pickups, village package aggregation, last-mile doorstep deliveries, local earnings tracking.</td></tr>
+<tr><td><strong>Transporter App</strong></td><td>Mobile app for commercial drivers and logistics providers.</td><td>Route selection, vehicle registration, batch QR scanning, hub drop-offs, trip earnings tracking.</td></tr>
+<tr><td><strong>Parcel Tracking</strong></td><td>Granular box-level tracking system.</td><td>Maintains real-time location history, timestamp logs, and handler identity for every parcel box.</td></tr>
+<tr><td><strong>QR Code System</strong></td><td>Digital identity for physical packages.</td><td>Unique dynamic QR image generation (<code>qrCodeValue</code>, <code>qrImage</code>) for instant phone camera scanning.</td></tr>
+<tr><td><strong>OTP System</strong></td><td>Dual-verification security for handovers.</td><td>4-digit code generated on sender's device and verified on recipient's device to validate physical handoffs.</td></tr>
+<tr><td><strong>Warehouse</strong></td><td>Physical and digital storage node management.</td><td>Tracks bin storage (<code>STORED</code>), quality control (<code>QC_PASSED</code>), order batching, and outbound dispatching.</td></tr>
+<tr><td><strong>Returns</strong></td><td>Management of return orders (<code>ReturnOrder</code>).</td><td>Handles buyer return requests, barcode tracking, return parcel scan histories, and seller return delivery.</td></tr>
+<tr><td><strong>Earnings</strong></td><td>Automated commission distribution platform.</td><td>Calculates distance, weight, and leg-based commissions credited to SHGs and Transporters upon success.</td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Each area fulfills a distinct role in the ecosystem. Clean separation of concerns across these areas keeps our monorepo scalable and maintainable.</p>
+<p>---</p>
+<h2 id="section-4-complete-business-flow">Section 4: Complete Business Flow</h2>
+<h3>4.1 End-to-End Order Lifecycle Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+sequenceDiagram
+    autonumber
+    actor Buyer
+    actor Seller
+    actor SHG_Pickup as Pickup SHG (CRP)
+    actor Transporter as Transporter Driver
+    actor GMU_Hub as GMU Hub Admin
+    actor SHG_Drop as Drop SHG Member
+
+    Buyer->>Seller: Places Order (MasterOrder Created)
+    Seller-->>SHG_Pickup: Broadcast / Pickup Order Notification
+    SHG_Pickup->>Seller: Visits Seller, inspects items, generates Parcel QR
+    Seller->>SHG_Pickup: Provides Seller Handover OTP
+    Note over SHG_Pickup: Status: PARCEL_PICKED
+    Transporter->>SHG_Pickup: Arrives at Village Node, batch scans Parcel QRs
+    SHG_Pickup->>Transporter: Provides SHG Handover OTP
+    Note over Transporter: Status: IN_TRANSIT_TO_HUB
+    Transporter->>GMU_Hub: Unloads parcels at Central Warehouse Hub
+    GMU_Hub->>GMU_Hub: Scans QRs, performs QC, updates status to STORED
+    Note over GMU_Hub: Warehouse Inventory Management
+    GMU_Hub->>Transporter: Assigns Outbound Drop Transporter
+    Transporter->>SHG_Drop: Transports & delivers parcels to Destination Village SHG
+    SHG_Drop->>Transporter: Provides Destination Handover OTP
+    Note over SHG_Drop: Status: PARCEL_AT_DROP_SHG
+    SHG_Drop->>Buyer: Visits Buyer doorstep for delivery
+    Buyer->>SHG_Drop: Shares Buyer Delivery OTP
+    Note over Buyer: Status: DELIVERED (Earning Credited)</div>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>The Golden Chain of Handovers:</strong> Notice that a parcel NEVER moves from one person to another without TWO actions: 1. <strong>Physical Scan of the Parcel QR Code</strong> (Proves the recipient has the physical box). 2. <strong>Verification of the Handover OTP</strong> (Proves the sender authorized the transfer).</div></div>
+<h3>Why This Matters</h3>
+<p>If a parcel is lost, the combination of QR scans and OTP verifications allows developers and admins to identify the exact person who last held physical custody of the box.</p>
+<p>---</p>
+<h2 id="section-5-user-roles">Section 5: User Roles</h2>
+<table>
+<thead><tr><th>Role Name</th><th>Platform Interface</th><th>Core Responsibilities</th><th>Database Enum Value</th></tr></thead><tbody>
+<tr><td><strong>Super Admin</strong></td><td>GMU Hub (Web)</td><td>Full platform control, system configuration, global analytics, admin user management.</td><td><code>SUPER_ADMIN</code></td></tr>
+<tr><td><strong>GMU Admin</strong></td><td>GMU Hub (Web)</td><td>Warehouse oversight, driver onboarding approval, order rerouting, QC validation.</td><td><code>ADMIN</code></td></tr>
+<tr><td><strong>SHG Member / CRP</strong></td><td>SHG App (Mobile)</td><td>First-mile seller pickups, village package aggregation, last-mile delivery, earning tracking.</td><td><code>SHG</code></td></tr>
+<tr><td><strong>Individual SHG</strong></td><td>SHG App (Mobile)</td><td>Independent local service provider managing localized pickup/drop tasks.</td><td><code>INDIVIDUAL</code></td></tr>
+<tr><td><strong>Transporter</strong></td><td>Transporter App (Mobile)</td><td>Inter-village and hub transport, vehicle capacity management, route execution.</td><td><code>TRANSPORTER</code></td></tr>
+<tr><td><strong>Seller</strong></td><td>Seller / E-com Integration</td><td>Product listing, stock availability, parcel preparation, seller OTP generation.</td><td><code>SELLER</code></td></tr>
+<tr><td><strong>Buyer</strong></td><td>Consumer E-com Interface</td><td>Order placement, delivery address input, item receipt, delivery OTP verification.</td><td><code>BUYER</code></td></tr>
+</tbody></table>
+<div class="callout callout-note"><div class="callout-title">📌 NOTE</div><div><strong>Developer Tip on Role Guards:</strong> In the NestJS backend, API endpoints are protected using <code>@Roles(UserRole.ADMIN, UserRole.SHG)</code> decorators combined with standard <code>JwtAuthGuard</code> and <code>RolesGuard</code>.</div></div>
+<h3>Why This Matters</h3>
+<p>Security and data integrity depend on strict Role-Based Access Control (RBAC). Always ensure API requests validate user roles before returning sensitive logistics data.</p>
+<p>---</p>
+<h2 id="section-6-technology-used">Section 6: Technology Used</h2>
+<table>
+<thead><tr><th>Technology</th><th>Simple Meaning</th><th>Role & Use in GMU Logistics</th></tr></thead><tbody>
+<tr><td><strong>React (v19)</strong></td><td>UI JavaScript Library</td><td>Powers the <code>GMU-hub</code> web administration dashboard interface.</td></tr>
+<tr><td><strong>React Native (v0.81)</strong></td><td>Mobile Application Framework</td><td>Enables native Android/iOS mobile apps using JavaScript/TypeScript.</td></tr>
+<tr><td><strong>Expo SDK (v54)</strong></td><td>React Native Tooling & Suite</td><td>Provides mobile hardware access: camera for QR scanning, location, and push notifications.</td></tr>
+<tr><td><strong>Tailwind CSS (v4)</strong></td><td>Utility-first CSS Framework</td><td>Used in <code>GMU-hub</code> web interface for modern, responsive dashboard styling.</td></tr>
+<tr><td><strong>NativeWind (v4)</strong></td><td>Tailwind for React Native</td><td>Utility styling solution for custom mobile UI design in <code>shg-app</code>.</td></tr>
+<tr><td><strong>NestJS (v10)</strong></td><td>Progressive Node.js Backend Framework</td><td>Modular, strongly-typed server framework hosting our REST APIs and business logic.</td></tr>
+<tr><td><strong>Prisma ORM (v6)</strong></td><td>Next-generation Database Toolkit</td><td>Provides type-safe database queries, migrations, and model relationships for PostgreSQL.</td></tr>
+<tr><td><strong>PostgreSQL</strong></td><td>Relational Database Engine</td><td>Primary data store for orders, users, parcels, transactions, and audit logs.</td></tr>
+<tr><td><strong>Supabase Auth</strong></td><td>Identity & Auth Management</td><td>Provides underlying authentication UUID management and secure user identity storage.</td></tr>
+<tr><td><strong>JWT (JSON Web Tokens)</strong></td><td>Encrypted Auth Tokens</td><td>Stateless user session verification passed via HTTP <code>Authorization: Bearer <token></code>.</td></tr>
+<tr><td><strong>Swagger UI</strong></td><td>Interactive API Documentation</td><td>Automatically generates interactive API endpoints test harness at <code>/api/docs</code>.</td></tr>
+<tr><td><strong>TypeScript (v5+)</strong></td><td>Typed JavaScript Superscript</td><td>Enforces type safety across backend services, mobile applications, and web dashboards.</td></tr>
+<tr><td><strong>Git & GitHub</strong></td><td>Distributed Version Control</td><td>Manages source code branches, pull requests, code reviews, and releases.</td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Using a single unified language (TypeScript) across backend and frontends reduces context switching and enables shared types, interfaces, and validation schemas across our entire monorepo.</p>
+<p>---</p>
+<h2 id="section-7-system-architecture">Section 7: System Architecture</h2>
+<h3>7.1 High-Level Architecture Topology</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+                               +----------------------------------+
+                               |     Client Applications Layer     |
+                               +----------------------------------+
+                               |                                  |
+     +-------------------------+--------+                +--------+-------------------------+
+     |  GMU Hub Web Dashboard           |                |  SHG & Transporter Mobile Apps   |
+     |  (React 19 + Vite + Tailwind)    |                |  (React Native + Expo SDK 54)    |
+     +-------------------------+--------+                +--------+-------------------------+
+                               |                                  |
+                               +-----------------+----------------+
+                                                 | HTTPS / REST APIs
+                                                 v
+                               +----------------------------------+
+                               |      NestJS API Server Gateway    |
+                               |  - JWT & Roles Guards            |
+                               |  - Swagger Documentation         |
+                               |  - Express / Throttler Engine    |
+                               +-----------------+----------------+
+                                                 |
+                               +-----------------+----------------+
+                               |    Modules & Business Services   |
+                               |  - GMU Admin Module              |
+                               |  - SHG Operations Module         |
+                               |  - Transporter Logistics Module  |
+                               |  - Vehicle Suggestion Algorithm  |
+                               +-----------------+----------------+
+                                                 |
+                               +-----------------+----------------+
+                               |     Prisma ORM Data Layer        |
+                               +-----------------+----------------+
+                                                 |
+                                                 v
+                               +----------------------------------+
+                               |     PostgreSQL Database Core     |
+                               |  (MasterOrders, Parcels, Users)  |
+                               +----------------------------------+</div>
+<h3>Why This Matters</h3>
+<p>Architecture diagrams provide a mental map. When diagnosing an issue (e.g. "Mobile app shows Network Error"), you can systematically trace the path: Client $\rightarrow$ Network $\rightarrow$ NestJS Guard $\rightarrow$ Controller $\rightarrow$ Service $\rightarrow$ Prisma $\rightarrow$ DB.</p>
+<p>---</p>
+<h2 id="section-8-project-structure">Section 8: Project Structure</h2>
+<p>The project is structured as an NPM Workspaces monorepo located under <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic" target="_blank">logistic/</a>:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+logistic/
+├── apps/                             # Frontend Applications Workspace
+│   ├── GMU-hub/                      # React 19 Vite Web Dashboard
+│   │   ├── src/
+│   │   │   ├── components/           # UI Components (Cards, Tables, Modals)
+│   │   │   ├── pages/                # Page Views (Dashboard, Orders, Inventory)
+│   │   │   └── services/             # Axios API integration clients
+│   │   ├── package.json
+│   │   └── vite.config.ts
+│   ├── shg-app/                      # Expo React Native App for SHGs / CRPs
+│   │   ├── src/
+│   │   │   ├── components/           # Mobile Components (OrderCard, Buttons)
+│   │   │   ├── screens/              # App Screens (HomeScreen, PickupScannerScreen)
+│   │   │   └── navigation/           # React Navigation stack & tabs
+│   │   └── package.json
+│   └── transporter-app/              # Expo React Native App for Drivers
+│       ├── src/                      # Driver screens, QR camera scanning, trip routes
+│       └── package.json
+├── backend/                          # Backend Services Workspace
+│   └── app/                          # Core NestJS Application Server
+│       ├── prisma/                   # Database Management
+│       │   ├── schema.prisma         # Primary Database Schema definition
+│       │   ├── seed-pincode.ts       # Pincode directory seeder script
+│       │   └── migrations/           # SQL Migration history
+│       ├── src/                      # Source Code
+│       │   ├── main.ts               # NestJS Application Entry Point
+│       │   ├── app.module.ts         # Root Application Module
+│       │   └── modules/              # Feature Modules
+│       │       ├── gmu/              # GMU Admin Features (Orders, Warehouses)
+│       │       ├── shg/              # SHG Mobile APIs (Pickup, Handover, Earnings)
+│       │       └── transporter/      # Transporter APIs (Trips, Vehicle, Scans)
+│       └── package.json
+├── docs/                             # Project Documentation & Architectural Guides
+├── scripts/                          # Developer Automation Scripts
+├── package.json                      # Monorepo Root Workspaces Configuration
+└── tsconfig.json                     # Shared TypeScript Configuration</div>
+<h3>Why This Matters</h3>
+<p>Monorepos prevent code isolation. Knowing where each app and module resides allows developers to quickly modify full-stack features across backend and frontend seamlessly.</p>
+<p>---</p>
+<h2 id="section-9-requirements--installation">Section 9: Requirements & Installation</h2>
+<h3>9.1 Prerequisites</h3>
+<p>Before setting up the project locally, verify your system meets the following requirements:</p>
+<table>
+<thead><tr><th>Tool</th><th>Recommended Version</th><th>Download / Verification Command</th></tr></thead><tbody>
+<tr><td><strong>Operating System</strong></td><td>Windows 10/11, macOS, or Linux</td><td><code>systeminfo</code> or <code>uname -a</code></td></tr>
+<tr><td><strong>Node.js</strong></td><td>v20.x LTS or higher</td><td><code>node -v</code></td></tr>
+<tr><td><strong>npm</strong></td><td>v10.x or higher</td><td><code>npm -v</code></td></tr>
+<tr><td><strong>PostgreSQL</strong></td><td>v15.x or v16.x</td><td><code>psql --version</code></td></tr>
+<tr><td><strong>Expo CLI</strong></td><td>Integrated via <code>npx expo</code></td><td><code>npx expo --version</code></td></tr>
+<tr><td><strong>VS Code Extensions</strong></td><td>Prisma, ESLint, Prettier, Tailwind CSS</td><td>Installed in VS Code</td></tr>
+</tbody></table>
+<h3>9.2 Step-by-Step Local Setup</h3>
+<p>#### Step 1: Clone the Repository</p>
+<pre><code>git clone <repository-url>
+cd GST-v1/logistic</code></pre>
+<p>#### Step 2: Install Monorepo Dependencies</p>
+<p>Run <code>npm install</code> from the monorepo root to link all npm workspace packages:</p>
+<pre><code>npm install</code></pre>
+<p>#### Step 3: Setup Local PostgreSQL Database</p>
+<ul>
+<li>Open PostgreSQL (via pgAdmin, psql, or DBeaver) and create a new database named <code>gmu_logistic</code>:</li>
+</ul>
+<p>   <code></code>`sql</p>
+<p>   CREATE DATABASE gmu_logistic;</p>
+<p>   <code></code>`</p>
+<p>#### Step 4: Configure Backend Environment Variables</p>
+<p>Copy <code>.env.example</code> inside <code>backend/app</code> to <code>.env</code>:</p>
+<pre><code>cd backend/app
+cp .env.example .env</code></pre>
+<p><em>(Update <code>DATABASE_URL</code> with your local database credentials).</em></p>
+<p>#### Step 5: Run Database Migrations & Seeds</p>
+<p>From <code>backend/app</code>, run:</p>
+<pre><code>npx prisma db push
+npx ts-node src/reset-and-seed-20-orders.ts</code></pre>
+<h3>Why This Matters</h3>
+<p>A standardized development setup prevents "works on my machine" issues and ensures fast onboarding for new team members.</p>
+<p>---</p>
+<h2 id="section-10-environment-configuration">Section 10: Environment Configuration</h2>
+<p>> [!CAUTION]</p>
+<p>> <strong>Environment Security Rule:</strong></p>
+<p>> NEVER commit <code>.env</code> files containing real production passwords or secret keys. The tables below document variable keys and purpose only.</p>
+<h3>10.1 Backend Environment Variables (`backend/app/.env`)</h3>
+<table>
+<thead><tr><th>Variable Name</th><th>Purpose</th><th>Example / Development Value</th></tr></thead><tbody>
+<tr><td><code>PORT</code></td><td>HTTP Server Port number</td><td><code>3000</code></td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>PostgreSQL connection string with password & port</td><td><code>postgresql://postgres:postgres@localhost:5432/gmu_logistic?schema=public</code></td></tr>
+<tr><td><code>DIRECT_URL</code></td><td>Direct connection string for Supabase / Prisma migrations</td><td><code>postgresql://postgres:postgres@localhost:5432/gmu_logistic?schema=public</code></td></tr>
+<tr><td><code>JWT_SECRET</code></td><td>Secret key used to sign and verify JWT auth tokens</td><td><code>super-secret-gmu-jwt-key-2026</code></td></tr>
+<tr><td><code>JWT_EXPIRATION</code></td><td>Duration before JWT tokens expire</td><td><code>7d</code></td></tr>
+<tr><td><code>DEV_OTP_BYPASS</code></td><td>Enabling universal test OTP for local developers</td><td><code>true</code></td></tr>
+<tr><td><code>DEV_DEFAULT_OTP</code></td><td>Default OTP used when bypass mode is active</td><td><code>1234</code></td></tr>
+</tbody></table>
+<h3>10.2 Mobile Apps Environment Variables (`shg-app/.env` & `transporter-app/.env`)</h3>
+<table>
+<thead><tr><th>Variable Name</th><th>Purpose</th><th>Example Value</th></tr></thead><tbody>
+<tr><td><code>EXPO_PUBLIC_API_BASE_URL</code></td><td>Local API server endpoint URL</td><td><code>http://192.168.1.10:3000/api</code></td></tr>
+<tr><td><code>EXPO_PUBLIC_APP_ENV</code></td><td>Application runtime environment identifier</td><td><code>development</code></td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Misconfigured environment variables are the #1 cause of application boot failures. Always double-check your IP address and port mappings when testing mobile apps locally.</p>
+<p>---</p>
+<h2 id="section-11-database--prisma-orm">Section 11: Database & Prisma ORM</h2>
+<p>Our database is managed via <strong>Prisma ORM</strong> (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/backend/app/prisma/schema.prisma" target="_blank">schema.prisma</a>). Below are the core domain models:</p>
+<h3>11.1 Key Database Tables & Purpose</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+erDiagram
+    User ||--o{ OrderAssignment : assigned
+    Seller ||--o{ Order : originates
+    Buyer ||--o{ Order : receives
+    MasterOrder ||--|{ MasterOrderItem : contains
+    Order ||--|{ Parcel : packaging
+    Parcel ||--o{ ParcelScanHistory : tracks
+    Order ||--o{ VerificationRecord : validates
+    User ||--o{ Earning : calculates</div>
+<table>
+<thead><tr><th>Model Name</th><th>Primary Key</th><th>Key Relations</th><th>Purpose in Platform</th></tr></thead><tbody>
+<tr><td><code>User</code></td><td><code>Int</code> (autoincrement)</td><td><code>ShgDetail</code>, <code>TransporterDetail</code>, <code>Address</code></td><td>Central store for all authenticated platform users (SHGs, Drivers, Admins).</td></tr>
+<tr><td><code>MasterOrder</code></td><td><code>Int</code> (autoincrement)</td><td><code>Buyer</code>, <code>MasterOrderItem</code>, <code>PickupOrder</code></td><td>Top-level customer purchase order containing multiple items from multiple sellers.</td></tr>
+<tr><td><code>Order</code> / <code>PickupOrder</code></td><td><code>String</code> / <code>Int</code></td><td><code>Seller</code>, <code>User</code> (SHG/Driver), <code>Parcel</code></td><td>Split order leg representing an individual pickup task assigned to an SHG/Driver.</td></tr>
+<tr><td><code>DropOrder</code></td><td><code>Int</code> (autoincrement)</td><td><code>Buyer</code>, <code>User</code> (SHG/Driver), <code>DropOrderItem</code></td><td>Delivery order leg representing transportation and last-mile delivery to the buyer.</td></tr>
+<tr><td><code>ReturnOrder</code></td><td><code>Int</code> (autoincrement)</td><td><code>DropOrder</code>, <code>User</code>, <code>ReturnOrderItem</code></td><td>Manages reverse logistics when a buyer requests a return or delivery fails.</td></tr>
+<tr><td><code>Parcel</code></td><td><code>String</code> (UUID)</td><td><code>Order</code>, <code>ParcelScanHistory</code></td><td>Physical box itemization with barcode, QR code image, weight, and current holder.</td></tr>
+<tr><td><code>ParcelScanHistory</code></td><td><code>String</code> (UUID)</td><td><code>Parcel</code>, <code>User</code></td><td>Complete physical tracking history log storing action, GPS coordinates, and user role.</td></tr>
+<tr><td><code>VerificationRecord</code></td><td><code>Int</code> (autoincrement)</td><td><code>Order</code></td><td>Stores generated handover codes, OTP expiration times, attempt counts, and status.</td></tr>
+<tr><td><code>Earning</code></td><td><code>Int</code> (autoincrement)</td><td><code>User</code> (SHG)</td><td>Financial credit ledger logging payouts for completed delivery legs.</td></tr>
+</tbody></table>
+<div class="callout callout-note"><div class="callout-title">📌 NOTE</div><div><strong>Developer Tip on Prisma Schema:</strong> Whenever you modify <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/backend/app/prisma/schema.prisma" target="_blank">schema.prisma</a>, always run <code>npx prisma generate</code> to update the TypeScript client types in your workspace.</div></div>
+<h3>Why This Matters</h3>
+<p>Database schema integrity is paramount. Understanding entity relationships prevents orphaned records and broken foreign key constraints during complex multi-leg order transitions.</p>
+<p>---</p>
+<h2 id="section-12-how-to-run-the-project">Section 12: How to Run the Project</h2>
+<p>You can run any application directly from the monorepo root using <strong>npm Workspaces</strong>:</p>
+<h3>12.1 Quick Execution Commands</h3>
+<pre><code># 1. Start Backend API Server (NestJS dev mode)
+npm run backend:dev
+
+# 2. Start GMU Hub Web Dashboard (Vite dev server)
+npm run gmu-hub:dev
+
+# 3. Start SHG Mobile App (Expo Metro bundler)
+npm run shg-app:start
+
+# 4. Start Transporter Mobile App (Expo Metro bundler)
+npm run transporter-app:start</code></pre>
+<h3>12.2 Interactive API Documentation (Swagger)</h3>
+<p>Once the backend is running, open your web browser and navigate to:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+http://localhost:3000/api/docs</div>
+<p>Swagger provides an interactive REST client to test all APIs, view DTO schemas, and inspect request payload requirements.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+[Browser / Swagger UI] ---> HTTP Requests ---> [NestJS Endpoints @ http://localhost:3000/api/docs]</div>
+<h3>Why This Matters</h3>
+<p>Knowing how to independently launch and test each component of the stack allows you to isolate bugs quickly between frontend UI state and backend logic.</p>
+<p>---</p>
+<h2 id="section-13-authentication--security">Section 13: Authentication & Security</h2>
+<h3>13.1 Authentication Workflow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+sequenceDiagram
+    autonumber
+    actor User as Mobile / Web User
+    participant Auth as NestJS Auth Module
+    participant DB as PostgreSQL User Table
+    participant JWT as JWT Service
+
+    User->>Auth: Request OTP (Phone Number)
+    Auth->>DB: Check if user exists & generate 4-digit OTP
+    Auth-->>User: Sends SMS OTP (or 1234 in DEV mode)
+    User->>Auth: Submit Phone Number + OTP
+    Auth->>Auth: Verify OTP & Expiration
+    Auth->>JWT: Generate Signed Access Token
+    JWT-->>User: Returns { accessToken, userProfile, role }
+    User->>Auth: Submits subsequent requests with Header `Authorization: Bearer <token>`</div>
+<div class="callout callout-tip"><div class="callout-title">📌 TIP</div><div><strong>Developer OTP Bypass Mode:</strong> During local development, setting <code>DEV_OTP_BYPASS=true</code> in <code>backend/app/.env</code> allows developers to log in to any test user account using the default OTP <code>1234</code>.</div></div>
+<h3>13.2 Security Best Practices</h3>
+<ul>
+<li><strong>Bearer Token Transmission:</strong> Mobile apps and web dashboards store the JWT securely (<code>AsyncStorage</code> on mobile, encrypted local storage on web) and inject it into Axios request headers.</li>
+<li><strong>Role Authorization Guards:</strong> Every sensitive endpoint checks the user's role before executing logic.</li>
+</ul>
+<h3>Why This Matters</h3>
+<p>Authentication flaws can expose sensitive logistics data and user phone numbers. Always test endpoints with both authorized and unauthorized user roles.</p>
+<p>---</p>
+<h2 id="section-14-complete-module-documentation">Section 14: Complete Module Documentation</h2>
+<p>---</p>
+<h3>Module 14.1: GMU Hub - Dashboard & Analytics</h3>
+<ul>
+<li><strong>Purpose:</strong> Provides central admins with a high-level operational overview of active orders, daily deliveries, active drivers, and warehouse volume.</li>
+<li><strong>Primary Users:</strong> <code>SUPER_ADMIN</code>, <code>ADMIN</code>.</li>
+<li><strong>Key Features:</strong> Live metric counters, delivery success rates, active pickup stats, order volume charts.</li>
+<li><strong>Database Tables:</strong> <code>Order</code>, <code>PickupOrder</code>, <code>DropOrder</code>, <code>User</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/gmu/dashboard/stats</code>, <code>GET /api/gmu/dashboard/analytics</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.2: GMU Hub - Order Management (Pickup & Drop)</h3>
+<ul>
+<li><strong>Purpose:</strong> Manage global orders across first-mile pickups and last-mile drops.</li>
+<li><strong>Primary Users:</strong> <code>ADMIN</code>.</li>
+<li><strong>Key Features:</strong> View order status, reassign pickup SHG, reassign transporter driver, approve manual redirects.</li>
+<li><strong>Database Tables:</strong> <code>Order</code>, <code>OrderAssignment</code>, <code>RedirectedOrder</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/gmu/orders</code>, <code>PATCH /api/gmu/orders/:id/assign-transporter</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.3: GMU Hub - Warehouse & Inventory</h3>
+<ul>
+<li><strong>Purpose:</strong> Track physical parcel receiving, Quality Control (QC), bin placement, and dispatch batching at the central hub.</li>
+<li><strong>Primary Users:</strong> <code>ADMIN</code> (Warehouse Manager).</li>
+<li><strong>Key Features:</strong> Receive inward shipments, record item QC status (<code>QC_PASSED</code> / <code>QC_FAILED</code>), log storage shelf numbers, generate master manifest for outbound drivers.</li>
+<li><strong>Database Tables:</strong> <code>Warehouse</code>, <code>WarehouseInventory</code>, <code>Parcel</code>, <code>ParcelScanHistory</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/gmu/warehouse/receive</code>, <code>GET /api/gmu/warehouse/inventory</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.4: GMU Hub - Returns Management</h3>
+<ul>
+<li><strong>Purpose:</strong> Process buyer return requests and manage reverse logistics back to sellers.</li>
+<li><strong>Primary Users:</strong> <code>ADMIN</code>.</li>
+<li><strong>Key Features:</strong> Inspect return reasons, assign return pick-up drivers, track return parcel barcodes.</li>
+<li><strong>Database Tables:</strong> <code>ReturnOrder</code>, <code>ReturnOrderItem</code>, <code>return_order_scan_history</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/gmu/returns</code>, <code>PATCH /api/gmu/returns/:id/status</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.5: GMU Hub - Community & Transporter Management</h3>
+<ul>
+<li><strong>Purpose:</strong> Onboard, review, and approve SHG members and transporter drivers.</li>
+<li><strong>Primary Users:</strong> <code>ADMIN</code>.</li>
+<li><strong>Key Features:</strong> Review uploaded KYC documents (Aadhaar, PAN, DL, RC), approve/reject applications, edit service areas.</li>
+<li><strong>Database Tables:</strong> <code>User</code>, <code>Application</code>, <code>Document</code>, <code>DrivingDetail</code>, <code>ShgServiceArea</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/gmu/community/applications</code>, <code>PATCH /api/gmu/community/applications/:id/approve</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.6: SHG App - Login & Profile Setup</h3>
+<ul>
+<li><strong>Purpose:</strong> Authenticate SHG members and complete multi-step profile registration.</li>
+<li><strong>Primary Users:</strong> <code>SHG</code>, <code>INDIVIDUAL</code>.</li>
+<li><strong>Key Features:</strong> Phone OTP login, personal detail entry, bank detail setup, document upload.</li>
+<li><strong>Database Tables:</strong> <code>User</code>, <code>ShgDetail</code>, <code>Address</code>, <code>BankDetail</code>, <code>StepTracking</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/shg/auth/send-otp</code>, <code>POST /api/shg/auth/verify-otp</code>, <code>POST /api/shg/user/step-data</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.7: SHG App - Broadcast & Assigned Pickup Orders</h3>
+<ul>
+<li><strong>Purpose:</strong> Receive available pickup orders in the SHG's service area and accept/reject tasks.</li>
+<li><strong>Primary Users:</strong> <code>SHG</code>.</li>
+<li><strong>Key Features:</strong> View order broadcasts, accept pickup task, view seller contact details and navigation address.</li>
+<li><strong>Database Tables:</strong> <code>PickupOrder</code>, <code>OrderAssignment</code>, <code>ShgServiceArea</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/shg/orders/broadcasts</code>, <code>POST /api/shg/orders/:id/accept</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.8: SHG App - Seller Pickup & QR Handover</h3>
+<ul>
+<li><strong>Purpose:</strong> Collect items from village sellers, create parcels, and hand over to transporters.</li>
+<li><strong>Primary Users:</strong> <code>SHG</code>.</li>
+<li><strong>Key Features:</strong> Item inspection, parcel QR generation (<code>Parcel</code>), seller OTP verification, transporter handover.</li>
+<li><strong>Database Tables:</strong> <code>Parcel</code>, <code>VerificationRecord</code>, <code>ParcelScanHistory</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/shg/orders/create-parcel</code>, <code>POST /api/shg/orders/verify-handover</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.9: SHG App - Doorstep Delivery & Earnings</h3>
+<ul>
+<li><strong>Purpose:</strong> Perform last-mile delivery to buyers and track earned commissions.</li>
+<li><strong>Primary Users:</strong> <code>SHG</code>.</li>
+<li><strong>Key Features:</strong> View assigned drop orders, navigate to buyer address, enter buyer delivery OTP, view earnings history.</li>
+<li><strong>Database Tables:</strong> <code>DropOrder</code>, <code>VerificationRecord</code>, <code>Earning</code>.</li>
+<li><strong>APIs Used:</strong> <code>GET /api/shg/orders/drop-assignments</code>, <code>POST /api/shg/orders/complete-delivery</code>, <code>GET /api/shg/earnings</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.10: Transporter App - Registration & Route Setup</h3>
+<ul>
+<li><strong>Purpose:</strong> Driver signup, vehicle detail submission, and operating route selection.</li>
+<li><strong>Primary Users:</strong> <code>TRANSPORTER</code>.</li>
+<li><strong>Key Features:</strong> Vehicle type selection (2W, 3W, 4W, Milk Van), driving license upload, working schedule definition.</li>
+<li><strong>Database Tables:</strong> <code>User</code>, <code>TransporterDetail</code>, <code>DrivingDetail</code>, <code>RouteDetail</code>, <code>OtherDetails</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/transporter/auth/register</code>, <code>POST /api/transporter/user/vehicle-details</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.11: Transporter App - Assigned Trips & Batch QR Scanner</h3>
+<ul>
+<li><strong>Purpose:</strong> View assigned pickup/drop trips and scan physical package barcodes.</li>
+<li><strong>Primary Users:</strong> <code>TRANSPORTER</code>.</li>
+<li><strong>Key Features:</strong> Camera QR scanner (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/PickupScannerScreen.tsx" target="_blank">PickupScannerScreen.tsx</a>), parcel count verification, batch scan session commit, route map.</li>
+<li><strong>Database Tables:</strong> <code>ScanSession</code>, <code>ScanSessionItem</code>, <code>ParcelScanHistory</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/transporter/scan/session</code>, <code>POST /api/transporter/scan/commit</code>.</li>
+</ul>
+<p>---</p>
+<h3>Module 14.12: Transporter App - Hub & Buyer Handovers</h3>
+<ul>
+<li><strong>Purpose:</strong> Complete cargo deliveries at the central GMU Hub or drop SHG node.</li>
+<li><strong>Primary Users:</strong> <code>TRANSPORTER</code>.</li>
+<li><strong>Key Features:</strong> Hub check-in, handover code entry, trip completion summary, payout log.</li>
+<li><strong>Database Tables:</strong> <code>Order</code>, <code>VerificationRecord</code>, <code>ParcelScanHistory</code>.</li>
+<li><strong>APIs Used:</strong> <code>POST /api/transporter/orders/complete-trip</code>.</li>
+</ul>
+<h3>Why This Matters</h3>
+<p>Comprehensive module documentation prevents feature duplication. Before creating a new service or screen, check if similar logic already exists in a related module.</p>
+<p>---</p>
+<h2 id="section-15-order-status-lifecycle">Section 15: Order Status Lifecycle</h2>
+<p>Below is the complete state transition matrix enforced across backend services:</p>
+<table>
+<thead><tr><th>Order Status Enum</th><th>Meaning & Stage</th><th>Trigger Event</th><th>Allowed Next Statuses</th></tr></thead><tbody>
+<tr><td><code>PENDING</code></td><td>Order created by buyer; awaiting allocation.</td><td>Buyer completes checkout.</td><td><code>SHG_ASSIGNED</code></td></tr>
+<tr><td><code>SHG_ASSIGNED</code></td><td>Assigned to local village SHG member.</td><td>System maps service pincode to active SHG.</td><td><code>PARCEL_PICKED</code>, <code>REJECTED</code></td></tr>
+<tr><td><code>PARCEL_PICKED</code></td><td>SHG collected parcel from seller; QR generated.</td><td>SHG verifies seller OTP.</td><td><code>TRANSPORTER_ASSIGNED</code></td></tr>
+<tr><td><code>TRANSPORTER_ASSIGNED</code></td><td>Assigned to driver for hub transportation.</td><td>Transporter accepts trip.</td><td><code>IN_TRANSIT_TO_HUB</code></td></tr>
+<tr><td><code>IN_TRANSIT_TO_HUB</code></td><td>Transporter carrying parcel to central hub.</td><td>Transporter scans parcel QR into session.</td><td><code>HUB_RECEIVED</code></td></tr>
+<tr><td><code>HUB_RECEIVED</code></td><td>Arrived at central GMU Hub warehouse.</td><td>Warehouse admin scans parcel inward.</td><td><code>STORED</code>, <code>QC_FAILED</code></td></tr>
+<tr><td><code>STORED</code></td><td>Package stored in warehouse shelf bin.</td><td>Warehouse staff logs shelf location.</td><td><code>READY_FOR_DISPATCH</code></td></tr>
+<tr><td><code>READY_FOR_DISPATCH</code></td><td>Aggregated and assigned to outbound driver.</td><td>Admin generates outbound manifest.</td><td><code>OUT_FOR_DELIVERY</code></td></tr>
+<tr><td><code>OUT_FOR_DELIVERY</code></td><td>Driver/Drop SHG carrying parcel to buyer.</td><td>Driver scans parcel for final leg.</td><td><code>PARCEL_AT_DROP_SHG</code>, <code>DELIVERED</code></td></tr>
+<tr><td><code>DELIVERED</code></td><td>Handed to buyer; delivery complete.</td><td>Buyer delivery OTP verified.</td><td><code>RETURN_REQUESTED</code></td></tr>
+<tr><td><code>RETURN_REQUESTED</code></td><td>Buyer initiated return request.</td><td>Buyer submits return issue.</td><td><code>RETURN_APPROVED</code>, <code>RETURN_REJECTED</code></td></tr>
+<tr><td><code>RETURN_COMPLETED</code></td><td>Parcel returned back to seller.</td><td>Seller signs return receipt.</td><td>None (Final State)</td></tr>
+</tbody></table>
+<div class="callout callout-warning"><div class="callout-title">📌 WARNING</div><div><strong>Status Lock Rule:</strong> Status transitions must strictly follow this matrix. Never manually update an <code>Order</code> status in the database without adding a corresponding tracking record in <code>ParcelScanHistory</code> or <code>PickupTracking</code>.</div></div>
+<h3>Why This Matters</h3>
+<p>Invalid status transitions cause mobile app crashes and broken UI state. Always use backend service helper methods (e.g. <code>orderService.updateStatus()</code>) to execute validated status changes.</p>
+<p>---</p>
+<h2 id="section-16-qr-code--otp-handover-workflow">Section 16: QR Code & OTP Handover Workflow</h2>
+<h3>16.1 The Dual-Verification Protocol</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+sequenceDiagram
+    autonumber
+    actor Sender as Parcel Sender (e.g. SHG)
+    participant App as Mobile App Camera
+    participant API as NestJS API Server
+    actor Recipient as Parcel Recipient (e.g. Driver)
+
+    Recipient->>App: 1. Scans Parcel QR Code with Phone Camera
+    App->>API: 2. Transmits scanned `qrCodeValue` + GPS location
+    API->>API: 3. Validates parcel existence & status
+    API-->>Sender: 4. Sends 4-Digit Handover OTP to Sender's Screen
+    Sender->>Recipient: 5. Verbally shares 4-Digit OTP with Recipient
+    Recipient->>App: 6. Enters 4-Digit OTP on screen
+    App->>API: 7. Submits OTP for verification
+    API->>API: 8. Validates OTP in `VerificationRecord` table
+    API->>API: 9. Transfers custody in `Parcel` table & logs `ParcelScanHistory`
+    API-->>App: 10. Handover Success Confirmation</div>
+<h3>Why This Matters</h3>
+<p>Physical packages cannot speak for themselves. The QR code identifies <em>what</em> the package is, and the OTP proves <em>who</em> authorized its transfer. Both steps are mandatory for secure supply chain management.</p>
+<p>---</p>
+<h2 id="section-17-api-communication--request-lifecycle">Section 17: API Communication & Request Lifecycle</h2>
+<p>When a client application interacts with the backend, requests flow through a strictly defined NestJS architectural pipeline:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+[Mobile App / Web Dashboard]
+            │
+            ▼ (HTTP Request with JSON payload & Bearer JWT)
+[Global NestJS ValidationPipe] ──► (Validates DTO types & throws 400 Bad Request if invalid)
+            │
+            ▼
+[JwtAuthGuard & RolesGuard]   ──► (Verifies JWT signature & checks user roles)
+            │
+            ▼
+[Controller Handler]          ──► (Extracts `@Body()`, `@Param()`, `@CurrentUser()`)
+            │
+            ▼
+[Business Service]            ──► (Executes business algorithms & vehicle assignments)
+            │
+            ▼
+[Prisma ORM Layer]            ──► (Generates SQL queries & manages transactions)
+            │
+            ▼
+[PostgreSQL Database]         ──► (Executes queries & updates table records)</div>
+<h3>Why This Matters</h3>
+<p>Understanding this flow enables efficient debugging. If an API returns a <code>400 Bad Request</code>, you know the request failed at the <code>ValidationPipe</code> stage before even reaching your service logic.</p>
+<p>---</p>
+<h2 id="section-18-debugging-guide">Section 18: Debugging Guide</h2>
+<p>When troubleshooting bugs during development, use this systematic checklist:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+flowchart TD
+    A[Issue Encountered] --> B{Is it a UI or Network error?}
+    B -- UI Rendering --> C[Check React / React Native Console Logs]
+    B -- API / Data Error --> D[Inspect Browser Network Tab / Metro Logs]
+    D --> E{API HTTP Status Code?}
+    E -- 401 / 403 --> F[Check JWT Auth Token & RolesGuard]
+    E -- 400 Bad Request --> G[Check DTO Class-Validator Schemas]
+    E -- 500 Internal Error --> H[Inspect NestJS Terminal Output]
+    H --> I[Check Prisma Query Logs in PostgreSQL]</div>
+<h3>18.1 Key Debugging Commands & Tools</h3>
+<ul>
+<li><strong>Browser DevTools:</strong> Press <code>F12</code> in Chrome/Edge to inspect Network HTTP requests, request headers, and console errors when working on <code>GMU-hub</code>.</li>
+<li><strong>Metro Bundler Logs:</strong> View live terminal logs when running <code>shg-app</code> or <code>transporter-app</code>.</li>
+<li><strong>Prisma Query Debugging:</strong> Enable verbose SQL logging by running the backend with:</li>
+</ul>
+<p>  <code></code>`bash</p>
+<p>  DEBUG="prisma:query" npm run backend:dev</p>
+<p>  <code></code>`</p>
+<h3>Why This Matters</h3>
+<p>Structured debugging saves hours of wasted time. Always follow empirical log evidence rather than guessing why code is failing.</p>
+<p>---</p>
+<h2 id="section-19-common-errors--troubleshooting">Section 19: Common Errors & Troubleshooting</h2>
+<table>
+<thead><tr><th>Error Symptom</th><th>Root Cause</th><th>First Verification Check</th><th>Resolution</th></tr></thead><tbody>
+<tr><td><code>EADDRINUSE: port 3000</code></td><td>Another process is already using port 3000.</td><td>Run `netstat -ano \</td><td>findstr :3000<code> (Windows) or </code>lsof -i :3000` (Mac/Linux).</td><td>Kill the process running on port 3000 or change <code>PORT</code> in <code>.env</code>.</td></tr>
+<tr><td><code>Can't reach database server at localhost:5432</code></td><td>PostgreSQL service is stopped or invalid credentials.</td><td>Verify PostgreSQL service is running (<code>pg_isready</code>).</td><td>Start PostgreSQL service or correct <code>DATABASE_URL</code> password in <code>backend/app/.env</code>.</td></tr>
+<tr><td><code>Unauthorized Exception: JWT Expired</code></td><td>Auth token expired or missing <code>Authorization</code> header.</td><td>Inspect Request Header in Swagger or Network tab for <code>Bearer <token></code>.</td><td>Log out and log back in to generate a fresh JWT access token.</td></tr>
+<tr><td><code>Camera permission denied</code></td><td>Expo camera permissions not granted on test device.</td><td>Check app settings on mobile device or emulator.</td><td>Grant camera access permission in mobile device settings.</td></tr>
+<tr><td><code>Metro Bundler Cache Stale Error</code></td><td>Metro bundler holding old cached JS code builds.</td><td>Terminal output shows React Native bundling errors.</td><td>Restart Metro bundler with clear flag: <code>npm run shg-app:start -- --clear</code>.</td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Reference tables empower developers to self-resolve 90% of routine setup and runtime issues independently.</p>
+<p>---</p>
+<h2 id="section-20-git--branching-workflow">Section 20: Git & Branching Workflow</h2>
+<p>To maintain monorepo stability, all team members follow our standardized Git workflow:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+gitGraph
+    commit id: "Initial Main"
+    branch feature/shg-qr-scanner
+    checkout feature/shg-qr-scanner
+    commit id: "Add Camera Screen"
+    commit id: "Add Verification API"
+    checkout main
+    merge feature/shg-qr-scanner id: "PR Merged #42"</div>
+<h3>20.1 Git Command Sequence</h3>
+<pre><code># 1. Always start by fetching the latest main branch
+git checkout main
+git pull origin main
+
+# 2. Create a feature branch using standard naming conventions
+# Formats: feature/<name>, fix/<issue>, chore/<task>
+git checkout -b feature/pickup-otp-validation
+
+# 3. Make small, logical commits with clear descriptive messages
+git add .
+git commit -m "feat(shg-app): add dual-verification OTP screen for seller pickup"
+
+# 4. Push your branch to GitHub
+git push origin feature/pickup-otp-validation
+
+# 5. Open a Pull Request (PR) on GitHub against the main branch</code></pre>
+<h3>Why This Matters</h3>
+<p>Clean branch strategy and descriptive commits prevent merge conflicts and make code reviews fast and productive.</p>
+<p>---</p>
+<h2 id="section-21-testing--qa-checklist">Section 21: Testing & QA Checklist</h2>
+<p>Before submitting a Pull Request, complete this verification checklist:</p>
+<table>
+<thead><tr><th>Verification Area</th><th>Requirement Check</th><th>Status (<code>PASS</code> / <code>FAIL</code>)</th></tr></thead><tbody>
+<tr><td><strong>UI & Layout</strong></td><td>Buttons, text fields, and icons display properly across mobile screens and desktop web views.</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>Form Validation</strong></td><td>Required fields fail gracefully with user-friendly error messages if left empty.</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>API Endpoints</strong></td><td>Endpoints return correct HTTP status codes (<code>200 OK</code>, <code>201 Created</code>, <code>400 Bad Request</code>).</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>Database Integrity</strong></td><td>Database updates correctly without orphaned foreign key records.</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>QR Code Scanning</strong></td><td>Camera successfully reads package barcodes and transmits correct payload.</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>OTP Handovers</strong></td><td>Handover fails if an incorrect OTP code is entered.</td><td><code>[ ] PASS</code></td></tr>
+<tr><td><strong>Role Authorization</strong></td><td>Non-admin users cannot access admin endpoints (<code>403 Forbidden</code>).</td><td><code>[ ] PASS</code></td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Thorough pre-commit testing prevents regressions and ensures build stability for the entire engineering team.</p>
+<p>---</p>
+<h2 id="section-22-production-overview">Section 22: Production Overview</h2>
+<p>When building for production environments, observe the following rules:</p>
+<ul>
+<li><strong>Backend Production Build:</strong> The NestJS API compiles to standalone JavaScript inside the <code>dist/</code> directory:</li>
+</ul>
+<p>   <code></code>`bash</p>
+<p>   npm run build --workspace=@logistic/backend</p>
+<p>   <code></code>`</p>
+<ul>
+<li><strong>Web Dashboard Build:</strong> The React Vite dashboard compiles to static assets inside <code>dist/</code>:</li>
+</ul>
+<p>   <code></code>`bash</p>
+<p>   npm run build --workspace=frontend</p>
+<p>   <code></code>`</p>
+<ul>
+<li><strong>Mobile Builds (EAS):</strong> Expo mobile apps are compiled into native Android <code>.apk</code>/<code>.aab</code> and iOS <code>.ipa</code> binaries using Expo Application Services (EAS):</li>
+</ul>
+<p>   <code></code>`bash</p>
+<p>   eas build --platform android</p>
+<p>   <code></code>`</p>
+<ul>
+<li><strong>Reverse Proxy & SSL:</strong> Production backends run behind an Nginx reverse proxy providing SSL/TLS encryption (<code>https://</code>) and PM2 process management for zero-downtime reloads.</li>
+</ul>
+<h3>Why This Matters</h3>
+<p>Production builds behave differently than local development servers. Always test your production bundle using preview scripts before deploying updates to users.</p>
+<p>---</p>
+<h2 id="section-23-commands-cheat-sheet">Section 23: Commands Cheat Sheet</h2>
+<table>
+<thead><tr><th>Command</th><th>Workspace</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>npm run backend:dev</code></td><td>Root</td><td>Starts NestJS API backend server in hot-reload watch mode.</td></tr>
+<tr><td><code>npm run gmu-hub:dev</code></td><td>Root</td><td>Starts GMU Hub web dashboard Vite development server.</td></tr>
+<tr><td><code>npm run shg-app:start</code></td><td>Root</td><td>Launches Expo Metro bundler for SHG Mobile App.</td></tr>
+<tr><td><code>npm run transporter-app:start</code></td><td>Root</td><td>Launches Expo Metro bundler for Transporter Mobile App on port 8082.</td></tr>
+<tr><td><code>npx prisma db push</code></td><td><code>backend/app</code></td><td>Pushes Prisma schema changes directly to local database.</td></tr>
+<tr><td><code>npx prisma studio</code></td><td><code>backend/app</code></td><td>Opens interactive browser GUI to inspect and edit database records.</td></tr>
+<tr><td><code>npm run seed:pincode</code></td><td>Root</td><td>Seeds Indian pincode and village directory into database.</td></tr>
+</tbody></table>
+<h3>Why This Matters</h3>
+<p>Having all daily terminal commands consolidated in one reference table speeds up development workflows.</p>
+<p>---</p>
+<h2 id="section-24-four-week-intern-learning-plan">Section 24: Four-Week Intern Learning Plan</h2>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+gantt
+    title Four-Week Intern Onboarding Roadmap
+    dateFormat  YYYY-MM-DD
+    section Week 1: Foundation
+    Business Flow & Architecture     :active, w1, 2026-08-01, 7d
+    section Week 2: GMU Hub & Backend
+    NestJS APIs & Web Dashboard      :w2, 2026-08-08, 7d
+    section Week 3: Mobile Apps
+    React Native & Expo Hardware     :w3, 2026-08-15, 7d
+    section Week 4: Feature Delivery
+    Real Task Execution & PR Merge   :w4, 2026-08-22, 7d</div>
+<h3>4.1 Weekly Milestones</h3>
+<ul>
+<li><strong>Week 1: Business Operations & Setup</strong></li>
+</ul>
+<p>  * Read Sections 1–7 of this guide.</p>
+<p>  * Set up local development environment (Node, Postgres, Expo).</p>
+<p>  * Run all applications locally and inspect sample data.</p>
+<ul>
+<li><strong>Week 2: Backend APIs & GMU Hub Web Dashboard</strong></li>
+</ul>
+<p>  * Explore NestJS modules under <code>backend/app/src/modules</code>.</p>
+<p>  * Test APIs using Swagger UI (<code>http://localhost:3000/api/docs</code>).</p>
+<p>  * Fix a minor UI/bug ticket in the <code>GMU-hub</code> web application.</p>
+<ul>
+<li><strong>Week 3: Mobile Apps (SHG & Transporter)</strong></li>
+</ul>
+<p>  * Explore React Native screens in <code>shg-app</code> and <code>transporter-app</code>.</p>
+<p>  * Practice scanning test QR codes using Expo Camera emulator.</p>
+<p>  * Trace a complete order pickup flow on a mobile emulator.</p>
+<ul>
+<li><strong>Week 4: Real Task Execution</strong></li>
+</ul>
+<p>  * Pick an assigned feature ticket from the team backlog.</p>
+<p>  * Create a feature branch, write clean code, and write unit/integration tests.</p>
+<p>  * Submit a Pull Request on GitHub and present your work to the team lead.</p>
+<h3>Why This Matters</h3>
+<p>A structured 4-week roadmap provides clear goals and milestones, ensuring smooth progression from beginner to confident contributor.</p>
+<p>---</p>
+<h2 id="section-25-final-checklist--the-golden-rule">Section 25: Final Checklist & The Golden Rule</h2>
+<h3>25.1 "I Can..." Self-Assessment Checklist</h3>
+<p>Before taking on your first independent feature ticket, verify that you can confidently check off every item:</p>
+<ul>
+<li>[ ] <strong>I can</strong> explain the business mission of GMU Logistics in plain English.</li>
+<li>[ ] <strong>I can</strong> describe the difference between First-Mile, Middle-Mile, and Last-Mile logistics.</li>
+<li>[ ] <strong>I can</strong> run all 4 monorepo apps locally (<code>backend</code>, <code>GMU-hub</code>, <code>shg-app</code>, <code>transporter-app</code>).</li>
+<li>[ ] <strong>I can</strong> open and test backend endpoints using Swagger UI.</li>
+<li>[ ] <strong>I can</strong> inspect database tables using Prisma Studio (<code>npx prisma studio</code>).</li>
+<li>[ ] <strong>I can</strong> explain how QR codes and 4-digit OTPs secure package handovers.</li>
+<li>[ ] <strong>I can</strong> trace an order from <code>PENDING</code> to <code>DELIVERED</code> across database models.</li>
+<li>[ ] <strong>I can</strong> debug a failing API request using browser DevTools or NestJS terminal logs.</li>
+<li>[ ] <strong>I can</strong> create a clean Git feature branch and submit a structured Pull Request.</li>
+</ul>
+<p>---</p>
+<h3>The Golden Rule of GMU Logistics Engineering</h3>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>The Golden Rule:</strong>   <strong>Understand the business flow first $\rightarrow$ understand the app flow $\rightarrow$ understand the code $\rightarrow$ make the smallest safe change $\rightarrow$ test the complete affected workflow.</strong></div></div>
+<p>Welcome aboard to the team! Build safe, test thoroughly, and empower rural enterprise!</p>
+</body></html>

@@ -855,6 +855,24 @@ export class RegistrationService {
         }
       }
 
+      // Helper to resolve pincodes for a list of villages (optimized batch query)
+      const resolvePincodesForVillages = async (villagesList: string[]): Promise<string[]> => {
+        const cleanVillages = villagesList.map(v => v.trim()).filter(Boolean);
+        if (cleanVillages.length === 0) return [];
+
+        try {
+          const records = await tx.pincode.findMany({
+            where: { village: { in: cleanVillages, mode: 'insensitive' } },
+            select: { pincode: true },
+            take: 100,
+          });
+          return [...new Set(records.map(r => r.pincode))];
+        } catch (e) {
+          console.warn('[resolvePincodesForVillages] Failed to fetch pincodes:', e);
+          return [];
+        }
+      };
+
       // 6. Route Detail (Step 6 Personal or Step 6 Milk Van)
       const existingRoute = await tx.routeDetail.findFirst({ where: { userId: id } });
 

@@ -6,6 +6,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { Colors, Fonts } from '../constants/Colors';
 import api from '../services/api';
 import { cleanRejectReason } from '../utils/orderUtils';
+import { HUB_CONFIG, isHubPoint } from '../constants/hub';
 
 
 // ==========================================
@@ -100,12 +101,46 @@ export interface ActivityEntry {
 
 type NotificationType = 'success' | 'error' | 'info';
 
+export interface UpcomingOrder {
+  id: string;
+  orderId: string;
+  displayId: string;
+  legType: 'shg_to_hub' | 'hub_to_drop_shg';
+  legTitle: string;
+  status: string;
+  statusText: string;
+  totalQty: number;
+  totalWeight: string;
+  originAddress: {
+    name: string;
+    phone: string;
+    address: string;
+    village: string;
+    taluka: string;
+    district: string;
+    pincode: string;
+  };
+  destinationAddress: {
+    name: string;
+    phone: string;
+    address: string;
+    village: string;
+    taluka: string;
+    district: string;
+    pincode: string;
+  };
+  createdAt?: string;
+  expectedDate?: string;
+}
+
 interface OrderManagementContextType {
   batches: BatchOrder[];
   rejectedBatches?: BatchOrder[];
+  upcomingOrders: UpcomingOrder[];
   activities: ActivityEntry[];
   newOrdersCount: number;
   acceptedOrdersCount: number;
+  upcomingOrdersCount: number;
   rejectedOrdersCount: number;
   completedOrdersCount: number;
   vehicleDetails?: any;
@@ -123,6 +158,7 @@ interface OrderManagementContextType {
 
   showToast: (message: string, type: NotificationType) => void;
   refreshBatchesList: () => Promise<void>;
+  refreshUpcomingOrders: () => Promise<void>;
 
   // Legacy fallback bindings
   pendingOrdersCount: number;
@@ -142,11 +178,11 @@ interface OrderManagementContextType {
 export const HUB_CONTACT = {
   name: 'Prasad Patil (Hub Manager)',
   phone: '+91 9123456789',
-  address: 'Gadhinglaj Central GMU Hub, Near MIDC Area',
-  village: 'Gadhinglaj',
-  pincode: '416502',
-  latitude: 16.2238,
-  longitude: 74.3498,
+  address: 'Nesari Central GMU Hub, Near Main Station, Nesari',
+  village: 'Nesari',
+  pincode: '416504',
+  latitude: 16.0683,
+  longitude: 74.3298,
 };
 
 
@@ -156,10 +192,31 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
   const [batches, setBatches] = useState<BatchOrder[]>([]);
   const [rejectedBatches, setRejectedBatches] = useState<BatchOrder[]>([]);
   const [completedBatches, setCompletedBatches] = useState<BatchOrder[]>([]);
+  const [upcomingOrders, setUpcomingOrders] = useState<UpcomingOrder[]>([]);
   const [activitiesState, setActivities] = useState<ActivityEntry[]>([]);
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, { pickupPhoto?: string; pickupPhotoTime?: number; dropPhoto?: string; dropPhotoTime?: number }>>({});
   const [completedDropPickups, setCompletedDropPickups] = useState<string[]>([]);
   const [vehicleDetails, setVehicleDetails] = useState<any>(null);
+
+  const refreshUpcomingOrders = async () => {
+    try {
+      let response;
+      try {
+        response = await api.get('/orders/upcoming');
+      } catch (e: any) {
+        if (e.response?.status === 404) {
+          response = await api.get('/orders/upcoming-orders');
+        } else {
+          throw e;
+        }
+      }
+      if (response?.data?.success && Array.isArray(response.data.data)) {
+        setUpcomingOrders(response.data.data);
+      }
+    } catch (err) {
+      console.log('Note on fetching upcoming orders in context:', err);
+    }
+  };
 
   // Always-fresh ref so async functions avoid stale closures on batches and photos
   const batchesRef = useRef<BatchOrder[]>(batches);
@@ -290,7 +347,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const shgObj = o.shg || o.pickupShg || o.pickupShgDetails || {};
         const pickupShgCrp = isRedirected
           ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
-          : (shgObj.crpName || shgObj.personName || shgObj.fullName || shgObj.name || shgObj.shgDetail?.crpName || 'SHG CRP Lead');
+          : (shgObj.fullName || shgObj.name || shgObj.personName || shgObj.crpName || shgObj.shgDetail?.crpName || 'SHG Member');
         const pickupShgName = isRedirected
           ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
           : (shgObj.shgName || shgObj.shgDetail?.shgName || (shgObj.village ? `${shgObj.village} Center` : 'SHG Center'));
@@ -305,16 +362,21 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const pickupShgTaluka = isRedirected ? (o.seller?.taluka || '') : (shgObj.taluka || shgObj.address?.taluka || o.seller?.taluka || '');
         const pickupShgDistrict = isRedirected ? (o.seller?.district || '') : (shgObj.district || shgObj.address?.district || o.seller?.district || '');
 
+        const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
+        const pickupPoint = isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'Pickup Village');
+        const dropPoint = isDirect ? (o.buyer?.village || o.dropShgDetails?.village || o.buyerVillage || 'Buyer Village') : HUB_CONFIG.name;
+        const flowTypeVal = isDirect ? ('shg_to_shg' as FlowType) : ('shg_to_gmu' as FlowType);
+
         return {
           id: `pickup-${o.id}`,
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'),
-          flowType: 'shg_to_gmu' as FlowType,
+          areaName: isDirect ? (o.buyer?.village || o.seller?.village || 'Direct Delivery') : (isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A')),
+          flowType: flowTypeVal,
           shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
-          pickupPointName: isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'N/A'),
-          dropPointName: 'Gadhinglaj Hub',
+          pickupPointName: pickupPoint,
+          dropPointName: dropPoint,
           pickupCount: 1,
-          dropCount: 0,
+          dropCount: isDirect ? 1 : 0,
           totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
           totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
           status: (() => {
@@ -382,7 +444,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)])) ? {
             name: HUB_CONTACT.name,
             crpName: HUB_CONTACT.name,
-            shgName: `Return Hub (Gadhinglaj Hub)`,
+            shgName: `Return Hub (${HUB_CONFIG.name})`,
             phone: HUB_CONTACT.phone,
             address: HUB_CONTACT.address,
             village: HUB_CONTACT.village,
@@ -400,6 +462,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             taluka: pickupShgTaluka,
             district: pickupShgDistrict,
           },
+          originalRecipient: isDirect ? {
+            name: cleanPersonName(o.dropShgDetails?.fullName || o.dropShgDetails?.name || o.dropShgDetails?.crpName || o.buyer?.buyerName || 'Drop SHG Member'),
+            shgName: o.dropShgDetails?.shgName || `${o.buyer?.village || 'Drop'} SHG`,
+            phone: o.dropShgDetails?.crpMobile || o.dropShgDetails?.phoneNumber || o.buyer?.mobileNumber || 'N/A',
+            address: o.dropShgDetails?.fullAddress || o.buyer?.fullAddress || o.buyer?.village || 'N/A',
+            village: o.dropShgDetails?.village || o.buyer?.village || 'N/A',
+            pincode: o.dropShgDetails?.pincode || o.buyer?.pincode || 'N/A',
+            taluka: o.dropShgDetails?.taluka || o.buyer?.taluka || 'N/A',
+            district: o.dropShgDetails?.district || o.buyer?.district || 'N/A',
+          } : undefined,
           products: (o.items && o.items.length > 0) ? o.items.map((item: any) => {
             const pId = String(item.id || item.parcelId || Math.random());
             const photoKey = `${o.masterOrderId}-${item.product?.name || item.productName || 'General Item'}`;
@@ -452,7 +524,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const isPickupFinished = resolvedDropPickups.includes(bId);
 
         const dropShgObj = o.dropShgDetails || o.dropShg || o.shg;
-        const dropShgCrp = dropShgObj?.crpName || dropShgObj?.personName || dropShgObj?.name || dropShgObj?.fullName || 'Drop SHG Lead';
+        const dropShgCrp = dropShgObj?.fullName || dropShgObj?.name || dropShgObj?.personName || dropShgObj?.crpName || 'Drop SHG Member';
         const dropShgName = dropShgObj?.shgName || `${dropShgObj?.village || o.buyer?.village || ''} Drop SHG`;
         const dropShgMobile = dropShgObj?.crpMobile || dropShgObj?.phoneNumber || dropShgObj?.mobileNumber || dropShgObj?.phone || 'N/A';
         const dropShgVillage = dropShgObj?.village || dropShgObj?.address?.village || o.buyer?.village || 'N/A';
@@ -475,7 +547,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           areaName: dropShgVillage,
           flowType: 'gmu_to_shg' as FlowType,
           shgName: dropShgName,
-          pickupPointName: 'Gadhinglaj Hub',
+          pickupPointName: HUB_CONFIG.name,
           dropPointName: dropPointVillage,
           pickupCount: 0,
           dropCount: 1,
@@ -543,7 +615,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[cleanNum] || (o.mainStatus === 'REJECTED' && (o.dropTransporterStatus === 'REJECTED' || o.pickupTransporterStatus === 'DROPPED')))) ? {
             name: HUB_CONTACT.name,
             crpName: HUB_CONTACT.name,
-            shgName: `Return Hub (Gadhinglaj Hub)`,
+            shgName: `Return Hub (${HUB_CONFIG.name})`,
             phone: HUB_CONTACT.phone,
             address: HUB_CONTACT.address,
             village: HUB_CONTACT.village,
@@ -709,7 +781,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               ...rtoBatch,
               status: 'PICKUP_COMPLETED',
               isRTO: true,
-              dropPointName: rtoBatch.pickupPointName || rtoBatch.dropPointName || 'Gadhinglaj Hub',
+              dropPointName: rtoBatch.pickupPointName || rtoBatch.dropPointName || HUB_CONFIG.name,
               shgContact: rtoBatch.shgContact || HUB_CONTACT,
             });
           });
@@ -717,6 +789,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       } catch (err) { }
 
       setBatches(combinedLiveBatches);
+      refreshUpcomingOrders().catch(() => {});
     } catch (error: any) {
       if (error.response?.status === 401) {
         console.warn('[Session Expiry] Transporter session token is invalid or expired. Redirecting to login...');
@@ -730,6 +803,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   useEffect(() => {
     const loadPersistedAndFetch = async () => {
+      try {
+        const storedPhotos = await AsyncStorage.getItem('captured_photos');
+        if (storedPhotos) setCapturedPhotos(JSON.parse(storedPhotos));
+
+        const storedDropPickups = await AsyncStorage.getItem('completed_drop_pickups');
+        if (storedDropPickups) setCompletedDropPickups(JSON.parse(storedDropPickups));
+
+        await refreshBatchesList();
+      } catch (err) {
+        console.error('Error loading persisted context data:', err);
+      }
       try {
         const hasCleared = await AsyncStorage.getItem('has_cleared_verification_v10');
         if (!hasCleared) {
@@ -761,6 +845,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             setBatches([]);
             setRejectedBatches([]);
             setCompletedBatches([]);
+            setUpcomingOrders([]);
             setActivities([]);
             setCapturedPhotos({});
             setCompletedDropPickups([]);
@@ -870,14 +955,14 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             id: `act-dropped-${b.id}`,
             orderId: b.id,
             route: routeStr,
-            status: 'Dropped',
+            status: 'Completed',
             qty: b.totalQty,
             weight: b.totalWeight,
             timestamp: timeStr,
           },
           timeMs,
         });
-      } else if (b.status === 'rejected') {
+      } else if (b.status === 'REJECTED') {
         list.push({
           entry: {
             id: `act-rejected-${b.id}`,
@@ -913,6 +998,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   const newOrdersCount = activeBatches.filter(b => b.status === 'NEW_ORDER').length;
   const acceptedOrdersCount = activeBatches.filter(b => b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED').length;
+  const upcomingOrdersCount = upcomingOrders.length;
   const rejectedOrdersCount = safeRejected.length;
   const completedOrdersCount = useMemo(() => {
     const journeyMap: Record<string, boolean> = {};
@@ -945,28 +1031,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
       let updated: ActivityEntry[];
       if (existingIndex !== -1) {
-        const filtered = prev.filter(act => !(act.orderId === orderId && act.status === status));
-        updated = [newEntry, ...filtered];
+        updated = [...prev];
+        updated[existingIndex] = newEntry;
       } else {
         updated = [newEntry, ...prev];
       }
-      AsyncStorage.setItem('transporter_activities', JSON.stringify(updated)).catch(() => { });
       return updated;
     });
-  };
-
-  const pruneStaleBatch = (batchId: string) => {
-    setRejectedBatches(prev => {
-      const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('rejected_batches', JSON.stringify(updated)).catch(() => { });
-      return updated;
-    });
-    setCompletedBatches(prev => {
-      const updated = prev.filter(b => b.id !== batchId);
-      AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
-      return updated;
-    });
-    setBatches(prev => prev.filter(b => b.id !== batchId));
   };
 
   const acceptBatch = async (batchId: string, skipToast: boolean = false) => {
@@ -1423,7 +1494,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           rejectReason: reason,
           isRTO: true,
           originalRecipient: b.originalRecipient || b.shgContact,
-          dropPointName: 'Gadhinglaj Hub',
+          dropPointName: HUB_CONFIG.name,
         };
       }
       return b;
@@ -1464,8 +1535,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const finalReason = reason || 'Recipient Unavailable - Return to Hub';
 
       // Construct RTO object with status PICKUP_COMPLETED so it stays active in the Drop section for return delivery
-      const pickedHubName = targetBatch?.pickupPointName || 'Gadhinglaj Hub';
-      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? pickedHubName : (targetBatch?.pickupPointName || 'Gadhinglaj Hub');
+      const pickedHubName = targetBatch?.pickupPointName || HUB_CONFIG.name;
+      const returnPoint = targetBatch?.flowType === 'gmu_to_shg' ? pickedHubName : (targetBatch?.pickupPointName || HUB_CONFIG.name);
       const activeRtoObj: BatchOrder = {
         ...targetBatch,
         id: targetBatch?.id || batchId,
@@ -1554,8 +1625,8 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
   return (
     <OrderManagementContext.Provider value={{
-      batches: allBatches, activities, newOrdersCount, acceptedOrdersCount, rejectedOrdersCount, completedOrdersCount, vehicleDetails,
-      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList,
+      batches: allBatches, upcomingOrders, activities, newOrdersCount, acceptedOrdersCount, upcomingOrdersCount, rejectedOrdersCount, completedOrdersCount, vehicleDetails,
+      acceptBatch, rejectBatch, acceptBatchIds, captureProductPhoto, rejectProductItem, rerouteBatchToHub, showToast, refreshBatchesList, refreshUpcomingOrders,
       finalizePickup, finalizeDrop, generateDropHandoverCode,
       pendingOrdersCount: acceptedOrdersCount, gmuSummary: {}, gmuProducts: [], routes: [], shgProducts: {}, areaAssignments: [],
       acceptShg: () => { }, completeProduct: () => { }, rejectProduct: () => { }, acceptAreaAssignment: () => { }, rejectAreaAssignment: () => { }, acceptAllRouteShgs: () => { }

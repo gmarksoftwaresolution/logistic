@@ -87,6 +87,7 @@ export interface Order {
 interface OrderContextType {
   incomingOrders: Order[];
   acceptedOrders: Order[];
+  upcomingOrders: any[];
   deliveredOrders: Order[];
   pendingOrders: Order[];
   returnedOrders: Order[];
@@ -101,6 +102,7 @@ interface OrderContextType {
   notReceiveOrder: (order: Order) => void;
   deliverOrder: (order: Order, code?: string) => Promise<void>;
   refreshOrdersList: () => Promise<void>;
+  refreshUpcomingOrders: () => Promise<void>;
   isOrdersLoading: boolean;
   incomingReturnOrders: Order[];
   redirectedOrders: Order[];
@@ -233,7 +235,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           'DELIVERED', 'COMPLETED',
           'PARCEL_WITH_DROP_SHG', 'PARCEL_AT_DROP_SHG',
           'IN_TRANSIT_TO_BUYER', 'AT_BUYER_SHG', 'DELIVERED_TO_BUYER',
-          'PARCEL_PICKED'
+          'PARCEL_PICKED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'
         ].includes(mStatus) || pStatus === 'COMPLETED' || shgStatus === 'DROPPED' || shgStatus === 'COMPLETED';
 
         if (isPickupCompleted) {
@@ -241,9 +243,9 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
         }
 
         const isPickedUpAtShg = [
-          'PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
+          'PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG', 'RETURN_PARCEL_AT_SHG', 'PICKED_UP',
           'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'
-        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
+        ].includes(mStatus) || pStatus === 'PICKED_UP' || pStatus === 'PARCEL_AT_SHG' || pStatus === 'PARCEL_AT_PICKUP_SHG' || pStatus === 'TRANSPORTER_ACCEPTED' || pStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || shgStatus === 'PICKED';
 
         if (isPickedUpAtShg) {
           return 'PickedUp';
@@ -346,6 +348,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
 export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [incomingOrders, setIncomingOrders] = useState<Order[]>([]);
   const [acceptedOrders, setAcceptedOrders] = useState<Order[]>([]);
+  const [upcomingOrders, setUpcomingOrders] = useState<any[]>([]);
   const [redirectedOrders, setRedirectedOrders] = useState<Order[]>([]);
   const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
   const [incomingReturnOrders, setIncomingReturnOrders] = useState<Order[]>([]);
@@ -353,6 +356,21 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
   const [highlightedOrders, setHighlightedOrders] = useState<Record<string, 'new' | 'updated'>>({});
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
+
+  const refreshUpcomingOrders = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get('/orders/shg-upcoming');
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        setUpcomingOrders(response.data.data);
+      } else if (Array.isArray(response.data)) {
+        setUpcomingOrders(response.data);
+      } else {
+        setUpcomingOrders([]);
+      }
+    } catch (err) {
+      console.log('Error fetching SHG upcoming orders in context:', err);
+    }
+  }, []);
 
   const localCompletedOrdersRef = useRef<Order[]>([]);
   const localCompletedReturnsRef = useRef<Order[]>([]);
@@ -454,7 +472,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const finalMapped = allMapped.filter(order => {
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
-          if (hasDropOrder) {
+          if (hasDropOrder && ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED'].includes(order.mainStatus || '')) {
             return false;
           }
         }
@@ -605,36 +623,36 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       allCompleted.forEach(o => uniqueCompletedMap.set(o.id, o));
       setDeliveredOrders(Array.from(uniqueCompletedMap.values()));
 
+      refreshUpcomingOrders().catch(() => {});
     } catch (error) {
       console.warn('Error fetching live order lists from backend:', error);
     } finally {
       setIsOrdersLoading(false);
     }
-  }, []);
+  }, [refreshUpcomingOrders]);
 
   const lastTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     const checkTokenAndRefresh = async () => {
       try {
-        const token = await AsyncStorage.getItem('jwt_token');
+        const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
         if (token !== lastTokenRef.current) {
           lastTokenRef.current = token;
-          console.log('[SHG OrderContext] JWT Token changed. Clearing state and refreshing orders...');
           if (!token) {
             setIncomingOrders([]);
             setAcceptedOrders([]);
-            setRedirectedOrders([]);
+            setUpcomingOrders([]);
             setDeliveredOrders([]);
             setPendingOrders([]);
-
             setReturnedOrders([]);
+            setRedirectedOrders([]);
           } else {
             await refreshOrdersList();
           }
         }
       } catch (err) {
-        console.error('Error checking token change in SHG:', err);
+        console.error('Error checking token change:', err);
       }
     };
 
@@ -666,9 +684,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => clearInterval(poller);
   }, [refreshOrdersList]);
 
-  const getStockItems = () => {
-    return orders.filter(o => o.currentHolder === 'SHG');
-  };
+  const getStockItems = useCallback(() => {
+    return deliveredOrders.filter(o => o.status === 'PickedUp');
+  }, [deliveredOrders]);
 
   const clearLocalStateForOrders = async (orderIds: string[]) => {
     try {
@@ -916,6 +934,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <OrderContext.Provider value={{
       incomingOrders,
       acceptedOrders,
+      upcomingOrders,
       deliveredOrders,
       pendingOrders,
       returnedOrders,
@@ -930,6 +949,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       notReceiveOrder,
       deliverOrder,
       refreshOrdersList,
+      refreshUpcomingOrders,
       isOrdersLoading,
       incomingReturnOrders,
       redirectedOrders,

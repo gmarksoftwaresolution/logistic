@@ -19,6 +19,7 @@ import { useOrderManagement, BatchOrder } from '../../context/OrderManagementCon
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info, Truck, Scale, AlertCircle, Gauge } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
+import { HUB_CONFIG, isHubPoint } from '../../constants/hub';
 import { useTranslation } from 'react-i18next';
 
 const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
@@ -159,9 +160,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
     // Route Logic Consistency
     if (entry.type === 'pickup' && entry.batch.flowType === 'gmu_to_shg') {
-      displayArea = 'Gadhinglaj Hub';
+      displayArea = HUB_CONFIG.name;
     } else if (entry.type === 'drop' && entry.batch.flowType === 'shg_to_gmu') {
-      displayArea = 'Gadhinglaj Hub';
+      displayArea = HUB_CONFIG.name;
     }
 
     if (!groupedEntries[displayArea]) {
@@ -170,7 +171,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     groupedEntries[displayArea].push(entry);
   });
 
-  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', 'Gadhinglaj Hub', 'Gadhinglaj'];
+  const ORDERED_AREAS = ['Nesari', 'Wagharale', 'Mahagaon', 'Halkarni', HUB_CONFIG.name, 'Gadhinglaj'];
   const allFoundAreas = Object.keys(groupedEntries);
   const rawAreas = [...ORDERED_AREAS.filter(a => groupedEntries[a]), ...allFoundAreas];
   const areas = rawAreas.filter((item, index) => item != null && rawAreas.indexOf(item) === index);
@@ -178,19 +179,24 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
 
   const getRouteDisplayText = (batch: BatchOrder, type: 'pickup' | 'drop', areaName: string) => {
-    const isHubRoute = areaName === 'Gadhinglaj Hub';
+    const isDirect = batch.flowType === 'shg_to_shg';
+    if (isDirect) {
+      return `From - ${batch.pickupPointName} To ${batch.dropPointName}`;
+    }
+
+    const isHubRoute = areaName === HUB_CONFIG.name || isHubPoint(areaName);
     
     if (isHubRoute) {
       if (type === 'pickup') {
         return `From - GMU To ${batch.dropPointName}`;
       } else {
-        return `From - ${batch.pickupPointName} To Gadhinglaj Hub`;
+        return `From - ${batch.pickupPointName} To ${HUB_CONFIG.name}`;
       }
     } else {
       if (type === 'pickup') {
-        return `From - ${batch.pickupPointName} To Gadhinglaj Hub`;
+        return `From - ${batch.pickupPointName} To ${HUB_CONFIG.name}`;
       } else {
-        return `From - Gadhinglaj Hub To ${batch.dropPointName}`;
+        return `From - ${HUB_CONFIG.name} To ${batch.dropPointName}`;
       }
     }
   };
@@ -348,8 +354,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                                     <Text style={styles.widgetTotalsText}>{batch.pickupCount} {t('orders.items')} • {batch.totalWeight}</Text>
-                                    <View style={[styles.legTagBox, { backgroundColor: '#EFF6FF' }]}>
-                                      <Text style={[styles.legTagText, { color: '#2563EB' }]}>{t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}</Text>
+                                    <View style={[styles.legTagBox, { backgroundColor: batch.flowType === 'shg_to_shg' ? '#FEF2F2' : '#EFF6FF' }]}>
+                                      <Text style={[styles.legTagText, { color: batch.flowType === 'shg_to_shg' ? '#DC2626' : '#2563EB' }]}>
+                                        {batch.flowType === 'shg_to_shg' ? '⚡ Direct SHG-to-SHG' : t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}
+                                      </Text>
                                     </View>
                                   </View>
                                 </TouchableOpacity>

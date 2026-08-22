@@ -639,6 +639,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       parcels: formattedParcels,
       rawCreatedAt: o.createdAt,
       rawUpdatedAt: o.updatedAt,
+      flowType: o.flowType,
       pickupShgDetails,
       pickupTransporterDetails,
       dropShgDetails,

@@ -14,6 +14,7 @@ import { useOrderManagement } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, ArrowRight, CheckCircle, History, MapPin, Truck } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { HUB_CONFIG } from '../../constants/hub';
 import { useTranslation } from 'react-i18next';
 import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
@@ -63,7 +64,7 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
           dispatchedAt: (b as any).dispatchedAt,
           deliveredAt: (b as any).completedAt || (b as any).deliveredAt || b.timestamp,
           pickupPoint: b.pickupPointName || 'Local SHG',
-          dropPoint: b.dropPointName || (b.flowType === 'shg_to_gmu' ? 'Gadhinglaj Hub' : 'Customer Address'),
+          dropPoint: b.dropPointName || (b.flowType === 'shg_to_gmu' ? HUB_CONFIG.name : 'Customer Address'),
           pickupCompleted: true,
           dropCompleted: true,
           pickupBatchId: undefined,

@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMU Logistics Platform - Master Onboarding Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* === PRINT & PAGE LAYOUT SETUP === */
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "Gramuunati Logistics (GMU) Platform";
+                font-family: 'Poppins', sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            color: #0f172a;
+            background-color: #ffffff;
+            line-height: 1.6;
+            font-size: 10pt;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* === COVER PAGE === */
+        .cover-page {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            page-break-after: always;
+            break-after: page;
+            background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+            border: 2px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 40px;
+            margin-bottom: 40px;
+        }
+
+        .cover-badge {
+            background-color: #15803d;
+            color: #ffffff;
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+        }
+
+        .cover-title {
+            font-size: 28pt;
+            font-weight: 700;
+            color: #15803d;
+            margin: 0 0 12px 0;
+            line-height: 1.2;
+        }
+
+        .cover-subtitle {
+            font-size: 16pt;
+            font-weight: 500;
+            color: #334155;
+            margin: 0 0 40px 0;
+        }
+
+        .cover-meta {
+            margin-top: 40px;
+            border-top: 2px solid #e2e8f0;
+            padding-top: 24px;
+            width: 80%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            text-align: left;
+            font-size: 9.5pt;
+        }
+
+        .meta-item strong {
+            color: #166534;
+        }
+
+        /* === HEADINGS & SECTIONS === */
+        h1.section-title {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #15803d;
+            border-bottom: 2px solid #bbf7d0;
+            padding-bottom: 8px;
+            margin-top: 36px;
+            margin-bottom: 16px;
+            page-break-before: always;
+            break-before: page;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #166534;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            break-after: avoid;
+        }
+
+        h3 {
+            font-size: 11.5pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin-top: 18px;
+            margin-bottom: 8px;
+            break-after: avoid;
+        }
+
+        p {
+            margin-top: 0;
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+
+        /* === TABLE OF CONTENTS === */
+        .toc-container {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 32px;
+            page-break-after: always;
+            break-after: page;
+        }
+
+        .toc-title {
+            font-size: 16pt;
+            font-weight: 700;
+            color: #15803d;
+            margin-top: 0;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #15803d;
+            padding-bottom: 6px;
+        }
+
+        .toc-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .toc-item-1 {
+            font-weight: 600;
+            font-size: 10pt;
+            margin-top: 10px;
+            color: #15803d;
+        }
+
+        .toc-item-2 {
+            font-weight: 400;
+            font-size: 9pt;
+            margin-left: 20px;
+            margin-top: 4px;
+            color: #334155;
+        }
+
+        .toc-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .toc-link:hover {
+            text-decoration: underline;
+        }
+
+        /* === CALLOUT BOXES === */
+        .callout {
+            border-left: 4px solid #15803d;
+            background-color: #f0fdf4;
+            padding: 14px 18px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+            break-inside: avoid;
+            font-size: 9.5pt;
+        }
+
+        .callout-important {
+            border-left-color: #15803d;
+            background-color: #f0fdf4;
+        }
+
+        .callout-warning {
+            border-left-color: #d97706;
+            background-color: #fffbeb;
+        }
+
+        .callout-tip {
+            border-left-color: #0284c7;
+            background-color: #f0f9ff;
+        }
+
+        .callout-note {
+            border-left-color: #64748b;
+            background-color: #f8fafc;
+        }
+
+        .callout-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .callout-important .callout-title { color: #15803d; }
+        .callout-warning .callout-title { color: #b45309; }
+        .callout-tip .callout-title { color: #0369a1; }
+        .callout-note .callout-title { color: #475569; }
+
+        /* === TABLES === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 18px 0;
+            font-size: 9pt;
+            break-inside: avoid;
+        }
+
+        th {
+            background-color: #15803d;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 12px;
+            border: 1px solid #15803d;
+        }
+
+        td {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* === CODE BLOCKS & DIAGRAMS === */
+        pre {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            padding: 14px 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 16px 0;
+            break-inside: avoid;
+            line-height: 1.45;
+            border: 1px solid #1e293b;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            border: 1px solid #e2e8f0;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            border: none;
+        }
+
+        .mermaid-box {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #15803d;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.5pt;
+            white-space: pre-wrap;
+            break-inside: avoid;
+            color: #1e293b;
+        }
+
+        /* === LISTS === */
+        ul, ol {
+            margin-top: 0;
+            margin-bottom: 12px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 4px;
+        }
+
+        /* === FOOTER PRINT === */
+        .page-footer {
+            margin-top: 40px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 8pt;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+
+    <div class="cover-page">
+        <div class="cover-badge">Gramuunati Logistics Monorepo</div>
+        <h1 class="cover-title">GMU Logistics Platform</h1>
+        <div class="cover-subtitle">Complete Project Documentation & Master Onboarding Guide</div>
+        
+        <div class="cover-meta">
+            <div class="meta-item"><strong>Document Version:</strong> 1.0.0</div>
+            <div class="meta-item"><strong>Company:</strong> Gramuunati Logistics (GMU)</div>
+            <div class="meta-item"><strong>Target Audience:</strong> Interns, Developers, QA & New Team Members</div>
+            <div class="meta-item"><strong>Published:</strong> August 2026</div>
+        </div>
+    </div>
+    
+<div class="toc-container"><div class="toc-title">Table of Contents</div><ul class="toc-list">
+<li class="toc-item-1"><a href="#shg-mobile-app-react-native--expo" class="toc-link">SHG MOBILE APP (REACT NATIVE / EXPO)</a></li>
+<li class="toc-item-2"><a href="#how-to-use-this-guide" class="toc-link">How to use this guide</a></li>
+<li class="toc-item-1"><a href="#1-project-introduction" class="toc-link">1. Project Introduction</a></li>
+<li class="toc-item-1"><a href="#2-what-is-shg-app" class="toc-link">2. What is SHG App?</a></li>
+<li class="toc-item-1"><a href="#3-what-shg-app-does" class="toc-link">3. What SHG App Does</a></li>
+<li class="toc-item-1"><a href="#4-complete-business-flow" class="toc-link">4. Complete Business Flow</a></li>
+<li class="toc-item-1"><a href="#5-users-and-roles" class="toc-link">5. Users and Roles</a></li>
+<li class="toc-item-1"><a href="#6-technology-used" class="toc-link">6. Technology Used</a></li>
+<li class="toc-item-1"><a href="#7-project-structure" class="toc-link">7. Project Structure</a></li>
+<li class="toc-item-1"><a href="#8-requirements-and-installation" class="toc-link">8. Requirements and Installation</a></li>
+<li class="toc-item-1"><a href="#9-environment-configuration" class="toc-link">9. Environment Configuration</a></li>
+<li class="toc-item-1"><a href="#10-database-and-prisma-integration" class="toc-link">10. Database and Prisma Integration</a></li>
+<li class="toc-item-1"><a href="#11-how-to-run-the-project" class="toc-link">11. How to Run the Project</a></li>
+<li class="toc-item-1"><a href="#12-authentication-and-security" class="toc-link">12. Authentication and Security</a></li>
+<li class="toc-item-1"><a href="#13-master--reference-data" class="toc-link">13. Master & Reference Data</a></li>
+<li class="toc-item-1"><a href="#14-module-1--dashboard-home" class="toc-link">14. Module 1 — Dashboard (Home)</a></li>
+<li class="toc-item-1"><a href="#15-module-2--order-management" class="toc-link">15. Module 2 — Order Management</a></li>
+<li class="toc-item-1"><a href="#16-module-3--order-history" class="toc-link">16. Module 3 — Order History</a></li>
+<li class="toc-item-1"><a href="#17-module-4--earnings" class="toc-link">17. Module 4 — Earnings</a></li>
+<li class="toc-item-1"><a href="#18-module-5--stock--inventory-management" class="toc-link">18. Module 5 — Stock / Inventory Management</a></li>
+<li class="toc-item-1"><a href="#19-api-and-mobilebackend-communication" class="toc-link">19. API and Mobile/Backend Communication</a></li>
+<li class="toc-item-1"><a href="#20-how-to-debug-a-problem" class="toc-link">20. How to Debug a Problem</a></li>
+<li class="toc-item-1"><a href="#21-common-errors--fixes" class="toc-link">21. Common Errors & Fixes</a></li>
+<li class="toc-item-1"><a href="#22-git-and-development-workflow" class="toc-link">22. Git and Development Workflow</a></li>
+<li class="toc-item-1"><a href="#make-changes--test-on-mobile-emulator" class="toc-link">Make changes & test on mobile emulator</a></li>
+<li class="toc-item-1"><a href="#23-testing-checklist" class="toc-link">23. Testing Checklist</a></li>
+<li class="toc-item-1"><a href="#24-production-overview" class="toc-link">24. Production Overview</a></li>
+<li class="toc-item-1"><a href="#build-android-apk--aab" class="toc-link">Build Android APK / AAB</a></li>
+<li class="toc-item-1"><a href="#build-ios-ipa" class="toc-link">Build iOS IPA</a></li>
+<li class="toc-item-1"><a href="#25-important-commands-cheat-sheet" class="toc-link">25. Important Commands Cheat Sheet</a></li>
+<li class="toc-item-1"><a href="#26-intern-learning-plan" class="toc-link">26. Intern Learning Plan</a></li>
+<li class="toc-item-1"><a href="#27-final-checklist" class="toc-link">27. Final Checklist</a></li>
+<li class="toc-item-1"><a href="#the-golden-rule" class="toc-link">THE GOLDEN RULE</a></li>
+</ul></div>
+<h1 class="section-title" id="shg-mobile-app-react-native--expo">SHG MOBILE APP (REACT NATIVE / EXPO)</h1>
+<h2 id="complete-project-documentation--technical-onboarding-manual">Complete Project Documentation & Technical Onboarding Manual</h2>
+<p><strong>Easy-to-understand guide for interns, developers, testers and new team members</strong>  </p>
+<p><strong>Version:</strong> 1.0.0  </p>
+<p><strong>Company:</strong> Gramuunati Logistics (GMU)  </p>
+<p><strong>Target Audience:</strong> Interns, Mobile Engineers, Full-Stack Developers, & QA Testers  </p>
+<p><strong>Last Updated:</strong> August 2026  </p>
+<p>---</p>
+<h2 id="how-to-use-this-guide">How to use this guide</h2>
+<p>Welcome to the <strong>SHG Mobile App Engineering Team</strong>! If you are completely new, read <strong>Sections 1–6</strong> first. Then follow <strong>Section 8</strong> to install the project and <strong>Section 11</strong> to run it. Use the remaining sections as a reference while working.</p>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>Security Notice:</strong> Mobile app environment files (<code>.env</code>), API URLs, and JWT access tokens stored in <code>AsyncStorage</code> must be handled securely. Never commit secret credentials or production API keys to Git repositories.</div></div>
+<p>---</p>
+<h1 class="section-title" id="1-project-introduction">1. Project Introduction</h1>
+<p><strong>SHG Mobile App</strong> (<code>apps/shg-app</code>) is the native mobile field application for Self Help Group (SHG) members and Community Resource Persons (CRPs) in the Gramuunati Logistics network. Built with <strong>React Native (v0.81)</strong> and <strong>Expo SDK (v54)</strong>, it connects village producers (Sellers), local field agents, transporters, and end buyers into a seamless first-mile and last-mile mobile workflow.</p>
+<p>The most important thing for a new team member to understand is that <strong>the SHG App operates directly in village field conditions</strong>. An SHG member uses this app to pick up goods from remote village sellers, generate parcel QR codes, verify 4-digit handover codes, hand off cargo to drivers, and deliver orders to buyers' doorsteps.</p>
+<h3>Example Field Workflow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Order Broadcast Notification -> SHG Accepts Task -> Seller Visit & Item Inspection -> QR Code Generation -> Seller Handover OTP -> Transporter Handover -> Buyer Doorstep Delivery OTP -> Earning Credited</div>
+<p>---</p>
+<h1 class="section-title" id="2-what-is-shg-app">2. What is SHG App?</h1>
+<p><strong>SHG App</strong> is a cross-platform mobile application powered by <strong>React Native</strong>, <strong>Expo SDK</strong>, <strong>NativeWind (Tailwind CSS)</strong>, <strong>React Navigation v7</strong>, and <strong>i18next</strong> (supporting English, Hindi, and regional languages). In simple words, it is software that helps village SHG members manage localized logistics tasks on their Android/iOS smartphones.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Seller Address & Item Request
+↓
+Pickup Order Acceptance
+↓
+Physical Item Verification & QR Generation (Parcel)
+↓
+Dual OTP Handover to Transporter
+↓
+Last-Mile Doorstep Delivery to Buyer
+↓
+Delivery OTP Verification
+↓
+Financial Commission Credit (Earning)</div>
+<div class="callout callout-tip"><div class="callout-title">📌 TIP</div><div><strong>Core Developer Rule:</strong> When working on any mobile screen or feature, always ask: <strong>"How will this screen perform under low-network rural connectivity when a user is scanning a parcel in the field?"</strong></div></div>
+<p>---</p>
+<h1 class="section-title" id="3-what-shg-app-does">3. What SHG App Does</h1>
+<p>The SHG App is structured into 5 core operational modules:</p>
+<table>
+<thead><tr><th>Module</th><th>Purpose & Capabilities</th><th>Primary Screens</th></tr></thead><tbody>
+<tr><td><strong>1. Dashboard (Home)</strong></td><td>Central operational hub rendering live task counters, broadcast alerts, quick action shortcuts, recent activity logs, and system status.</td><td><code>DashboardScreen.tsx</code></td></tr>
+<tr><td><strong>2. Order Management</strong></td><td>Manages the full lifecycle of first-mile pickups, transporter handovers, doorstep drop deliveries, returned parcels, and redirected orders.</td><td><code>OrderManagementScreen.tsx</code>, <code>IncomingOrdersScreen.tsx</code>, <code>AcceptedOrdersScreen.tsx</code>, <code>DropScreen.tsx</code>, <code>PickupScannerScreen.tsx</code>, <code>OrderDetailsScreen.tsx</code>, <code>VehicleSuggestionDetailsScreen.tsx</code>, <code>ReturnedOrdersScreen.tsx</code>, <code>RedirectedOrdersScreen.tsx</code></td></tr>
+<tr><td><strong>3. Order History</strong></td><td>Provides an audit log of past deliveries, search filtering, status filters, and step-by-step parcel tracking history.</td><td><code>OrderHistoryScreen.tsx</code>, <code>OrderHistoryDetailsScreen.tsx</code>, <code>CompletedOrdersScreen.tsx</code>, <code>CompletedOrderDetailsScreen.tsx</code></td></tr>
+<tr><td><strong>4. Earnings</strong></td><td>Financial ledger rendering total earned commissions, daily/weekly payout breakdowns, completed order earnings, and withdrawal history.</td><td><code>EarningsScreen.tsx</code></td></tr>
+<tr><td><strong>5. Stock / Inventory</strong></td><td>Local village product management screen allowing SHGs to register products, update stock quantities, view daily production, and set prices.</td><td><code>StockManagementScreen.tsx</code></td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="4-complete-business-flow">4. Complete Business Flow</h1>
+<p>Learn these flows before reading the code.</p>
+<h3>4.1 First-Mile Seller Pickup Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Order Broadcast Appears on Dashboard
+↓
+SHG Member Accepts Pickup Task (IncomingOrdersScreen)
+↓
+Visits Seller Location & Inspects Goods (AcceptedOrdersScreen)
+↓
+Scans / Generates Parcel QR Code via Expo Camera (PickupScannerScreen)
+↓
+Seller Provides Handover OTP Code
+↓
+Pickup Confirmed -> Status: PARCEL_PICKED</div>
+<h3>4.2 Transporter Handover Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Transporter Arrives at Village Pickup Node
+↓
+Transporter Scans Parcel QR Code
+↓
+SHG App Displays 4-Digit Handover Code
+↓
+SHG Shares Code Verbally with Transporter
+↓
+Transporter Enters Code -> Status: IN_TRANSIT_TO_HUB</div>
+<h3>4.3 Last-Mile Doorstep Delivery Flow</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Parcel Delivered to Village SHG by Drop Transporter (PARCEL_AT_DROP_SHG)
+↓
+SHG Member Receives Notification (DropScreen)
+↓
+Visits Buyer Address & Inspects Items
+↓
+Buyer Inspects Goods & Provides Delivery OTP
+↓
+SHG Enters Delivery OTP -> Status: DELIVERED
+↓
+Commission Instantly Credited to SHG Wallet (EarningsScreen)</div>
+<h3>4.4 Reverse Logistics (Return Flow)</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Buyer Requests Return / Delivery Fails (RETURN_REQUESTED)
+↓
+SHG Receives Return Task (ReturnedOrdersScreen)
+↓
+Collects Parcel from Buyer & Verifies Condition
+↓
+Hands Off Return Parcel to Transporter -> Status: RETURN_IN_TRANSIT</div>
+<h3>Why the flow matters</h3>
+<p>If an SHG member confirms a seller pickup without completing the OTP verification, the parcel custody will not transfer correctly in the backend database. Therefore, <strong>always test the complete physical flow end-to-end.</strong></p>
+<p>---</p>
+<h1 class="section-title" id="5-users-and-roles">5. Users and Roles</h1>
+<table>
+<thead><tr><th>Role</th><th>Easy Explanation</th><th>Responsibilities in App</th></tr></thead><tbody>
+<tr><td><strong>SHG Member / CRP</strong></td><td>Primary mobile app user (Village Field Agent).</td><td>Accepting order broadcasts, collecting goods from sellers, generating QR codes, handing off cargo to drivers, delivering to buyers.</td></tr>
+<tr><td><strong>Individual SHG / CRP</strong></td><td>Independent local service provider.</td><td>Managing localized pickup and doorstep delivery tasks within assigned service pincodes.</td></tr>
+<tr><td><strong>Seller</strong></td><td>Rural producer / artisan.</td><td>Preparing packages, providing seller handover OTP to SHG member.</td></tr>
+<tr><td><strong>Transporter Driver</strong></td><td>Commercial vehicle driver.</td><td>Receiving cargo from SHG, providing driver handover PIN.</td></tr>
+<tr><td><strong>Buyer</strong></td><td>End consumer.</td><td>Receiving doorstep package delivery, providing buyer delivery OTP.</td></tr>
+<tr><td><strong>GMU Admin</strong></td><td>Hub administrator.</td><td>Reviewing SHG profile registrations and approving village service area coverage.</td></tr>
+</tbody></table>
+<p><em>For an access problem, check authentication (logged in via phone OTP?) and role permissions.</em></p>
+<p>---</p>
+<h1 class="section-title" id="6-technology-used">6. Technology Used</h1>
+<table>
+<thead><tr><th>Technology</th><th>Simple Meaning</th><th>Use in Project</th></tr></thead><tbody>
+<tr><td><strong>React Native (v0.81)</strong></td><td>Mobile App Framework</td><td>Renders native iOS and Android user interface components.</td></tr>
+<tr><td><strong>Expo SDK (v54)</strong></td><td>Mobile Tooling Suite</td><td>Provides native device access: <code>expo-camera</code> (QR scanner), <code>expo-location</code> (GPS), <code>expo-haptics</code>.</td></tr>
+<tr><td><strong>React Navigation (v7)</strong></td><td>Mobile Navigation Library</td><td>Bottom tab navigator (<code>MainTabNavigator</code>) and native stack navigators (<code>OrdersStack</code>).</td></tr>
+<tr><td><strong>NativeWind (v4)</strong></td><td>Tailwind for React Native</td><td>Utility-first CSS styling for native mobile components (<code>className="..."</code>).</td></tr>
+<tr><td><strong>i18next & react-i18next</strong></td><td>Internationalization Framework</td><td>Multilingual support for English, Hindi, Marathi, and regional languages.</td></tr>
+<tr><td><strong>OrderContext</strong></td><td>React Context API</td><td>Manages live mobile orders state, broadcast polling, and action methods.</td></tr>
+<tr><td><strong>Axios</strong></td><td>HTTP Request Library</td><td>Configured in <code>axiosInstance.ts</code> to attach Bearer JWT tokens to backend API requests.</td></tr>
+<tr><td><strong>AsyncStorage</strong></td><td>Mobile Storage Engine</td><td>Persists user tokens (<code>userToken</code>), language preferences, and onboarding state.</td></tr>
+</tbody></table>
+<h3>Overall Mobile Architecture</h3>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Mobile Phone (React Native / Expo)
+↓
+UI Screens (Dashboard, Orders, Scanner, Earnings)
+↓
+OrderContext & Custom Hooks
+↓
+Axios Client (axiosInstance.ts) + Bearer JWT Header
+↓ HTTP REST Request
+NestJS Backend Server (http://<LOCAL-IP>:3000/api)
+↓
+Prisma ORM & PostgreSQL Database</div>
+<p>---</p>
+<h1 class="section-title" id="7-project-structure">7. Project Structure</h1>
+<p>The SHG App codebase is located under <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app" target="_blank">apps/shg-app/</a>:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+apps/shg-app/
+■■■ src/
+■ ■■■ api/              → Axios HTTP instance & request interceptors (axiosInstance.ts)
+■ ■■■ components/       → Reusable mobile UI components (OrderCard, AddressDetailsModal, FilterModal, RescheduleModals)
+■ ■■■ constants/        → Colors, typography, and API routes
+■ ■■■ context/          → Centralized state stores (OrderContext, UserContext, LanguageContext, OnboardingContext)
+■ ■■■ locales/          → i18n translation JSON files (English, Hindi, Marathi)
+■ ■■■ navigation/       → App navigators (AppNavigator.tsx, MainTabNavigator.tsx, types.ts)
+■ ■■■ screens/          → All 28 application screen views
+■ ■ ■■■ DashboardScreen.tsx            → Module 1: Home Dashboard Screen
+■ ■ ■■■ OrderManagementScreen.tsx      → Module 2: Main Orders Hub
+■ ■ ■■■ IncomingOrdersScreen.tsx       → Module 2: New Broadcast Orders Feed
+■ ■ ■■■ AcceptedOrdersScreen.tsx       → Module 2: Active Pickup Orders & Handovers
+■ ■ ■■■ PickupScannerScreen.tsx        → Module 2: Expo Camera QR Barcode Scanner
+■ ■ ■■■ DropScreen.tsx                 → Module 2: Doorstep Buyer Delivery Screen
+■ ■ ■■■ ReturnedOrdersScreen.tsx       → Module 2: Reverse Logistics Return Tasks
+■ ■ ■■■ RedirectedOrdersScreen.tsx     → Module 2: Re-routed Leg Tasks
+■ ■ ■■■ OrderDetailsScreen.tsx         → Module 2: Itemized Order & Parcel Summary
+■ ■ ■■■ VehicleSuggestionDetailsScreen.tsx → Module 2: Weight & Recommended Vehicle View
+■ ■ ■■■ OrderHistoryScreen.tsx         → Module 3: Past Delivery Audit & Timeline Search
+■ ■ ■■■ CompletedOrdersScreen.tsx      → Module 3: Completed Orders Roster
+■ ■ ■■■ EarningsScreen.tsx             → Module 4: Wallet Balance & Commission Ledger
+■ ■ ■■■ StockManagementScreen.tsx      → Module 5: Village Product & Stock Management
+■ ■ ■■■ LoginScreen.tsx                → Auth: Phone OTP Login
+■ ■ ■■■ SignupScreen.tsx               → Auth: Multi-step Registration Workflow
+■ ■ ■■■ ProfileScreen.tsx              → User: SHG Profile & Service Area Settings
+■ ■■■ services/          → API integration services (authService, inventoryService, signupService)
+■ ■■■ utils/             → Helper utilities & date formatters
+■■■ App.tsx              → Root application component & provider wrapper
+■■■ app.json             → Expo project configuration
+■■■ package.json         → Mobile dependencies & npm workspace scripts
+■■■ tailwind.config.js   → NativeWind Tailwind configuration</div>
+<p>---</p>
+<h1 class="section-title" id="8-requirements-and-installation">8. Requirements and Installation</h1>
+<h3>System Requirements</h3>
+<table>
+<thead><tr><th>Tool</th><th>Requirement</th></tr></thead><tbody>
+<tr><td><strong>Node.js</strong></td><td>v20.x LTS recommended (<code>node -v</code>)</td></tr>
+<tr><td><strong>npm</strong></td><td>v10.x or higher (<code>npm -v</code>)</td></tr>
+<tr><td><strong>Expo CLI</strong></td><td>Run via <code>npx expo</code></td></tr>
+<tr><td><strong>Mobile Hardware / Emulator</strong></td><td>Physical Android/iOS phone with Expo Go app OR Android Studio Emulator</td></tr>
+<tr><td><strong>Network</strong></td><td>Development laptop and mobile phone MUST be connected to the SAME Wi-Fi network.</td></tr>
+</tbody></table>
+<h3>Step 1 — Install Dependencies</h3>
+<p>Run from monorepo root:</p>
+<pre><code>npm install</code></pre>
+<h3>Step 2 — Verify Expo Installation</h3>
+<pre><code>npx expo --version</code></pre>
+<p>---</p>
+<h1 class="section-title" id="9-environment-configuration">9. Environment Configuration</h1>
+<p>The SHG App uses environment variables defined in <code>apps/shg-app/.env</code>:</p>
+<table>
+<thead><tr><th>Variable</th><th>Purpose</th><th>Example Value</th></tr></thead><tbody>
+<tr><td><code>EXPO_PUBLIC_API_BASE_URL</code></td><td>Local API server IP address & port</td><td><code>http://192.168.1.15:3000/api</code></td></tr>
+<tr><td><code>EXPO_PUBLIC_APP_ENV</code></td><td>Runtime environment mode</td><td><code>development</code></td></tr>
+</tbody></table>
+<div class="callout callout-warning"><div class="callout-title">📌 WARNING</div><div><strong>Mobile IP Address Rule:</strong> When testing on a physical mobile phone, <code>localhost</code> refers to the mobile phone itself! ALWAYS replace <code>localhost</code> in <code>EXPO_PUBLIC_API_BASE_URL</code> with your laptop's local network IP address (e.g. <code>http://192.168.1.15:3000/api</code>).</div></div>
+<p>---</p>
+<h1 class="section-title" id="10-database-and-prisma-integration">10. Database and Prisma Integration</h1>
+<p>The SHG App interacts with the NestJS backend, which maps requests to PostgreSQL database models via Prisma ORM (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/backend/app/prisma/schema.prisma" target="_blank">schema.prisma</a>):</p>
+<table>
+<thead><tr><th>Database Model</th><th>SHG App Role & Data Usage</th></tr></thead><tbody>
+<tr><td><code>User</code></td><td>Stores SHG member profile, phone number, language preference, and application approval status (<code>ApplicationStatus</code>).</td></tr>
+<tr><td><code>ShgDetail</code></td><td>Stores group name, leader name, member code, group size, and CRP contact details.</td></tr>
+<tr><td><code>ShgServiceArea</code></td><td>Maps the SHG member to specific village names and pincodes for order broadcasts.</td></tr>
+<tr><td><code>PickupOrder</code></td><td>First-mile pickup tasks assigned to the SHG member.</td></tr>
+<tr><td><code>DropOrder</code></td><td>Last-mile doorstep delivery tasks assigned to the SHG member.</td></tr>
+<tr><td><code>Parcel</code></td><td>Individual box items containing QR codes (<code>qrCodeValue</code>), weight, and current holder.</td></tr>
+<tr><td><code>VerificationRecord</code></td><td>Stores generated 4-digit handover codes and buyer delivery OTPs.</td></tr>
+<tr><td><code>Earning</code></td><td>Financial credit ledger logging commission amounts for completed delivery legs.</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="11-how-to-run-the-project">11. How to Run the Project</h1>
+<p>Normal mobile development startup:</p>
+<h3>1. Start NestJS Backend (Terminal 1)</h3>
+<pre><code>cd backend/app
+npm run start:dev</code></pre>
+<h3>2. Start SHG App Metro Bundler (Terminal 2)</h3>
+<p>From monorepo root:</p>
+<pre><code>npm run shg-app:start</code></pre>
+<h3>3. Open App on Mobile Device</h3>
+<ul>
+<li>Scan the QR code displayed in the terminal using the <strong>Expo Go</strong> app on your Android phone or Camera app on iOS.</li>
+<li>Alternatively, press <code>a</code> in terminal to launch Android Studio Emulator.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="12-authentication-and-security">12. Authentication and Security</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+Phone Number Input -> Send OTP -> Enter 4-Digit OTP (1234 in DEV mode) -> Backend Issues JWT Token -> Saved to AsyncStorage -> MainTabNavigator Displayed</div>
+<h3>Key Security Implementations</h3>
+<ul>
+<li><strong>AsyncStorage Token Persistence:</strong> The JWT access token is stored securely under key <code>userToken</code>.</li>
+<li><strong>Axios Request Interceptor:</strong> Located in <code>axiosInstance.ts</code>, automatically attaches header <code>Authorization: Bearer <token></code> to every outgoing request.</li>
+<li><strong>Developer OTP Bypass:</strong> Setting <code>DEV_OTP_BYPASS=true</code> in <code>backend/app/.env</code> allows testing any phone number using test OTP <code>1234</code>.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="13-master--reference-data">13. Master & Reference Data</h1>
+<p>Master data is loaded from the backend to populate mobile screens:</p>
+<ul>
+<li><strong>Pincode & Village Directory:</strong> Populates service area dropdowns during signup (<code>pincode</code> table).</li>
+<li><strong>Product Catalog:</strong> Lists rural commodities (agriculture, textiles, handicrafts, dairy) in Stock Management.</li>
+<li><strong>Seller Contact Cards:</strong> Provides village seller address, phone number, and location navigation.</li>
+<li><strong>Buyer Contact Cards:</strong> Provides buyer delivery address, house number, and contact info.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="14-module-1--dashboard-home">14. Module 1 — Dashboard (Home)</h1>
+<h3>14.1 Screen Overview</h3>
+<p>The <strong>Dashboard Screen</strong> (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/DashboardScreen.tsx" target="_blank">DashboardScreen.tsx</a>) is the primary landing screen after login.</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+flowchart TD
+    A[Dashboard Screen Mount] --> B[Fetch Profile & Live Orders via OrderContext]
+    B --> C[Render Welcome Header & Service Pincode]
+    B --> D[Render Live Task Count Stat Cards]
+    B --> E[Render Quick Action Buttons]
+    B --> F[Render Broadcast Order Alerts]</div>
+<h3>14.2 Dashboard Elements & Actions</h3>
+<ul>
+<li><strong>Welcome Header:</strong> Displays SHG Leader Name, Group Name, and assigned service pincode.</li>
+<li><strong>Stat Cards:</strong> Live counters for <strong>Incoming Broadcasts</strong>, <strong>Active Pickups</strong>, <strong>Active Drops</strong>, and <strong>Total Earnings</strong>.</li>
+<li><strong>Quick Action Buttons:</strong> Direct navigation to Scanner (<code>PickupScannerScreen</code>), Earnings (<code>EarningsScreen</code>), and Stock Management (<code>StockManagementScreen</code>).</li>
+<li><strong>Broadcast Alert Banner:</strong> Notifies the SHG member immediately when a new seller pickup is available in their village.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="15-module-2--order-management">15. Module 2 — Order Management</h1>
+<p>The <strong>Order Management Module</strong> manages the complete multi-leg lifecycle through dedicated sub-screens:</p>
+<h3>15.1 Sub-Screens Breakdown</h3>
+<p>#### 1. Incoming Orders Screen (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/IncomingOrdersScreen.tsx" target="_blank">IncomingOrdersScreen.tsx</a>)</p>
+<ul>
+<li>Displays unassigned pickup orders broadcasted to the SHG's service area.</li>
+<li>Shows seller name, village address, distance indicator (<code>OrderDistance.tsx</code>), total weight, and product count.</li>
+<li><strong>Actions:</strong> <code>Accept Order</code> (assigns task to SHG) or <code>Decline Order</code>.</li>
+</ul>
+<p>#### 2. Accepted Orders Screen (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/AcceptedOrdersScreen.tsx" target="_blank">AcceptedOrdersScreen.tsx</a>)</p>
+<ul>
+<li>Lists active pickup tasks currently accepted by the SHG member.</li>
+<li>Displays seller contact info, pickup schedule, and navigation address.</li>
+<li><strong>Actions:</strong> <code>Start Pickup</code> (opens camera scanner), <code>Call Seller</code>, <code>Reschedule Pickup</code>.</li>
+</ul>
+<p>#### 3. Camera QR Barcode Scanner (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/PickupScannerScreen.tsx" target="_blank">PickupScannerScreen.tsx</a>)</p>
+<ul>
+<li>Integrated with <code>expo-camera</code> to scan physical package barcodes during seller visits.</li>
+<li>Generates <code>Parcel</code> QR images and verifies physical box count.</li>
+<li>Prompts entry of the 4-digit <strong>Seller Handover OTP</strong> to confirm physical pickup.</li>
+</ul>
+<p>#### 4. Drop Screen (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/DropScreen.tsx" target="_blank">DropScreen.tsx</a>)</p>
+<ul>
+<li>Manages last-mile doorstep delivery tasks to buyers.</li>
+<li>Displays buyer address, house number, phone number, and package items.</li>
+<li><strong>Actions:</strong> <code>Verify Buyer OTP</code> (enters 4-digit code provided by buyer to complete delivery and credit earnings).</li>
+</ul>
+<p>#### 5. Returned & Redirected Orders Screens (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/ReturnedOrdersScreen.tsx" target="_blank">ReturnedOrdersScreen.tsx</a>, <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/RedirectedOrdersScreen.tsx" target="_blank">RedirectedOrdersScreen.tsx</a>)</p>
+<ul>
+<li>Handles reverse logistics return tasks and orders redirected due to partner unavailability.</li>
+</ul>
+<p>#### 6. Order Details & Vehicle Suggestion Screens (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/OrderDetailsScreen.tsx" target="_blank">OrderDetailsScreen.tsx</a>, <a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/VehicleSuggestionDetailsScreen.tsx" target="_blank">VehicleSuggestionDetailsScreen.tsx</a>)</p>
+<ul>
+<li>Comprehensive itemized breakdown of products, weights, declared values, and recommended transporter vehicle based on parcel payload weight.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="16-module-3--order-history">16. Module 3 — Order History</h1>
+<h3>16.1 Purpose</h3>
+<p>The <strong>Order History Module</strong> (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/CompletedOrdersScreen.tsx" target="_blank">OrderHistoryScreen.tsx</a>, <code>CompletedOrdersScreen.tsx</code>) provides an audit trail of all completed and past deliveries.</p>
+<h3>16.2 Features & Audit Tools</h3>
+<ul>
+<li><strong>Search Filter:</strong> Search by Order ID, Seller Name, Buyer Name, or Village.</li>
+<li><strong>Status Filter Tabs:</strong> Filter by <code>Completed</code>, <code>Returned</code>, or <code>Cancelled</code>.</li>
+<li><strong>Step Timeline:</strong> Opens <code>TrackingHistoryModal.tsx</code> to display step-by-step physical scan history with timestamps and handler roles.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="17-module-4--earnings">17. Module 4 — Earnings</h1>
+<h3>17.1 Purpose</h3>
+<p>The <strong>Earnings Screen</strong> (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/EarningsScreen.tsx" target="_blank">EarningsScreen.tsx</a>) acts as the SHG member's financial wallet and commission ledger.</p>
+<h3>17.2 Wallet Features & Ledger</h3>
+<ul>
+<li><strong>Total Balance:</strong> Displays total accumulated earnings balance.</li>
+<li><strong>Recent Payouts:</strong> Itemized ledger showing commission earned per completed delivery leg.</li>
+<li><strong>Filter Tabs:</strong> View daily, weekly, and monthly commission performance.</li>
+<li><strong>Payout Status:</strong> Indicates payment status (<code>CREDITED</code>, <code>PENDING_SETTLEMENT</code>).</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="18-module-5--stock--inventory-management">18. Module 5 — Stock / Inventory Management</h1>
+<h3>18.1 Purpose</h3>
+<p>The <strong>Stock Management Screen</strong> (<a href="file:///c:/Users/parth/OneDrive/Desktop/GST-v1/logistic/apps/shg-app/src/screens/StockManagementScreen.tsx" target="_blank">StockManagementScreen.tsx</a>) enables SHGs to manage local village product inventory.</p>
+<h3>18.2 Features</h3>
+<ul>
+<li><strong>Product Registration:</strong> Add new products produced by the SHG (handicrafts, agriculture, food items).</li>
+<li><strong>Stock Quantity Updates:</strong> Update available stock units (<code>stock</code>) and unit prices (<code>price</code>).</li>
+<li><strong>Production Logs:</strong> Record daily and weekly production output (<code>dailyProduction</code>, <code>weeklyProduction</code>).</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="19-api-and-mobilebackend-communication">19. API and Mobile/Backend Communication</h1>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+User Action on Screen -> Trigger Method in OrderContext -> Call axiosInstance -> HTTP Request to NestJS -> Guard & DTO Check -> Service & Prisma -> PostgreSQL -> JSON Response back to Mobile Screen</div>
+<table>
+<thead><tr><th>Area</th><th>HTTP Method & Path</th><th>Mobile Service Method</th></tr></thead><tbody>
+<tr><td><strong>Auth</strong></td><td><code>POST /api/auth/send-otp</code></td><td><code>authService.sendOtp()</code></td></tr>
+<tr><td><strong>Auth</strong></td><td><code>POST /api/auth/verify-otp</code></td><td><code>authService.verifyOtp()</code></td></tr>
+<tr><td><strong>Pickup Broadcasts</strong></td><td><code>GET /api/shg/orders/broadcasts</code></td><td><code>OrderContext.fetchBroadcasts()</code></td></tr>
+<tr><td><strong>Accept Pickup</strong></td><td><code>POST /api/shg/orders/:id/accept</code></td><td><code>OrderContext.acceptOrder()</code></td></tr>
+<tr><td><strong>Verify Pickup OTP</strong></td><td><code>POST /api/shg/orders/verify-handover</code></td><td><code>OrderContext.verifyPickupHandover()</code></td></tr>
+<tr><td><strong>Buyer Delivery</strong></td><td><code>POST /api/shg/orders/complete-delivery</code></td><td><code>OrderContext.completeDelivery()</code></td></tr>
+<tr><td><strong>Earnings</strong></td><td><code>GET /api/shg/earnings</code></td><td><code>OrderContext.fetchEarnings()</code></td></tr>
+<tr><td><strong>Inventory</strong></td><td><code>GET /api/shg/inventory</code></td><td><code>inventoryService.getInventory()</code></td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="20-how-to-debug-a-problem">20. How to Debug a Problem</h1>
+<p>Follow this 10-step mobile debugging workflow when an issue occurs:</p>
+<div class="mermaid-box"><strong>[Diagram / Workflow Architecture]</strong>
+1. Understand mobile screen requirement
+↓
+2. Reproduce issue on mobile emulator / device
+↓
+3. Inspect Metro Bundler terminal output for JavaScript errors
+↓
+4. Check Network request URL (verify IP is NOT localhost)
+↓
+5. Check NestJS backend terminal logs for 400/500 errors
+↓
+6. Verify JWT token in AsyncStorage (`userToken`)
+↓
+7. Inspect Expo Camera permissions if QR scanning fails
+↓
+8. Check Prisma query in backend
+↓
+9. Fix root cause in screen or service
+↓
+10. Test complete physical flow again</div>
+<p>---</p>
+<h1 class="section-title" id="21-common-errors--fixes">21. Common Errors & Fixes</h1>
+<table>
+<thead><tr><th>Problem</th><th>Likely Reason</th><th>First Check</th></tr></thead><tbody>
+<tr><td><strong>Network Request Failed</strong></td><td><code>EXPO_PUBLIC_API_BASE_URL</code> uses <code>localhost</code> instead of laptop IP.</td><td>Change <code>localhost</code> to laptop Wi-Fi IP address in <code>shg-app/.env</code>.</td></tr>
+<tr><td><strong>Camera Scanner Black Screen</strong></td><td>Camera permissions not granted on phone.</td><td>Grant camera permission in phone settings or prompt <code>useCameraPermissions()</code>.</td></tr>
+<tr><td><strong>Metro Bundler Stale Cache</strong></td><td>Metro bundler holding old JavaScript build code.</td><td>Restart Metro bundler: <code>npm run shg-app:start -- --clear</code>.</td></tr>
+<tr><td><strong>401 Session Expired</strong></td><td>JWT token expired or cleared from <code>AsyncStorage</code>.</td><td>Log out and re-authenticate via phone OTP login screen.</td></tr>
+<tr><td><strong>NativeWind Styles Not Applying</strong></td><td>Missing <code>global.css</code> import or stale Babel cache.</td><td>Verify <code>global.css</code> import in <code>App.tsx</code> and restart bundler.</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="22-git-and-development-workflow">22. Git and Development Workflow</h1>
+<p>Use a feature branch for every mobile task.</p>
+<pre><code>git pull origin main
+git status
+git checkout -b feature/shg-otp-screen
+
+# Make changes & test on mobile emulator
+git add .
+git commit -m "feat(shg-app): update seller OTP verification modal layout"
+git push -u origin feature/shg-otp-screen</code></pre>
+<h3>Before Pushing Checklist</h3>
+<ul>
+<li>Test screen layout on different phone screen sizes.</li>
+<li>Test pickup and delivery flows end-to-end.</li>
+<li>Check Metro bundler terminal for warnings.</li>
+<li>Verify no hardcoded API URLs or secrets.</li>
+</ul>
+<p>---</p>
+<h1 class="section-title" id="23-testing-checklist">23. Testing Checklist</h1>
+<table>
+<thead><tr><th>Check</th><th>Question</th></tr></thead><tbody>
+<tr><td><strong>UI</strong></td><td>Does the mobile screen render cleanly on both small and large phone screens?</td></tr>
+<tr><td><strong>Validation</strong></td><td>Are empty form inputs rejected with helpful toast messages?</td></tr>
+<tr><td><strong>API</strong></td><td>Does Axios send requests to the correct IP endpoint with Bearer token?</td></tr>
+<tr><td><strong>Camera</strong></td><td>Does the QR barcode scanner detect parcel codes instantly?</td></tr>
+<tr><td><strong>OTP</strong></td><td>Does handover fail gracefully when an invalid OTP is entered?</td></tr>
+<tr><td><strong>Earnings</strong></td><td>Does wallet balance update immediately after a delivery is completed?</td></tr>
+<tr><td><strong>Offline/Network</strong></td><td>Does the app display a clean error message if Wi-Fi drops?</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="24-production-overview">24. Production Overview</h1>
+<h3>Expo Application Services (EAS) Build</h3>
+<p>For production deployment, mobile app binaries are compiled using EAS:</p>
+<pre><code># Build Android APK / AAB
+eas build --platform android
+
+# Build iOS IPA
+eas build --platform ios</code></pre>
+<p>---</p>
+<h1 class="section-title" id="25-important-commands-cheat-sheet">25. Important Commands Cheat Sheet</h1>
+<table>
+<thead><tr><th>Task</th><th>Command</th></tr></thead><tbody>
+<tr><td><strong>Start Metro Bundler</strong></td><td><code>npm run shg-app:start</code></td></tr>
+<tr><td><strong>Start Tunnel Mode</strong></td><td><code>npm run shg-app:start-tunnel</code></td></tr>
+<tr><td><strong>Clear Metro Cache</strong></td><td><code>npm run shg-app:start -- --clear</code></td></tr>
+<tr><td><strong>Run Android Emulator</strong></td><td>Press <code>a</code> in Metro terminal</td></tr>
+<tr><td><strong>Run iOS Simulator</strong></td><td>Press <code>i</code> in Metro terminal</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="26-intern-learning-plan">26. Intern Learning Plan</h1>
+<table>
+<thead><tr><th>Stage</th><th>Learn Roadmap</th></tr></thead><tbody>
+<tr><td><strong>Day 1</strong></td><td>Understand SHG field role, install Expo Go on phone, run <code>shg-app</code>.</td></tr>
+<tr><td><strong>Days 2–3</strong></td><td>Explore <code>src/navigation</code> and main bottom tab screens (<code>Dashboard</code>, <code>Orders</code>, <code>History</code>, <code>Earnings</code>, <code>Stock</code>).</td></tr>
+<tr><td><strong>Days 4–5</strong></td><td>Trace <code>OrderContext.tsx</code> and API calls in <code>axiosInstance.ts</code>.</td></tr>
+<tr><td><strong>Week 2</strong></td><td>Test first-mile seller pickup flow and camera QR barcode scanner (<code>PickupScannerScreen.tsx</code>).</td></tr>
+<tr><td><strong>Week 3</strong></td><td>Test doorstep delivery flow (<code>DropScreen.tsx</code>) and earnings wallet updating (<code>EarningsScreen.tsx</code>).</td></tr>
+<tr><td><strong>Week 4</strong></td><td>Pick a real mobile backlog task; write code, test on device, and submit Pull Request.</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="27-final-checklist">27. Final Checklist</h1>
+<table>
+<thead><tr><th>I can...</th><th>Done</th></tr></thead><tbody>
+<tr><td>Explain what SHG App is and who uses it in the village field.</td><td>[ ]</td></tr>
+<tr><td>Run <code>shg-app</code> locally using Expo Metro bundler.</td><td>[ ]</td></tr>
+<tr><td>Configure <code>EXPO_PUBLIC_API_BASE_URL</code> with my laptop's Wi-Fi IP address.</td><td>[ ]</td></tr>
+<tr><td>Find mobile screens in <code>src/screens</code> and components in <code>src/components</code>.</td><td>[ ]</td></tr>
+<tr><td>Trace how <code>OrderContext</code> fetches live orders from backend APIs.</td><td>[ ]</td></tr>
+<tr><td>Test seller pickup and camera QR barcode scanning on a phone.</td><td>[ ]</td></tr>
+<tr><td>Test buyer doorstep delivery and OTP verification.</td><td>[ ]</td></tr>
+<tr><td>Verify earnings wallet updates after delivery completion.</td><td>[ ]</td></tr>
+<tr><td>Debug mobile issues using Metro terminal and DevTools.</td><td>[ ]</td></tr>
+<tr><td>Submit a clean Git branch and Pull Request.</td><td>[ ]</td></tr>
+</tbody></table>
+<p>---</p>
+<h1 class="section-title" id="the-golden-rule">THE GOLDEN RULE</h1>
+<div class="callout callout-important"><div class="callout-title">📌 IMPORTANT</div><div><strong>THE GOLDEN RULE:</strong>   <em></em>Understand the business flow first $</div></div>
+<p>ightarrow$ understand the code $</p>
+<p>ightarrow$ make the smallest safe change $</p>
+<p>ightarrow$ test the complete affected flow.<em></em></p>
+<p><em>Prepared as an easy-to-understand complete project documentation for the Gramuunati Logistics (GMU) SHG Mobile App.</em></p>
+</body></html>

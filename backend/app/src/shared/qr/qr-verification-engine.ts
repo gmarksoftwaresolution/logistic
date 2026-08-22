@@ -197,14 +197,15 @@ export function determineTransition(
       };
     }
 
-    // PHASE 1 (PICKUP): Transporter loading from Pickup SHG (or Seller directly if redirected) to deliver to GMU Hub
+    // PHASE 1 (PICKUP): Transporter loading from Pickup SHG (or Seller directly if redirected)
     if (currentStatus === 'PENDING' || currentStatus === 'PARCEL_AT_SHG' || currentStatus === 'PARCEL_PICKED' || currentStatus === 'TRANSPORTER_ACCEPTED' || currentStatus === 'READY_FOR_PICKUP' || currentStatus === 'REDIRECTED') {
+      const isDirect = order?.flowType === 'DIRECT_SHG_TO_SHG' || order?.flowType === 'shg_to_shg';
       return {
-        nextParcelStatus: 'IN_TRANSIT_TO_HUB',
+        nextParcelStatus: isDirect ? 'IN_DIRECT_TRANSIT' : 'IN_TRANSIT_TO_HUB',
         nextHolderId: userId,
         nextHolderType: 'TRANSPORTER',
         action: 'TRANSPORTER_PICKUP',
-        message: order?.isPickupRedirected ? 'Parcel loaded by Transporter directly from Seller (Redirected)' : 'Parcel loaded by Transporter from SHG',
+        message: isDirect ? 'Parcel loaded by Transporter for Direct SHG-to-SHG Delivery' : (order?.isPickupRedirected ? 'Parcel loaded by Transporter directly from Seller (Redirected)' : 'Parcel loaded by Transporter from SHG'),
       };
     }
   }
@@ -268,10 +269,59 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
   try {
     const order = await tx.order.findUnique({
       where: { id: orderId },
-      include: { seller: true }
+      include: { seller: true, buyer: true }
     });
 
     if (!order) return;
+
+    // Auto-assign Drop SHG for direct SHG-to-SHG flow orders when sending request to transporter
+    const isDirectFlow = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
+    if (isDirectFlow) {
+      let targetDropShgId = order.dropShgId;
+      if (!targetDropShgId && order.buyer) {
+        const bVillage = (order.buyer.village || '').trim().toLowerCase();
+        const bPincode = (order.buyer.pincode || '').trim().toLowerCase();
+        const shgUsers = await tx.user.findMany({
+          where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null },
+          include: { address: true }
+        });
+        const matchedDropShg = shgUsers.find((u: any) => {
+          const v = (u.address?.village || '').trim().toLowerCase();
+          const p = (u.address?.pincode || '').trim().toLowerCase();
+          return (bVillage && v && (v === bVillage || v.includes(bVillage) || bVillage.includes(v))) || (bPincode && p && p === bPincode);
+        }) || shgUsers[0];
+
+        if (matchedDropShg) {
+          targetDropShgId = String(matchedDropShg.id);
+          await tx.order.update({
+            where: { id: order.id },
+            data: { dropShgId: targetDropShgId }
+          }).catch(() => {});
+        }
+      }
+
+      if (targetDropShgId) {
+        const dropShgIdStr = String(targetDropShgId);
+        await tx.orderAssignment.deleteMany({
+          where: {
+            orderId: order.id,
+            assigneeId: dropShgIdStr,
+            role: 'DROP',
+            assigneeType: 'SHG'
+          }
+        }).catch(() => {});
+
+        await tx.orderAssignment.create({
+          data: {
+            orderId: order.id,
+            assigneeId: dropShgIdStr,
+            assigneeType: 'SHG',
+            role: 'DROP',
+            status: 'ACCEPTED'
+          }
+        }).catch(() => {});
+      }
+    }
 
     const seller = order.seller;
     let matchedTransporters: any[] = [];
@@ -1290,10 +1340,14 @@ export class QrVerificationEngine {
       let dropTransporterId = order.dropTransporterId;
 
       if (roleUpper === 'TRANSPORTER') {
-        if (isPhase2DropLeg) {
-          dropTransporterStatus = 'PICKED';
+        if (isPhase2DropLeg || order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg') {
+          dropTransporterStatus = 'COMPLETED';
           dropTransporterId = String(userIdFinal);
-          mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
+          pickupShgStatus = 'COMPLETED';
+          pickupTransporterStatus = 'IN_TRANSIT';
+          pickupTransporterId = String(userIdFinal);
+          dropShgStatus = 'PENDING_TRANSPORTER';
+          mainStatus = 'IN_TRANSIT';
         } else {
           // Transporter picking up from Pickup SHG to carry to GMU Hub
           pickupShgStatus = 'DROPPED';
@@ -1302,23 +1356,32 @@ export class QrVerificationEngine {
           mainStatus = 'IN_TRANSIT_TO_HUB';
         }
       } else if (roleUpper === 'SHG') {
-        if (isPhase2DropLeg) {
+        const isDropLegScan = isPhase2DropLeg ||
+          ['IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DISPATCHED'].includes(order.mainStatus);
+
+        if (isDropLegScan && order.mainStatus !== 'PICKUP_ASSIGNED' && order.mainStatus !== 'PARCEL_AT_PICKUP_SHG') {
           // Drop SHG receiving from Transporter OR delivering to Buyer
-          if (order.mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || order.mainStatus === 'DISPATCHED' || (order.dropShgStatus !== 'ACCEPTED' && order.dropShgStatus !== 'DELIVERED')) {
-            dropShgStatus = 'PICKED';
+          if (order.mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || order.mainStatus === 'IN_DIRECT_TRANSIT' || order.mainStatus === 'IN_TRANSIT' || order.mainStatus === 'DISPATCHED' || (order.dropShgStatus !== 'READY_FOR_BUYER' && order.dropShgStatus !== 'ACCEPTED' && order.dropShgStatus !== 'DELIVERED')) {
+            dropShgStatus = 'READY_FOR_BUYER';
             dropShgId = String(userIdFinal);
             dropTransporterStatus = 'COMPLETED';
+            pickupTransporterStatus = 'COMPLETED';
+            pickupShgStatus = 'COMPLETED';
             mainStatus = 'PARCEL_AT_DROP_SHG';
           } else {
             dropShgStatus = 'DELIVERED';
             dropShgId = String(userIdFinal);
+            pickupShgStatus = 'COMPLETED';
+            pickupTransporterStatus = 'COMPLETED';
+            dropTransporterStatus = 'COMPLETED';
             mainStatus = 'DELIVERED';
           }
         } else {
           pickupShgStatus = 'PICKED';
           pickupShgId = String(userIdFinal);
           pickupTransporterStatus = 'PENDING';
-          mainStatus = 'PARCEL_AT_SHG';
+          dropShgStatus = 'PENDING_TRANSPORTER';
+          mainStatus = 'PARCEL_AT_PICKUP_SHG';
           await triggerTransporterPickupBroadcast(tx, order.id);
         }
       } else if (roleUpper === 'GMU' || roleUpper === 'ADMIN') {
