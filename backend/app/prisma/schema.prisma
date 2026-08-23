@@ -106,6 +106,7 @@ model Order {
   isPickupRedirected      Boolean?          @default(false)
   redirectedPickupAt      DateTime?
   redirectedPickupShgId   String?
+  isDropRedirected        Boolean?          @default(false)
   
   // Timestamps
   warehouseReceivedAt     DateTime?
@@ -206,14 +207,6 @@ model User {
   @@index([role])
   @@index([applicationStatus])
   @@index([isVerified])
-  shgReturnOrders           ReturnOrder[]               @relation("ShgReturnOrders")
-  transporterReturnOrders   ReturnOrder[]               @relation("TransporterReturnOrders")
-  return_order_assignments  return_order_assignments[]
-  return_order_scan_history return_order_scan_history[]
-  shgPickupOrders           PickupOrder[]               @relation("ShgPickupOrders")
-  transporterPickups        PickupOrder[]               @relation("TransporterPickupOrders")
-  shgDropOrders             DropOrder[]                 @relation("ShgDropOrders")
-  transporterDrops          DropOrder[]                 @relation("TransporterDropOrders")
 }
 
 model Address {
@@ -528,10 +521,6 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@map("products")
-  returnOrderItems   ReturnOrderItem[]
-  masterOrderItems   MasterOrderItem[]
-  pickupOrderItems   PickupOrderItem[]
-  dropOrderItems     DropOrderItem[]
 }
 
 model Warehouse {
@@ -605,8 +594,6 @@ model Seller {
   @@index([pincode])
   @@index([mobileNumber])
   @@map("sellers")
-  masterOrderItems  MasterOrderItem[]
-  pickupOrders      PickupOrder[]
 }
 
 model Buyer {
@@ -631,9 +618,6 @@ model Buyer {
   @@index([pincode])
   @@index([mobileNumber])
   @@map("buyers")
-  returnOrders ReturnOrder[]
-  masterOrders MasterOrder[] @relation("BuyerOrders")
-  dropOrders   DropOrder[]
 }
 
 model VerificationRecord {
@@ -769,243 +753,6 @@ model Earning {
   @@index([shgId, completedAt])
   @@unique([shgId, orderId])
   @@map("earnings")
-}
-
-model MasterOrder {
-  id            Int               @id @default(autoincrement())
-  orderNumber   String            @unique @map("order_number")
-  buyerId       Int               @map("buyer_id")
-  buyer         Buyer             @relation("BuyerOrders", fields: [buyerId], references: [id])
-  totalAmount   Float             @map("total_amount")
-  paymentMethod String?           @map("payment_method")
-  paymentStatus String            @default("PENDING") @map("payment_status")
-  status        String            @default("CREATED")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at")
-
-  items         MasterOrderItem[]
-  pickupOrders  PickupOrder[]
-  dropOrders    DropOrder[]
-
-  @@index([buyerId])
-  @@index([status])
-  @@map("master_orders")
-}
-
-model MasterOrderItem {
-  id            Int         @id @default(autoincrement())
-  masterOrderId Int         @map("master_order_id")
-  masterOrder   MasterOrder @relation(fields: [masterOrderId], references: [id])
-  productId     Int         @map("product_id")
-  product       Product     @relation(fields: [productId], references: [id])
-  sellerId      Int         @map("seller_id")
-  seller        Seller      @relation(fields: [sellerId], references: [id])
-  quantity      Int
-  price         Float
-
-  @@index([masterOrderId])
-  @@index([productId])
-  @@index([sellerId])
-  @@map("master_order_items")
-}
-
-model PickupOrder {
-  id                 Int               @id @default(autoincrement())
-  pickupOrderNumber  String?           @unique @map("pickup_order_number")
-  masterOrderId      Int               @map("master_order_id")
-  masterOrder        MasterOrder       @relation(fields: [masterOrderId], references: [id])
-  sellerId           Int               @map("seller_id")
-  seller             Seller            @relation(fields: [sellerId], references: [id])
-  shgId              Int?              @map("shg_id")
-  shg                User?             @relation("ShgPickupOrders", fields: [shgId], references: [id])
-  transporterId      Int?              @map("transporter_id")
-  transporter        User?             @relation("TransporterPickupOrders", fields: [transporterId], references: [id])
-  status             String            @default("PENDING")
-  pickupTime         DateTime?         @map("pickup_time")
-  handoverCode       String?           @map("handover_code")
-  createdAt          DateTime          @default(now()) @map("created_at")
-
-  items              PickupOrderItem[]
-  tracking           PickupTracking[]
-
-  @@index([masterOrderId])
-  @@index([sellerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("pickup_orders")
-}
-
-model PickupOrderItem {
-  id            Int         @id @default(autoincrement())
-  pickupOrderId Int         @map("pickup_order_id")
-  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
-  productId     Int         @map("product_id")
-  product       Product     @relation(fields: [productId], references: [id])
-  quantity      Int
-
-  verificationCode String?   @map("verification_code")
-  generatedTime    DateTime? @map("generated_time")
-  verifiedTime     DateTime? @map("verified_time")
-  verificationStatus String?  @default("PENDING") @map("verification_status")
-
-  @@index([pickupOrderId])
-  @@index([productId])
-  @@map("pickup_order_items")
-}
-
-model DropOrder {
-  id              Int             @id @default(autoincrement())
-  dropOrderNumber String?         @unique @map("drop_order_number")
-  masterOrderId   Int             @map("master_order_id")
-  masterOrder     MasterOrder     @relation(fields: [masterOrderId], references: [id])
-  buyerId         Int             @map("buyer_id")
-  buyer           Buyer           @relation(fields: [buyerId], references: [id])
-  shgId           Int?            @map("shg_id")
-  shg             User?           @relation("ShgDropOrders", fields: [shgId], references: [id])
-  transporterId   Int?            @map("transporter_id")
-  transporter     User?           @relation("TransporterDropOrders", fields: [transporterId], references: [id])
-  status          String          @default("PENDING")
-  deliveryAddress String?         @map("delivery_address")
-  handoverCode    String?         @map("handover_code")
-  createdAt       DateTime        @default(now()) @map("created_at")
-
-  items           DropOrderItem[]
-  tracking        DropTracking[]
-
-  @@index([masterOrderId])
-  @@index([buyerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("drop_orders")
-  returnOrders    ReturnOrder[]
-}
-
-model DropOrderItem {
-  id          Int       @id @default(autoincrement())
-  dropOrderId Int       @map("drop_order_id")
-  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
-  productId   Int       @map("product_id")
-  product     Product   @relation(fields: [productId], references: [id])
-  quantity    Int?
-
-  verificationCode String?   @map("verification_code")
-  generatedTime    DateTime? @map("generated_time")
-  verifiedTime     DateTime? @map("verified_time")
-  verificationStatus String?  @default("PENDING") @map("verification_status")
-
-  @@index([dropOrderId])
-  @@index([productId])
-  @@map("drop_order_items")
-}
-
-model PickupTracking {
-  id            Int         @id @default(autoincrement())
-  pickupOrderId Int         @map("pickup_order_id")
-  pickupOrder   PickupOrder @relation(fields: [pickupOrderId], references: [id])
-  status        String?
-  remarks       String?
-  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
-
-  @@index([pickupOrderId])
-  @@map("pickup_tracking")
-}
-
-model DropTracking {
-  id          Int       @id @default(autoincrement())
-  dropOrderId Int       @map("drop_order_id")
-  dropOrder   DropOrder @relation(fields: [dropOrderId], references: [id])
-  status      String?
-  remarks     String?
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
-
-  @@index([dropOrderId])
-  @@map("drop_tracking")
-}
-
-model ReturnOrder {
-  id                        Int                         @id @default(autoincrement())
-  returnOrderNumber         String?                     @unique @map("return_order_number")
-  originalOrderId           Int                         @map("original_order_id")
-  buyerId                   Int                         @map("buyer_id")
-  shgId                     Int?                        @map("shg_id")
-  transporterId             Int?                        @map("transporter_id")
-  status                    String                      @default("RETURN_REQUESTED")
-  returnReason              String?                     @map("return_reason")
-  barcode                   String?                     @unique
-  createdAt                 DateTime                    @default(now()) @map("created_at")
-  updatedAt                 DateTime                    @default(now()) @updatedAt @map("updated_at")
-  return_order_assignments  return_order_assignments[]
-  items                     ReturnOrderItem[]
-  return_order_scan_history return_order_scan_history[]
-  return_order_timeline     return_order_timeline[]
-  buyer                     Buyer                       @relation(fields: [buyerId], references: [id])
-  originalOrder             DropOrder                   @relation(fields: [originalOrderId], references: [id])
-  shg                       User?                       @relation("ShgReturnOrders", fields: [shgId], references: [id])
-  transporter               User?                       @relation("TransporterReturnOrders", fields: [transporterId], references: [id])
-
-  @@index([originalOrderId])
-  @@index([buyerId])
-  @@index([shgId])
-  @@index([transporterId])
-  @@index([status])
-  @@map("return_orders")
-}
-
-model ReturnOrderItem {
-  id            Int         @id @default(autoincrement())
-  returnOrderId Int         @map("return_order_id")
-  productId     Int         @map("product_id")
-  quantity      Int?
-  product       Product     @relation(fields: [productId], references: [id])
-  returnOrder   ReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
-
-  @@index([returnOrderId])
-  @@index([productId])
-  @@map("return_order_items")
-}
-
-model return_order_assignments {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  assignee_id     Int
-  assigneeType    String
-  status          String      @default("PENDING")
-  created_at      DateTime    @default(now())
-  updated_at      DateTime    @default(now())
-  User            User        @relation(fields: [assignee_id], references: [id])
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-
-  @@index([assignee_id])
-  @@index([return_order_id])
-}
-
-model return_order_scan_history {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  scanned_by      Int
-  userRole        String
-  scanResult      String
-  barcode         String
-  scanLocation    String?
-  timestamp       DateTime    @default(now())
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-  User            User        @relation(fields: [scanned_by], references: [id])
-
-  @@index([return_order_id])
-  @@index([scanned_by])
-}
-
-model return_order_timeline {
-  id              Int         @id @default(autoincrement())
-  return_order_id Int
-  status          String
-  remarks         String?
-  updated_at      DateTime    @default(now())
-  return_orders   ReturnOrder @relation(fields: [return_order_id], references: [id], onDelete: Cascade)
-
-  @@index([return_order_id])
 }
 
 model RedirectedOrder {

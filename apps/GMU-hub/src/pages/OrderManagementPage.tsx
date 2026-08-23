@@ -55,6 +55,7 @@ const CANONICAL_STATUS_MAP: Record<string, string> = {
   'transporter accepted': 'Transporter Route Assigned & Accepted',
   'accepted_pickup': 'Transporter Route Assigned & Accepted',
   'picked up by transporter (in transit to hub)': 'Picked up by Transporter',
+  'picked up by transporter (in direct transit to drop shg)': 'Picked up by Transporter',
   'picked up by transporter': 'Picked up by Transporter',
   'transporter pickup': 'Picked up by Transporter',
   'transporter_pickup': 'Picked up by Transporter',
@@ -102,14 +103,15 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
 
 const STAGE_ORDER: Record<string, number> = {
   'Order Placed & Registered': 1,
-  'Collected & Scanned by SHG': 2,
-  'Transporter Route Assigned & Accepted': 3,
-  'Picked up by Transporter': 4,
-  'Received & Quality Checked at GMU Hub': 5,
-  'Dispatched from Hub': 6,
-  'Transporter Picked Up from Hub': 7,
-  'Received at Destination SHG Center': 8,
-  'Delivered & Handed Over to Buyer': 9,
+  'Pickup SHG Assigned & Accepted': 2,
+  'Collected & Scanned by SHG': 3,
+  'Transporter Route Assigned & Accepted': 4,
+  'Picked up by Transporter': 5,
+  'Received & Quality Checked at GMU Hub': 6,
+  'Dispatched from Hub': 7,
+  'Transporter Picked Up from Hub': 8,
+  'Received at Destination SHG Center': 9,
+  'Delivered & Handed Over to Buyer': 10,
 };
 
 const getUpdatedTimeAgo = (order: any) => {

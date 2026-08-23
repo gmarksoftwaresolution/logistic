@@ -250,31 +250,6 @@ export class OrderHistoryService {
       }
     }
 
-    if (!sellerName && (cleanId || order.orderId)) {
-      const pickupOrderObj = await this.prisma.pickupOrder.findFirst({
-        where: {
-          OR: [
-            { pickupOrderNumber: cleanId },
-            { pickupOrderNumber: `ORD-${cleanId}` },
-            { pickupOrderNumber: order.orderId },
-          ]
-        },
-        include: { seller: true }
-      });
-      if (pickupOrderObj?.seller) {
-        sellerName = pickupOrderObj.seller.sellerName;
-        sellerMobile = pickupOrderObj.seller.mobileNumber;
-        sellerVillage = pickupOrderObj.seller.village;
-        sellerAddress = [
-          pickupOrderObj.seller.addressLine1,
-          pickupOrderObj.seller.village,
-          pickupOrderObj.seller.taluka,
-          pickupOrderObj.seller.district,
-          pickupOrderObj.seller.pincode ? `- ${pickupOrderObj.seller.pincode}` : ''
-        ].filter(Boolean).join(', ');
-      }
-    }
-
     let buyerName = order.buyer?.buyerName || order.buyer?.fullName || '';
     let buyerMobile = order.buyer?.mobileNumber || order.buyer?.phoneNumber || '';
     let buyerVillage = order.buyer?.village || order.buyer?.addressLine1 || '';
@@ -300,31 +275,6 @@ export class OrderHistoryService {
           buyerObj.taluka,
           buyerObj.district,
           buyerObj.pincode ? `- ${buyerObj.pincode}` : ''
-        ].filter(Boolean).join(', ');
-      }
-    }
-
-    if (!buyerName && (cleanId || order.orderId)) {
-      const dropOrderObj = await this.prisma.dropOrder.findFirst({
-        where: {
-          OR: [
-            { dropOrderNumber: cleanId },
-            { dropOrderNumber: `ORD-${cleanId}` },
-            { dropOrderNumber: order.orderId },
-          ]
-        },
-        include: { buyer: true }
-      });
-      if (dropOrderObj?.buyer) {
-        buyerName = dropOrderObj.buyer.buyerName;
-        buyerMobile = dropOrderObj.buyer.mobileNumber;
-        buyerVillage = dropOrderObj.buyer.village;
-        buyerAddress = [
-          dropOrderObj.buyer.addressLine1,
-          dropOrderObj.buyer.village,
-          dropOrderObj.buyer.taluka,
-          dropOrderObj.buyer.district,
-          dropOrderObj.buyer.pincode ? `- ${dropOrderObj.buyer.pincode}` : ''
         ].filter(Boolean).join(', ');
       }
     }

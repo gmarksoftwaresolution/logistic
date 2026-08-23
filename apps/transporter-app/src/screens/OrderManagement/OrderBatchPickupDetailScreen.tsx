@@ -48,6 +48,12 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const { t } = useTranslation();
   const { batchId, type: initialType } = route.params;
+
+  const handleCall = (phone?: string) => {
+    if (phone) {
+      Linking.openURL(`tel:${phone}`).catch(() => {});
+    }
+  };
   const { batches, rejectProductItem, rerouteBatchToHub, finalizePickup, finalizeDrop, generateDropHandoverCode, showToast, refreshBatchesList } = useOrderManagement();
   const { currentStep, isActive } = useOnboarding();
 

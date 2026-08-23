@@ -1088,6 +1088,7 @@ export class OrderManagementService implements OnModuleInit {
 
       // Build unified Tracking Audit History from Phase 1 to Phase 2
       const auditTimeline: any[] = [];
+      const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
 
       // 1. Order Placed
       if (o.createdAt) {
@@ -1104,9 +1105,9 @@ export class OrderManagementService implements OnModuleInit {
       }
 
       // 2. Pickup SHG Assigned & Accepted
-      if (pickupShgAcceptedAt) {
+      if (pickupShgAcceptedAt || isDirectFlow) {
         auditTimeline.push({
-          timestamp: pickupShgAcceptedAt,
+          timestamp: pickupShgAcceptedAt || o.createdAt,
           stage: 'PHASE 1: PICKUP',
           status: 'Pickup SHG Assigned & Accepted',
           statusType: 'COMPLETED',
@@ -1135,7 +1136,7 @@ export class OrderManagementService implements OnModuleInit {
       if (pickupTransporterAcceptedAt) {
         auditTimeline.push({
           timestamp: pickupTransporterAcceptedAt,
-          stage: 'PHASE 1: PICKUP',
+          stage: isDirectFlow ? 'DIRECT TRANSIT' : 'PHASE 1: PICKUP',
           status: 'Transporter Route Assigned & Accepted',
           statusType: 'COMPLETED',
           actorName: pickupTransporterDetails?.name || 'Transporter',
@@ -1145,60 +1146,60 @@ export class OrderManagementService implements OnModuleInit {
         });
       }
 
-      // 5. Transporter Pickup / In Transit to GMU Hub
+      // 5. Transporter Pickup / In Transit
       if (pickupTransporterPickedAt) {
         auditTimeline.push({
           timestamp: pickupTransporterPickedAt,
-          stage: 'PHASE 1: PICKUP',
-          status: 'Picked up by Transporter (In Transit to Hub)',
+          stage: isDirectFlow ? 'DIRECT TRANSIT' : 'PHASE 1: PICKUP',
+          status: isDirectFlow ? 'Picked up by Transporter (In Direct Transit to Drop SHG)' : 'Picked up by Transporter (In Transit to Hub)',
           statusType: 'COMPLETED',
           actorName: pickupTransporterDetails?.name || 'Transporter',
           actorRole: 'TRANSPORTER',
           location: o.seller?.village || 'Collection Point',
-          remarks: 'Parcels in transit to GMU Central Hub',
+          remarks: isDirectFlow ? 'Parcels in direct transit to Destination SHG Center' : 'Parcels in transit to GMU Central Hub',
         });
       }
 
-      // 6. GMU Hub Intake Received
-      if (gmuHubIntakeAt) {
-        auditTimeline.push({
-          timestamp: gmuHubIntakeAt,
-          stage: 'GMU HUB WAREHOUSE',
-          status: 'Received & Quality Checked at GMU Hub',
-          statusType: 'COMPLETED',
-          actorName: 'GMU Hub Intake Dock',
-          actorRole: 'HUB_COORDINATOR',
-          location: 'GMU Central Hub',
-          remarks: 'Intake verification completed & barcode validated',
-        });
-      }
+      // 6. GMU Hub Stages (Exclusion for Direct Flow)
+      if (!isDirectFlow) {
+        if (gmuHubIntakeAt) {
+          auditTimeline.push({
+            timestamp: gmuHubIntakeAt,
+            stage: 'GMU HUB WAREHOUSE',
+            status: 'Received & Quality Checked at GMU Hub',
+            statusType: 'COMPLETED',
+            actorName: 'GMU Hub Intake Dock',
+            actorRole: 'HUB_COORDINATOR',
+            location: 'GMU Central Hub',
+            remarks: 'Intake verification completed & barcode validated',
+          });
+        }
 
-      // 7. GMU Hub Stored in Inventory
-      if (gmuHubStoredAt) {
-        auditTimeline.push({
-          timestamp: gmuHubStoredAt,
-          stage: 'GMU HUB WAREHOUSE',
-          status: 'Stored in Hub Inventory',
-          statusType: 'COMPLETED',
-          actorName: 'GMU Hub Inventory',
-          actorRole: 'HUB_COORDINATOR',
-          location: 'GMU Central Warehouse',
-          remarks: 'Ready for outbound route dispatch',
-        });
-      }
+        if (gmuHubStoredAt) {
+          auditTimeline.push({
+            timestamp: gmuHubStoredAt,
+            stage: 'GMU HUB WAREHOUSE',
+            status: 'Stored in Hub Inventory',
+            statusType: 'COMPLETED',
+            actorName: 'GMU Hub Inventory',
+            actorRole: 'HUB_COORDINATOR',
+            location: 'GMU Central Warehouse',
+            remarks: 'Ready for outbound route dispatch',
+          });
+        }
 
-      // 8. Dispatched & Handed to Drop Transporter
-      if (dropTransporterPickedAt || o.dispatchedAt) {
-        auditTimeline.push({
-          timestamp: dropTransporterPickedAt || o.dispatchedAt,
-          stage: 'PHASE 2: DROP',
-          status: 'Dispatched from Hub (In Transit to Drop Center)',
-          statusType: 'COMPLETED',
-          actorName: dropTransporterDetails?.name || 'Drop Transporter',
-          actorRole: 'TRANSPORTER',
-          location: 'GMU Central Hub Outbound',
-          remarks: dropTransporterDetails?.vehicle ? `Vehicle: ${dropTransporterDetails.vehicle}` : 'Outbound transport started',
-        });
+        if (dropTransporterPickedAt || o.dispatchedAt) {
+          auditTimeline.push({
+            timestamp: dropTransporterPickedAt || o.dispatchedAt,
+            stage: 'PHASE 2: DROP',
+            status: 'Dispatched from Hub (In Transit to Drop Center)',
+            statusType: 'COMPLETED',
+            actorName: dropTransporterDetails?.name || 'Drop Transporter',
+            actorRole: 'TRANSPORTER',
+            location: 'GMU Central Hub Outbound',
+            remarks: dropTransporterDetails?.vehicle ? `Vehicle: ${dropTransporterDetails.vehicle}` : 'Outbound transport started',
+          });
+        }
       }
 
       // 9. Drop SHG Accepted / Received
@@ -1241,6 +1242,7 @@ export class OrderManagementService implements OnModuleInit {
         'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
         'transporter accepted': 'Transporter Route Assigned & Accepted',
         'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+        'picked up by transporter (in direct transit to drop shg)': 'Picked up by Transporter (In Direct Transit to Drop SHG)',
         'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
         'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
         'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
@@ -1270,6 +1272,7 @@ export class OrderManagementService implements OnModuleInit {
         'Collected & Scanned by SHG': 3,
         'Transporter Route Assigned & Accepted': 4,
         'Picked up by Transporter (In Transit to Hub)': 5,
+        'Picked up by Transporter (In Direct Transit to Drop SHG)': 5,
         'Received & Quality Checked at GMU Hub': 6,
         'Stored in Hub Inventory': 7,
         'Drop SHG Assigned & Accepted': 8,
@@ -1292,10 +1295,12 @@ export class OrderManagementService implements OnModuleInit {
       });
 
       const cleanAuditTimeline = Array.from(uniqueAuditMap.values()).sort((a: any, b: any) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
         const rankA = STAGE_ORDER[a.status] || 99;
         const rankB = STAGE_ORDER[b.status] || 99;
-        if (rankA !== rankB) return rankA - rankB;
-        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        return rankA - rankB;
       });
 
       const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.action === 'DECLINE_PRE_PICKUP' || s.scanResult === 'REJECTED' || s.scanResult === 'DECLINED');

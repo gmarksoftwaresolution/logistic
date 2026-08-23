@@ -1073,6 +1073,10 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
     });
   };
 
+  const pruneStaleBatch = (bId: string) => {
+    setBatches(prev => prev.filter(b => b.id !== bId && getCleanNumber(b.id) !== getCleanNumber(bId)));
+  };
+
   const acceptBatch = async (batchId: string, skipToast: boolean = false) => {
     try {
 
