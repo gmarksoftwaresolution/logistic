@@ -21,11 +21,25 @@ export class QrService {
   }
 
   async generateQr(orderId: string, regenerate = false, createdBy = 'SYSTEM'): Promise<any[]> {
+    const cleanId = String(orderId || '').trim();
+    const rawNumber = cleanId.replace(/^(pickup|drop|return)-/i, '').replace(/^ORD-(PICK|DROP|RETURN)-/i, 'ORD-');
+    const justNumber = cleanId.replace(/\D/g, '');
+
     let order = await this.prisma.order.findFirst({
       where: {
         OR: [
-          { id: orderId },
-          { orderId: orderId }
+          { id: cleanId },
+          { orderId: cleanId },
+          { id: rawNumber },
+          { orderId: rawNumber },
+          ...(justNumber ? [
+            { id: `ORD-2026-${justNumber}` },
+            { orderId: `ORD-2026-${justNumber}` },
+            { id: `ORD-${justNumber}` },
+            { orderId: `ORD-${justNumber}` },
+            { id: justNumber },
+            { orderId: justNumber }
+          ] : [])
         ]
       }
     });
@@ -34,13 +48,15 @@ export class QrService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    const resolvedOrderId = order.orderId;
+    const resolvedOrderId = order.orderId || order.id;
 
     const existingParcels = await this.prisma.parcel.findMany({
       where: {
         OR: [
           { orderId: resolvedOrderId },
-          { orderId: order.id }
+          { orderId: order.id },
+          { orderId: cleanId },
+          { orderId: rawNumber }
         ]
       }
     });
@@ -178,8 +194,35 @@ export class QrService {
   }
 
   async getOrderParcels(orderId: string): Promise<any[]> {
+    const cleanId = String(orderId || '').trim();
+    const rawNumber = cleanId.replace(/^(pickup|drop|return)-/i, '').replace(/^ORD-(PICK|DROP|RETURN)-/i, 'ORD-');
+    const justNumber = cleanId.replace(/\D/g, '');
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { id: cleanId },
+          { orderId: cleanId },
+          { id: rawNumber },
+          { orderId: rawNumber },
+          ...(justNumber ? [
+            { id: `ORD-2026-${justNumber}` },
+            { orderId: `ORD-2026-${justNumber}` },
+            { id: `ORD-${justNumber}` },
+            { orderId: `ORD-${justNumber}` },
+            { id: justNumber },
+            { orderId: justNumber }
+          ] : [])
+        ]
+      }
+    });
+
+    const targetIds = Array.from(new Set([cleanId, rawNumber, order?.id, order?.orderId].filter(Boolean) as string[]));
+
     return this.prisma.parcel.findMany({
-      where: { orderId }
+      where: {
+        orderId: { in: targetIds }
+      }
     });
   }
 

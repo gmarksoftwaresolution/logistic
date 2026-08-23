@@ -45,6 +45,7 @@ export const DashboardPage = ({ onNavigate }: PageProps) => {
     pickupRejectedOrders,
     dropNewOrders,
     dropAssignedOrders,
+    dropCompletedOrders,
     dropRejectedOrders,
     returnNewOrders,
     returnAssignedOrders,
@@ -66,6 +67,7 @@ export const DashboardPage = ({ onNavigate }: PageProps) => {
       ...pickupRejectedOrders,
       ...dropNewOrders,
       ...dropAssignedOrders,
+      ...dropCompletedOrders,
       ...dropRejectedOrders,
       ...returnNewOrders,
       ...returnAssignedOrders,
@@ -83,16 +85,15 @@ export const DashboardPage = ({ onNavigate }: PageProps) => {
     return Array.from(map.values());
   }, [
     pickupNewOrders, pickupAssignedOrders, pickupWarehouseOrders, pickupRejectedOrders,
-    dropNewOrders, dropAssignedOrders, dropRejectedOrders, returnNewOrders, returnAssignedOrders,
+    dropNewOrders, dropAssignedOrders, dropCompletedOrders, dropRejectedOrders, returnNewOrders, returnAssignedOrders,
     returnCompletedOrders
   ]);
 
   const isOrderCompleted = (o: any) => {
     const ms = (o.mainStatus || o.status || '').toUpperCase();
     const ds = (o.dropShgStatus || '').toUpperCase();
-    const dt = (o.dropTransporterStatus || '').toUpperCase();
-    return ['DELIVERED', 'COMPLETED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED'].includes(ms) ||
-           ds === 'COMPLETED' || ds === 'DROPPED' || (dt === 'COMPLETED' && o.phase === 'DROP');
+    return ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED'].includes(ms) ||
+           ds === 'COMPLETED' || ds === 'DROPPED' || ds === 'DELIVERED';
   };
 
   const isOrderRejected = (o: any) => {

@@ -539,13 +539,18 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
 
   const isPickup = type === 'pickup';
   const isRTOBatch = batch.products.some(p => (p as any).isRTO) || batch.isRTO || batch.status === 'rejected' || false;
-  const isHubPoint = isPickup
-    ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU')
-    : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU' || isRTOBatch);
+  const isDirect = batch.flowType === 'shg_to_shg' || (batch as any).isDirect;
+  const isHubPoint = isDirect ? false : (isPickup
+    ? (batch.pickupPointName === 'Gadhinglaj Hub' || batch.pickupPointName === 'Central Hub GMU' || checkHubPoint(batch.pickupPointName))
+    : (batch.dropPointName === 'Gadhinglaj Hub' || batch.dropPointName === 'Central Hub GMU' || checkHubPoint(batch.dropPointName) || isRTOBatch));
 
   const displayContact = isRTOBatch
     ? HUB_CONTACT
-    : (isHubPoint ? HUB_CONTACT : batch.shgContact);
+    : (isHubPoint
+      ? HUB_CONTACT
+      : (type === 'drop'
+        ? (batch.originalRecipient || (batch as any).dropShgDetails || batch.shgContact)
+        : batch.shgContact));
   const isSHG = !isHubPoint;
 
   const sectionTitle = type === 'pickup'
@@ -641,14 +646,20 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
           </View>
         </LinearGradient>
 
-        {/* Section A: Contact Master Box */}
+        {/* Section A: Contact Master Box (Pickup Location Contact) */}
         <View style={styles.masterSectionBox}>
           <View style={styles.boxHeaderRow}>
             <View style={styles.boxHeaderLeft}>
               <MapPin size={scale(18)} color={Colors.primary} strokeWidth={2.5} />
-              <Text style={styles.boxTitleText}>{isSHG ? t('orders.shg_contact_detail', { defaultValue: 'SHG Contact Detail' }) : t('orders.gmu_contact_detail', { defaultValue: 'GMU Contact Detail' })}</Text>
+              <Text style={styles.boxTitleText}>
+                {batch.flowType === 'shg_to_shg'
+                  ? 'Pickup Location Contact (Pickup SHG)'
+                  : ((batch as any).isRedirected
+                    ? t('orders.seller_contact_detail', { defaultValue: 'Seller Contact Detail' })
+                    : (isSHG ? t('orders.shg_contact_detail', { defaultValue: 'SHG Contact Detail' }) : t('orders.gmu_contact_detail', { defaultValue: 'GMU Contact Detail' })))}
+              </Text>
             </View>
-            <TouchableOpacity style={styles.contactActionBtn}>
+            <TouchableOpacity style={styles.contactActionBtn} onPress={() => handleCall((displayContact as any).phone)}>
               <Phone size={scale(14)} color={Colors.primary} />
               <Text style={styles.contactActionText}>{t('orders.call', { defaultValue: 'Call' })}</Text>
             </TouchableOpacity>
@@ -669,32 +680,22 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
               );
             })()}
             {(() => {
-              const resolvedContact = displayContact || {};
+              const isDirectFlow = batch.flowType === 'shg_to_shg' || (batch as any).isDirect;
+              const pickupContactObj = (batch as any).pickupShgContact || (batch as any).pickupShgDetails || ((isDirectFlow && type === 'drop') ? null : batch.shgContact) || {};
+              const resolvedContact = isDirectFlow ? pickupContactObj : (displayContact || {});
               const formattedAddr = formatAddress(resolvedContact.address);
               const addressPincode = typeof resolvedContact.address === 'string' ? resolvedContact.address?.match(/\d{6}/)?.[0] : (resolvedContact.address as any)?.pincode;
-              const resolvedVillage = (resolvedContact as any).village || batch.areaName || 'N/A';
+              const resolvedVillage = (resolvedContact as any).village || (isDirectFlow ? (batch.pickupPointName || 'N/A') : (batch.areaName || 'N/A'));
               const resolvedPincode = (resolvedContact as any).pincode || addressPincode || 'N/A';
               return (
                 <View style={styles.contactGrid}>
-                  {!!(displayContact as any).shgName && (
-                    <View style={styles.contactGridItem}>
-                      <View style={styles.contactIconCircle}>
-                        <User size={scale(14)} color={Colors.primary} />
-                      </View>
-                      <View style={styles.contactDetailCol}>
-                        <Text style={styles.contactItemLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={1}>{(resolvedContact as any).shgName}</Text>
-                      </View>
-                    </View>
-                  )}
-
                   <View style={styles.contactGridItem}>
                     <View style={styles.contactIconCircle}>
                       <User size={scale(14)} color={Colors.primary} />
                     </View>
                     <View style={styles.contactDetailCol}>
-                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Contact Person' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(displayContact.name || displayContact.fullName || (displayContact as any).crpName) || (isHubPoint ? 'Hub Manager' : 'SHG Member')}</Text>
+                      <Text style={styles.contactItemLabel}>{isHubPoint ? t('orders.hub_manager', { defaultValue: 'Hub Manager' }) : t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(resolvedContact.name || resolvedContact.fullName || (resolvedContact as any).crpName || (resolvedContact as any).personName) || ((batch as any).isRedirected ? 'Seller' : (isHubPoint ? 'Hub Manager' : 'SHG Member'))}</Text>
                     </View>
                   </View>
 
@@ -704,7 +705,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                     </View>
                     <View style={styles.contactDetailCol}>
                       <Text style={styles.contactItemLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
-                      <Text style={styles.contactItemValue} numberOfLines={1}>{resolvedContact.phone || 'N/A'}</Text>
+                      <Text style={styles.contactItemValue} numberOfLines={1}>{resolvedContact.phone || resolvedContact.phoneNumber || resolvedContact.mobileNumber || 'N/A'}</Text>
                     </View>
                   </View>
 
@@ -759,9 +760,7 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
                       </View>
                       <View style={styles.contactDetailCol}>
                         <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
-                        <Text style={styles.contactItemValue} numberOfLines={2}>
-                          {typeof displayContact.address === 'string' ? displayContact.address : (typeof displayContact.address === 'object' ? ([(displayContact.address as any)?.addressLine1, (displayContact.address as any)?.village, (displayContact.address as any)?.district, (displayContact.address as any)?.pincode].filter(Boolean).join(', ') || '') : String(displayContact.address || ''))}
-                        </Text>
+                        <Text style={styles.contactItemValue} numberOfLines={2}>{formattedAddr || 'N/A'}</Text>
                       </View>
                     </View>
                     <TouchableOpacity style={styles.addressNavigateBtn} onPress={handleNavigate}>
@@ -773,6 +772,110 @@ const OrderBatchPickupDetailScreen: React.FC<{ route: any; navigation: any }> = 
             })()}
           </View>
         </View>
+
+        {/* Section A2: Drop Location Contact (For SHG-to-SHG Direct Orders) */}
+        {(batch.flowType === 'shg_to_shg' || (batch as any).isDirect) && (
+          <View style={[styles.masterSectionBox, { marginTop: scale(12) }]}>
+            <View style={styles.boxHeaderRow}>
+              <View style={styles.boxHeaderLeft}>
+                <MapPin size={scale(18)} color="#2563EB" strokeWidth={2.5} />
+                <Text style={styles.boxTitleText}>Drop Location Contact (Drop SHG)</Text>
+              </View>
+              <TouchableOpacity style={styles.contactActionBtn} onPress={() => {
+                const dropObj = (batch as any).originalRecipient || (batch as any).dropShgDetails || (type === 'drop' ? batch.shgContact : null) || {};
+                handleCall(dropObj.phone || dropObj.phoneNumber || dropObj.mobileNumber);
+              }}>
+                <Phone size={scale(14)} color="#2563EB" />
+                <Text style={[styles.contactActionText, { color: '#2563EB' }]}>{t('orders.call', { defaultValue: 'Call' })}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.boxContentPadding}>
+              {(() => {
+                const dropContact = (batch as any).originalRecipient || (batch as any).dropShgDetails || (type === 'drop' ? batch.shgContact : null) || {};
+                return (
+                  <View style={styles.contactGrid}>
+                    <View style={styles.contactGridItem}>
+                      <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                        <User size={scale(14)} color="#2563EB" />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.person_name', { defaultValue: 'Person Name' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{cleanPersonName(dropContact.name || dropContact.fullName || dropContact.crpName) || 'Drop SHG Member'}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.contactGridItem}>
+                      <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                        <Phone size={scale(14)} color="#2563EB" />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.phone_number', { defaultValue: 'Phone Number' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{dropContact.phone || dropContact.phoneNumber || dropContact.mobileNumber || 'N/A'}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.contactGridItem}>
+                      <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                        <MapPin size={scale(14)} color="#2563EB" />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.village', { defaultValue: 'Village' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{dropContact.village || 'N/A'}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.contactGridItem}>
+                      <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                        <MapPin size={scale(14)} color="#2563EB" />
+                      </View>
+                      <View style={styles.contactDetailCol}>
+                        <Text style={styles.contactItemLabel}>{t('orders.pincode', { defaultValue: 'Pincode' })}</Text>
+                        <Text style={styles.contactItemValue} numberOfLines={1}>{dropContact.pincode || 'N/A'}</Text>
+                      </View>
+                    </View>
+
+                    {!!dropContact.taluka && (
+                      <View style={styles.contactGridItem}>
+                        <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                          <MapPin size={scale(14)} color="#2563EB" />
+                        </View>
+                        <View style={styles.contactDetailCol}>
+                          <Text style={styles.contactItemLabel}>{t('orders.taluka', { defaultValue: 'Taluka' })}</Text>
+                          <Text style={styles.contactItemValue} numberOfLines={1}>{dropContact.taluka}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {!!dropContact.district && (
+                      <View style={styles.contactGridItem}>
+                        <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                          <MapPin size={scale(14)} color="#2563EB" />
+                        </View>
+                        <View style={styles.contactDetailCol}>
+                          <Text style={styles.contactItemLabel}>{t('orders.district', { defaultValue: 'District' })}</Text>
+                          <Text style={styles.contactItemValue} numberOfLines={1}>{dropContact.district}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={[styles.contactGridItem, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: scale(10) }}>
+                        <View style={[styles.contactIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                          <MapPin size={scale(14)} color="#2563EB" />
+                        </View>
+                        <View style={styles.contactDetailCol}>
+                          <Text style={styles.contactItemLabel}>{t('orders.full_address', { defaultValue: 'Full Address' })}</Text>
+                          <Text style={styles.contactItemValue} numberOfLines={2}>{dropContact.address || 'N/A'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })()}
+            </View>
+          </View>
+        )}
 
         {/* RTO Original Recipient Audit Card */}
         {isRTOBatch && (batch.originalRecipient || batch.shgContact) && (

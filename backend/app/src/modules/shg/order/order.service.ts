@@ -36,6 +36,7 @@ export class OrderService {
     }
 
     const shgUuid = String(numericShgId);
+    const shgAuthId = user.authId || '';
     const userVillage = this.normalizeStr(user.address?.village);
     const userPincode = user.address?.pincode ? user.address.pincode.trim().toLowerCase() : '';
 
@@ -127,6 +128,7 @@ export class OrderService {
         orderId: true,
         barcode: true,
         phase: true,
+        flowType: true,
         sellerId: true,
         buyerId: true,
         productCount: true,
@@ -178,39 +180,54 @@ export class OrderService {
             verificationToken: true,
             qrCodeValue: true,
           }
-        }
+        },
+        assignments: true,
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
+    }).catch((err) => {
+      console.error('[getAssignedOrders Error]', err?.message || err);
+      return [];
     });
 
     // STRICT BUSINESS LOGIC FILTER: Village + Pincode matching per SHG
     const matchedOrders = orders.filter((o: any) => {
       const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg';
-      const isDropPhase = o.phase === 'DROP' || (isDirectFlow && ['IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus)) || ['STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes(o.mainStatus);
 
-      if (isDropPhase) {
-        // Drop Leg Completed Check: If delivered, exclude from active pickups
+      const isDropUser = (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId)) ||
+        o.assignments?.some((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && (String(a.assigneeId) === shgUuid || String(a.assigneeId) === shgAuthId));
+
+      const isPickupUser = (o.pickupShgId && (String(o.pickupShgId) === shgUuid || String(o.pickupShgId) === shgAuthId)) ||
+        o.assignments?.some((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG' && (String(a.assigneeId) === shgUuid || String(a.assigneeId) === shgAuthId));
+
+      if (isDropUser) {
         const dShgStatus = (o.dropShgStatus || '').toUpperCase();
-        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED' || o.mainStatus === 'DELIVERED' || o.mainStatus === 'COMPLETED' || o.mainStatus === 'PARCEL_AT_DROP_SHG') {
+        const pShgStatus = (o.pickupShgStatus || '').toUpperCase();
+        const mStatus = (o.mainStatus || '').toUpperCase();
+
+        // 1. Exclude if already delivered / completed
+        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
           return false;
         }
 
-        if (o.dropShgId && String(o.dropShgId) === shgUuid) return true;
-        const dropVillage = o.dropShgDetails?.village || o.buyer?.village;
-        const dropPincode = o.dropShgDetails?.pincode || o.buyer?.pincode;
-        return isVillageMatch(dropVillage, dropPincode);
-      } else {
-        // Pickup Leg Completed Check: If picked up by SHG / handed to transporter, exclude from active pickups
+        // 2. Drop SHG should ONLY see drop order request AFTER Pickup SHG has picked up parcel from seller!
+        const isPickedUpByPickupShg = pShgStatus === 'PICKED' || ['PARCEL_AT_PICKUP_SHG', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'STORED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'PARCEL_AT_DROP_SHG', 'OUT_FOR_DELIVERY'].includes(mStatus);
+        if (!isPickedUpByPickupShg) {
+          return false;
+        }
+
+        return true;
+      }
+
+      if (isPickupUser) {
         const pShgStatus = (o.pickupShgStatus || '').toUpperCase();
         if (pShgStatus === 'DROPPED' || pShgStatus === 'COMPLETED' || ['IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'IN_TRANSIT_TO_HUB', 'HUB_RECEIVED', 'STORED', 'DISPATCHED', 'DELIVERED', 'COMPLETED'].includes((o.mainStatus || '').toUpperCase())) {
           return false;
         }
-
-        if (o.pickupShgId && String(o.pickupShgId) === shgUuid) return true;
-        const sellerVillage = o.seller?.village;
-        const sellerPincode = o.seller?.pincode;
-        return isVillageMatch(sellerVillage, sellerPincode);
+        return true;
       }
+
+      return false;
     });
 
     const transporterIds = matchedOrders
@@ -220,7 +237,7 @@ export class OrderService {
     const transporters = transporterIds.length > 0
       ? await this.prisma.user.findMany({
         where: { id: { in: transporterIds } },
-        include: { transporterDetail: true, otherDetails: true }
+        include: { address: true, transporterDetail: true, otherDetails: true }
       })
       : [];
 
@@ -231,7 +248,9 @@ export class OrderService {
       const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
       const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg';
-      const isDropLeg = (o.phase === 'DROP' || (isDirectFlow && ['IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus)) || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus) || (o.dropShgId && String(o.dropShgId) === shgUuid));
+      const isDropUser = (o.dropShgId && (String(o.dropShgId) === shgUuid || String(o.dropShgId) === shgAuthId)) ||
+        o.assignments?.some((a: any) => a.role === 'DROP' && a.assigneeType === 'SHG' && (String(a.assigneeId) === shgUuid || String(a.assigneeId) === shgAuthId));
+      const isDropLeg = isDropUser || (o.phase === 'DROP' || (isDirectFlow && ['IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus)) || ['DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus));
       return {
         id: cleanOrderId,
         uuid: o.id,
@@ -333,12 +352,16 @@ export class OrderService {
         dropShgStatus: o.dropShgStatus,
         dropTransporterStatus: o.dropTransporterStatus,
         mainStatus: o.mainStatus,
+        transporterName: transporterUser?.fullName || (transporterUser as any)?.transporterDetail?.driverName || null,
+        transporterMobile: transporterUser?.phoneNumber || (transporterUser as any)?.transporterDetail?.driverMobile || null,
+        vehicleNumber: (transporterUser?.transporterDetail as any)?.vehicleNumber || (transporterUser?.transporterDetail as any)?.registrationNumber || null,
+        transporterAddress: [transporterUser?.address?.village, transporterUser?.address?.district].filter(Boolean).join(', ') || null,
         transporter: (() => {
           const isPickupAccepted = ['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'PICKED', 'IN_TRANSIT_TO_HUB', 'DELIVERED_TO_HUB', 'HUB_RECEIVED', 'COMPLETED'].includes(o.pickupTransporterStatus || '');
           const isDropAccepted = ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(o.dropTransporterStatus || '');
-          const isTransAccepted = o.phase === 'DROP' ? isDropAccepted : isPickupAccepted;
+          const isTransAccepted = isDirectFlow || (o.phase === 'DROP' ? isDropAccepted : isPickupAccepted);
 
-          if (!isTransAccepted || !transporterUser) {
+          if (!transporterUser) {
             return null;
           }
 
@@ -424,7 +447,7 @@ export class OrderService {
         const isDropShgMatch = (o.dropShgId && String(o.dropShgId) === shgUuid);
         const isReturnShgMatch = (o.pickupReturnShgId && String(o.pickupReturnShgId) === shgUuid);
 
-        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
+        const isPhase2ActiveForDropShg = isDropShgMatch && ['DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(o.mainStatus) && o.dropShgStatus !== 'DROPPED' && o.dropShgStatus !== 'DELIVERED' && o.dropShgStatus !== 'COMPLETED';
         if (isPhase2ActiveForDropShg) {
           return false;
         }

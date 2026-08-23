@@ -110,8 +110,8 @@ export default function DashboardScreen({
     return "This Month";
   };
 
-  const pickupCount = incomingOrders.length + acceptedOrders.filter((o: any) => o.legType === 'pickup' || !o.legType).length;
-  const deliveryCount = acceptedOrders.filter((o: any) => o.legType === 'drop').length;
+  const pickupCount = incomingOrders.length + acceptedOrders.filter((o: any) => (o.legType === 'pickup' || (!o.legType && o.phase !== 'DROP')) && o.status !== 'PickedUp').length;
+  const deliveryCount = acceptedOrders.filter((o: any) => o.legType === 'drop' || o.phase === 'DROP' || o.status === 'PickedUp').length;
 
   return (
     <LinearGradient colors={['#F9FAFB', '#F3F4F6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="flex-1">

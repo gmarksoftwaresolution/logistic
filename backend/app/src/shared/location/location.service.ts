@@ -580,7 +580,7 @@ export class LocationService {
     return null;
   }
 
-  async evaluateDirectFlow(sellerAddr: string, buyerAddr: string) {
+  async evaluateDirectFlow(sellerAddr: string, buyerAddr: string, sellerVillage?: string, buyerVillage?: string) {
     const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDNMv_sau3_koFOtAvkLkwsZgn_Y8iydy0';
     const NESARI_HUB_ADDR = 'Nesari, Gadhinglaj, Kolhapur, Maharashtra 416504, India';
 
@@ -621,14 +621,87 @@ export class LocationService {
         if (o === 1 && d === 1) hubToBuyerMeters = dist;
       });
 
-      if (sellerToHubMeters !== null && sellerToBuyerMeters !== null && hubToBuyerMeters !== null) {
-        const isDirect = sellerToBuyerMeters <= (sellerToHubMeters + hubToBuyerMeters) * 0.70;
-        return { isDirect };
+      // Rule 2 Check: Distance must be <= 10 km (10,000 meters) or <= 70% threshold
+      let isDistanceOk = false;
+      if (sellerToBuyerMeters !== null) {
+        if (sellerToBuyerMeters <= 10000) {
+          isDistanceOk = true;
+        } else if (sellerToHubMeters !== null && hubToBuyerMeters !== null) {
+          isDistanceOk = sellerToBuyerMeters <= (sellerToHubMeters + hubToBuyerMeters) * 0.70;
+        }
       }
+
+      // If distance condition fails (> 10 km and fails 70% ratio), return isDirect: false (VIA_HUB)
+      if (!isDistanceOk) {
+        return { isDirect: false, reason: 'Distance > 10km' };
+      }
+
+      // Rule 1 & Rule 3 Check: Transporter Route Coverage
+      if (sellerVillage && buyerVillage) {
+        const hasCommonTransporter = await this.checkTransporterRouteCoverage(sellerVillage, buyerVillage);
+        if (!hasCommonTransporter) {
+          console.log(`[evaluateDirectFlow] Distance is <= 10km but no single transporter covers both '${sellerVillage}' and '${buyerVillage}'. Fallback to VIA_HUB.`);
+          return { isDirect: false, reason: 'No single transporter route covers both villages' };
+        }
+      }
+
+      return { isDirect: true };
     } catch (err: any) {
       console.warn('[evaluateDirectFlow Notice] Google API calculation fallback:', err.message);
     }
 
     return { isDirect: false };
+  }
+
+  private async checkTransporterRouteCoverage(sellerVillage: string, buyerVillage: string): Promise<boolean> {
+    const sVill = sellerVillage.trim().toLowerCase();
+    const bVill = buyerVillage.trim().toLowerCase();
+
+    // If seller and buyer are in the exact same village, auto-covered
+    if (sVill === bVill) return true;
+
+    try {
+      const transporters = await this.prisma.user.findMany({
+        where: {
+          role: 'TRANSPORTER',
+          applicationStatus: 'APPROVED',
+          deletedAt: null,
+        },
+        include: {
+          routeDetail: true,
+          milkVanDetail: true,
+        }
+      });
+
+      const normalize = (val: any): string => {
+        if (typeof val === 'string') return val.toLowerCase();
+        if (Array.isArray(val)) return val.map(v => String(v).toLowerCase()).join(' ');
+        if (typeof val === 'object' && val !== null) return JSON.stringify(val).toLowerCase();
+        return '';
+      };
+
+      for (const t of transporters) {
+        const routeText = [
+          t.routeDetail?.operatingArea,
+          normalize(t.routeDetail?.pickupLocations),
+          normalize(t.routeDetail?.dropLocations),
+          t.milkVanDetail?.sangathanName,
+          t.milkVanDetail?.centerName,
+          normalize(t.milkVanDetail?.assignedVillages),
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const coversSeller = routeText.includes(sVill);
+        const coversBuyer = routeText.includes(bVill);
+
+        if (coversSeller && coversBuyer) {
+          return true;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[checkTransporterRouteCoverage Error]:', err.message);
+    }
+
+    // Default to true if no transporter route data is found yet to avoid blocking short distance orders
+    return true;
   }
 }

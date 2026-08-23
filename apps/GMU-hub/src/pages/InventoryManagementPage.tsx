@@ -135,7 +135,7 @@ export const InventoryManagementPage = ({ onNavigate }: { onNavigate: (page: str
   const isOrderDispatched = (o: any) => {
     const ms = (o.mainStatus || o.status || '').toUpperCase();
     const dt = (o.dropTransporterStatus || '').toUpperCase();
-    return ms === 'DISPATCHED' || ms === 'IN_TRANSIT_TO_DROP_SHG' || ms === 'IN_TRANSIT_TO_BUYER' || ms === 'OUT_FOR_DELIVERY' || ms === 'PARCEL_AT_DROP_SHG' || ms === 'DELIVERED' || ms === 'COMPLETED' || dt === 'PICKED' || o.phase === 'DROP';
+    return ms === 'DISPATCHED' || ms === 'IN_TRANSIT_TO_DROP_SHG' || ms === 'IN_TRANSIT_TO_BUYER' || ms === 'OUT_FOR_DELIVERY' || ms === 'PARCEL_AT_DROP_SHG' || ms === 'DELIVERED' || ms === 'COMPLETED' || dt === 'PICKED' || dt === 'IN_TRANSIT_TO_DROP_SHG';
   };
 
   const storedOrdersList = (incomingInventory || []).filter((o: any) => !isOrderDispatched(o));

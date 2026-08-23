@@ -1837,7 +1837,12 @@ export class OrderManagementService implements OnModuleInit {
       try {
         const sellerAddr = `${seller.village}, ${seller.taluka || 'Gadhinglaj'}, ${seller.district || 'Kolhapur'}, ${seller.state || 'Maharashtra'} ${seller.pincode || ''}, India`;
         const buyerAddr = `${dto.buyerVillage || buyer.village}, ${dto.buyerTaluka || buyer.taluka || 'Gadhinglaj'}, ${dto.buyerDistrict || buyer.district || 'Kolhapur'}, ${dto.buyerState || buyer.state || 'Maharashtra'} ${dto.buyerPincode || buyer.pincode || ''}, India`;
-        const evalRes = await this.locationService.evaluateDirectFlow(sellerAddr, buyerAddr);
+        const evalRes = await this.locationService.evaluateDirectFlow(
+          sellerAddr,
+          buyerAddr,
+          seller.village,
+          dto.buyerVillage || buyer.village
+        );
         if (evalRes?.isDirect) {
           evaluatedFlowType = 'DIRECT_SHG_TO_SHG';
         }
@@ -2118,8 +2123,6 @@ export class OrderManagementService implements OnModuleInit {
     const assignedShg = matchingShgs[0];
     const shgNumericId = parseInt(assignedShg.id, 10);
 
-
-
     await this.prisma.orderAssignment.deleteMany({
       where: {
         orderId: order.id,
@@ -2142,7 +2145,7 @@ export class OrderManagementService implements OnModuleInit {
       Order ID: ${order.orderId} (${order.id})
       Seller Village: ${order.sellerVillage}
       Seller Pincode: ${order.sellerPincode}
-      Auto-Assigned & Accepted SHG ID: ${assignedShg.id}
+      Auto-Assigned & Accepted Pickup SHG ID: ${assignedShg.id}
     `);
 
     return this.prisma.order.update({
@@ -3505,10 +3508,14 @@ export class OrderManagementService implements OnModuleInit {
       ))
     );
 
-    // 2. Fallback: Match on Pincode if no village match found
-    if (matchingShgs.length === 0 && op) {
+    // 2. Fallback: Match on Village if village matches but pincode differs slightly
+    if (matchingShgs.length === 0 && ov) {
       matchingShgs = approvedShgs.filter(shg =>
-        shg.pincode && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()
+        shg.village && (
+          normalizeStr(shg.village) === ov ||
+          normalizeStr(shg.village).includes(ov.substring(0, 5)) ||
+          ov.includes(normalizeStr(shg.village).substring(0, 5))
+        )
       );
     }
 

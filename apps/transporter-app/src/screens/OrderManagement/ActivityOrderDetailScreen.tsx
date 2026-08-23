@@ -64,15 +64,18 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
     );
   }
 
-  const isDropCard = batch.id?.startsWith('drop-') || (batch.dropCount > 0 && batch.pickupCount === 0);
+  const navType = (route.params as any)?.type;
+  const isDropCard = navType === 'drop' || batch.id?.startsWith('drop-') || batch.status === 'PICKUP_COMPLETED' || (batch.dropCount > 0 && batch.pickupCount === 0);
+
+  const isDirect = batch.flowType === 'shg_to_shg' || (batch as any).isDirect;
 
   // Resolve Pickup Contact details
-  const isPickupHub = isHubPoint(batch.pickupPointName);
-  const pickupContact = isPickupHub ? HUB_CONTACT : batch.shgContact;
+  const isPickupHub = isDirect ? false : isHubPoint(batch.pickupPointName);
+  const pickupContact = isPickupHub ? HUB_CONTACT : ((batch as any).pickupShgContact || batch.shgContact);
 
   // Resolve Drop-off Contact details
-  const isDropHub = isHubPoint(batch.dropPointName);
-  const dropContact = isDropHub ? HUB_CONTACT : (batch.originalRecipient || batch.shgContact);
+  const isDropHub = isDirect ? false : isHubPoint(batch.dropPointName);
+  const dropContact = isDropHub ? HUB_CONTACT : (batch.originalRecipient || (batch as any).dropShgDetails || batch.shgContact);
 
   const activeContact = isDropCard ? dropContact : pickupContact;
   const isTargetHub = isDropCard ? isDropHub : isPickupHub;
@@ -233,19 +236,6 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
             <View style={styles.contactCardBody}>
               <View style={styles.contactInfoGrid}>
-                {/* SHG Name Item (if not GMU Hub) */}
-                {!!(!isTargetHub && ((activeContact as any)?.shgName || batch.shgName)) && (
-                  <View style={styles.contactInfoRow}>
-                    <View style={styles.contactIconBg}>
-                      <User size={scale(14)} color={Colors.primary} />
-                    </View>
-                    <View style={styles.contactTextCol}>
-                      <Text style={styles.contactTextLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                      <Text style={styles.contactTextValue}>{(activeContact as any)?.shgName || batch.shgName}</Text>
-                    </View>
-                  </View>
-                )}
-
                 {/* Person Item */}
                 <View style={styles.contactInfoRow}>
                   <View style={styles.contactIconBg}>
@@ -336,19 +326,6 @@ const ActivityOrderDetailScreen: React.FC<{ route: any; navigation: any }> = ({ 
 
             <View style={styles.contactCardBody}>
               <View style={styles.contactInfoGrid}>
-                {/* SHG Name Item (if not GMU Hub) */}
-                {!!(!isDropHub && ((dropContact as any)?.shgName || batch.shgName)) && (
-                  <View style={styles.contactInfoRow}>
-                    <View style={styles.contactIconBg}>
-                      <User size={scale(14)} color={Colors.primary} />
-                    </View>
-                    <View style={styles.contactTextCol}>
-                      <Text style={styles.contactTextLabel}>{t('orders.shg_name', { defaultValue: 'SHG Name' })}</Text>
-                      <Text style={styles.contactTextValue}>{(dropContact as any)?.shgName || batch.shgName}</Text>
-                    </View>
-                  </View>
-                )}
-
                 {/* Person Item */}
                 <View style={styles.contactInfoRow}>
                   <View style={styles.contactIconBg}>

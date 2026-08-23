@@ -253,6 +253,7 @@ export interface AppContextType {
   loadReturnsTransporter: (status?: string, date?: string) => Promise<void>;
   loadReturnsBuyer: (status?: string, date?: string) => Promise<void>;
   loadInventoryStored: (status?: string, date?: string) => Promise<void>;
+  loadInventoryDispatched: (status?: string, date?: string) => Promise<void>;
   loadInventoryTransporterReturn: (status?: string, date?: string) => Promise<void>;
   loadInventoryBuyerReturn: (status?: string, date?: string) => Promise<void>;
 
@@ -1192,6 +1193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadReturnsTransporter,
         loadReturnsBuyer,
         loadInventoryStored,
+        loadInventoryDispatched,
         loadInventoryTransporterReturn,
         loadInventoryBuyerReturn,
 

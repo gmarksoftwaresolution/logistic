@@ -341,18 +341,24 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           o.isPickupRedirected ||
           o.isRedirected ||
           o.pickupShgStatus === 'REDIRECTED' ||
-          o.mainStatus === 'REDIRECTED'
+          o.pickupShgStatus === 'REJECTED' ||
+          o.pickupShgStatus === 'DECLINED' ||
+          o.pickupShgStatus === 'SHG_DECLINED' ||
+          o.mainStatus === 'REDIRECTED' ||
+          o.pickupType === 'DIRECT_SELLER' ||
+          o.pickupType === 'SELLER_DIRECT' ||
+          o.pickupType === 'SELLER'
         );
 
         const shgObj = o.shg || o.pickupShg || o.pickupShgDetails || {};
         const pickupShgCrp = isRedirected
-          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          ? (o.seller?.sellerName || o.seller?.fullName || o.sellerName || 'Seller Direct Pickup')
           : (shgObj.fullName || shgObj.name || shgObj.personName || shgObj.crpName || shgObj.shgDetail?.crpName || 'SHG Member');
         const pickupShgName = isRedirected
-          ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup')
+          ? (o.seller?.sellerName || o.seller?.fullName || o.sellerName || 'Seller Direct Pickup')
           : (shgObj.shgName || shgObj.shgDetail?.shgName || (shgObj.village ? `${shgObj.village} Center` : 'SHG Center'));
         const pickupShgPhone = isRedirected
-          ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.seller?.phone || '')
+          ? (o.seller?.mobileNumber || o.seller?.phoneNumber || o.seller?.phone || o.sellerMobile || '')
           : (shgObj.mobileNumber || shgObj.phoneNumber || shgObj.phone || shgObj.shgDetail?.crpMobile || '');
         const pickupShgAddress = isRedirected
           ? (o.seller?.fullAddress || o.seller?.addressLine1 || o.seller?.village || '')
@@ -372,6 +378,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
           areaName: isDirect ? (o.buyer?.village || o.seller?.village || 'Direct Delivery') : (isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A')),
           flowType: flowTypeVal,
+          isRedirected: isRedirected,
           shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
           pickupPointName: pickupPoint,
           dropPointName: dropPoint,
@@ -405,10 +412,10 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               return 'REJECTED' as const;
             }
             // Normal completed pickup
-            if (['DELIVERED_TO_HUB', 'DROPPED', 'COMPLETED'].includes(ptStatus) || mStatus === 'DELIVERED_TO_HUB' || mStatus === 'STORED' || mStatus === 'IN_TRANSIT_TO_DROP_SHG' || mStatus === 'PARCEL_AT_DROP_SHG') {
-              return 'PICKUP_COMPLETED' as const;
+            if (ptStatus === 'COMPLETED' || ptStatus === 'DELIVERED_TO_HUB' || ['HUB_RECEIVED', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus)) {
+              return 'DROP_COMPLETED' as const;
             }
-            if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED'].includes(mStatus)) {
+            if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(mStatus)) {
               return 'PICKUP_COMPLETED' as const;
             }
             if (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes(ptStatus) || mStatus === 'TRANSPORTER_ACCEPTED' || mStatus === 'PICKUP_TRANSPORTER_ACCEPTED') {
@@ -515,11 +522,27 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       });
 
       const mappedDrops = rawDrops.map((o: any) => {
+        const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
         const rawId = String(o.orderId || o.id || '105');
         const cleanNum = rawId.replace(/^(ORD-)+(2026-)?/, '');
         const bId = `drop-${o.id}`;
         const isPickupFinished = resolvedDropPickups.includes(bId);
 
+        const pickupShgObj = o.pickupShgDetails || o.pickupShg || o.seller;
+        const pickupShgCrp = pickupShgObj?.fullName || pickupShgObj?.name || pickupShgObj?.personName || pickupShgObj?.crpName || pickupShgObj?.sellerName || 'Pickup SHG Lead';
+        const pickupShgName = pickupShgObj?.shgName || `${pickupShgObj?.village || o.seller?.village || ''} Pickup SHG`;
+        const pickupShgMobile = pickupShgObj?.crpMobile || pickupShgObj?.phoneNumber || pickupShgObj?.mobileNumber || pickupShgObj?.phone || 'N/A';
+        const pickupShgVillage = pickupShgObj?.village || pickupShgObj?.address?.village || o.seller?.village || 'N/A';
+        const pickupShgPincode = pickupShgObj?.pincode || pickupShgObj?.address?.pincode || o.seller?.pincode || 'N/A';
+        const pickupShgTaluka = pickupShgObj?.taluka || pickupShgObj?.address?.taluka || o.seller?.taluka || 'N/A';
+        const pickupShgDistrict = pickupShgObj?.district || pickupShgObj?.address?.district || o.seller?.district || 'N/A';
+        const pickupShgAddress = pickupShgObj?.fullAddress || [
+          pickupShgObj?.address?.deliveryAddress || pickupShgObj?.address?.landmark || pickupShgObj?.address?.houseNo || pickupShgObj?.address?.addressLine1,
+          pickupShgObj?.address?.village || pickupShgVillage,
+          pickupShgObj?.address?.taluka || pickupShgTaluka,
+          pickupShgObj?.address?.district || pickupShgDistrict,
+          pickupShgObj?.address?.pincode || pickupShgPincode
+        ].filter(Boolean).join(', ') || o.seller?.fullAddress || 'N/A';
         const dropShgObj = o.dropShgDetails || o.dropShg || o.shg;
         const dropShgCrp = dropShgObj?.fullName || dropShgObj?.name || dropShgObj?.personName || dropShgObj?.crpName || 'Drop SHG Member';
         const dropShgName = dropShgObj?.shgName || `${dropShgObj?.village || o.buyer?.village || ''} Drop SHG`;
@@ -537,14 +560,16 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         ].filter(Boolean).join(', ') || o.buyer?.fullAddress || 'N/A';
 
         const dropPointVillage = dropShgVillage !== 'N/A' ? dropShgVillage : (o.buyer?.village || dropShgObj?.village || 'Local Village');
+        const pickupPointVillage = isDirect ? (o.seller?.village || o.shg?.address?.village || 'Pickup Village') : HUB_CONFIG.name;
+        const flowTypeVal = isDirect ? ('shg_to_shg' as FlowType) : ('gmu_to_shg' as FlowType);
 
         return {
           id: bId,
           displayId: `ORD-2026-${cleanNum}`,
           areaName: dropShgVillage,
-          flowType: 'gmu_to_shg' as FlowType,
+          flowType: flowTypeVal,
           shgName: dropShgName,
-          pickupPointName: HUB_CONFIG.name,
+          pickupPointName: pickupPointVillage,
           dropPointName: dropPointVillage,
           pickupCount: 0,
           dropCount: 1,
@@ -577,7 +602,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             if (dtStatus === 'COMPLETED' || dShgStatus === 'DELIVERED' || dShgStatus === 'DROPPED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
               return 'DROP_COMPLETED' as const;
             }
-            if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus)) {
+            if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || ptStatus === 'COMPLETED' || ptStatus === 'PARCEL_PICKED' || ['IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG'].includes(mStatus)) {
               return 'PICKUP_COMPLETED' as const;
             }
             // 3. Move to ACCEPTED section when Transporter accepts drop assignment from GMU Hub
@@ -637,6 +662,17 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             address: dropShgAddress,
             village: dropShgVillage,
             pincode: dropShgPincode,
+          },
+          pickupShgContact: {
+            name: cleanPersonName(pickupShgCrp, 'Pickup SHG Lead'),
+            crpName: cleanPersonName(pickupShgCrp, 'Pickup SHG Lead'),
+            shgName: pickupShgName,
+            phone: pickupShgMobile,
+            address: pickupShgAddress,
+            village: pickupShgVillage,
+            pincode: pickupShgPincode,
+            taluka: pickupShgTaluka,
+            district: pickupShgDistrict,
           },
           products: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
             id: String(p.parcelId || p.id || Math.random()),

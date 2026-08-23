@@ -35,9 +35,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : err.message || 'Internal server error';
     }
 
-    this.logger.error(
-      `HTTP Status: ${status} | Path: ${request.url} | Details: ${JSON.stringify(messageResponse)}`,
-    );
+    if (status === HttpStatus.NOT_FOUND) {
+      this.logger.warn(
+        `HTTP Status: ${status} | Path: ${request.url} | Details: ${JSON.stringify(messageResponse)}`,
+      );
+    } else {
+      this.logger.error(
+        `HTTP Status: ${status} | Path: ${request.url} | Details: ${JSON.stringify(messageResponse)}`,
+      );
+    }
 
     response.status(status).json({
       statusCode: status,

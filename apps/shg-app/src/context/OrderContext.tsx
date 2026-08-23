@@ -259,7 +259,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       } else {
         // Drop leg mapping for SHG (Phase 2)
         const dShgStatus = (dbOrder.dropShgStatus || dbOrder.drop_shg_status || '').toUpperCase();
-        if (pStatus === 'COMPLETED' || pStatus === 'DELIVERED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'PARCEL_WITH_DROP_SHG' || mStatus === 'AT_BUYER_SHG' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED') {
+        if (dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED') {
           return 'COMPLETED';
         }
 
@@ -267,7 +267,8 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
           ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(mStatus) ||
           ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(pStatus) ||
           dShgStatus === 'PICKED' ||
-          dShgStatus === 'PICKED_UP'
+          dShgStatus === 'PICKED_UP' ||
+          dShgStatus === 'READY_FOR_BUYER'
         ) {
           return 'PickedUp';
         }
@@ -322,11 +323,11 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       verificationCode: item.verificationCode || '',
       verificationStatus: item.verificationStatus || 'PENDING',
     })),
-    transporterName: dbOrder.transporter?.fullName || '',
-    transporterMobile: dbOrder.transporter?.phoneNumber || '',
-    vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
-    transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || '',
-    transporterAddress: dbOrder.transporter?.transporterAddress || '',
+    transporterName: dbOrder.transporter?.fullName || dbOrder.transporterName || (dbOrder as any).transporterPersonName || '',
+    transporterMobile: dbOrder.transporter?.phoneNumber || dbOrder.transporterMobile || (dbOrder as any).transporterPhone || '',
+    vehicleNumber: dbOrder.transporter?.transporterDetail?.vehicleNumber || dbOrder.transporter?.transporterDetail?.registrationNumber || dbOrder.vehicleNumber || dbOrder.transporter?.otherDetails?.[0]?.registrationNumber || '',
+    transporterId: dbOrder.transporter?.transporterDetail?.transporterCode || dbOrder.transporterId || '',
+    transporterAddress: dbOrder.transporter?.transporterAddress || dbOrder.transporterAddress || '',
     transporterRoute: dbOrder.transporter?.transporterRoute || '',
     handoverCode: dbOrder.handoverCode || '',
     isPickupRedirected: !!(dbOrder.isPickupRedirected || dbOrder.masterOrder?.isPickupRedirected || dbOrder.pickupShgStatus === 'REDIRECTED'),
@@ -463,7 +464,9 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return order;
       });
       const mappedDrops = rawDrops.map((o: any) => {
-        const order = mapDbOrderToUi(o, 'drop', false);
+        const hasReceivedFromTransporter = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'OUT_FOR_DELIVERY'].includes((o.mainStatus || o.status || '').toUpperCase()) || (o.dropShgStatus || '').toUpperCase() === 'READY_FOR_BUYER';
+        const legTypeVal = hasReceivedFromTransporter ? 'drop' : 'pickup';
+        const order = mapDbOrderToUi(o, legTypeVal, false);
         return order;
       });
 

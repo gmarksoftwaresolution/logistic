@@ -279,23 +279,41 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
     if (isDirectFlow) {
       let targetDropShgId = order.dropShgId;
       if (!targetDropShgId && order.buyer) {
-        const bVillage = (order.buyer.village || '').trim().toLowerCase();
+        const normalizeStr = (s?: string | null) => (s ? s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase() : '');
+        const bVillageNorm = normalizeStr(order.buyer.village);
         const bPincode = (order.buyer.pincode || '').trim().toLowerCase();
+
         const shgUsers = await tx.user.findMany({
           where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null },
           include: { address: true }
         });
-        const matchedDropShg = shgUsers.find((u: any) => {
-          const v = (u.address?.village || '').trim().toLowerCase();
+
+        // 1. Priority 1: Match BOTH Village AND Pincode
+        let matchedDropShg = shgUsers.find((u: any) => {
+          const vNorm = normalizeStr(u.address?.village);
           const p = (u.address?.pincode || '').trim().toLowerCase();
-          return (bVillage && v && (v === bVillage || v.includes(bVillage) || bVillage.includes(v))) || (bPincode && p && p === bPincode);
-        }) || shgUsers[0];
+          return bVillageNorm && vNorm && (vNorm === bVillageNorm || vNorm.includes(bVillageNorm) || bVillageNorm.includes(vNorm)) && (!bPincode || !p || p === bPincode);
+        });
+
+        // 2. Priority 2: Match Village exact/substring
+        if (!matchedDropShg && bVillageNorm) {
+          matchedDropShg = shgUsers.find((u: any) => {
+            const vNorm = normalizeStr(u.address?.village);
+            return vNorm && (vNorm === bVillageNorm || vNorm.includes(bVillageNorm) || bVillageNorm.includes(vNorm));
+          });
+        }
 
         if (matchedDropShg) {
           targetDropShgId = String(matchedDropShg.id);
-          await tx.order.update({
-            where: { id: order.id },
-            data: { dropShgId: targetDropShgId }
+          await tx.order.updateMany({
+            where: {
+              OR: [
+                { id: order.id },
+                { orderId: order.id },
+                ...(order.orderId ? [{ id: order.orderId }, { orderId: order.orderId }] : [])
+              ]
+            },
+            data: { dropShgId: targetDropShgId, dropShgStatus: 'PENDING' }
           }).catch(() => {});
         }
       }
@@ -305,7 +323,6 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
         await tx.orderAssignment.deleteMany({
           where: {
             orderId: order.id,
-            assigneeId: dropShgIdStr,
             role: 'DROP',
             assigneeType: 'SHG'
           }
@@ -1345,14 +1362,22 @@ export class QrVerificationEngine {
       let dropTransporterId = order.dropTransporterId;
 
       if (roleUpper === 'TRANSPORTER') {
-        if (isPhase2DropLeg || order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg') {
-          dropTransporterStatus = 'COMPLETED';
+        const isDirect = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
+        if (isDirect) {
+          pickupShgStatus = 'COMPLETED';
+          pickupTransporterStatus = 'COMPLETED';
+          pickupTransporterId = String(userIdFinal);
+          dropTransporterId = String(userIdFinal);
+          dropTransporterStatus = 'ACCEPTED';
+          dropShgStatus = 'PENDING';
+          mainStatus = 'IN_TRANSIT';
+        } else if (isPhase2DropLeg) {
+          dropTransporterStatus = 'PICKED';
           dropTransporterId = String(userIdFinal);
           pickupShgStatus = 'COMPLETED';
-          pickupTransporterStatus = 'IN_TRANSIT';
-          pickupTransporterId = String(userIdFinal);
+          pickupTransporterStatus = 'COMPLETED';
           dropShgStatus = 'PENDING_TRANSPORTER';
-          mainStatus = 'IN_TRANSIT';
+          mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
         } else {
           // Transporter picking up from Pickup SHG to carry to GMU Hub
           pickupShgStatus = 'DROPPED';
