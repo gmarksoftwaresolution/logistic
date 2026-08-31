@@ -90,12 +90,16 @@ export class AuthService {
       if (dto.appType === 'TRANSPORTER') {
         throw new BadRequestException('This mobile number is not registered as a Transporter. Please sign up first.');
       }
-      // GMU Admin or default fallback
+      let name = 'GMU Coordinator';
+      if (cleaned === '1111111111') name = 'Nesari GMU Coordinator';
+      else if (cleaned === '2222222222') name = 'Gadhinglaj GMU Coordinator';
+      else if (cleaned === '3333333333') name = 'Wagharali GMU Coordinator';
+
       user = await this.prisma.user.create({
         data: {
           authId: randomUUID(),
           phoneNumber: cleaned,
-          fullName: 'GMU Coordinator',
+          fullName: name,
           role: 'INDIVIDUAL',
           applicationStatus: 'APPROVED',
           uniqueCode: `GMU-${cleaned.slice(-4)}`,
@@ -133,11 +137,16 @@ export class AuthService {
       if (dto.appType === 'TRANSPORTER') {
         throw new BadRequestException('This account is not registered. Please register as a Transporter first.');
       }
+      let name = 'GMU Coordinator';
+      if (cleaned === '1111111111') name = 'Nesari GMU Coordinator';
+      else if (cleaned === '2222222222') name = 'Gadhinglaj GMU Coordinator';
+      else if (cleaned === '3333333333') name = 'Wagharali GMU Coordinator';
+
       userAny = await this.prisma.user.create({
         data: {
           authId: randomUUID(),
           phoneNumber: cleaned,
-          fullName: 'GMU Coordinator',
+          fullName: name,
           role: 'INDIVIDUAL',
           applicationStatus: 'APPROVED',
           uniqueCode: `GMU-${cleaned.slice(-4)}`,

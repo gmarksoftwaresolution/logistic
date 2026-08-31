@@ -1,4 +1,6 @@
+import React, { useState } from 'react';
 import { Layout } from '../components/Layout';
+import { ProfileModal } from '../components/ProfileModal';
 import { User, Shield, Bell, Map, Settings as SettingsIcon, Package, Target, Key } from 'lucide-react';
 
 interface PageProps {
@@ -6,6 +8,8 @@ interface PageProps {
 }
 
 export const SettingsPage = ({ onNavigate }: PageProps) => {
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const sections = [
     { title: 'Profile Settings', icon: User, desc: 'Update admin personal information and avatar.' },
     { title: 'System Settings', icon: SettingsIcon, desc: 'Configure global variables and operational modes.' },
@@ -26,7 +30,15 @@ export const SettingsPage = ({ onNavigate }: PageProps) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {sections.map((sec, i) => (
-          <div key={i} className="bg-white/85 backdrop-blur-sm rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:border-[#B2D534]/50">
+          <div
+            key={i}
+            onClick={() => {
+              if (sec.title === 'Profile Settings') {
+                setShowProfileModal(true);
+              }
+            }}
+            className="bg-white/85 backdrop-blur-sm rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:border-[#B2D534]/50"
+          >
             <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[#073318] mb-5 group-hover:bg-[#B2D534] transition-colors">
               <sec.icon className="h-6 w-6" />
             </div>
@@ -35,6 +47,11 @@ export const SettingsPage = ({ onNavigate }: PageProps) => {
           </div>
         ))}
       </div>
+
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </Layout>
   );
 };

@@ -11,6 +11,7 @@ const pageLoaders = {
   'shg-management': () => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })),
   'transporter-management': () => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })),
   settings: () => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
+  profile: () => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })),
 };
 
 const LandingPage = lazy(pageLoaders['landing']);
@@ -22,6 +23,7 @@ const InventoryManagementPage = lazy(pageLoaders['inventory-management']);
 const CommunityManagementPage = lazy(pageLoaders['shg-management']);
 const TransporterManagementPage = lazy(pageLoaders['transporter-management']);
 const SettingsPage = lazy(pageLoaders['settings']);
+const ProfilePage = lazy(pageLoaders['profile']);
 
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -86,6 +88,9 @@ function App() {
         )}
         {currentPage === 'settings' && (
           <SettingsPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'profile' && (
+          <ProfilePage onNavigate={handleNavigate} />
         )}
       </Suspense>
     </div>

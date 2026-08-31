@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import logoImg from '../assets/logo.png';
 import { useAppContext } from '../context/AppContext';
+import { ProfileModal } from './ProfileModal';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -30,6 +31,7 @@ interface LayoutProps {
 export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('gmu_sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -165,8 +167,30 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   } catch (e) {
     user = null;
   }
-  const userName = user?.fullName || user?.name || 'GMU Hub Admin';
-  const userRole = user?.role || user?.userType || 'Warehouse Head';
+
+  const rawPhone = user?.mobileNumber || user?.phoneNumber || user?.mobile || '';
+  const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+
+  const userName = user?.fullName || (
+    cleanPhone === '2222222222'
+      ? 'Gadhinglaj GMU Hub'
+      : cleanPhone === '3333333333'
+        ? 'Wagharali GMU Hub'
+        : cleanPhone === '1111111111'
+          ? 'Nesari GMU Hub'
+          : 'GMU Hub Admin'
+  );
+
+  const userRole = (
+    cleanPhone === '2222222222'
+      ? 'HUB-GADHINGLAJ'
+      : cleanPhone === '3333333333'
+        ? 'HUB-WAGHARALI'
+        : cleanPhone === '1111111111'
+          ? 'HUB-NESARI'
+          : (user?.role || user?.userType || 'INDIVIDUAL')
+  );
+
   const userInitials = userName.substring(0, 1).toUpperCase();
 
   const handleLogout = () => {
@@ -365,15 +389,19 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
             <div className="h-5 w-[1px] bg-slate-200" />
 
             {/* User Profile Avatar */}
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-full bg-[#B2D534]/20 border border-[#B2D534]/50 flex items-center justify-center text-[#073318] font-bold text-sm">
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="flex items-center gap-2 hover:bg-slate-50 p-1 rounded-xl transition-colors cursor-pointer text-left"
+              title="View GMU Coordinator & Hub Profile"
+            >
+              <div className="h-9 w-9 rounded-full bg-[#E2F1AD] border border-[#B2D534] flex items-center justify-center text-[#073318] font-bold text-sm shadow-xs">
                 {userInitials}
               </div>
               <div className="hidden lg:block text-left">
                 <p className="text-xs font-bold text-[#073318] leading-tight">{userName}</p>
-                <p className="text-[10px] text-slate-400">{userRole}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{userRole}</p>
               </div>
-            </div>
+            </button>
           </div>
         </header>
 
@@ -382,6 +410,12 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
           {children}
         </main>
       </div>
+
+      {/* Profile Popup Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   );
 };

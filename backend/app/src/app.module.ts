@@ -12,6 +12,7 @@ import { UploadsModule } from './shared/uploads/uploads.module';
 import { CommunityManagementModule } from './modules/gmu/community-management/community-management.module';
 import { TransporterManagementModule } from './modules/gmu/transporter-management/transporter-management.module';
 import { OrderManagementModule } from './modules/gmu/order-management/order-management.module';
+import { HubModule } from './modules/gmu/hub/hub.module';
 
 // SHG Feature Modules
 import { OrderModule as ShgOrderModule } from './modules/shg/order/order.module';
@@ -45,6 +46,7 @@ import { HealthModule } from './modules/health/health.module';
     CommunityManagementModule,
     TransporterManagementModule,
     OrderManagementModule,
+    HubModule,
     TransporterOrderModule,
     ShgOrderModule,
     OrderHistoryModule,

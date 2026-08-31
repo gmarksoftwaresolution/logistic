@@ -246,5 +246,12 @@ export const api = {
     getDetails: (parcelId: string) => request(`/parcel/${parcelId}`),
     getHistory: (parcelId: string) => request(`/parcel/${parcelId}/history`),
   },
+  hubs: {
+    getAll: () => request('/hubs'),
+    getById: (id: string) => request(`/hubs/${id}`),
+    create: (data: any) => request('/hubs', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request(`/hubs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) => request(`/hubs/${id}`, { method: 'DELETE' }),
+  },
 };
 export default api;
