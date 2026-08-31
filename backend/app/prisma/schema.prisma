@@ -101,6 +101,10 @@ model Order {
   rejectReason            String?
   remarks                 String?
   
+  // Direct flow indicators
+  flowType                String?           @default("VIA_HUB")
+  directDropShgId         String?
+
   // Redirect indicators
   isPickupRedirected      Boolean?          @default(false)
   redirectedPickupAt      DateTime?
@@ -554,7 +558,7 @@ model WarehouseInventory {
   @@map("warehouse_inventory")
 }
 
-model PincodeDirectory {
+model Pincode {
   id             Int      @id @default(autoincrement())
   village        String
   postOffice     String   @map("post_office")
@@ -1010,4 +1014,6 @@ model RedirectedOrder {
   @@index([shgId])
   @@index([transporterId])
 }
+
+
 

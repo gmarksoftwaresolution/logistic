@@ -729,7 +729,7 @@ export class RegistrationService {
       try {
         let records: any[] = [];
         try {
-          records = await this.prisma.pincodeDirectory.findMany({
+          records = await this.prisma.pincode.findMany({
             where: { village: { in: cleanVillages, mode: 'insensitive' } },
             select: { pincode: true },
             take: 100,
