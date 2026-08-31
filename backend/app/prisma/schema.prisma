@@ -102,6 +102,10 @@ model Order {
   rejectReason            String?
   remarks                 String?
   
+  // Direct flow indicators
+  flowType                String?           @default("VIA_HUB")
+  directDropShgId         String?
+
   // Redirect indicators
   isPickupRedirected      Boolean?          @default(false)
   redirectedPickupAt      DateTime?
@@ -774,4 +778,6 @@ model RedirectedOrder {
   @@index([shgId])
   @@index([transporterId])
 }
+
+
 
