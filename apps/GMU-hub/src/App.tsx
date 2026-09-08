@@ -10,6 +10,7 @@ const pageLoaders = {
   'inventory-management': () => import('./pages/InventoryManagementPage').then(m => ({ default: m.InventoryManagementPage })),
   'shg-management': () => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })),
   'transporter-management': () => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })),
+  'parcel-exception': () => import('./pages/ParcelExceptionPage').then(m => ({ default: m.ParcelExceptionPage })),
   settings: () => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
   profile: () => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })),
 };
@@ -22,6 +23,7 @@ const OrderHistoryPage = lazy(pageLoaders['order-history']);
 const InventoryManagementPage = lazy(pageLoaders['inventory-management']);
 const CommunityManagementPage = lazy(pageLoaders['shg-management']);
 const TransporterManagementPage = lazy(pageLoaders['transporter-management']);
+const ParcelExceptionPage = lazy(pageLoaders['parcel-exception']);
 const SettingsPage = lazy(pageLoaders['settings']);
 const ProfilePage = lazy(pageLoaders['profile']);
 
@@ -85,6 +87,9 @@ function App() {
         )}
         {currentPage === 'transporter-management' && (
           <TransporterManagementPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'parcel-exception' && (
+          <ParcelExceptionPage onNavigate={handleNavigate} />
         )}
         {currentPage === 'settings' && (
           <SettingsPage onNavigate={handleNavigate} />
