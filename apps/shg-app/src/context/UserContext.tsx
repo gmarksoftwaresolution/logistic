@@ -33,6 +33,13 @@ export interface UserProfile {
   applicationStatus?: string;
   vehicleCapacity?: number;
   otherDetails?: OtherDetails[] | OtherDetails | null;
+  bankDetails?: any;
+  accountName?: string;
+  bankName?: string;
+  branchName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  upiId?: string;
 }
 
 export type ApplicationStatus = 'Pending' | 'Under Review' | 'Approved' | 'Rejected' | null;
@@ -139,6 +146,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (updatedUser.taluka) payload.taluka = updatedUser.taluka;
         if (updatedUser.village) payload.village = updatedUser.village;
         if (updatedUser.homeAddress) payload.homeAddress = updatedUser.homeAddress;
+        if (updatedUser.accountName) payload.accountName = updatedUser.accountName;
+        if (updatedUser.bankName) payload.bankName = updatedUser.bankName;
+        if (updatedUser.branchName) payload.branchName = updatedUser.branchName;
+        if (updatedUser.accountNumber) payload.accountNumber = updatedUser.accountNumber;
+        if (updatedUser.ifscCode) payload.ifscCode = updatedUser.ifscCode;
+        if (updatedUser.upiId) payload.upiId = updatedUser.upiId;
+        if (updatedUser.bankDetails) payload.bankDetails = updatedUser.bankDetails;
 
         await userService.updateProfile(payload);
       } catch (err) {

@@ -6,10 +6,13 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SharedHeader } from '../components/SharedHeader';
 import { LanguageContext } from '../context/LanguageContext';
 import axiosInstance from '../api/axiosInstance';
+import { useOrders } from '../context/OrderContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, navigation }) => {
   const context = useContext(LanguageContext);
   const t = context ? context.t : (k: string) => k;
+  const { deliveredOrders = [], refreshOrdersList } = useOrders();
 
   const [activeFilter, setActiveFilter] = useState<'today' | 'week' | 'month'>('today');
   const [loading, setLoading] = useState(true);
@@ -18,6 +21,9 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
 
   const fetchEarnings = async () => {
     try {
+      if (refreshOrdersList) {
+        await refreshOrdersList().catch(() => {});
+      }
       const response = await axiosInstance.get(`/earnings?filter=${activeFilter}`);
       if (response.data?.success) {
         setEarningsData(response.data.data);
@@ -28,6 +34,12 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
       setLoading(false);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchEarnings();
+    }, [activeFilter])
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -73,10 +85,15 @@ const EarningsScreen: React.FC<{ route?: any, navigation?: any }> = ({ route, na
 
   const renderSummaryCards = () => {
     const summary = earningsData?.summary || {};
+    
+    const todayVal = summary.todayEarnings !== undefined ? summary.todayEarnings : 0;
+    const weekVal = summary.weekEarnings !== undefined ? summary.weekEarnings : 0;
+    const monthVal = summary.monthEarnings !== undefined ? summary.monthEarnings : (summary.totalEarnings || 0);
+
     const cards = [
-      { title: "Today's Earnings", amount: summary.todayEarnings || 0, icon: "cash-outline" },
-      { title: "This Week", amount: summary.weekEarnings || 0, icon: "calendar-outline" },
-      { title: "This Month", amount: summary.monthEarnings || 0, icon: "wallet-outline" },
+      { title: "Today's Earnings", amount: todayVal, icon: "cash-outline" },
+      { title: "This Week", amount: weekVal, icon: "calendar-outline" },
+      { title: "This Month", amount: monthVal, icon: "wallet-outline" },
     ];
 
     return (

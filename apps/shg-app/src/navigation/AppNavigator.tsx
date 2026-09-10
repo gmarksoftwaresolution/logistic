@@ -17,6 +17,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import PersonalDetailsScreen from '../screens/PersonalDetailsScreen';
 import IncomingOrdersScreen from '../screens/IncomingOrdersScreen';
 import AddressScreen from '../screens/AddressScreen';
+import BankDetailsScreen from '../screens/BankDetailsScreen';
 import MainTabNavigator from './MainTabNavigator';
 import StockManagementScreen from '../screens/StockManagementScreen';
 import ApplicationStatusScreen from '../screens/ApplicationStatusScreen';
@@ -60,6 +61,7 @@ export default function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />
       <Stack.Screen name="Address" component={AddressScreen} />
+      <Stack.Screen name="BankDetails" component={BankDetailsScreen} />
       <Stack.Screen name="ApplicationStatus" component={ApplicationStatusScreen} />
       <Stack.Screen name="OrderHistoryDetails" component={OrderHistoryDetailsScreen} />
       <Stack.Screen name="PickupScanner" component={PickupScannerScreen} />

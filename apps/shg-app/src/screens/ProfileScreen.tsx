@@ -1,6 +1,6 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import { LanguageContext } from '../context/LanguageContext';
-import { View, Text, TouchableOpacity, ScrollView, Image, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { SharedRefreshControl } from '../components/SharedRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,7 +8,12 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { SharedHeader } from '../components/SharedHeader';
 import { useUser } from '../context/UserContext';
+import { useOrders } from '../context/OrderContext';
+import { useFocusEffect } from '@react-navigation/native';
+import axiosInstance from '../api/axiosInstance';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+
 export default function ProfileScreen({
   navigation
 }: Props) {
@@ -20,12 +25,36 @@ export default function ProfileScreen({
     logout
   } = useUser();
 
-  const [isOnline, setIsOnline] = useState(true);
+  const { deliveredOrders = [], refreshOrdersList } = useOrders();
   const [refreshing, setRefreshing] = useState(false);
+  const [completedOrdersCount, setCompletedOrdersCount] = useState<number>(0);
+  const [totalEarnings, setTotalEarnings] = useState<number>(0);
+
+  const fetchProfileStats = async () => {
+    try {
+      if (refreshOrdersList) await refreshOrdersList().catch(() => {});
+      const response = await axiosInstance.get('/earnings?filter=today');
+      if (response.data?.success && response.data.data?.summary) {
+        const summary = response.data.data.summary;
+        const count = typeof summary.completedOrders === 'number' ? summary.completedOrders : 0;
+        const earnings = typeof summary.totalEarnings === 'number' ? summary.totalEarnings : count * 15;
+        setCompletedOrdersCount(count);
+        setTotalEarnings(earnings);
+      }
+    } catch (e) {
+      console.log('Failed to fetch profile stats:', e);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfileStats();
+    }, [])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await fetchProfileStats();
     setRefreshing(false);
   };
 
@@ -77,67 +106,87 @@ export default function ProfileScreen({
           }} 
         />
 
-        {/* Profile Card Section */}
-        <View 
-          className="bg-white mx-6 p-6 rounded-[32px] shadow-sm border border-slate-100/50 mt-6 mb-6"
-          style={{
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.04,
-            shadowRadius: 16,
-            elevation: 4,
-          }}
-        >
-          <View className="items-center">
-            <View className="relative">
-              <View className="w-24 h-24 bg-white rounded-full items-center justify-center border-4 border-white shadow-md overflow-hidden">
-                {user?.profileImage ? (
-                  <Image source={{ uri: user.profileImage }} className="w-full h-full" />
-                ) : (
-                  <Text className="text-[#073318] font-bold text-3xl">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'M'}</Text>
-                )}
-              </View>
-
+        {/* Profile Card Section - Increased height (+40%) */}
+        <View className="bg-[#F4FBF7] mx-5 py-8 px-6 rounded-[28px] border border-[#D1FAE5] mt-3 mb-4 relative overflow-hidden flex-row items-center">
+          {/* Left: Avatar with green dot */}
+          <View className="relative mr-4 items-center justify-center">
+            <View className="w-20 h-20 bg-[#D1FAE5] rounded-full items-center justify-center border-2 border-[#A7F3D0] shadow-sm">
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} className="w-full h-full rounded-full" />
+              ) : (
+                <Text className="text-[#065F46] font-extrabold text-3xl">{(user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().charAt(0)) || 'A'}</Text>
+              )}
             </View>
+            <View className="absolute bottom-0.5 right-0.5 w-4.5 h-4.5 bg-[#10B981] rounded-full border-2 border-white" />
+          </View>
 
-            <View className="flex-row items-center mt-4">
-              <Text className="text-xl font-bold text-[#1E293B]">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim() || 'Mahadev'}</Text>
-              <View className="flex-row items-center bg-[#EEF5F0] px-2 py-0.5 rounded-full ml-2">
-                <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
-                <Text className="text-[10px] text-[#16A34A] font-bold ml-1">{t("su_verified_303")}</Text>
+          {/* Middle: Details */}
+          <View className="flex-1 pr-10 justify-center">
+            <View className="flex-row items-center">
+              <Text className="text-lg font-bold text-[#1E293B]">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim() || 'Anita Patil'}</Text>
+              <View className="flex-row items-center bg-[#D1FAE5] px-2.5 py-0.5 rounded-full ml-2">
+                <Ionicons name="checkmark-circle" size={12} color="#059669" />
+                <Text className="text-[10px] text-[#059669] font-bold ml-0.5">{t("su_verified_303") || "Verified"}</Text>
               </View>
             </View>
-            
-            <Text className="text-sm text-[#64748B] mt-1.5">+91 {user?.mobile || '7777777777'}</Text>
-            <Text className="text-sm text-[#64748B] mt-0.5">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().toLowerCase().replace(' ', '.') || 'mahadev'}{t("su_gmail_com_304")}</Text>
 
-            <View className="bg-[#F8FAFC] w-full rounded-2xl p-4 mt-6 flex-row items-center border border-gray-100">
-              <MaterialCommunityIcons name="moped-electric" size={24} color="#073318" />
-              <Text className="flex-1 text-xs text-[#475569] font-medium leading-5 ml-3">{t("su_delivering_to_make_l_305")}</Text>
+            <View className="flex-row items-center mt-2">
+              <Ionicons name="call" size={13} color="#059669" />
+              <Text className="text-xs text-[#64748B] font-medium ml-2">+91 {user?.mobile || '9000000005'}</Text>
             </View>
+
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="mail" size={13} color="#059669" />
+              <Text className="text-xs text-[#64748B] font-medium ml-2">{user?.name?.replace(/\s*\(.*\)\s*/g, '').trim().toLowerCase().replace(' ', '.') || 'anita.patil'}{t("su_gmail_com_304") || "@gmail.com"}</Text>
+            </View>
+
+            <Text className="text-xs text-[#64748B] font-medium mt-2 leading-4.5" numberOfLines={2}>
+              {t("su_delivering_to_make_l_305") || "Delivering to make life easier,\none order at a time."}
+            </Text>
+          </View>
+
+          {/* Right: Delivery Rider Illustration */}
+          <View 
+            className="absolute right-4 opacity-90 justify-center items-center"
+            style={{ position: 'absolute', right: 16, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}
+            pointerEvents="none"
+          >
+            <MaterialCommunityIcons name="moped-electric" size={64} color="#34D399" />
           </View>
         </View>
 
-        {/* Statistics Card */}
-        <View className="px-6 mb-6">
-          <View className="bg-white rounded-3xl p-5 flex-row justify-between shadow-sm border border-gray-50">
-            <View className="items-center flex-1">
-              <Ionicons name="bag-handle" size={24} color="#16A34A" />
-              <Text className="text-xl font-bold text-[#1E293B] mt-2">128</Text>
-              <Text className="text-xs text-[#64748B] text-center mt-1">{t("orders")}{'\n'}{t("su_completed_307")}</Text>
+        {/* Statistics Cards - Compact height dashboard style (-28% height) */}
+        <View className="px-5 mb-4 flex-row gap-3">
+          {/* Card 1: Total Completed Orders */}
+          <View className="flex-1 bg-[#F4FBF7] border border-[#D1FAE5] rounded-[18px] px-3 py-2.5 flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <View className="w-8 h-8 bg-[#A7F3D0] rounded-full items-center justify-center mr-2.5">
+                <Ionicons name="bag-handle" size={15} color="#047857" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[10px] font-bold text-[#047857] leading-3" numberOfLines={1}>
+                  Completed Orders
+                </Text>
+                <Text className="text-xl font-extrabold text-[#064E3B] mt-0.5">{completedOrdersCount}</Text>
+              </View>
             </View>
-            <View className="w-[1px] bg-gray-100 my-2" />
-            <View className="items-center flex-1">
-              <Ionicons name="star" size={24} color="#FBBF24" />
-              <Text className="text-xl font-bold text-[#1E293B] mt-2">4.9</Text>
-              <Text className="text-xs text-[#64748B] text-center mt-1">{t("su_rating_308")}</Text>
+            <MaterialCommunityIcons name="chart-bar" size={16} color="#34D399" />
+          </View>
+
+          {/* Card 2: Total Earnings */}
+          <View className="flex-1 bg-[#F4FBF7] border border-[#D1FAE5] rounded-[18px] px-3 py-2.5 flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <View className="w-8 h-8 bg-[#A7F3D0] rounded-full items-center justify-center mr-2.5">
+                <MaterialCommunityIcons name="cash-multiple" size={15} color="#047857" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[10px] font-bold text-[#047857] leading-3" numberOfLines={1}>
+                  Total Earnings
+                </Text>
+                <Text className="text-xl font-extrabold text-[#064E3B] mt-0.5">₹{totalEarnings}</Text>
+              </View>
             </View>
-            <View className="w-[1px] bg-gray-100 my-2" />
-            <View className="items-center flex-1">
-              <Ionicons name="time" size={24} color="#16A34A" />
-              <Text className="text-xl font-bold text-[#1E293B] mt-2">98%</Text>
-              <Text className="text-xs text-[#64748B] text-center mt-1">{t("su_on_time_309")}{'\n'}{t("su_delivery_310")}</Text>
-            </View>
+            <MaterialCommunityIcons name="chart-bar" size={16} color="#34D399" />
           </View>
         </View>
 
@@ -145,29 +194,12 @@ export default function ProfileScreen({
         <View className="px-6 mb-6">
           <Text className="text-sm font-bold text-[#1E293B] mb-3 ml-1">{t("su_quick_access_311")}</Text>
           <View className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50 py-2">
-            <ActionRow icon={<Ionicons name="bag-handle-outline" size={22} color="#16A34A" />} title={t("su_my_orders_312")} subtitle={t("su_view_your_past_deliv_313")} onPress={() => navigation.navigate("Orders")} />
+            <ActionRow icon={<Ionicons name="person-outline" size={22} color="#16A34A" />} title={t("personal_details") || "Personal Details"} subtitle={t("su_update_your_personal_429") || "Update your personal info"} onPress={() => navigation.navigate("PersonalDetails")} />
+            <ActionRow icon={<Ionicons name="bag-handle-outline" size={22} color="#16A34A" />} title={t("su_my_orders_312")} subtitle={t("su_view_your_past_deliv_313")} onPress={() => (navigation as any).navigate("Main", { screen: "Orders" })} />
             <ActionRow icon={<Ionicons name="location-outline" size={22} color="#16A34A" />} title={t("su_my_addresses_314")} subtitle={t("su_manage_saved_address_315")} onPress={() => navigation.navigate("Address")} />
-            <ActionRow icon={<Ionicons name="card-outline" size={22} color="#16A34A" />} title={t("su_payment_methods_316")} subtitle={t("su_cards_wallets_317")} />
-            <ActionRow icon={<Ionicons name="cash-outline" size={22} color="#16A34A" />} title={t("su_earnings_318")} subtitle={t("su_view_your_earnings_s_319")} />
-            <ActionRow icon={<Ionicons name="gift-outline" size={22} color="#16A34A" />} title={t("su_refer_earn_320")} subtitle={t("su_invite_friends_and_e_321")} />
+            <ActionRow icon={<Ionicons name="card-outline" size={22} color="#16A34A" />} title={t("su_bank_details_231") || "Bank Details"} subtitle={t("su_where_should_we_send_232") || "View payout account details"} onPress={() => navigation.navigate("BankDetails")} />
+            <ActionRow icon={<Ionicons name="cash-outline" size={22} color="#16A34A" />} title={t("su_earnings_318")} subtitle={t("su_view_your_earnings_s_319")} onPress={() => (navigation as any).navigate("Main", { screen: "Earnings" })} />
             <ActionRow icon={<Ionicons name="settings-outline" size={22} color="#16A34A" />} title={t("settings")} subtitle={t("su_manage_your_app_pref_323")} onPress={() => navigation.navigate("Settings")} />
-          </View>
-        </View>
-
-        {/* Online Toggle */}
-        <View className="px-6 mb-6">
-          <View className="bg-white rounded-3xl p-5 shadow-sm border border-gray-50 flex-row items-center">
-            <View className="w-10 h-10 items-center justify-center mr-3">
-              <MaterialCommunityIcons name="clock-check-outline" size={24} color="#16A34A" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-semibold text-[#1E293B] text-sm">{t("su_go_online_324")}</Text>
-              <Text className="text-xs text-[#64748B] mt-0.5">{t("su_start_receiving_deli_325")}</Text>
-            </View>
-            <Switch trackColor={{
-            false: "#E2E8F0",
-            true: "#16A34A"
-          }} thumbColor={"#FFFFFF"} ios_backgroundColor="#E2E8F0" onValueChange={setIsOnline} value={isOnline} />
           </View>
         </View>
 

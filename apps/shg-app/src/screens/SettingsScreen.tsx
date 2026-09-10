@@ -76,12 +76,6 @@ export default function SettingsScreen({
 
       <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false}>
         
-        <SectionHeader title={t("su_account_427")} />
-        {renderCard(<>
-            <SettingRow icon={<Ionicons name="person-outline" size={20} color="#16A34A" />} title={t("personal_details")} subtitle={t("su_update_your_personal_429")} onPress={() => navigation.navigate("PersonalDetails")} />
-            <SettingRow icon={<Ionicons name="notifications-outline" size={20} color="#16A34A" />} title={t("su_manage_session_433")} subtitle={t("su_check_your_active_se_434")} />
-          </>)}
-
         <SectionHeader title={t("su_preferences_435")} />
         {renderCard(<>
             <SettingRow icon={<Ionicons name="calendar-outline" size={20} color="#16A34A" />} title={t("su_notification_436")} subtitle={t("su_manage_notification__437")} />
@@ -107,21 +101,6 @@ export default function SettingsScreen({
         <SectionHeader title={t("su_privacy_security_442")} />
         {renderCard(<>
             <SettingRow icon={<Ionicons name="shield-checkmark-outline" size={20} color="#16A34A" />} title={t("privacy_title")} subtitle={t("su_view_our_privacy_pol_444")} onPress={() => navigation.navigate("Privacy")} />
-            <SettingRow icon={<Ionicons name="lock-closed-outline" size={20} color="#16A34A" />} title={t("su_lock_app_on_logout_445")} subtitle={t("su_automatically_lock_t_446")} rightElement={<Switch trackColor={{
-          false: "#E2E8F0",
-          true: "#16A34A"
-        }} thumbColor={"#FFFFFF"} ios_backgroundColor="#E2E8F0" onValueChange={setLockApp} value={lockApp} />} />
-            <SettingRow icon={<Ionicons name="finger-print-outline" size={20} color="#16A34A" />} title={t("su_two_factor_authentic_447")} subtitle={t("su_add_extra_layer_of_s_448")} rightElement={<View className="flex-row items-center">
-                  <Text className="text-xs text-[#64748B] mr-2">{t("su_off_449")}</Text>
-                  <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-                </View>} />
-            <SettingRow icon={<Ionicons name="trash-outline" size={20} color="#16A34A" />} title={t("su_delete_account_450")} subtitle={t("su_permanently_delete_y_451")} />
-          </>)}
-
-        <SectionHeader title={t("su_support_452")} />
-        {renderCard(<>
-            <SettingRow icon={<Ionicons name="headset-outline" size={20} color="#16A34A" />} title={t("su_help_center_453")} subtitle={t("su_get_help_and_support_454")} onPress={() => navigation.navigate("Help")} />
-            <SettingRow icon={<Ionicons name="chatbubble-ellipses-outline" size={20} color="#16A34A" />} title={t("su_contact_support_455")} subtitle={t("su_we_re_here_to_help_y_456")} />
           </>)}
 
         <SectionHeader title={t("su_about_457")} />
@@ -134,14 +113,7 @@ export default function SettingsScreen({
             <SettingRow icon={<Ionicons name="information-circle-outline" size={20} color="#16A34A" />} title={t("su_about_app_463")} subtitle={t("su_learn_more_about_our_464")} />
           </>)}
 
-        {/* Logout */}
-        <View className="mb-12 mt-4">
-          <TouchableOpacity onPress={handleLogout} className="bg-red-50 py-4 rounded-2xl flex-row justify-center items-center">
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" className="mr-2" />
-            <Text className="text-[#EF4444] font-bold text-base ml-2">{t("logout")}</Text>
-          </TouchableOpacity>
-        </View>
-
+        <View className="mb-8" />
       </ScrollView>
 
       {/* Language Selection Modal */}

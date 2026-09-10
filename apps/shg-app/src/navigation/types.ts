@@ -42,6 +42,7 @@ export type RootStackParamList = {
   Terms: undefined;
   Privacy: undefined;
   ApplicationStatus: undefined;
+  BankDetails: undefined;
   Drop: undefined;
   OrderDetails: { order: any };
   CompletedOrderDetails: { order: any };

@@ -163,7 +163,7 @@ export class EarningsService {
       const day = now.getDay() || 7;
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1);
     } else if (filter === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     } else {
       throw new BadRequestException('Invalid filter value. Supported values: today, week, month');
     }
@@ -172,7 +172,7 @@ export class EarningsService {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const day = now.getDay() || 7;
     const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const [todayAgg, weekAgg, monthAgg, allTimeAgg, aggregations] = await Promise.all([
       // @ts-ignore

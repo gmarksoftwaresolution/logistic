@@ -2,74 +2,59 @@ import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { LanguageContext } from '../context/LanguageContext';
 import { useUser } from '../context/UserContext';
-import { signupService } from '../services/signupService';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Address'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'BankDetails'>;
 
-export default function AddressScreen({
-  navigation
-}: Props) {
+export default function BankDetailsScreen({ navigation }: Props) {
   const context = useContext(LanguageContext);
-  const {
-    user,
-    updateUser
-  } = useUser();
+  const { user, updateUser } = useUser();
+
   if (!context || !user) return null;
-  const {
-    t
-  } = context;
+  const { t } = context;
+
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    pincode: user?.pincode || '',
-    stateName: user?.stateName || '',
-    district: user?.district || '',
-    taluka: user?.taluka || '',
-    village: user?.village || '',
-    homeAddress: user?.homeAddress || ''
-  });
   const [showSuccess, setShowSuccess] = useState(false);
   const [generalError, setGeneralError] = useState('');
 
+  // Extract bank details from user object or nested bankDetails array
+  const bankData = Array.isArray(user?.bankDetails) && user.bankDetails.length > 0
+    ? user.bankDetails[0]
+    : user?.bankDetails || {};
+
+  const getInitialForm = () => ({
+    accountName: user?.accountName || bankData.accountName || bankData.accountHolderName || bankData.name || user?.name || '',
+    ifscCode: user?.ifscCode || bankData.ifscCode || bankData.ifsc || '',
+    bankName: user?.bankName || bankData.bankName || '',
+    branchName: user?.branchName || bankData.branchName || bankData.branch || '',
+    accountNumber: user?.accountNumber || bankData.accountNumber || '',
+    upiId: user?.upiId || bankData.upiId || bankData.upi || '',
+  });
+
+  const [formData, setFormData] = useState(getInitialForm());
+
   useEffect(() => {
-    if (isEditing && formData.pincode && formData.pincode.length === 6) {
-      const fetchPincodeDetails = async () => {
-        try {
-          const data = await signupService.getPincodeDetails(formData.pincode);
-          if (data) {
-            setFormData(prev => ({
-              ...prev,
-              stateName: data.state || prev.stateName,
-              district: data.district || prev.district,
-              taluka: data.taluka || prev.taluka,
-              village: data.villages && data.villages.length > 0 ? (data.villages.length === 1 ? data.villages[0] : (prev.village || data.villages[0])) : prev.village
-            }));
-          }
-        } catch (error) {
-          console.error('Error fetching pincode details in AddressScreen:', error);
-        }
-      };
-      fetchPincodeDetails();
-    }
-  }, [formData.pincode, isEditing]);
+    setFormData(getInitialForm());
+  }, [user]);
 
   const hasChanges = () => {
-    return formData.pincode !== user.pincode || formData.stateName !== user.stateName || formData.district !== user.district || formData.taluka !== user.taluka || formData.village !== user.village || formData.homeAddress !== user.homeAddress;
+    const initial = getInitialForm();
+    return (
+      formData.accountName !== initial.accountName ||
+      formData.ifscCode !== initial.ifscCode ||
+      formData.bankName !== initial.bankName ||
+      formData.branchName !== initial.branchName ||
+      formData.accountNumber !== initial.accountNumber ||
+      formData.upiId !== initial.upiId
+    );
   };
 
   const handleCancelEdit = () => {
-    setFormData({
-      pincode: user?.pincode || '',
-      stateName: user?.stateName || '',
-      district: user?.district || '',
-      taluka: user?.taluka || '',
-      village: user?.village || '',
-      homeAddress: user?.homeAddress || ''
-    });
+    setFormData(getInitialForm());
     setGeneralError('');
     setIsEditing(false);
   };
@@ -81,7 +66,21 @@ export default function AddressScreen({
       return;
     }
     setGeneralError('');
-    updateUser(formData);
+    const updatedBankObj = {
+      accountName: formData.accountName,
+      accountHolderName: formData.accountName,
+      ifscCode: formData.ifscCode,
+      bankName: formData.bankName,
+      branchName: formData.branchName,
+      accountNumber: formData.accountNumber,
+      upiId: formData.upiId,
+    };
+
+    updateUser({
+      ...formData,
+      bankDetails: Array.isArray(user?.bankDetails) ? [updatedBankObj] : updatedBankObj,
+    });
+
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
@@ -95,7 +94,14 @@ export default function AddressScreen({
     onChangeText,
     placeholder,
     keyboardType = "default"
-  }: any) => <View className="w-full mb-3">
+  }: {
+    label: string;
+    value: string;
+    onChangeText: (val: string) => void;
+    placeholder: string;
+    keyboardType?: any;
+  }) => (
+    <View className="w-full mb-3">
       <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{label}</Text>
       <View className={`flex-row items-center py-2.5 px-4 rounded-xl border ${isEditing ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
         <TextInput
@@ -110,16 +116,18 @@ export default function AddressScreen({
           keyboardType={keyboardType}
         />
       </View>
-    </View>;
+    </View>
+  );
 
-  return <SafeAreaView className="flex-1 bg-background">
+  return (
+    <SafeAreaView className="flex-1 bg-background">
       <View className="px-6 py-4 bg-white border-b border-gray-50 flex-row items-center mt-2">
         <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
           <Ionicons name="arrow-back" size={24} color="#073318" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-2xl font-bold text-textPrimary tracking-tight">{t('address_details')}</Text>
-          <Text className="text-textSecondary text-xs font-medium mt-0.5">{t('address_subtitle')}</Text>
+          <Text className="text-2xl font-bold text-textPrimary tracking-tight">{t('su_bank_details_231') || "Bank Details"}</Text>
+          <Text className="text-textSecondary text-xs font-medium mt-0.5">{t('su_where_should_we_send_232') || "Where should we send your earnings?"}</Text>
         </View>
       </View>
 
@@ -134,35 +142,50 @@ export default function AddressScreen({
       >
         <View className="px-5 pt-4">
           <View className="bg-white p-5 rounded-[28px] shadow-sm border border-gray-50 mb-6">
-            <InputField label={t('pincode')} value={formData.pincode} onChangeText={(val: string) => setFormData({
-            ...formData,
-            pincode: val
-          })} placeholder={t("su_enter_pincode_337")} keyboardType="numeric" />
-            <InputField label={t('state')} value={formData.stateName} onChangeText={(val: string) => setFormData({
-            ...formData,
-            stateName: val
-          })} placeholder={t("su_enter_state_338")} />
-            <InputField label={t('district')} value={formData.district} onChangeText={(val: string) => setFormData({
-            ...formData,
-            district: val
-          })} placeholder={t("su_enter_district_339")} />
-            <InputField label={t('taluka')} value={formData.taluka} onChangeText={(val: string) => setFormData({
-            ...formData,
-            taluka: val
-          })} placeholder={t("su_enter_taluka_340")} />
-            <InputField label={t('village')} value={formData.village} onChangeText={(val: string) => setFormData({
-            ...formData,
-            village: val
-          })} placeholder={t("su_enter_village_341")} />
-            <InputField label={t('home_address')} value={formData.homeAddress} onChangeText={(val: string) => setFormData({
-            ...formData,
-            homeAddress: val
-          })} placeholder={t("su_enter_home_address_342")} />
+            <InputField
+              label={t('su_account_holder_name_235') || "Account Holder Name"}
+              value={formData.accountName}
+              onChangeText={(val) => setFormData({ ...formData, accountName: val })}
+              placeholder="Enter account holder name"
+            />
+            <InputField
+              label={t('su_ifsc_code_233') || "IFSC Code"}
+              value={formData.ifscCode}
+              onChangeText={(val) => setFormData({ ...formData, ifscCode: val })}
+              placeholder="Enter IFSC code"
+            />
+            <InputField
+              label={t('su_bank_name_or_auto_f_249') || "Bank Name"}
+              value={formData.bankName}
+              onChangeText={(val) => setFormData({ ...formData, bankName: val })}
+              placeholder="Enter bank name"
+            />
+            <InputField
+              label={t('su_branch_name_241') || "Branch Name"}
+              value={formData.branchName}
+              onChangeText={(val) => setFormData({ ...formData, branchName: val })}
+              placeholder="Enter branch name"
+            />
+            <InputField
+              label={t('su_account_number_237') || "Account Number"}
+              value={formData.accountNumber}
+              onChangeText={(val) => setFormData({ ...formData, accountNumber: val })}
+              placeholder="Enter account number"
+              keyboardType="numeric"
+            />
+            <InputField
+              label={t('su_upi_id_optional_245') || "UPI ID"}
+              value={formData.upiId}
+              onChangeText={(val) => setFormData({ ...formData, upiId: val })}
+              placeholder="Enter UPI ID (optional)"
+            />
 
-            {generalError ? <View className="bg-red-50 p-3 rounded-2xl mb-4 flex-row items-center border border-red-100 mt-1">
+            {generalError ? (
+              <View className="bg-red-50 p-3 rounded-2xl mb-4 flex-row items-center border border-red-100 mt-1">
                 <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
                 <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
-              </View> : null}
+              </View>
+            ) : null}
 
             <View className="flex-row gap-3 w-full mt-2">
               {!isEditing ? (
@@ -197,10 +220,11 @@ export default function AddressScreen({
                 <Ionicons name="checkmark" size={32} color="white" />
               </View>
             </View>
-            <Text className="text-2xl font-bold text-textPrimary mb-2 text-center">{t("updated")}</Text>
-            <Text className="text-textSecondary text-center text-sm">{t("address_details_success")}</Text>
+            <Text className="text-2xl font-bold text-textPrimary mb-2 text-center">{t("updated") || "Updated"}</Text>
+            <Text className="text-textSecondary text-center text-sm">{t("bank_details_success") || "Bank details updated successfully."}</Text>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>;
+    </SafeAreaView>
+  );
 }

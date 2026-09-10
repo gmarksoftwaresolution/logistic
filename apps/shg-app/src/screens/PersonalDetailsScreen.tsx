@@ -131,97 +131,119 @@ export default function PersonalDetailsScreen({
     placeholder,
     keyboardType = "default",
     editable = true
-  }: any) => <View className="w-full mb-6">
-      <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{label}</Text>
-      <View className={`flex-row items-center py-3 px-4 rounded-xl border ${editable ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-100 border-gray-100 opacity-70'}`}>
-        <TextInput value={value} onChangeText={val => {
-        if (editable && onChangeText) {
-          onChangeText(val);
-          setGeneralError('');
-        }
-      }} className={`flex-1 font-semibold text-base ${editable ? 'text-textPrimary' : 'text-textSecondary'}`} placeholder={placeholder} keyboardType={keyboardType} editable={editable} />
+  }: any) => <View className="w-full mb-3">
+      <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{label}</Text>
+      <View className={`flex-row items-center py-2.5 px-4 rounded-xl border ${editable && isEditing ? 'bg-white border-gray-200 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
+        <TextInput
+          value={value}
+          onChangeText={val => {
+            if (editable && onChangeText) {
+              onChangeText(val);
+              setGeneralError('');
+            }
+          }}
+          className={`flex-1 font-semibold text-sm ${editable && isEditing ? 'text-textPrimary' : 'text-gray-700'}`}
+          placeholder={placeholder}
+          keyboardType={keyboardType}
+          editable={editable && isEditing}
+        />
       </View>
     </View>;
+
   return <SafeAreaView className="flex-1 bg-background">
       <View className="px-6 py-4 bg-white border-b border-gray-50 flex-row items-center mt-2">
         <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
           <Ionicons name="arrow-back" size={24} color="#073318" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-2xl font-bold text-textPrimary font-bold tracking-tight">{t('personal_details')}</Text>
-          <Text className="text-textSecondary text-xs font-medium font-medium mt-0.5">{t('profile_subtitle')}</Text>
+          <Text className="text-2xl font-bold text-textPrimary tracking-tight">{t('personal_details')}</Text>
+          <Text className="text-textSecondary text-xs font-medium mt-0.5">{t('profile_subtitle')}</Text>
         </View>
       </View>
 
       <KeyboardAwareScrollView
         className="flex-1"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
         enableOnAndroid={true}
         extraScrollHeight={80}
         extraHeight={80}
         enableAutomaticScroll={true}
       >
-        <View className="px-6 pt-10">
-          <View className="items-center mb-10">
-            <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-4 ml-1">{t('profile_photo')}</Text>
-            <View className="w-32 h-32 bg-primary rounded-full items-center justify-center border-4 border-white shadow-xl overflow-hidden">
-              {formData.profileImage ? <Image source={{
-              uri: formData.profileImage
-            }} className="w-full h-full" /> : <Text className="text-white font-bold text-5xl">{formData.name?.charAt(0) || 'U'}</Text>}
+        <View className="px-5 pt-3">
+          <View className="items-center mb-3">
+            <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{t('profile_photo')}</Text>
+            <View className="relative">
+              <View className="w-20 h-20 bg-primary rounded-full items-center justify-center border-2 border-white shadow-sm overflow-hidden">
+                {formData.profileImage ? <Image source={{
+                uri: formData.profileImage
+              }} className="w-full h-full" /> : <Text className="text-white font-bold text-3xl">{formData.name?.charAt(0) || 'U'}</Text>}
+              </View>
+              <TouchableOpacity onPress={pickImage} className="absolute bottom-0 right-0 w-7 h-7 bg-[#073318] rounded-full border border-white items-center justify-center shadow-sm">
+                <Feather name="camera" size={12} color="white" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={pickImage} className="absolute bottom-1 right-[35%] w-10 h-10 bg-[#073318] rounded-full border-2 border-white items-center justify-center shadow-md">
-              <Feather name="camera" size={18} color="white" />
-            </TouchableOpacity>
           </View>
 
-          <View className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-50 mb-10">
-            <View className="w-full mb-6">
-              <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t("su_gmu_id_331")}</Text>
-              <View className="bg-gray-100 py-3 px-4 rounded-xl border border-gray-100 opacity-70">
-                <Text className="text-textSecondary font-bold text-base">{user?.gmuId || 'N/A'}</Text>
+          <View className="bg-white p-5 rounded-[28px] shadow-sm border border-gray-50 mb-6">
+            <View className="w-full mb-3">
+              <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{t("su_gmu_id_331")}</Text>
+              <View className="bg-gray-50 py-2.5 px-4 rounded-xl border border-gray-100">
+                <Text className="text-gray-700 font-semibold text-sm">{user?.gmuId || 'N/A'}</Text>
               </View>
             </View>
 
             <InputField label={t('gmu_full_name')} value={formData.name} editable={false} placeholder={t("su_enter_name_332")} />
 
-            <View className="w-full mb-6">
-              <Text className="text-xs font-bold text-textSecondary uppercase tracking-widest mb-3 ml-1">{t('mobile_number')}</Text>
-              <View className="flex-row items-center py-3 px-4 rounded-xl border bg-gray-100 border-gray-100 opacity-70">
-                <Text className="text-textSecondary font-bold mr-3">+91</Text>
-                <TextInput value={formData.mobile} editable={false} className="flex-1 text-textSecondary font-semibold text-base" />
+            <View className="w-full mb-3">
+              <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{t('mobile_number')}</Text>
+              <View className="flex-row items-center py-2.5 px-4 rounded-xl border bg-gray-50 border-gray-100">
+                <Text className="text-gray-700 font-semibold mr-3 text-sm">+91</Text>
+                <TextInput value={formData.mobile} editable={false} className="flex-1 text-gray-700 font-semibold text-sm" />
               </View>
-              {mobileError ? <Text className="text-red-500 text-xs mt-2 ml-1">{mobileError}</Text> : null}
+              {mobileError ? <Text className="text-red-500 text-xs mt-1 ml-1">{mobileError}</Text> : null}
             </View>
             <InputField label={t('role_in_group')} value={formData.role} editable={false} />
             
             <TouchableOpacity activeOpacity={isEditing ? 0.8 : 1} onPress={() => { if (isEditing) setShowDobPicker(true); }}>
               <View pointerEvents="none">
-                 <InputField label={t('dob')} value={formData.dob} editable={isEditing} />
+                 <InputField label={t('dob')} value={formData.dob} editable={true} />
               </View>
             </TouchableOpacity>
 
-            <InputField label={t('aadhaar_optional')} value={formData.aadhaar} editable={isEditing} onChangeText={(val: string) => setFormData({...formData, aadhaar: val})} />
+            <InputField label={t('aadhaar_optional')} value={formData.aadhaar} editable={true} onChangeText={(val: string) => setFormData({...formData, aadhaar: val})} />
 
             <View pointerEvents="none">
                <InputField label={t('joining_date')} value={formData.joiningDate} editable={false} />
             </View>
 
-            {generalError ? <View className="bg-red-50 p-4 rounded-2xl mb-6 flex-row items-center border border-red-100">
+            {generalError ? <View className="bg-red-50 p-3 rounded-2xl mb-4 flex-row items-center border border-red-100 mt-1">
                 <Ionicons name="alert-circle" size={18} color="#EF4444" className="mr-2" />
                 <Text className="text-red-500 font-semibold text-xs">{generalError}</Text>
               </View> : null}
 
-            <View className="flex-row gap-4 w-full">
-              <TouchableOpacity onPress={isEditing ? handleCancel : () => setIsEditing(true)} className="flex-1 bg-gray-100 py-4 rounded-2xl items-center">
-                <Text className="text-textPrimary font-bold text-base">{isEditing ? t("cancel") : 'Edit'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-4 rounded-2xl items-center shadow-sm">
-                <Text className="text-white font-bold text-base">{t("save_changes")}</Text>
-              </TouchableOpacity>
+            <View className="flex-row gap-3 w-full mt-2">
+              {!isEditing ? (
+                <>
+                  <TouchableOpacity onPress={() => navigation.goBack()} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                    <Text className="text-textPrimary font-bold text-base">{t("back") || "Back"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setIsEditing(true)} className="flex-1 bg-primary py-3.5 rounded-2xl items-center shadow-sm">
+                    <Text className="text-white font-bold text-base">{t("edit") || "Edit"}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity onPress={handleCancel} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                    <Text className="text-textPrimary font-bold text-base">{t("cancel") || "Cancel"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSave} className="flex-1 bg-primary py-3.5 rounded-2xl items-center shadow-sm">
+                    <Text className="text-white font-bold text-base">{t("save_changes") || "Save Changes"}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
-          <View className="mb-20" />
         </View>
       </KeyboardAwareScrollView>
 
