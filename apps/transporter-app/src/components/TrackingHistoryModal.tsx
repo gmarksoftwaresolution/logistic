@@ -215,18 +215,18 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
   }
 
   // 3. Detect Phase 1 (Pickup Leg: Seller ➔ Hub) vs Phase 2 (Drop Leg: Hub ➔ Destination SHG) vs Master Journey
-  const isExplicitPickup = 
-    order.type === 'pickup' || 
-    order.legType === 'pickup' || 
-    order.flowType === 'shg_to_gmu' || 
-    String(order.id || '').startsWith('pickup-') || 
+  const isExplicitPickup =
+    order.type === 'pickup' ||
+    order.legType === 'pickup' ||
+    order.flowType === 'shg_to_gmu' ||
+    String(order.id || '').startsWith('pickup-') ||
     String(displayOrderId).toUpperCase().includes('PICK');
 
-  const isExplicitDrop = 
-    order.type === 'drop' || 
-    order.legType === 'drop' || 
-    order.flowType === 'gmu_to_shg' || 
-    String(order.id || '').startsWith('drop-') || 
+  const isExplicitDrop =
+    order.type === 'drop' ||
+    order.legType === 'drop' ||
+    order.flowType === 'gmu_to_shg' ||
+    String(order.id || '').startsWith('drop-') ||
     String(displayOrderId).toUpperCase().includes('DROP');
 
   const isConsolidatedMaster = !!(order.pickupBatchId && order.dropBatchId) || !!order.masterOrderId;
@@ -315,11 +315,13 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 5);
     }
 
+    const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
+
     const p1CreatedAt = rawCreatedAt;
-    const p1ShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || getStepTime(null, 1, stageLevel);
-    const p1TransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || getStepTime(null, 2, stageLevel);
-    const p1TransPickedAt = transScanTime || order.transporterPickedUpAt || getStepTime(null, 3, stageLevel);
-    const p1HubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || getStepTime(null, 4, stageLevel);
+    const p1ShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
+    const p1TransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
+    const p1TransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
+    const p1HubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || (statusUpper === 'HUB_RECEIVED' || statusUpper === 'PARCEL_AT_GMU' || statusUpper === 'STORED' ? order.updatedAt : null) || rawCreatedAt;
 
     if (stageLevel >= 1) addEvent('Order Placed & Registered', p1CreatedAt);
     if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', p1ShgPickedAt);
@@ -370,11 +372,13 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 5);
     }
 
+    const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
+
     const p2DispatchedAt = order.dispatchedAt || order.hubDispatchedAt || rawCreatedAt;
-    const p2TransAcceptedAt = order.acceptedAt || order.dropTransporterAcceptedAt || getStepTime(null, 1, stageLevel);
-    const p2TransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || getStepTime(null, 2, stageLevel);
-    const p2InTransitAt = getStepTime(null, 3, stageLevel);
-    const p2DropShgReceivedAt = dropShgScanTime || order.dropShgReceivedAt || order.dropShgAcceptedAt || getStepTime(null, 4, stageLevel);
+    const p2TransAcceptedAt = order.acceptedAt || order.dropTransporterAcceptedAt || dropAssignment?.updatedAt || dropAssignment?.createdAt || p2DispatchedAt;
+    const p2TransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
+    const p2InTransitAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
+    const p2DropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || p2DispatchedAt;
 
     if (stageLevel >= 1) addEvent('Order Ready for Dispatch at GMU Hub', p2DispatchedAt);
     if (stageLevel >= 2) addEvent('Transporter Drop Route Assigned & Accepted', p2TransAcceptedAt);
@@ -447,14 +451,17 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
       stageLevel = Math.max(stageLevel, 8);
     }
 
+    const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
+    const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
+
     const mCreatedAt = rawCreatedAt;
-    const mShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || getStepTime(null, 1, stageLevel);
-    const mTransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || getStepTime(null, 2, stageLevel);
-    const mTransPickedAt = transScanTime || order.transporterPickedUpAt || getStepTime(null, 3, stageLevel);
-    const mHubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || getStepTime(null, 4, stageLevel);
-    const mDispatchedAt = order.dispatchedAt || order.hubDispatchedAt || getStepTime(null, 5, stageLevel);
-    const mDropTransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || getStepTime(null, 6, stageLevel);
-    const mDropShgReceivedAt = dropShgScanTime || order.dropShgReceivedAt || order.dropShgAcceptedAt || getStepTime(null, 7, stageLevel);
+    const mShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
+    const mTransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
+    const mTransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
+    const mHubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || rawCreatedAt;
+    const mDispatchedAt = order.dispatchedAt || order.hubDispatchedAt || dropAssignment?.createdAt || mHubReceivedAt;
+    const mDropTransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || mDispatchedAt;
+    const mDropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || mDropTransPickedAt;
 
     if (stageLevel >= 1) addEvent('Order Placed & Registered', mCreatedAt);
     if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', mShgPickedAt);

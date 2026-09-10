@@ -21,6 +21,231 @@ export class OrderManagementService implements OnModuleInit {
     this.fixPendingStoredOrders().catch(err => console.error('[onModuleInit] fixPendingStoredOrders error:', err.message));
   }
 
+  async getDayEndClosure(dateStr?: string, searchStr?: string) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetDate = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : todayStr;
+
+    const startOfDay = new Date(`${targetDate}T00:00:00.000Z`);
+    const endOfDay = new Date(`${targetDate}T23:59:59.999Z`);
+
+    // Fetch valid Transporter members (reusing Transporter Management source of truth: role = TRANSPORTER & applicationStatus = APPROVED)
+    const transporters = await this.prisma.user.findMany({
+      where: {
+        role: 'TRANSPORTER',
+        applicationStatus: 'APPROVED',
+        deletedAt: null,
+      },
+      include: {
+        transporterDetail: true,
+        otherDetails: true,
+        drivingDetail: true,
+        routeDetail: true,
+        address: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    // Filter by search query if provided
+    const searchClean = (searchStr || '').trim().toLowerCase();
+    const filteredTransporters = transporters.filter((t) => {
+      if (!searchClean) return true;
+      const name = (t.fullName || '').toLowerCase();
+      const phone = (t.phoneNumber || '').toLowerCase();
+      const code = (t.transporterDetail?.transporterCode || t.uniqueCode || '').toLowerCase();
+      const vehicle = (
+        (t.transporterDetail as any)?.vehicleNumber ||
+        (t.otherDetails?.[0] as any)?.registrationNumber ||
+        (t.otherDetails?.[0] as any)?.vehicleNumber ||
+        t.transporterDetail?.vehicleCategory ||
+        ''
+      ).toLowerCase();
+      return (
+        name.includes(searchClean) ||
+        phone.includes(searchClean) ||
+        code.includes(searchClean) ||
+        vehicle.includes(searchClean)
+      );
+    });
+
+    const allTransporterIdVariants: string[] = [];
+    filteredTransporters.forEach((t) => {
+      allTransporterIdVariants.push(String(t.id));
+      if (t.authId) allTransporterIdVariants.push(t.authId);
+    });
+
+    // Fetch Order Assignments for the date range
+    const assignments = await this.prisma.orderAssignment.findMany({
+      where: {
+        assigneeType: 'TRANSPORTER',
+        createdAt: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      include: {
+        order: true,
+      },
+    });
+
+    // Fetch Orders created or modified on this date involving transporters
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { createdAt: { gte: startOfDay, lte: endOfDay } },
+          { updatedAt: { gte: startOfDay, lte: endOfDay } },
+          { dispatchedAt: { gte: startOfDay, lte: endOfDay } },
+          { deliveredAt: { gte: startOfDay, lte: endOfDay } },
+        ],
+        AND: [
+          {
+            OR: [
+              { pickupTransporterId: { in: allTransporterIdVariants } },
+              { dropTransporterId: { in: allTransporterIdVariants } },
+              { returnTransporterId: { in: allTransporterIdVariants } },
+            ],
+          },
+        ],
+      },
+      include: {
+        assignments: {
+          where: { assigneeType: 'TRANSPORTER' },
+        },
+      },
+    });
+
+    const transporterReports = filteredTransporters.map((transporter) => {
+      const idVariants = [String(transporter.id), transporter.authId].filter(Boolean) as string[];
+
+      const tAssignments = assignments.filter((a) => idVariants.includes(String(a.assigneeId)));
+
+      const tOrders = orders.filter((o) =>
+        idVariants.includes(String(o.pickupTransporterId)) ||
+        idVariants.includes(String(o.dropTransporterId)) ||
+        idVariants.includes(String(o.returnTransporterId)) ||
+        o.assignments.some((a) => idVariants.includes(String(a.assigneeId)))
+      );
+
+      const uniqueOrderIds = new Set<string>();
+      tAssignments.forEach((a) => uniqueOrderIds.add(a.orderId));
+      tOrders.forEach((o) => uniqueOrderIds.add(o.id));
+
+      const sellerPickupCount =
+        tAssignments.filter((a) => a.role === 'PICKUP').length +
+        tOrders.filter(
+          (o) =>
+            idVariants.includes(String(o.pickupTransporterId)) &&
+            !tAssignments.some((a) => a.orderId === o.id && a.role === 'PICKUP')
+        ).length;
+
+      const shgDropCount =
+        tAssignments.filter((a) => a.role === 'DROP').length +
+        tOrders.filter(
+          (o) =>
+            idVariants.includes(String(o.dropTransporterId)) &&
+            !tAssignments.some((a) => a.orderId === o.id && a.role === 'DROP')
+        ).length;
+
+      const totalAllocated = Math.max(tAssignments.length, uniqueOrderIds.size);
+
+      let completedCount = 0;
+      let undeliveredCount = 0;
+
+      tOrders.forEach((o) => {
+        const isPickup =
+          idVariants.includes(String(o.pickupTransporterId)) ||
+          tAssignments.some((a) => a.orderId === o.id && a.role === 'PICKUP');
+        const isDrop =
+          idVariants.includes(String(o.dropTransporterId)) ||
+          tAssignments.some((a) => a.orderId === o.id && a.role === 'DROP');
+
+        const ptStatus = (o.pickupTransporterStatus || '').toUpperCase();
+        const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
+        const mStatus = (o.mainStatus || '').toUpperCase();
+
+        const dShgStatus = (o.dropShgStatus || '').toUpperCase();
+
+        const isPickupCompleted =
+          ['COMPLETED', 'DELIVERED_TO_HUB', 'DROPPED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(ptStatus) ||
+          ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus);
+
+        const isDropCompleted =
+          ['COMPLETED', 'DROPPED', 'DELIVERED'].includes(dtStatus) ||
+          ['DELIVERED', 'DROPPED'].includes(dShgStatus) ||
+          ['PARCEL_AT_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus);
+
+        const isRejected =
+          ptStatus === 'REJECTED' ||
+          dtStatus === 'REJECTED' ||
+          mStatus === 'REJECTED' ||
+          dtStatus === 'SHG_NOT_AVAILABLE';
+
+        if (isRejected) {
+          undeliveredCount++;
+        } else if ((isPickup && isPickupCompleted) || (isDrop && isDropCompleted)) {
+          completedCount++;
+        }
+      });
+
+      const extraRejectedAssignments = tAssignments.filter(
+        (a) => a.status === 'REJECTED' && !tOrders.some((o) => o.id === a.orderId && o.mainStatus === 'REJECTED')
+      ).length;
+      undeliveredCount += extraRejectedAssignments;
+
+      const extraCompletedAssignments = tAssignments.filter(
+        (a) =>
+          a.status === 'COMPLETED' &&
+          !tOrders.some((o) => o.id === a.orderId && ['DELIVERED', 'COMPLETED', 'HUB_RECEIVED'].includes(o.mainStatus))
+      ).length;
+      completedCount += extraCompletedAssignments;
+
+      completedCount = Math.min(completedCount, totalAllocated);
+      undeliveredCount = Math.min(undeliveredCount, totalAllocated - completedCount);
+
+      const pendingCount = Math.max(0, totalAllocated - completedCount - undeliveredCount);
+
+      const vehicleNum =
+        (transporter.transporterDetail as any)?.vehicleNumber ||
+        (transporter.otherDetails?.[0] as any)?.registrationNumber ||
+        (transporter.otherDetails?.[0] as any)?.vehicleNumber ||
+        (transporter.drivingDetail as any)?.vehicleType ||
+        'N/A';
+
+      const codeStr =
+        (transporter.transporterDetail as any)?.transporterCode ||
+        transporter.uniqueCode ||
+        `TRP-${transporter.id}`;
+
+      return {
+        transporterId: String(transporter.id),
+        transporterName: transporter.fullName || `Transporter #${transporter.id}`,
+        mobileNumber: transporter.phoneNumber || 'N/A',
+        transporterCode: codeStr,
+        vehicleNumber: vehicleNum,
+        totalAllocated,
+        completed: completedCount,
+        pending: pendingCount,
+        undelivered: undeliveredCount,
+        sellerPickup: sellerPickupCount,
+        shgDrop: shgDropCount,
+      };
+    });
+
+    const summary = {
+      totalTransporters: transporterReports.length,
+      totalAllocated: transporterReports.reduce((sum, r) => sum + r.totalAllocated, 0),
+      completed: transporterReports.reduce((sum, r) => sum + r.completed, 0),
+      pending: transporterReports.reduce((sum, r) => sum + r.pending, 0),
+      undelivered: transporterReports.reduce((sum, r) => sum + r.undelivered, 0),
+    };
+
+    return {
+      success: true,
+      date: targetDate,
+      summary,
+      transporters: transporterReports,
+    };
+  }
+
   async fixPendingStoredOrders() {
     const pendingStored = await this.prisma.order.findMany({
       where: {

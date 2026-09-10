@@ -20,6 +20,7 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  CalendarCheck,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -153,6 +154,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
     { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },
+    { id: 'day-end-closure', label: 'Day End Closure', icon: CalendarCheck },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -419,3 +421,5 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     </div>
   );
 };
+
+export default Layout;

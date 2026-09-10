@@ -518,6 +518,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           }],
           timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+          warehouseReceivedAt: o.warehouseReceivedAt,
+          storedAt: o.storedAt,
+          dispatchedAt: o.dispatchedAt,
+          deliveredAt: o.deliveredAt,
+          assignments: o.assignments,
+          tracking: o.tracking,
         };
       });
 
@@ -706,6 +713,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           }],
           timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+          warehouseReceivedAt: o.warehouseReceivedAt,
+          storedAt: o.storedAt,
+          dispatchedAt: o.dispatchedAt,
+          deliveredAt: o.deliveredAt,
+          assignments: o.assignments,
+          tracking: o.tracking,
         };
       });
 

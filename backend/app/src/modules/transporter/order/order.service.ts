@@ -98,7 +98,13 @@ export class OrderService {
           pickupTransporterStatus: true,
           dropShgStatus: true,
           dropTransporterStatus: true,
+          warehouseReceivedAt: true,
+          barcodeGeneratedAt: true,
+          storedAt: true,
+          dispatchedAt: true,
+          deliveredAt: true,
           createdAt: true,
+          updatedAt: true,
           seller: {
             select: {
               id: true,
@@ -136,6 +142,7 @@ export class OrderService {
               currentHolderType: true,
               verificationToken: true,
               qrCodeValue: true,
+              scanHistories: true,
             }
           },
           assignments: {
@@ -144,6 +151,8 @@ export class OrderService {
               assigneeId: true,
               assigneeType: true,
               status: true,
+              createdAt: true,
+              updatedAt: true,
             }
           }
         },
@@ -372,7 +381,11 @@ export class OrderService {
         include: {
           seller: true,
           buyer: true,
-          parcels: true,
+          parcels: {
+            include: {
+              scanHistories: true
+            }
+          },
           assignments: true,
         },
         orderBy: { createdAt: 'desc' },

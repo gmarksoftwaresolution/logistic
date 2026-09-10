@@ -25,6 +25,15 @@ export class OrderManagementController {
     return this.service.getCounts();
   }
 
+  @Get('day-end-closure')
+  @ApiOperation({ summary: 'Get daily transporter activity report for Day End Closure' })
+  async getDayEndClosure(
+    @Query('date') date?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.service.getDayEndClosure(date, search);
+  }
+
   @Get('dashboard-summary')
   @ApiOperation({ summary: 'Get dashboard summary metrics' })
   async getDashboardSummary(@Request() req: any, @Query('filter') filter?: string) {

@@ -86,6 +86,12 @@ export const api = {
     create: (data: any) => request('/orders', { method: 'POST', body: JSON.stringify(data) }),
     createDrop: (data: any) => request('/orders/drop', { method: 'POST', body: JSON.stringify(data) }),
     getCounts: () => request('/orders/counts'),
+    getDayEndClosure: (date?: string, search?: string) => {
+      const q = new URLSearchParams();
+      if (date) q.append('date', date);
+      if (search) q.append('search', search);
+      return request(`/orders/day-end-closure?${q.toString()}`);
+    },
     getDetails: (id: string) => request(`/orders/${id}`),
     getPickupNew: (status?: string, date?: string) => {
       const q = new URLSearchParams();
