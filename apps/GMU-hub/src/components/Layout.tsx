@@ -154,7 +154,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
     { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },
-    { id: 'parcel-exception', label: 'Parcel Investigation', icon: QrCode },
+    { id: 'parcel-exception', label: 'Label Search & Reprint', icon: QrCode },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
