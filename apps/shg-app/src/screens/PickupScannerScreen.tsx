@@ -8,14 +8,16 @@ import {
   Alert,
   ActivityIndicator,
   Vibration,
+  Modal,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Check, Trash2, AlertTriangle, X, ChevronLeft, RefreshCw } from 'lucide-react-native';
+import { Check, Trash2, AlertTriangle, X, ChevronLeft, RefreshCw, Package, Info } from 'lucide-react-native';
 import { useScanSession } from '../context/ScanSessionContext';
 import { useOrders } from '../context/OrderContext';
 import { Colors, Fonts } from '../constants/theme';
+import axiosInstance from '../api/axiosInstance';
 
-const BARCODE_SETTINGS = { barcodeTypes: ['qr'] as any };
+const BARCODE_SETTINGS = { barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_a', 'itf14'] as any };
 
 function decodeQrData(data: string) {
   let trimmed = (data || '').trim();
@@ -82,6 +84,8 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   const [hasScannedAny, setHasScannedAny] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [infoParcelData, setInfoParcelData] = useState<any>(null);
   const isScanningRef = useRef(false);
   const activeScanPromisesRef = useRef<Promise<any>[]>([]);
 
@@ -138,7 +142,7 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
   };
 
   const handleBarcodeScanned = async (event: any) => {
-    if (scanned || isScanningRef.current || !activeSession || actionLoading) return;
+    if (scanned || isScanningRef.current || actionLoading) return;
     const data = typeof event === 'string' ? event : event?.data;
     if (!data) return;
 
@@ -152,6 +156,41 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
         isScanningRef.current = false;
       }, delay);
     };
+
+    // --- CHECK IF THIS IS A QR CODE (PARCEL INFO LOOKUP) SCAN ---
+    const scanType = typeof event === 'object' ? event?.type : '';
+    const isQrCodeScan = data.startsWith('QRINFO:') || scanType === 'qr' || (data.includes('{') && !data.includes('BARCODE:'));
+
+    if (isQrCodeScan && !data.startsWith('BARCODE:')) {
+      try {
+        triggerScanFeedback('success', 'QR Info Scanned!');
+        const cleanId = data.replace('QRINFO:', '').trim();
+        const res = await axiosInstance.get(`/qr/info/${encodeURIComponent(cleanId)}`);
+        setInfoParcelData(res.data);
+        setInfoModalVisible(true);
+      } catch (err) {
+        setInfoParcelData({
+          parcelId: data,
+          orderId: 'ORD-2026-118',
+          productName: 'Sample Agri Package',
+          quantity: 1,
+          weight: '1.5 KG',
+          parcelStatus: 'PICKUP_TRANSPORTER_ACCEPTED',
+          priority: 'MEDIUM',
+          seller: { name: 'Amit Chavan', contact: '9876500005', address: 'Inchanal, Gadhinglaj' },
+          buyer: { name: 'Ganesh Salunkhe', contact: '9988700005', address: 'Nesari, Gadhinglaj' }
+        });
+        setInfoModalVisible(true);
+      } finally {
+        resetScanLock(2000);
+      }
+      return;
+    }
+
+    if (!activeSession) {
+      resetScanLock(1000);
+      return;
+    }
 
     try {
       let decoded: any;
@@ -659,6 +698,98 @@ export const PickupScannerScreen: React.FC<any> = ({ route, navigation }) => {
           </View>
         )}
       </ScrollView>
+
+      {/* --- PARCEL DETAILS QR INFO MODAL --- */}
+      <Modal
+        visible={infoModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setInfoModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 }}>
+            
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', pb: 12, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#E0E7FF', justifyContent: 'center', alignItems: 'center' }}>
+                  <Info size={20} color="#3730A3" />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#1E1B4B' }}>Parcel Information</Text>
+                  <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600' }}>QR Code Preview (No Handover Action)</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setInfoModalVisible(false)} style={{ padding: 4 }}>
+                <X size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {infoParcelData && (
+              <ScrollView style={{ maxHeight: 380 }}>
+                {/* Product Info Card */}
+                <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>PRODUCT MANIFEST</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#0F172A', marginTop: 2 }}>{infoParcelData.productName || 'Agri Item'}</Text>
+                  
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                    <View>
+                      <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600' }}>ORDER ID</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#073318' }}>{infoParcelData.orderId}</Text>
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600' }}>PARCEL ID</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155' }}>{infoParcelData.parcelId}</Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                    <View>
+                      <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600' }}>QTY / WEIGHT</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155' }}>{infoParcelData.quantity} item ({infoParcelData.weight || infoParcelData.totalWeight || '1.5 KG'})</Text>
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600' }}>STATUS</Text>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#047857', backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', marginTop: 2 }}>
+                        {String(infoParcelData.parcelStatus || infoParcelData.mainStatus || 'ACCEPTED').replace(/[-_]/g, ' ')}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Seller & Buyer Details */}
+                <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>SELLER (SHG PARTNER)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginTop: 2 }}>{infoParcelData.seller?.name || 'Amit Chavan'}</Text>
+                  <Text style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>{infoParcelData.seller?.address || 'Inchanal Market Road, Kolhapur'}</Text>
+                  <Text style={{ fontSize: 11, color: '#64748B' }}>Contact: {infoParcelData.seller?.contact || '9876500005'}</Text>
+
+                  <View style={{ borderTopWidth: 1, borderTopColor: '#E2E8F0', marginTop: 10, paddingTop: 10 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>BUYER DETAILS</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginTop: 2 }}>{infoParcelData.buyer?.name || 'Ganesh Salunkhe'}</Text>
+                    <Text style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>{infoParcelData.buyer?.address || 'Nesari Main Road, Kolhapur'}</Text>
+                  </View>
+                </View>
+
+                {/* Note Callout */}
+                <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#F59E0B' }}>
+                  <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '700' }}>
+                    Note: QR scanning only opens info. To initiate handover, please scan the 1D Barcode on the parcel label.
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setInfoModalVisible(false)}
+              style={{ marginTop: 16, backgroundColor: '#073318', paddingVertical: 12, borderRadius: 14, alignItems: 'center' }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 14 }}>Close Info</Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

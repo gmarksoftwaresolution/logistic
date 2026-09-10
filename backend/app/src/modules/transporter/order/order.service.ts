@@ -46,6 +46,10 @@ export class OrderService {
             { orderId: { in: assignedOrderIds } },
             { pickupTransporterId: { in: idVariants } },
             { returnTransporterId: { in: idVariants } },
+            {
+              mainStatus: { in: ['PARCEL_AT_SHG', 'PARCEL_AT_PICKUP_SHG'] },
+              pickupTransporterId: null,
+            },
           ],
           mainStatus: {
             in: [

@@ -251,7 +251,7 @@ export class OrderHistoryService {
     }
 
     if (!sellerName && (cleanId || order.orderId)) {
-      const pickupOrderObj = await this.prisma.pickupOrder.findFirst({
+      const pickupOrderObj = await (this.prisma as any).pickupOrder?.findFirst({
         where: {
           OR: [
             { pickupOrderNumber: cleanId },
@@ -305,7 +305,7 @@ export class OrderHistoryService {
     }
 
     if (!buyerName && (cleanId || order.orderId)) {
-      const dropOrderObj = await this.prisma.dropOrder.findFirst({
+      const dropOrderObj = await (this.prisma as any).dropOrder?.findFirst({
         where: {
           OR: [
             { dropOrderNumber: cleanId },

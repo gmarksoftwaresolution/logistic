@@ -768,12 +768,12 @@ export const OrderHistoryPage = ({ onNavigate }: { onNavigate: (page: string) =>
 
               {/* Right Column: Parcels & Tracking Audit History */}
               <div className="space-y-6">
-                {/* Parcels & QR Codes Card */}
+                {/* Parcels, Barcodes & QR Codes Card */}
                 <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
                       <QrCode className="h-4 w-4" />
-                      Parcels & QR Codes
+                      Parcels, Barcodes & QR Codes
                     </h4>
                     {selectedOrder.parcels && selectedOrder.parcels.length > 0 && (
                       <button
@@ -809,65 +809,73 @@ export const OrderHistoryPage = ({ onNavigate }: { onNavigate: (page: string) =>
                     }
 
                     return (
-                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-                        {displayParcels.map((parcel: any, idx: number) => (
-                          <div key={parcel.parcelId || idx} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-xl transition-all">
-                            {parcel.qrImage ? (
-                              <img
-                                src={parcel.qrImage}
-                                alt={`Parcel ${parcel.parcelNumber}`}
-                                onClick={() => {
-                                  setSelectedParcel(parcel);
-                                  setIsParcelPreviewOpen(true);
-                                }}
-                                className="h-12 w-12 rounded-lg bg-white p-0.5 border border-slate-200 cursor-pointer hover:scale-105 transition-all shadow-sm shrink-0"
-                              />
-                            ) : (
-                              <div className="h-12 w-12 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0">
-                                <QrCode className="h-6 w-6" />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-800 truncate">{parcel.productName || 'Agri Goods Item'}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] text-slate-500 font-semibold">
-                                  Parcel {parcel.parcelNumber || (idx + 1)}/{parcel.totalParcels || displayParcels.length}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-medium">|</span>
-                                <span className="text-[10px] text-slate-500 font-semibold">
-                                  Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
+                      <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                        {displayParcels.map((parcel: any, idx: number) => {
+                          const pclId = parcel.parcelId || `PCL-${selectedOrder?.orderId || 'ORDER'}-${parcel.parcelNumber || (idx + 1)}`;
+                          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(pclId)}&scale=3&height=12&type=png`;
+                          const qrUrl = parcel.qrImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('QRINFO:' + pclId)}`;
+
+                          return (
+                            <div key={pclId} className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl transition-all space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-bold text-slate-900">{parcel.productName || 'Order Package'}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[10px] text-slate-500 font-semibold">
+                                      Parcel {parcel.parcelNumber || (idx + 1)}/{parcel.totalParcels || displayParcels.length}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-medium">|</span>
+                                    <span className="text-[10px] text-slate-500 font-semibold">
+                                      Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                                  {(parcel.parcelStatus || 'COMPLETED').replace(/[-_]/g, ' ')}
                                 </span>
                               </div>
-                              <span className="inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/50">
-                                {(parcel.parcelStatus || selectedOrder.mainStatus || 'COMPLETED').replace(/[-_]/g, ' ')}
-                              </span>
-                            </div>
-                            <div className="flex flex-col gap-1.5 text-right">
-                              {parcel.qrImage && (
-                                <a
-                                  href={parcel.qrImage}
-                                  download={`QR-${parcel.productName || 'Parcel'}-${parcel.parcelNumber || idx + 1}.png`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[10px] text-[#073318] hover:underline font-bold"
-                                >
-                                  Download
-                                </a>
-                              )}
-                              {parcel.qrImage && (
-                                <button
+
+                              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                                <div
                                   onClick={() => {
-                                    setSelectedParcel(parcel);
+                                    setSelectedParcel({ ...parcel, barcodeUrl, qrUrl });
                                     setIsParcelPreviewOpen(true);
                                   }}
-                                  className="text-[10px] text-slate-500 hover:text-slate-700 font-semibold cursor-pointer"
+                                  className="bg-white p-2 border border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-[#073318] transition-all group"
                                 >
-                                  Preview
-                                </button>
-                              )}
+                                  <img
+                                    src={barcodeUrl}
+                                    alt={`Barcode ${pclId}`}
+                                    className="h-9 w-full object-contain group-hover:scale-105 transition-all"
+                                    onError={(e: any) => {
+                                      e.target.src = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(pclId)}&code=Code128`;
+                                    }}
+                                  />
+                                  <span className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider group-hover:text-[#073318]">
+                                    Barcode (Handover Scan)
+                                  </span>
+                                </div>
+
+                                <div
+                                  onClick={() => {
+                                    setSelectedParcel({ ...parcel, barcodeUrl, qrUrl });
+                                    setIsParcelPreviewOpen(true);
+                                  }}
+                                  className="bg-white p-2 border border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-[#073318] transition-all group"
+                                >
+                                  <img
+                                    src={qrUrl}
+                                    alt={`QR ${pclId}`}
+                                    className="h-9 w-9 object-contain group-hover:scale-105 transition-all"
+                                  />
+                                  <span className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider group-hover:text-[#073318]">
+                                    QR Code (Info Preview)
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   })()}

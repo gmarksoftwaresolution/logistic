@@ -23,6 +23,12 @@ export class QrController {
     return this.qrService.getOrderParcels(orderId);
   }
 
+  @Get('info/:identifier')
+  @ApiOperation({ summary: 'Retrieve full parcel and order details for QR preview' })
+  async getParcelInfo(@Param('identifier') identifier: string) {
+    return this.qrService.getParcelDetails(identifier);
+  }
+
   @Get(':parcelId')
   @ApiOperation({ summary: 'Retrieve QR details for a parcel' })
   async getParcel(@Param('parcelId') parcelId: string) {
