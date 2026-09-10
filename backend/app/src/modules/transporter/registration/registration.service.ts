@@ -58,14 +58,20 @@ export class RegistrationService {
   }
 
   private async generateTransporterUniqueId(): Promise<string> {
-    const count = await this.prisma.user.count({
+    let count = await this.prisma.user.count({
       where: {
         role: UserRole.TRANSPORTER,
         uniqueCode: { startsWith: 'LOG-TP-' },
       },
     });
-    const seq = (count + 1).toString().padStart(4, '0');
-    return `LOG-TP-${seq}`;
+    let uniqueCode = `LOG-TP-${(count + 1).toString().padStart(4, '0')}`;
+    let existing = await this.prisma.user.findFirst({ where: { uniqueCode } });
+    while (existing) {
+      count++;
+      uniqueCode = `LOG-TP-${(count + 1).toString().padStart(4, '0')}`;
+      existing = await this.prisma.user.findFirst({ where: { uniqueCode } });
+    }
+    return uniqueCode;
   }
 
   private async generateTokens(user: any) {
@@ -337,21 +343,62 @@ export class RegistrationService {
       throw new BadRequestException('Invalid location combination. Only combinations existing in India Pincodes directory are valid.');
     }
 
+    const emailToSave = dto.email && dto.email.trim() !== '' ? dto.email.trim().toLowerCase() : null;
+
+    if (emailToSave) {
+      const existingEmailUser = await this.prisma.user.findFirst({
+        where: {
+          email: emailToSave,
+          id: { not: user.id },
+        },
+      });
+
+      if (existingEmailUser) {
+        throw new BadRequestException('This email address is already registered with another account.');
+      }
+    }
+
     let uniqueCode = user.uniqueCode;
     if (!uniqueCode) {
       uniqueCode = await this.generateTransporterUniqueId();
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        fullName: `${dto.firstName} ${dto.lastName}`.trim(),
-        email: dto.email,
-        profilePhoto: dto.profilePhoto,
-        uniqueCode: uniqueCode,
-        currentStep: Math.max(user.currentStep, 2),
-      },
-    });
+    try {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          fullName: `${dto.firstName} ${dto.lastName}`.trim(),
+          email: emailToSave,
+          profilePhoto: dto.profilePhoto,
+          uniqueCode: uniqueCode,
+          currentStep: Math.max(user.currentStep, 2),
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        const target = error?.meta?.target;
+        if (Array.isArray(target) && target.includes('email')) {
+          throw new BadRequestException('This email address is already registered with another account.');
+        }
+        if (Array.isArray(target) && target.includes('uniqueCode')) {
+          uniqueCode = await this.generateTransporterUniqueId();
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+              fullName: `${dto.firstName} ${dto.lastName}`.trim(),
+              email: emailToSave,
+              profilePhoto: dto.profilePhoto,
+              uniqueCode: uniqueCode,
+              currentStep: Math.max(user.currentStep, 2),
+            },
+          });
+        } else {
+          throw new BadRequestException('Unique constraint failed on user update.');
+        }
+      } else {
+        throw error;
+      }
+    }
 
     const existingAddress = await this.prisma.address.findFirst({
       where: { userId: user.id },

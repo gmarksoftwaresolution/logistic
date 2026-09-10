@@ -129,7 +129,7 @@ export class Step1PersonalDetailsDto {
   @ApiPropertyOptional({ example: 'john@example.com' })
   @IsOptional()
   @IsEmail()
-  @Transform(({ value }) => value?.trim().toLowerCase())
+  @Transform(({ value }) => (value && typeof value === 'string' && value.trim().length > 0 ? value.trim().toLowerCase() : undefined))
   email?: string;
 
   @ApiProperty({ example: 'Maharashtra' })
