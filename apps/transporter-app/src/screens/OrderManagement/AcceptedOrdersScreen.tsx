@@ -251,6 +251,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                   : { text: t('orders.drop_orders', { defaultValue: 'Drop Order' }), color: '#059669', bg: '#ECFDF5' };
 
                 const { pickup: currentPickup, drop: currentDrop } = getCounts(batch);
+                const badge = batch.movementBadge || { type: isPickup ? 'SHG_TO_HUB' : 'HUB_TO_SHG', label: isPickup ? 'SHG ➔ Hub' : 'Hub ➔ SHG', color: isPickup ? '#2563EB' : '#8B5CF6', bg: isPickup ? '#EFF6FF' : '#F5F3FF' };
 
                 return (
                   <TouchableOpacity
@@ -264,6 +265,10 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                     <View style={styles.widgetLeftData}>
                       <View style={styles.widgetTopRow}>
                         <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                        <View style={[styles.movementBadgeBox, { backgroundColor: badge.bg }]}>
+                          <View style={[styles.movementDot, { backgroundColor: badge.color }]} />
+                          <Text style={[styles.movementBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                        </View>
                       </View>
 
                       <Text style={styles.widgetRouteText} numberOfLines={2}>
@@ -506,9 +511,30 @@ const styles = StyleSheet.create({
   widgetTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: scale(8),
     marginBottom: verticalScale(4),
   },
+  movementBadgeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    paddingHorizontal: scale(7),
+    paddingVertical: verticalScale(2.5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  movementDot: {
+    width: scale(7),
+    height: scale(7),
+    borderRadius: scale(3.5),
+  },
+  movementBadgeText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(9.5),
+  },
+
   widgetBatchIdText: {
     fontFamily: Fonts.semiBold,
     fontSize: moderateScale(11.5),

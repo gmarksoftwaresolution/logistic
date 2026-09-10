@@ -344,6 +344,8 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                             const itemWeight = parseWeightKg(batch.totalWeight);
                             const isExceedingTolerance = (currentAcceptedWeight + itemWeight) > effectiveMaxCapacity;
 
+                            const badge = batch.movementBadge || { type: 'SHG_TO_HUB', label: 'SHG ➔ Hub', color: '#2563EB', bg: '#EFF6FF' };
+
                             return (
                               <View key={`${batch.id}-pickup-${index}`} style={styles.notificationWidgetCard}>
                                 <TouchableOpacity
@@ -355,6 +357,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                  >
                                   <View style={styles.widgetTopRow}>
                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                                    <View style={[styles.movementBadgeBox, { backgroundColor: badge.bg }]}>
+                                      <View style={[styles.movementDot, { backgroundColor: badge.color }]} />
+                                      <Text style={[styles.movementBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                                    </View>
                                   </View>
                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
@@ -414,6 +420,8 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                             const itemWeight = parseWeightKg(batch.totalWeight);
                             const isExceedingTolerance = (currentAcceptedWeight + itemWeight) > effectiveMaxCapacity;
 
+                            const badge = batch.movementBadge || { type: 'HUB_TO_SHG', label: 'Hub ➔ SHG', color: '#8B5CF6', bg: '#F5F3FF' };
+
                             return (
                               <View key={`${batch.id}-drop-${index}`} style={styles.notificationWidgetCard}>
                                 <TouchableOpacity
@@ -425,6 +433,10 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                  >
                                     <View style={styles.widgetTopRow}>
                                       <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                                      <View style={[styles.movementBadgeBox, { backgroundColor: badge.bg }]}>
+                                        <View style={[styles.movementDot, { backgroundColor: badge.color }]} />
+                                        <Text style={[styles.movementBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                                      </View>
                                     </View>
                                    <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
@@ -739,9 +751,30 @@ const styles = StyleSheet.create({
   widgetTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: scale(8),
     marginBottom: verticalScale(4),
   },
+  movementBadgeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    paddingHorizontal: scale(7),
+    paddingVertical: verticalScale(2.5),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  movementDot: {
+    width: scale(7),
+    height: scale(7),
+    borderRadius: scale(3.5),
+  },
+  movementBadgeText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(9.5),
+  },
+
   widgetBatchIdText: {
     fontFamily: Fonts.semiBold,
     fontSize: moderateScale(11.5),

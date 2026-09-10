@@ -3,6 +3,49 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function classifyOrderMovement(order: any, legPhase: 'PICKUP' | 'DROP'): {
+  type: string;
+  label: string;
+  color: string;
+  bg: string;
+} {
+  const isRTO = Boolean(order.isRTO || order.returnType === 'TRANSPORTER_RETURN' || order.returnType === 'BUYER_RETURN');
+  if (isRTO) {
+    return { type: 'RTO_RETURN', label: 'Return ➔ Hub', color: '#EF4444', bg: '#FEF2F2' };
+  }
+
+  const isDirect = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg' || String(order.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
+  const isSellerDirect = Boolean(order.isPickupRedirected || order.pickupType === 'DIRECT_SELLER' || order.pickupType === 'SELLER');
+  const isBuyerDirect = Boolean(order.isDropRedirected || !order.dropShgId || order.buyerDirectDrop);
+
+  if (isDirect) {
+    if (isSellerDirect && isBuyerDirect) {
+      return { type: 'SELLER_TO_BUYER', label: 'Seller ➔ Buyer', color: '#D97706', bg: '#FEF3C7' };
+    }
+    if (isBuyerDirect) {
+      return { type: 'SHG_TO_BUYER', label: 'SHG ➔ Buyer', color: '#F43F5E', bg: '#FFE4E6' };
+    }
+    return { type: 'SHG_TO_SHG', label: 'SHG ➔ SHG', color: '#10B981', bg: '#ECFDF5' };
+  }
+
+  if (legPhase === 'PICKUP') {
+    if (isSellerDirect) {
+      return { type: 'SELLER_TO_HUB', label: 'Seller ➔ Hub', color: '#C026D3', bg: '#FDF4FF' };
+    }
+    return { type: 'SHG_TO_HUB', label: 'SHG ➔ Hub', color: '#2563EB', bg: '#EFF6FF' };
+  }
+
+  if (legPhase === 'DROP') {
+    if (isBuyerDirect) {
+      return { type: 'HUB_TO_BUYER', label: 'Hub ➔ Buyer', color: '#06B6D4', bg: '#ECFEFF' };
+    }
+    return { type: 'HUB_TO_SHG', label: 'Hub ➔ SHG', color: '#8B5CF6', bg: '#F5F3FF' };
+  }
+
+  return { type: 'SHG_TO_HUB', label: 'SHG ➔ Hub', color: '#2563EB', bg: '#EFF6FF' };
+}
+
+
 @Injectable()
 export class OrderService {
   constructor(private prisma: PrismaService) { }
@@ -321,6 +364,7 @@ export class OrderService {
           dropShg: dropShgData,
           dropShgDetails: dropShgData,
           parcels: o.parcels || [],
+          movementBadge: classifyOrderMovement(o, 'PICKUP'),
         };
       });
     } catch (err) {
@@ -522,6 +566,7 @@ export class OrderService {
           pickupShgDetails: pickupShgData,
           shg: dropShgData,
           parcels: o.parcels || [],
+          movementBadge: classifyOrderMovement(o, 'DROP'),
           items: (o.parcels && o.parcels.length > 0) ? o.parcels.map((p: any) => ({
             id: p.id || p.parcelId,
             quantity: p.quantity || 1,

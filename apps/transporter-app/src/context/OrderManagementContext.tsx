@@ -44,11 +44,61 @@ export interface ProductItem {
   verificationStatus?: string;
 }
 
+export interface MovementBadge {
+  type: string;
+  label: string;
+  color: string;
+  bg: string;
+}
+
+export const computeMovementBadge = (o: any, legType: 'pickup' | 'drop'): MovementBadge => {
+  if (o.movementBadge && o.movementBadge.label && o.movementBadge.color) {
+    return o.movementBadge;
+  }
+
+  const isRTO = Boolean(o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || o.returnType === 'BUYER_RETURN');
+  if (isRTO) {
+    return { type: 'RTO_RETURN', label: 'Return ➔ Hub', color: '#EF4444', bg: '#FEF2F2' };
+  }
+
+  const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
+  const isSellerDirect = Boolean(o.isPickupRedirected || o.isRedirected || o.pickupType === 'DIRECT_SELLER' || o.pickupType === 'SELLER');
+  const isBuyerDirect = Boolean(o.isDropRedirected || !o.dropShgId || o.buyerDirectDrop || (o.originalRecipient && o.originalRecipient.name));
+
+  if (isDirect) {
+    if (isSellerDirect && isBuyerDirect) {
+      return { type: 'SELLER_TO_BUYER', label: 'Seller ➔ Buyer', color: '#D97706', bg: '#FEF3C7' };
+    }
+    if (isBuyerDirect) {
+      return { type: 'SHG_TO_BUYER', label: 'SHG ➔ Buyer', color: '#F43F5E', bg: '#FFE4E6' };
+    }
+    return { type: 'SHG_TO_SHG', label: 'SHG ➔ SHG', color: '#10B981', bg: '#ECFDF5' };
+  }
+
+  if (legType === 'pickup') {
+    if (isSellerDirect) {
+      return { type: 'SELLER_TO_HUB', label: 'Seller ➔ Hub', color: '#C026D3', bg: '#FDF4FF' };
+    }
+    return { type: 'SHG_TO_HUB', label: 'SHG ➔ Hub', color: '#2563EB', bg: '#EFF6FF' };
+  }
+
+  if (legType === 'drop') {
+    if (isBuyerDirect) {
+      return { type: 'HUB_TO_BUYER', label: 'Hub ➔ Buyer', color: '#06B6D4', bg: '#ECFEFF' };
+    }
+    return { type: 'HUB_TO_SHG', label: 'Hub ➔ SHG', color: '#8B5CF6', bg: '#F5F3FF' };
+  }
+
+  return { type: 'SHG_TO_HUB', label: 'SHG ➔ Hub', color: '#2563EB', bg: '#EFF6FF' };
+};
+
 export interface BatchOrder {
   id: string;
   displayId?: string;
   areaName: string;
   flowType: FlowType;
+  movementBadge?: MovementBadge;
+
   shgName: string;
   pickupPointName: string;
   dropPointName: string;
@@ -518,6 +568,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           }],
           timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: o.createdAt,
+          movementBadge: computeMovementBadge(o, 'pickup'),
         };
       });
 
@@ -706,6 +757,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           }],
           timestamp: new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: o.createdAt,
+          movementBadge: computeMovementBadge(o, 'drop'),
         };
       });
 
