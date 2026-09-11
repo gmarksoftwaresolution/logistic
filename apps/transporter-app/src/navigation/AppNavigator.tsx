@@ -15,6 +15,13 @@ import MainTabNavigator from './MainTabNavigator';
 import { PickupScannerScreen } from '../screens/OrderManagement/PickupScannerScreen';
 import { Colors } from '../constants/Colors';
 
+import TransporterPersonalDetailsScreen from '../screens/profile/TransporterPersonalDetailsScreen';
+import TransporterDrivingDetailsScreen from '../screens/profile/TransporterDrivingDetailsScreen';
+import TransporterVehicleDetailsScreen from '../screens/profile/TransporterVehicleDetailsScreen';
+import TransporterBankDetailsScreen from '../screens/profile/TransporterBankDetailsScreen';
+import TransporterAddressDetailsScreen from '../screens/profile/TransporterAddressDetailsScreen';
+import TransporterRouteDetailsScreen from '../screens/profile/TransporterRouteDetailsScreen';
+
 import api from '../services/api';
 
 export type RootStackParamList = {
@@ -26,6 +33,12 @@ export type RootStackParamList = {
   Main: undefined;
   Profile: undefined;
   PickupScanner: { sessionId?: string; orderIds?: string[] } | undefined;
+  TransporterPersonalDetails: { profileData?: any } | undefined;
+  TransporterDrivingDetails: { profileData?: any } | undefined;
+  TransporterVehicleDetails: { profileData?: any } | undefined;
+  TransporterBankDetails: { profileData?: any } | undefined;
+  TransporterAddressDetails: { profileData?: any } | undefined;
+  TransporterRouteDetails: { profileData?: any } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -92,6 +105,12 @@ const AppNavigator = () => {
         <Stack.Screen name="Main" component={MainTabNavigator} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="PickupScanner" component={PickupScannerScreen} />
+        <Stack.Screen name="TransporterPersonalDetails" component={TransporterPersonalDetailsScreen} />
+        <Stack.Screen name="TransporterDrivingDetails" component={TransporterDrivingDetailsScreen} />
+        <Stack.Screen name="TransporterVehicleDetails" component={TransporterVehicleDetailsScreen} />
+        <Stack.Screen name="TransporterBankDetails" component={TransporterBankDetailsScreen} />
+        <Stack.Screen name="TransporterAddressDetails" component={TransporterAddressDetailsScreen} />
+        <Stack.Screen name="TransporterRouteDetails" component={TransporterRouteDetailsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

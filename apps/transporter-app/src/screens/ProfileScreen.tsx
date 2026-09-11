@@ -340,6 +340,13 @@ const ProfileScreen: React.FC = () => {
               <Text style={styles.profileName} numberOfLines={1}>
                 {personalDetails?.firstName ? `${personalDetails.firstName} ${personalDetails.lastName}`.trim() : t('profile.name')}
               </Text>
+
+              {/* Login Number / Mobile Number */}
+              <Text style={styles.profilePhone} numberOfLines={1}>
+                {profileData?.phoneNumber || profileData?.mobileNumber || personalDetails?.phoneNumber || personalDetails?.mobileNumber || '-'}
+              </Text>
+
+              {/* Email Address */}
               <Text style={styles.profileEmail} numberOfLines={1}>
                 {personalDetails?.email || t('profile.email')}
               </Text>
@@ -367,298 +374,94 @@ const ProfileScreen: React.FC = () => {
         </LinearGradient>
 
         {/* Section - Personal details */}
-        <View style={styles.accordionCard}>
-          {renderSectionHeader(
-            t('signup.personal_details') || 'Personal Details',
-            <User size={scale(20)} color={Colors.primary} />,
-            'personal'
-          )}
-          {activeSection === 'personal' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.first_name')}</Text>
-                <Text style={styles.detailValue}>{personalDetails?.firstName || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.last_name')}</Text>
-                <Text style={styles.detailValue}>{personalDetails?.lastName || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.email')}</Text>
-                <Text style={styles.detailValue}>{personalDetails?.email || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.address')}</Text>
-                <Text style={styles.detailValue}>{personalDetails?.residentialAddress || '-'}</Text>
-              </View>
-              <View style={styles.gridRow}>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.operating_area') || 'Taluka'}</Text>
-                  <Text style={styles.detailValue}>{personalDetails?.taluka || '-'}</Text>
-                </View>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.operating_area') || 'District'}</Text>
-                  <Text style={styles.detailValue}>{personalDetails?.district || '-'}</Text>
-                </View>
-              </View>
-              <View style={styles.gridRow}>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.operating_area') || 'State'}</Text>
-                  <Text style={styles.detailValue}>{personalDetails?.state || '-'}</Text>
-                </View>
-                <View style={styles.gridCol}>
-                  <Text style={styles.detailLabel}>{t('signup.pincode')}</Text>
-                  <Text style={styles.detailValue}>{personalDetails?.pinCode || '-'}</Text>
-                </View>
-              </View>
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterPersonalDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <User size={scale(20)} color={Colors.primary} />
             </View>
-          )}
-        </View>
+            <Text style={styles.profileListItemTitle}>{t('signup.personal_details') || 'Personal Details'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
 
-        {/* Section - Driving license */}
-        <View style={styles.accordionCard}>
-          {renderSectionHeader(
-            t('signup.driving_details') || 'Driving Details',
-            <Shield size={scale(20)} color={Colors.primary} />,
-            'driving'
-          )}
-          {activeSection === 'driving' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.license_number')}</Text>
-                <Text style={styles.detailValue}>{drivingDetails?.licenseNumber || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.expiry_date')}</Text>
-                <Text style={styles.detailValue}>
-                  {drivingDetails?.expiryDate ? new Date(drivingDetails.expiryDate).toLocaleDateString() : '-'}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.driving_experience')}</Text>
-                <Text style={styles.detailValue}>
-                  {drivingDetails?.experienceYears ? `${drivingDetails.experienceYears} ${t('common.years') || 'Years'}` : '-'}
-                </Text>
-              </View>
-
-              {drivingDetails?.licensePhoto && (
-                <View style={styles.documentPreviewContainer}>
-                  <Text style={styles.detailLabel}>{t('signup.license_photo')}</Text>
-                  <Image
-                    source={{ uri: getFullPhotoUrl(drivingDetails.licensePhoto) }}
-                    style={styles.documentImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              )}
+        {/* Section - Driving Details */}
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterDrivingDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <Shield size={scale(20)} color={Colors.primary} />
             </View>
-          )}
-        </View>
+            <Text style={styles.profileListItemTitle}>{t('signup.driving_details') || 'Driving Details'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
 
         {/* Section - Vehicle Details */}
-        <View style={styles.accordionCard}>
-          {renderSectionHeader(
-            t('signup.vehicle_details') || 'Vehicle Details',
-            <Truck size={scale(20)} color={Colors.primary} />,
-            'vehicle'
-          )}
-          {activeSection === 'vehicle' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.vehicle_category')}</Text>
-                <Text style={[styles.detailValue, { fontWeight: '700', color: Colors.primary }]}>
-                  {profileData.vehicleCategory === 'MILK_VAN' ? t('signup.milk_van') : t('signup.personal_vehicle')}
-                </Text>
-              </View>
-
-              {vehicleDetails ? (
-                <>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.vehicle_number')}</Text>
-                    <Text style={styles.detailValue}>{vehicleDetails.registrationNumber || '-'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.vehicle_make')}</Text>
-                    <Text style={styles.detailValue}>{vehicleDetails.vehicleName || '-'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.vehicle_type')}</Text>
-                    <Text style={styles.detailValue}>{vehicleDetails.vehicleType || '-'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.vehicle_wheeler') || 'Wheeler'}</Text>
-                    <Text style={styles.detailValue}>{vehicleDetails.wheeler || '-'}</Text>
-                  </View>
-
-                  <View style={styles.documentGrid}>
-                    {vehicleDetails.rcUrl && (
-                      <View style={styles.documentCol}>
-                        <Text style={styles.detailLabel}>{t('signup.rc_upload')}</Text>
-                        <Image
-                          source={{ uri: getFullPhotoUrl(vehicleDetails.rcUrl) }}
-                          style={styles.documentGridImage}
-                        />
-                      </View>
-                    )}
-                    {vehicleDetails.insuranceUrl && (
-                      <View style={styles.documentCol}>
-                        <Text style={styles.detailLabel}>{t('signup.insurance_upload')}</Text>
-                        <Image
-                          source={{ uri: getFullPhotoUrl(vehicleDetails.insuranceUrl) }}
-                          style={styles.documentGridImage}
-                        />
-                      </View>
-                    )}
-                  </View>
-                </>
-              ) : milkVanDetails ? (
-                <>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.sangathan_name')}</Text>
-                    <Text style={styles.detailValue}>{milkVanDetails.sangathanName || '-'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.milk_center_name')}</Text>
-                    <Text style={styles.detailValue}>{milkVanDetails.centerName || '-'}</Text>
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.emptyText}>No vehicle details recorded.</Text>
-              )}
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterVehicleDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <Truck size={scale(20)} color={Colors.primary} />
             </View>
-          )}
-        </View>
+            <Text style={styles.profileListItemTitle}>{t('signup.vehicle_details') || 'Vehicle Details'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
 
         {/* Section - Bank Details */}
-        <View style={styles.accordionCard}>
-          {renderSectionHeader(
-            t('signup.bank_details') || 'Bank Details',
-            <CreditCard size={scale(20)} color={Colors.primary} />,
-            'bank'
-          )}
-          {activeSection === 'bank' && (
-            <View style={styles.sectionBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.account_holder')}</Text>
-                <Text style={styles.detailValue}>{bankDetails?.accountHolderName || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.bank_name')}</Text>
-                <Text style={styles.detailValue}>{bankDetails?.bankName || '-'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.account_number')}</Text>
-                <Text style={styles.detailValue}>
-                  {bankDetails?.accountNumber
-                    ? `•••• •••• •••• ${bankDetails.accountNumber.slice(-4)}`
-                    : '-'}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{t('signup.ifsc_code')}</Text>
-                <Text style={styles.detailValue}>{bankDetails?.ifscCode || '-'}</Text>
-              </View>
-              {bankDetails?.branchName && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{t('signup.branch_name')}</Text>
-                  <Text style={styles.detailValue}>{bankDetails.branchName}</Text>
-                </View>
-              )}
-              {bankDetails?.upiId && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{t('signup.upi_id')}</Text>
-                  <Text style={styles.detailValue}>{bankDetails.upiId}</Text>
-                </View>
-              )}
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterBankDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <CreditCard size={scale(20)} color={Colors.primary} />
             </View>
-          )}
-        </View>
+            <Text style={styles.profileListItemTitle}>{t('signup.bank_details') || 'Bank Details'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
+
+        {/* Section - My Address */}
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterAddressDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <MapPin size={scale(20)} color={Colors.primary} />
+            </View>
+            <Text style={styles.profileListItemTitle}>{t('signup.my_address') || 'My Address'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
 
         {/* Section - Route & Schedules */}
-        <View style={styles.accordionCard}>
-          {renderSectionHeader(
-            t('orders.route_details') || 'Route Details',
-            <Calendar size={scale(20)} color={Colors.primary} />,
-            'route'
-          )}
-          {activeSection === 'route' && (() => {
-            const isMilkVan = profileData.vehicleCategory === 'MILK_VAN';
-
-            // Format working days array/string
-            const days = routeDetails?.workingDays;
-            let formattedDays = '-';
-            if (Array.isArray(days)) {
-              formattedDays = days.join(', ');
-            } else if (typeof days === 'string') {
-              try {
-                if (days.startsWith('[')) {
-                  formattedDays = JSON.parse(days).join(', ');
-                } else {
-                  formattedDays = days;
-                }
-              } catch (e) {
-                formattedDays = days;
-              }
-            }
-
-            if (isMilkVan) {
-              const villages = parseLocations(milkVanDetails?.assignedVillages);
-
-              return (
-                <View style={styles.sectionBody}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.assigned_villages') || 'Assigned Villages'}</Text>
-                    {renderConnectingDots(villages, '#10B981')}
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.milk_center_name') || 'Milk Center'}</Text>
-                    <Text style={styles.detailValue}>{milkVanDetails?.centerName || '-'}</Text>
-                  </View>
-
-                  <View style={styles.gridRow}>
-                    <View style={styles.gridCol}>
-                      <Text style={styles.detailLabel}>{t('signup.morning_shift') || 'Morning Shift'}</Text>
-                      <Text style={styles.detailValue}>{milkVanDetails?.morningShiftTime || '-'}</Text>
-                    </View>
-                    <View style={styles.gridCol}>
-                      <Text style={styles.detailLabel}>{t('signup.evening_shift') || 'Evening Shift'}</Text>
-                      <Text style={styles.detailValue}>{milkVanDetails?.eveningShiftTime || '-'}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
-                    <Text style={styles.detailValue}>{formattedDays}</Text>
-                  </View>
-                </View>
-              );
-            } else {
-              const pickupLocs = parseLocations(routeDetails?.pickupLocations);
-              const dropLocs = parseLocations(routeDetails?.dropLocations);
-
-              return (
-                <View style={styles.sectionBody}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.route_from') || 'Route From'}</Text>
-                    {renderConnectingDots(pickupLocs, '#10B981')}
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.route_to') || 'Route To'}</Text>
-                    {renderConnectingDots(dropLocs, '#F59E0B')}
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.operating_area') || 'Operating Area'}</Text>
-                    <Text style={styles.detailValue}>{routeDetails?.operatingArea || '-'}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{t('signup.days_available') || 'Days Available'}</Text>
-                    <Text style={styles.detailValue}>{formattedDays}</Text>
-                  </View>
-                </View>
-              );
-            }
-          })()}
-        </View>
+        <TouchableOpacity
+          style={styles.profileListItem}
+          onPress={() => navigation.navigate('TransporterRouteDetails', { profileData })}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileListItemLeft}>
+            <View style={styles.profileListItemIconBg}>
+              <Calendar size={scale(20)} color={Colors.primary} />
+            </View>
+            <Text style={styles.profileListItemTitle}>{t('orders.route_details') || 'Route Details'}</Text>
+          </View>
+          <ChevronRight size={scale(18)} color="#94A3B8" />
+        </TouchableOpacity>
 
         {/* Settings & App Quick actions */}
         <Text style={styles.settingsLabelGroup}>{t('profile.menu.settings') || 'Settings'}</Text>
@@ -1013,7 +816,8 @@ const styles = StyleSheet.create({
   },
   profileHeaderCard: {
     borderRadius: moderateScale(24),
-    padding: scale(20),
+    paddingVertical: verticalScale(24),
+    paddingHorizontal: scale(20),
     marginBottom: verticalScale(24),
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -1071,6 +875,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.extraBold,
     fontSize: moderateScale(20),
     color: '#FFFFFF',
+  },
+  profilePhone: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(13),
+    color: 'rgba(255,255,255,0.95)',
+    marginTop: verticalScale(2),
   },
   profileEmail: {
     fontFamily: Fonts.medium,
@@ -1539,6 +1349,41 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(14),
     color: Colors.textPrimary,
     lineHeight: moderateScale(18),
+  },
+  profileListItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(18),
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(16),
+    marginBottom: verticalScale(12),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+  },
+  profileListItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileListItemIconBg: {
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(10),
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: scale(14),
+  },
+  profileListItemTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(15),
+    color: '#1E293B',
   },
 });
 
