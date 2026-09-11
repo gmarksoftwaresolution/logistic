@@ -20,18 +20,29 @@ export default function BankDetailsScreen({ navigation }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [generalError, setGeneralError] = useState('');
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
 
   // Extract bank details from user object or nested bankDetails array
   const bankData = Array.isArray(user?.bankDetails) && user.bankDetails.length > 0
     ? user.bankDetails[0]
     : user?.bankDetails || {};
 
+  const getRawAccount = () => {
+    return (
+      user?.rawAccountNumber ||
+      bankData.rawAccountNumber ||
+      user?.accountNumber ||
+      bankData.accountNumber ||
+      ''
+    );
+  };
+
   const getInitialForm = () => ({
     accountName: user?.accountName || bankData.accountName || bankData.accountHolderName || bankData.name || user?.name || '',
     ifscCode: user?.ifscCode || bankData.ifscCode || bankData.ifsc || '',
     bankName: user?.bankName || bankData.bankName || '',
     branchName: user?.branchName || bankData.branchName || bankData.branch || '',
-    accountNumber: user?.accountNumber || bankData.accountNumber || '',
+    accountNumber: getRawAccount(),
     upiId: user?.upiId || bankData.upiId || bankData.upi || '',
   });
 
@@ -39,7 +50,30 @@ export default function BankDetailsScreen({ navigation }: Props) {
 
   useEffect(() => {
     setFormData(getInitialForm());
+    setShowAccountNumber(false);
   }, [user]);
+
+  const maskAccount = (val: string) => {
+    if (!val) return 'Not provided';
+    const clean = val.trim();
+    if (clean.includes('X')) {
+      return clean;
+    }
+    if (clean.length < 4) return val;
+    return `${'X'.repeat(Math.max(8, clean.length - 4))}${clean.slice(-4)}`;
+  };
+
+  const getDisplayedAccount = () => {
+    const current = formData.accountNumber || getRawAccount();
+    if (showAccountNumber) {
+      if (current && !current.includes('X')) {
+        return current;
+      }
+      return user?.rawAccountNumber || bankData.rawAccountNumber || current || 'Not provided';
+    } else {
+      return maskAccount(current);
+    }
+  };
 
   const hasChanges = () => {
     const initial = getInitialForm();
@@ -56,6 +90,7 @@ export default function BankDetailsScreen({ navigation }: Props) {
   const handleCancelEdit = () => {
     setFormData(getInitialForm());
     setGeneralError('');
+    setShowAccountNumber(false);
     setIsEditing(false);
   };
 
@@ -73,11 +108,13 @@ export default function BankDetailsScreen({ navigation }: Props) {
       bankName: formData.bankName,
       branchName: formData.branchName,
       accountNumber: formData.accountNumber,
+      rawAccountNumber: formData.accountNumber,
       upiId: formData.upiId,
     };
 
     updateUser({
       ...formData,
+      rawAccountNumber: formData.accountNumber,
       bankDetails: Array.isArray(user?.bankDetails) ? [updatedBankObj] : updatedBankObj,
     });
 
@@ -93,13 +130,19 @@ export default function BankDetailsScreen({ navigation }: Props) {
     value,
     onChangeText,
     placeholder,
-    keyboardType = "default"
+    keyboardType = "default",
+    isToggleable = false,
+    isVisible = false,
+    onToggleVisibility = () => {},
   }: {
     label: string;
     value: string;
     onChangeText: (val: string) => void;
     placeholder: string;
     keyboardType?: any;
+    isToggleable?: boolean;
+    isVisible?: boolean;
+    onToggleVisibility?: () => void;
   }) => (
     <View className="w-full mb-3">
       <Text className="text-[11px] font-bold text-textSecondary uppercase tracking-wider mb-1 ml-1">{label}</Text>
@@ -115,6 +158,11 @@ export default function BankDetailsScreen({ navigation }: Props) {
           placeholder={placeholder}
           keyboardType={keyboardType}
         />
+        {isToggleable && (
+          <TouchableOpacity onPress={onToggleVisibility} className="p-1 ml-2" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name={isVisible ? "eye-outline" : "eye-off-outline"} size={18} color="#64748B" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -143,38 +191,41 @@ export default function BankDetailsScreen({ navigation }: Props) {
         <View className="px-5 pt-4">
           <View className="bg-white p-5 rounded-[28px] shadow-sm border border-gray-50 mb-6">
             <InputField
-              label={t('su_account_holder_name_235') || "Account Holder Name"}
+              label="Account Holder Name"
               value={formData.accountName}
               onChangeText={(val) => setFormData({ ...formData, accountName: val })}
               placeholder="Enter account holder name"
             />
             <InputField
-              label={t('su_ifsc_code_233') || "IFSC Code"}
+              label="IFSC Code"
               value={formData.ifscCode}
               onChangeText={(val) => setFormData({ ...formData, ifscCode: val })}
               placeholder="Enter IFSC code"
             />
             <InputField
-              label={t('su_bank_name_or_auto_f_249') || "Bank Name"}
+              label="Bank Name"
               value={formData.bankName}
               onChangeText={(val) => setFormData({ ...formData, bankName: val })}
               placeholder="Enter bank name"
             />
             <InputField
-              label={t('su_branch_name_241') || "Branch Name"}
+              label="Branch Name"
               value={formData.branchName}
               onChangeText={(val) => setFormData({ ...formData, branchName: val })}
               placeholder="Enter branch name"
             />
             <InputField
-              label={t('su_account_number_237') || "Account Number"}
-              value={formData.accountNumber}
+              label="Account Number"
+              value={getDisplayedAccount()}
               onChangeText={(val) => setFormData({ ...formData, accountNumber: val })}
               placeholder="Enter account number"
               keyboardType="numeric"
+              isToggleable={true}
+              isVisible={showAccountNumber}
+              onToggleVisibility={() => setShowAccountNumber(!showAccountNumber)}
             />
             <InputField
-              label={t('su_upi_id_optional_245') || "UPI ID"}
+              label="UPI ID (Optional)"
               value={formData.upiId}
               onChangeText={(val) => setFormData({ ...formData, upiId: val })}
               placeholder="Enter UPI ID (optional)"

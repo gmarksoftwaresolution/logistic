@@ -43,6 +43,7 @@ export interface UserProfile {
   bankName?: string;
   branchName?: string;
   accountNumber?: string;
+  rawAccountNumber?: string;
   ifscCode?: string;
   upiId?: string;
 }

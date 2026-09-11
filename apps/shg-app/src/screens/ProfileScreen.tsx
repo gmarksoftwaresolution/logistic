@@ -187,9 +187,9 @@ export default function ProfileScreen({
           <Text className="text-sm font-bold text-[#1E293B] mb-3 ml-1">{t("su_quick_access_311")}</Text>
           <View className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50 py-2">
             <ActionRow icon={<Ionicons name="person-outline" size={22} color="#16A34A" />} title={t("personal_details") || "Personal Details"} subtitle={t("su_update_your_personal_429") || "Update your personal info"} onPress={() => navigation.navigate("PersonalDetails")} />
-            <ActionRow icon={<Ionicons name="bag-handle-outline" size={22} color="#16A34A" />} title={t("su_my_orders_312")} subtitle={t("su_view_your_past_deliv_313")} onPress={() => (navigation as any).navigate("Main", { screen: "Orders" })} />
             <ActionRow icon={<Ionicons name="location-outline" size={22} color="#16A34A" />} title={t("su_my_addresses_314")} subtitle={t("su_manage_saved_address_315")} onPress={() => navigation.navigate("Address")} />
             <ActionRow icon={<Ionicons name="card-outline" size={22} color="#16A34A" />} title={t("su_bank_details_231") || "Bank Details"} subtitle={t("su_where_should_we_send_232") || "View payout account details"} onPress={() => navigation.navigate("BankDetails")} />
+            <ActionRow icon={<Ionicons name="bag-handle-outline" size={22} color="#16A34A" />} title={t("su_my_orders_312")} subtitle={t("su_view_your_past_deliv_313")} onPress={() => (navigation as any).navigate("Main", { screen: "Orders" })} />
             <ActionRow icon={<Ionicons name="cash-outline" size={22} color="#16A34A" />} title={t("su_earnings_318")} subtitle={t("su_view_your_earnings_s_319")} onPress={() => (navigation as any).navigate("Main", { screen: "Earnings" })} />
             <ActionRow icon={<Ionicons name="settings-outline" size={22} color="#16A34A" />} title={t("settings")} subtitle={t("su_manage_your_app_pref_323")} onPress={() => navigation.navigate("Settings")} />
           </View>

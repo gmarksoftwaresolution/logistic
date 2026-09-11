@@ -60,8 +60,10 @@ export class UserService {
         },
       bankDetails: user.bankDetails.map((bd: any) => ({
         ...bd,
+        rawAccountNumber: bd.accountNumber,
         accountNumber: this.maskAccount(bd.accountNumber),
       })),
+      rawAccountNumber: user.bankDetails && user.bankDetails[0] ? user.bankDetails[0].accountNumber : '',
     };
 
     return maskedUser;
