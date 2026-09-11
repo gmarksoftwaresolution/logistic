@@ -21,8 +21,13 @@ export interface UserProfile {
   gmuId: string;
   role: string;
   dob: string;
-  aadhaar: string;
-  joiningDate: string;
+  aadhaar?: string;
+  aadhaarNumber?: string;
+  pan?: string;
+  panNumber?: string;
+  document?: any;
+  documents?: any[];
+  joiningDate?: string;
   pincode: string;
   stateName: string;
   district: string;
@@ -153,6 +158,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (updatedUser.ifscCode) payload.ifscCode = updatedUser.ifscCode;
         if (updatedUser.upiId) payload.upiId = updatedUser.upiId;
         if (updatedUser.bankDetails) payload.bankDetails = updatedUser.bankDetails;
+        if (updatedUser.aadhaar !== undefined) payload.aadhaarNumber = updatedUser.aadhaar;
+        if (updatedUser.aadhaarNumber !== undefined) payload.aadhaarNumber = updatedUser.aadhaarNumber;
+        if (updatedUser.pan !== undefined) payload.panNumber = updatedUser.pan;
+        if (updatedUser.panNumber !== undefined) payload.panNumber = updatedUser.panNumber;
 
         await userService.updateProfile(payload);
       } catch (err) {

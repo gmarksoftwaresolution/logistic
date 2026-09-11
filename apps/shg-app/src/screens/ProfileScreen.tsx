@@ -97,14 +97,6 @@ export default function ProfileScreen({
         showsVerticalScrollIndicator={false}
         refreshControl={<SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Subtle curved background decoration behind the card */}
-        <View 
-          className="absolute top-0 left-0 right-0 h-48 bg-[#EEF5F0] rounded-b-[120px]" 
-          style={{
-            transform: [{ scaleX: 1.5 }],
-            top: -20
-          }} 
-        />
 
         {/* Profile Card Section - Increased height (+40%) */}
         <View className="bg-[#F4FBF7] mx-5 py-8 px-6 rounded-[28px] border border-[#D1FAE5] mt-3 mb-4 relative overflow-hidden flex-row items-center">

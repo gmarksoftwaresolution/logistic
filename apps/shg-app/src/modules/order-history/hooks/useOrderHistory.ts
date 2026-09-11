@@ -4,7 +4,7 @@ import { HistoryGroup, HistoryStats, HistoryStatus } from '../types/history.type
 
 export const useOrderHistory = () => {
   const [groupedOrders, setGroupedOrders] = useState<HistoryGroup[]>([]);
-  const [stats, setStats] = useState<HistoryStats | null>(null);
+  const [stats, setStats] = useState<HistoryStats>({ totalOrders: 0, completedOrders: 0 });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);

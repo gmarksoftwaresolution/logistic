@@ -69,57 +69,57 @@ export const OrderHistoryScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       <HistoryHeader />
-      {loading && !refreshing && (!groupedOrders || groupedOrders.length === 0) ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#073318" />
-        </View>
-      ) : (
-        <SectionList
-          sections={groupedOrders || []}
-          keyExtractor={(item, index) => `${item?.id || index}-${index}`}
-          renderItem={({ item }) => (
-            <HistoryCard 
-              order={item} 
-              onPress={(order) => {
-                navigation.navigate('OrderHistoryDetails', { order });
-              }}
-              onViewAddress={setSelectedAddressOrder}
-              onTrackOrder={setSelectedTrackingOrder}
-            />
-          )}
-          renderSectionHeader={({ section: { title, data } }) => (
-            <View className="flex-row justify-between items-center px-5 py-3 bg-[#F8FAFC]">
-              <Text className="text-[14px] font-bold text-slate-800">{title}</Text>
-              <View className="bg-slate-200 px-2 py-0.5 rounded-md">
-                <Text className="text-[11px] font-bold text-slate-600">
-                  {data.length} {t('orders') || 'Orders'}
-                </Text>
-              </View>
+      <SectionList
+        sections={groupedOrders || []}
+        keyExtractor={(item, index) => `${item?.id || index}-${index}`}
+        renderItem={({ item }) => (
+          <HistoryCard 
+            order={item} 
+            onPress={(order) => {
+              navigation.navigate('OrderHistoryDetails', { order });
+            }}
+            onViewAddress={setSelectedAddressOrder}
+            onTrackOrder={setSelectedTrackingOrder}
+          />
+        )}
+        renderSectionHeader={({ section: { title, data } }) => (
+          <View className="flex-row justify-between items-center px-5 py-3 bg-[#F8FAFC]">
+            <Text className="text-[14px] font-bold text-slate-800">{title}</Text>
+            <View className="bg-slate-200 px-2 py-0.5 rounded-md">
+              <Text className="text-[11px] font-bold text-slate-600">
+                {data.length} {t('orders') || 'Orders'}
+              </Text>
             </View>
-          )}
-          ListHeaderComponent={renderHeader}
-          ListEmptyComponent={
+          </View>
+        )}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={
+          loading && !refreshing ? (
+            <View className="py-12 items-center justify-center">
+              <ActivityIndicator size="large" color="#073318" />
+            </View>
+          ) : (
             <View className="px-5 mt-10">
               <EmptyHistory />
             </View>
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={true}
-          refreshControl={
-            <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            loadingMore ? (
-              <View className="py-4 items-center">
-                <ActivityIndicator size="small" color="#073318" />
-              </View>
-            ) : null
-          }
-        />
-      )}
+          )
+        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={true}
+        refreshControl={
+          <SharedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <View className="py-4 items-center">
+              <ActivityIndicator size="small" color="#073318" />
+            </View>
+          ) : null
+        }
+      />
 
       <HistoryFilterModal 
         visible={filterVisible}

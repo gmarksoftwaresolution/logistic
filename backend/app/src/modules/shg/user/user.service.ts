@@ -28,17 +28,36 @@ export class UserService {
 
     if (!user) throw new NotFoundException('User not found');
 
+    let aadhaarNum = user.documents && user.documents.length > 0 ? user.documents[0].aadhaarNumber : null;
+    let panNum = user.documents && user.documents.length > 0 ? user.documents[0].panNumber : null;
+
+    if (!aadhaarNum || !panNum) {
+      const step5 = await this.prisma.stepTracking.findFirst({
+        where: { userId: userId, step: 5 },
+      });
+      if (step5 && step5.data) {
+        const d = step5.data as any;
+        if (!aadhaarNum) aadhaarNum = d.aadhaarNumber || null;
+        if (!panNum) panNum = d.panNumber || null;
+      }
+    }
+
     // Mask sensitive data
     const maskedUser = {
       ...user,
+      aadhaarNumber: aadhaarNum || '',
+      panNumber: panNum || '',
       mobileNumber: this.maskMobile(user.phoneNumber),
       document: user.documents && user.documents.length > 0
         ? {
           ...user.documents[0],
-          aadhaarNumber: this.maskAadhaar(user.documents[0].aadhaarNumber || ''),
-          panNumber: this.maskPan(user.documents[0].panNumber || ''),
+          aadhaarNumber: this.maskAadhaar(aadhaarNum || ''),
+          panNumber: this.maskPan(panNum || ''),
         }
-        : null,
+        : {
+          aadhaarNumber: this.maskAadhaar(aadhaarNum || ''),
+          panNumber: this.maskPan(panNum || ''),
+        },
       bankDetails: user.bankDetails.map((bd: any) => ({
         ...bd,
         accountNumber: this.maskAccount(bd.accountNumber),
@@ -55,6 +74,29 @@ export class UserService {
     }
     if (updateData.profileImage !== undefined) {
       dataToUpdate.profilePhoto = updateData.profileImage;
+    }
+
+    const aadhaarVal = updateData.aadhaarNumber !== undefined ? updateData.aadhaarNumber : updateData.aadhaar;
+    const panVal = updateData.panNumber !== undefined ? updateData.panNumber : updateData.pan;
+    if (aadhaarVal !== undefined || panVal !== undefined) {
+      const doc = await this.prisma.document.findFirst({ where: { userId } });
+      const docData: any = {};
+      if (aadhaarVal !== undefined) docData.aadhaarNumber = aadhaarVal;
+      if (panVal !== undefined) docData.panNumber = panVal;
+
+      if (doc) {
+        await this.prisma.document.update({
+          where: { id: doc.id },
+          data: docData,
+        });
+      } else {
+        await this.prisma.document.create({
+          data: {
+            userId,
+            ...docData,
+          },
+        });
+      }
     }
 
     const addressData: any = {};
