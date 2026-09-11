@@ -9,6 +9,7 @@ import {
   Package,
   Users,
   Truck,
+  Printer,
   Settings,
   LogOut,
   Menu,
@@ -153,6 +154,7 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
     { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },
+    { id: 'label-search-reprint', label: 'Label Search & Reprint', icon: Printer },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 

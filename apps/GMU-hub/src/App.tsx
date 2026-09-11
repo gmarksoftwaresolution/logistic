@@ -10,6 +10,7 @@ const pageLoaders = {
   'inventory-management': () => import('./pages/InventoryManagementPage').then(m => ({ default: m.InventoryManagementPage })),
   'shg-management': () => import('./pages/CommunityManagementPage').then(m => ({ default: m.CommunityManagementPage })),
   'transporter-management': () => import('./pages/TransporterManagementPage').then(m => ({ default: m.TransporterManagementPage })),
+  'label-search-reprint': () => import('./pages/LabelSearchReprintPage').then(m => ({ default: m.LabelSearchReprintPage })),
   settings: () => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
   profile: () => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })),
 };
@@ -22,6 +23,7 @@ const OrderHistoryPage = lazy(pageLoaders['order-history']);
 const InventoryManagementPage = lazy(pageLoaders['inventory-management']);
 const CommunityManagementPage = lazy(pageLoaders['shg-management']);
 const TransporterManagementPage = lazy(pageLoaders['transporter-management']);
+const LabelSearchReprintPage = lazy(pageLoaders['label-search-reprint']);
 const SettingsPage = lazy(pageLoaders['settings']);
 const ProfilePage = lazy(pageLoaders['profile']);
 
@@ -85,6 +87,9 @@ function App() {
         )}
         {currentPage === 'transporter-management' && (
           <TransporterManagementPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'label-search-reprint' && (
+          <LabelSearchReprintPage onNavigate={handleNavigate} />
         )}
         {currentPage === 'settings' && (
           <SettingsPage onNavigate={handleNavigate} />
