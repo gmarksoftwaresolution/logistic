@@ -210,8 +210,14 @@ export const OrderHistoryPage = ({ onNavigate }: { onNavigate: (page: string) =>
       setLoading(true);
       const res = await api.get('/orders/history');
       if (res) {
-        const completed = res.completedOrders || [];
+        const rawCompleted = res.completedOrders || [];
         const returns = res.returnOrders || [];
+        const completed = rawCompleted.filter((o: any) => {
+          const ms = (o.mainStatus || o.status || '').toUpperCase();
+          const ds = (o.dropShgStatus || '').toUpperCase();
+          return ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'PARCEL_AT_DROP_SHG', 'BUYER_DELIVERED', 'RETURN_COMPLETED'].includes(ms) ||
+                 ds === 'COMPLETED' || ds === 'DROPPED';
+        });
         setData({
           metrics: {
             totalOrders: completed.length + returns.length,
@@ -400,21 +406,23 @@ export const OrderHistoryPage = ({ onNavigate }: { onNavigate: (page: string) =>
         {/* Header Section */}
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight flex items-center gap-2.5">
-                <Clock className="w-7 h-7 text-[#073318]" />
-                Order History
-              </h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1">
-                Complete historical record of all completed orders and returns fetched directly from live database.
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-[#073318]/80 to-[#073318] p-3.5 rounded-2xl border border-[#073318]/40 shadow-sm">
+                <Clock className="h-7 w-7 text-[#B2D534]" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order History</h2>
+                <p className="text-sm font-medium text-slate-500 mt-1">
+                  Complete historical record of all completed orders and returns fetched directly from live database.
+                </p>
+              </div>
             </div>
             <button
               onClick={fetchHistory}
-              className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs border border-slate-200 shadow-xs flex items-center gap-1.5 transition-all cursor-pointer self-start lg:self-auto"
+              className="px-4 py-2 bg-[#073318] text-white text-xs font-bold rounded-xl flex items-center gap-2 hover:bg-[#052812] transition-colors shadow-sm cursor-pointer self-start lg:self-auto"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#073318] ${loading ? 'animate-spin' : ''}`} />
-              <span>Refresh Data</span>
+              <RefreshCw className={`w-3.5 h-3.5 text-white ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -500,26 +508,16 @@ export const OrderHistoryPage = ({ onNavigate }: { onNavigate: (page: string) =>
                 </span>
               </button>
             </div>
-
-            <div className="relative w-full lg:w-80">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-              <input
-                type="text"
-                placeholder="Search ID, Barcode, Seller, Buyer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#073318]/50"
-              />
-            </div>
           </div>
 
           {/* Data Table */}
           <DataTable
             columns={columns}
-            data={filteredOrders}
+            data={currentList}
             isRefreshing={loading}
             onRefresh={fetchHistory}
             hideDateAndRefresh={true}
+            searchPlaceholder="Search ID, Barcode, Seller, Buyer, Village..."
           />
         </div>
       </div>

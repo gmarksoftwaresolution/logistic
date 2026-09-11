@@ -1088,6 +1088,7 @@ export class OrderManagementService implements OnModuleInit {
 
       // Build unified Tracking Audit History from Phase 1 to Phase 2
       const auditTimeline: any[] = [];
+      const isDirectFlow = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
 
       // 1. Order Placed
       if (o.createdAt) {
@@ -1104,9 +1105,9 @@ export class OrderManagementService implements OnModuleInit {
       }
 
       // 2. Pickup SHG Assigned & Accepted
-      if (pickupShgAcceptedAt) {
+      if (pickupShgAcceptedAt || isDirectFlow) {
         auditTimeline.push({
-          timestamp: pickupShgAcceptedAt,
+          timestamp: pickupShgAcceptedAt || o.createdAt,
           stage: 'PHASE 1: PICKUP',
           status: 'Pickup SHG Assigned & Accepted',
           statusType: 'COMPLETED',
@@ -1135,7 +1136,7 @@ export class OrderManagementService implements OnModuleInit {
       if (pickupTransporterAcceptedAt) {
         auditTimeline.push({
           timestamp: pickupTransporterAcceptedAt,
-          stage: 'PHASE 1: PICKUP',
+          stage: isDirectFlow ? 'DIRECT TRANSIT' : 'PHASE 1: PICKUP',
           status: 'Transporter Route Assigned & Accepted',
           statusType: 'COMPLETED',
           actorName: pickupTransporterDetails?.name || 'Transporter',
@@ -1145,60 +1146,60 @@ export class OrderManagementService implements OnModuleInit {
         });
       }
 
-      // 5. Transporter Pickup / In Transit to GMU Hub
+      // 5. Transporter Pickup / In Transit
       if (pickupTransporterPickedAt) {
         auditTimeline.push({
           timestamp: pickupTransporterPickedAt,
-          stage: 'PHASE 1: PICKUP',
-          status: 'Picked up by Transporter (In Transit to Hub)',
+          stage: isDirectFlow ? 'DIRECT TRANSIT' : 'PHASE 1: PICKUP',
+          status: isDirectFlow ? 'Picked up by Transporter (In Direct Transit to Drop SHG)' : 'Picked up by Transporter (In Transit to Hub)',
           statusType: 'COMPLETED',
           actorName: pickupTransporterDetails?.name || 'Transporter',
           actorRole: 'TRANSPORTER',
           location: o.seller?.village || 'Collection Point',
-          remarks: 'Parcels in transit to GMU Central Hub',
+          remarks: isDirectFlow ? 'Parcels in direct transit to Destination SHG Center' : 'Parcels in transit to GMU Central Hub',
         });
       }
 
-      // 6. GMU Hub Intake Received
-      if (gmuHubIntakeAt) {
-        auditTimeline.push({
-          timestamp: gmuHubIntakeAt,
-          stage: 'GMU HUB WAREHOUSE',
-          status: 'Received & Quality Checked at GMU Hub',
-          statusType: 'COMPLETED',
-          actorName: 'GMU Hub Intake Dock',
-          actorRole: 'HUB_COORDINATOR',
-          location: 'GMU Central Hub',
-          remarks: 'Intake verification completed & barcode validated',
-        });
-      }
+      // 6. GMU Hub Stages (Exclusion for Direct Flow)
+      if (!isDirectFlow) {
+        if (gmuHubIntakeAt) {
+          auditTimeline.push({
+            timestamp: gmuHubIntakeAt,
+            stage: 'GMU HUB WAREHOUSE',
+            status: 'Received & Quality Checked at GMU Hub',
+            statusType: 'COMPLETED',
+            actorName: 'GMU Hub Intake Dock',
+            actorRole: 'HUB_COORDINATOR',
+            location: 'GMU Central Hub',
+            remarks: 'Intake verification completed & barcode validated',
+          });
+        }
 
-      // 7. GMU Hub Stored in Inventory
-      if (gmuHubStoredAt) {
-        auditTimeline.push({
-          timestamp: gmuHubStoredAt,
-          stage: 'GMU HUB WAREHOUSE',
-          status: 'Stored in Hub Inventory',
-          statusType: 'COMPLETED',
-          actorName: 'GMU Hub Inventory',
-          actorRole: 'HUB_COORDINATOR',
-          location: 'GMU Central Warehouse',
-          remarks: 'Ready for outbound route dispatch',
-        });
-      }
+        if (gmuHubStoredAt) {
+          auditTimeline.push({
+            timestamp: gmuHubStoredAt,
+            stage: 'GMU HUB WAREHOUSE',
+            status: 'Stored in Hub Inventory',
+            statusType: 'COMPLETED',
+            actorName: 'GMU Hub Inventory',
+            actorRole: 'HUB_COORDINATOR',
+            location: 'GMU Central Warehouse',
+            remarks: 'Ready for outbound route dispatch',
+          });
+        }
 
-      // 8. Dispatched & Handed to Drop Transporter
-      if (dropTransporterPickedAt || o.dispatchedAt) {
-        auditTimeline.push({
-          timestamp: dropTransporterPickedAt || o.dispatchedAt,
-          stage: 'PHASE 2: DROP',
-          status: 'Dispatched from Hub (In Transit to Drop Center)',
-          statusType: 'COMPLETED',
-          actorName: dropTransporterDetails?.name || 'Drop Transporter',
-          actorRole: 'TRANSPORTER',
-          location: 'GMU Central Hub Outbound',
-          remarks: dropTransporterDetails?.vehicle ? `Vehicle: ${dropTransporterDetails.vehicle}` : 'Outbound transport started',
-        });
+        if (dropTransporterPickedAt || o.dispatchedAt) {
+          auditTimeline.push({
+            timestamp: dropTransporterPickedAt || o.dispatchedAt,
+            stage: 'PHASE 2: DROP',
+            status: 'Dispatched from Hub (In Transit to Drop Center)',
+            statusType: 'COMPLETED',
+            actorName: dropTransporterDetails?.name || 'Drop Transporter',
+            actorRole: 'TRANSPORTER',
+            location: 'GMU Central Hub Outbound',
+            remarks: dropTransporterDetails?.vehicle ? `Vehicle: ${dropTransporterDetails.vehicle}` : 'Outbound transport started',
+          });
+        }
       }
 
       // 9. Drop SHG Accepted / Received
@@ -1241,6 +1242,7 @@ export class OrderManagementService implements OnModuleInit {
         'transporter route assigned & accepted': 'Transporter Route Assigned & Accepted',
         'transporter accepted': 'Transporter Route Assigned & Accepted',
         'picked up by transporter (in transit to hub)': 'Picked up by Transporter (In Transit to Hub)',
+        'picked up by transporter (in direct transit to drop shg)': 'Picked up by Transporter (In Direct Transit to Drop SHG)',
         'transporter pickup': 'Picked up by Transporter (In Transit to Hub)',
         'transporter_pickup': 'Picked up by Transporter (In Transit to Hub)',
         'received & quality checked at gmu hub': 'Received & Quality Checked at GMU Hub',
@@ -1270,6 +1272,7 @@ export class OrderManagementService implements OnModuleInit {
         'Collected & Scanned by SHG': 3,
         'Transporter Route Assigned & Accepted': 4,
         'Picked up by Transporter (In Transit to Hub)': 5,
+        'Picked up by Transporter (In Direct Transit to Drop SHG)': 5,
         'Received & Quality Checked at GMU Hub': 6,
         'Stored in Hub Inventory': 7,
         'Drop SHG Assigned & Accepted': 8,
@@ -1292,10 +1295,12 @@ export class OrderManagementService implements OnModuleInit {
       });
 
       const cleanAuditTimeline = Array.from(uniqueAuditMap.values()).sort((a: any, b: any) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
         const rankA = STAGE_ORDER[a.status] || 99;
         const rankB = STAGE_ORDER[b.status] || 99;
-        if (rankA !== rankB) return rankA - rankB;
-        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        return rankA - rankB;
       });
 
       const rejectScan = allScans.find((s: any) => s.action === 'REJECT_DROP' || s.action === 'REJECT_PICKUP' || s.action === 'DECLINE_PRE_PICKUP' || s.scanResult === 'REJECTED' || s.scanResult === 'DECLINED');
@@ -1416,9 +1421,8 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       {
         OR: [
-          { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { dropTransporterStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER'] } },
-          { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER'] } }
+          { mainStatus: { in: ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'BUYER_DELIVERED', 'HANDED_OVER', 'PARCEL_HANDED_OVER', 'PARCEL_AT_DROP_SHG'] } },
+          { dropShgStatus: { in: ['DELIVERED', 'COMPLETED', 'HANDED_OVER', 'DROPPED'] } }
         ]
       },
       filter
@@ -1564,7 +1568,26 @@ export class OrderManagementService implements OnModuleInit {
     const where = this.applyFilters(
       { returnType: null },
       filter,
-      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_HUB', 'DELIVERED', 'COMPLETED']
+      ['STORED', 'HUB_RECEIVED', 'AT_HUB', 'PARCEL_AT_HUB', 'PARCEL_AT_GMU', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED']
+    );
+    const orders = await this.prisma.order.findMany({
+      where,
+      include: {
+        assignments: true,
+        seller: true,
+        buyer: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const filtered = orders.filter(o => o.dropTransporterStatus !== 'PICKED' && o.mainStatus !== 'DISPATCHED' && o.mainStatus !== 'IN_TRANSIT_TO_DROP_SHG' && o.mainStatus !== 'PARCEL_AT_DROP_SHG' && o.mainStatus !== 'DELIVERED' && o.mainStatus !== 'COMPLETED');
+    return this.enrichOrdersWithPickupAssignments(filtered);
+  }
+
+  async getInventoryDispatchedOrders(filter?: OrderFilterDto) {
+    const where = this.applyFilters(
+      { returnType: null },
+      filter,
+      ['DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'OUT_FOR_DELIVERY', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED']
     );
     const orders = await this.prisma.order.findMany({
       where,
@@ -1819,7 +1842,12 @@ export class OrderManagementService implements OnModuleInit {
       try {
         const sellerAddr = `${seller.village}, ${seller.taluka || 'Gadhinglaj'}, ${seller.district || 'Kolhapur'}, ${seller.state || 'Maharashtra'} ${seller.pincode || ''}, India`;
         const buyerAddr = `${dto.buyerVillage || buyer.village}, ${dto.buyerTaluka || buyer.taluka || 'Gadhinglaj'}, ${dto.buyerDistrict || buyer.district || 'Kolhapur'}, ${dto.buyerState || buyer.state || 'Maharashtra'} ${dto.buyerPincode || buyer.pincode || ''}, India`;
-        const evalRes = await this.locationService.evaluateDirectFlow(sellerAddr, buyerAddr);
+        const evalRes = await this.locationService.evaluateDirectFlow(
+          sellerAddr,
+          buyerAddr,
+          seller.village,
+          dto.buyerVillage || buyer.village
+        );
         if (evalRes?.isDirect) {
           evaluatedFlowType = 'DIRECT_SHG_TO_SHG';
         }
@@ -2100,8 +2128,6 @@ export class OrderManagementService implements OnModuleInit {
     const assignedShg = matchingShgs[0];
     const shgNumericId = parseInt(assignedShg.id, 10);
 
-
-
     await this.prisma.orderAssignment.deleteMany({
       where: {
         orderId: order.id,
@@ -2124,7 +2150,7 @@ export class OrderManagementService implements OnModuleInit {
       Order ID: ${order.orderId} (${order.id})
       Seller Village: ${order.sellerVillage}
       Seller Pincode: ${order.sellerPincode}
-      Auto-Assigned & Accepted SHG ID: ${assignedShg.id}
+      Auto-Assigned & Accepted Pickup SHG ID: ${assignedShg.id}
     `);
 
     return this.prisma.order.update({
@@ -3515,10 +3541,14 @@ export class OrderManagementService implements OnModuleInit {
       ))
     );
 
-    // 2. Fallback: Match on Pincode if no village match found
-    if (matchingShgs.length === 0 && op) {
+    // 2. Fallback: Match on Village if village matches but pincode differs slightly
+    if (matchingShgs.length === 0 && ov) {
       matchingShgs = approvedShgs.filter(shg =>
-        shg.pincode && shg.pincode.trim().toLowerCase() === op.trim().toLowerCase()
+        shg.village && (
+          normalizeStr(shg.village) === ov ||
+          normalizeStr(shg.village).includes(ov.substring(0, 5)) ||
+          ov.includes(normalizeStr(shg.village).substring(0, 5))
+        )
       );
     }
 

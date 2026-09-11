@@ -226,6 +226,7 @@ export interface AppContextType {
   returnDropCompletedOrders: ReturnOrder[];
 
   incomingInventory: InventoryItem[];
+  dispatchedInventory: InventoryItem[];
   returnPickupInventory: InventoryItem[];
   dropInventory: InventoryItem[];
   returnDropInventory: InventoryItem[];
@@ -252,6 +253,7 @@ export interface AppContextType {
   loadReturnsTransporter: (status?: string, date?: string) => Promise<void>;
   loadReturnsBuyer: (status?: string, date?: string) => Promise<void>;
   loadInventoryStored: (status?: string, date?: string) => Promise<void>;
+  loadInventoryDispatched: (status?: string, date?: string) => Promise<void>;
   loadInventoryTransporterReturn: (status?: string, date?: string) => Promise<void>;
   loadInventoryBuyerReturn: (status?: string, date?: string) => Promise<void>;
 
@@ -325,6 +327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [returnAssignedOrders] = useState<ReturnOrder[]>([]);
 
   const [incomingInventory, setIncomingInventory] = useState<InventoryItem[]>([]);
+  const [dispatchedInventory, setDispatchedInventory] = useState<InventoryItem[]>([]);
   const [returnPickupInventory, setReturnPickupInventory] = useState<InventoryItem[]>([]);
   const [returnDropInventory, setReturnDropInventory] = useState<InventoryItem[]>([]);
   const [dropInventory] = useState<InventoryItem[]>([]);
@@ -826,6 +829,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIncomingInventory(sortNewestFirst(data.map(mapInventory)));
   };
 
+  const loadInventoryDispatched = async (status?: string, date?: string) => {
+    const data = await api.orders.getInventoryDispatched(status, date);
+    setDispatchedInventory(sortNewestFirst(data.map(mapInventory)));
+  };
+
   const loadInventoryTransporterReturn = async (status?: string, date?: string) => {
     const data = await api.orders.getInventoryTransporterReturn(status, date);
     setReturnDropInventory(sortNewestFirst(data.map(mapInventory)));
@@ -1161,6 +1169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         returnDropNewOrders,
         returnDropCompletedOrders,
         incomingInventory,
+        dispatchedInventory,
         returnPickupInventory,
         dropInventory,
         returnDropInventory,
@@ -1185,6 +1194,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadReturnsTransporter,
         loadReturnsBuyer,
         loadInventoryStored,
+        loadInventoryDispatched,
         loadInventoryTransporterReturn,
         loadInventoryBuyerReturn,
 

@@ -172,6 +172,55 @@ export class LocationService {
     }
   }
 
+  public isRealVillageName(name: string, types?: string[]): boolean {
+    if (!name || name.trim().length < 2) return false;
+    const n = name.toLowerCase().trim();
+
+    // Reject non-English / non-ASCII commercial strings
+    if (/[^\x00-\x7F]/.test(name)) return false;
+
+    // Address prefixes / building / plot / region suffix patterns
+    if (/^(near|opp|opposite|behind|next to|front of|infront|beside|by|at|post|po|bo|so|via)\s+/i.test(n)) return false;
+    if (/\b(shop|plot|flat|house|door|survey|gat|hissa|room|office|sec|sector|phase|block|ward|lane)\s*(no|num|number)?\s*[\d\-]/i.test(n)) return false;
+    if (/\b(ta|tal|taluka|dist|district|post)\s*[\.:\s]/i.test(n)) return false;
+
+    // Google Place types check if types array provided
+    if (types && Array.isArray(types) && types.length > 0) {
+      const isLocalityType = types.some(t => ['locality', 'sublocality', 'sublocality_level_1', 'sublocality_level_2', 'neighborhood', 'administrative_area_level_3', 'political', 'village', 'postal_town'].includes(t));
+      const isEstablishmentType = types.some(t => ['establishment', 'point_of_interest', 'store', 'food', 'health', 'place_of_worship', 'lodging', 'gas_station', 'school', 'finance', 'car_repair', 'restaurant', 'bar', 'shopping_mall', 'bakery'].includes(t));
+      if (isEstablishmentType && !isLocalityType) return false;
+    }
+
+    const landmarkKeywords = [
+      'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
+      'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
+      'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
+      'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
+      'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
+      'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
+      'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
+      'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
+      'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
+      'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar',
+      'petrol', 'pump', 'fuel', 'hpcl', 'bpcl', 'iocl', 'garage', 'mechanic', 'workshop',
+      'enterprise', 'traders', 'agency', 'agencies', 'industries', 'industry', 'distributor', 'supplier', 'company', 'pvt', 'ltd', 'corp', 'corporation',
+      'building', 'tower', 'towers', 'enclave', 'residency', 'apartment', 'apartments', 'floors', 'heights', 'palace', 'chambers',
+      'hall', 'auditorium', 'stadium', 'grounds', 'ground', 'playground',
+      'police', 'chowki', 'post office', 'tehsil', 'panchayat', 'grampanchayat', 'talathi',
+      'nursery', 'dairy', 'bakery', 'sweets', 'sweet', 'saloon', 'parlour', 'parlor', 'spa', 'gym', 'fitness',
+      'haat', 'mandi', 'yard', 'godown', 'warehouse',
+      'crematorium', 'smashan', 'cemetery', 'kabristan',
+      'naka', 'bypass', 'highway', 'expressway', 'flyover', 'circle', 'ring road',
+      'sangh', 'vikri', 'kharedi', 'sahakari', 'coop', 'co-op', 'federation', 'association', 'private', 'limited'
+    ];
+
+    for (const kw of landmarkKeywords) {
+      if (n.includes(kw)) return false;
+    }
+
+    return true;
+  }
+
   async getAddressFromPincode(pincode: string) {
     if (!pincode || pincode.trim().length !== 6) {
       throw new HttpException('Invalid pincode length', HttpStatus.BAD_REQUEST);
@@ -185,33 +234,6 @@ export class LocationService {
         .replace(/\s*\(.*?\)/g, '')
         .replace(/\s*(B\.?O\.?|S\.?O\.?|H\.?O\.?|Branch Office|Sub Office|Head Office)\b/gi, '')
         .trim();
-    };
-
-    const isRealVillageName = (name: string): boolean => {
-      if (!name || name.trim().length < 2) return false;
-      const n = name.toLowerCase().trim();
-
-      // Reject non-English / non-ASCII commercial strings
-      if (/[^\x00-\x7F]/.test(name)) return false;
-
-      const landmarkKeywords = [
-        'mandir', 'temple', 'masjid', 'church', 'gurudwara', 'dargah', 'math', 'karyalay', 'karyalaya', 'bhavan', 'bhavana',
-        'bus stand', 'bus stop', 'depot', 'railway', 'station', 'junction', 'terminal',
-        'school', 'college', 'high school', 'vidyalaya', 'shikshan', 'institute', 'academy', 'university',
-        'hospital', 'clinic', 'medical', 'pharmacy', 'dispensary', 'nursing', 'care',
-        'hotel', 'restaurant', 'diner', 'dhabha', 'dayning', 'dining', 'cafe', 'lodge', 'khonaval', 'khanaval', 'khaniwal',
-        'fort', 'monument', 'park', 'garden', 'chowk', 'corner', 'cinema', 'talkies', 'theater', 'theatre',
-        'shop', 'store', 'mart', 'mall', 'bazaar', 'bazar', 'market', 'office', 'bank', 'atm', 'board', 'trust', 'samiti', 'kendra',
-        'i love', 'city', 'centre', 'center', 'path', 'marg', 'road', 'street', 'avenue', 'cake', 'mandekar', 'maruti', 'glory', 'gadvi',
-        'farmhouse', 'farm house', 'farm', 'home', 'wada', 'vada', 'villa', 'resort', 'cottage', 'colony', 'layout', 'society', 'complex',
-        'hill top', 'view point', 'waterfall', 'dam', 'lake', 'river', 'bridge', 'nagar'
-      ];
-
-      for (const kw of landmarkKeywords) {
-        if (n.includes(kw)) return false;
-      }
-
-      return true;
     };
 
     let state = '';
@@ -246,7 +268,7 @@ export class LocationService {
             const poName = r.postOffice || r.post_office;
             if (vName) {
               const cleaned = cleanVillageName(vName);
-              if (cleaned && isRealVillageName(cleaned)) {
+              if (cleaned && this.isRealVillageName(cleaned)) {
                 villageSet.add(cleaned);
                 if (cleaned.toLowerCase().includes('vaghrali') || cleaned.toLowerCase().includes('vagharali') || cleaned.toLowerCase().includes('waghrali')) {
                   villageSet.add('Vagharali');
@@ -259,7 +281,7 @@ export class LocationService {
               if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
               if (vName) {
                 const cleaned = cleanVillageName(vName);
-                if (cleaned && isRealVillageName(cleaned) && !postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
+                if (cleaned && this.isRealVillageName(cleaned) && !postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
               }
             }
           });
@@ -293,7 +315,7 @@ export class LocationService {
           if (poName) {
             postOfficesSet.add(poName);
             if (!postOfficeMap[poName]) postOfficeMap[poName] = [];
-            if (cleaned && isRealVillageName(cleaned)) {
+            if (cleaned && this.isRealVillageName(cleaned)) {
               if (!postOfficeMap[poName].includes(cleaned)) postOfficeMap[poName].push(cleaned);
               villageSet.add(cleaned);
             }
@@ -325,7 +347,7 @@ export class LocationService {
             }
             if (types.includes('locality') || types.includes('sublocality') || types.includes('sublocality_level_1') || types.includes('sublocality_level_2') || types.includes('neighborhood') || types.includes('village')) {
               const cleaned = cleanVillageName(name);
-              if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+              if (cleaned && this.isRealVillageName(cleaned, types)) villageSet.add(cleaned);
             }
           });
         });
@@ -343,7 +365,7 @@ export class LocationService {
         googlePlacesRes.data.results.forEach((place: any) => {
           if (place.name) {
             const cleaned = cleanVillageName(place.name);
-            if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+            if (cleaned && this.isRealVillageName(cleaned, place.types)) villageSet.add(cleaned);
           }
         });
       }
@@ -357,7 +379,7 @@ export class LocationService {
             nearbyRes.data.results.forEach((place: any) => {
               if (place.name) {
                 const cleaned = cleanVillageName(place.name);
-                if (cleaned && isRealVillageName(cleaned)) villageSet.add(cleaned);
+                if (cleaned && this.isRealVillageName(cleaned, place.types)) villageSet.add(cleaned);
               }
             });
           }
@@ -558,7 +580,7 @@ export class LocationService {
     return null;
   }
 
-  async evaluateDirectFlow(sellerAddr: string, buyerAddr: string) {
+  async evaluateDirectFlow(sellerAddr: string, buyerAddr: string, sellerVillage?: string, buyerVillage?: string) {
     const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDNMv_sau3_koFOtAvkLkwsZgn_Y8iydy0';
     const NESARI_HUB_ADDR = 'Nesari, Gadhinglaj, Kolhapur, Maharashtra 416504, India';
 
@@ -599,14 +621,87 @@ export class LocationService {
         if (o === 1 && d === 1) hubToBuyerMeters = dist;
       });
 
-      if (sellerToHubMeters !== null && sellerToBuyerMeters !== null && hubToBuyerMeters !== null) {
-        const isDirect = sellerToBuyerMeters <= (sellerToHubMeters + hubToBuyerMeters) * 0.70;
-        return { isDirect };
+      // Rule 2 Check: Distance must be <= 10 km (10,000 meters) or <= 70% threshold
+      let isDistanceOk = false;
+      if (sellerToBuyerMeters !== null) {
+        if (sellerToBuyerMeters <= 10000) {
+          isDistanceOk = true;
+        } else if (sellerToHubMeters !== null && hubToBuyerMeters !== null) {
+          isDistanceOk = sellerToBuyerMeters <= (sellerToHubMeters + hubToBuyerMeters) * 0.70;
+        }
       }
+
+      // If distance condition fails (> 10 km and fails 70% ratio), return isDirect: false (VIA_HUB)
+      if (!isDistanceOk) {
+        return { isDirect: false, reason: 'Distance > 10km' };
+      }
+
+      // Rule 1 & Rule 3 Check: Transporter Route Coverage
+      if (sellerVillage && buyerVillage) {
+        const hasCommonTransporter = await this.checkTransporterRouteCoverage(sellerVillage, buyerVillage);
+        if (!hasCommonTransporter) {
+          console.log(`[evaluateDirectFlow] Distance is <= 10km but no single transporter covers both '${sellerVillage}' and '${buyerVillage}'. Fallback to VIA_HUB.`);
+          return { isDirect: false, reason: 'No single transporter route covers both villages' };
+        }
+      }
+
+      return { isDirect: true };
     } catch (err: any) {
       console.warn('[evaluateDirectFlow Notice] Google API calculation fallback:', err.message);
     }
 
     return { isDirect: false };
+  }
+
+  private async checkTransporterRouteCoverage(sellerVillage: string, buyerVillage: string): Promise<boolean> {
+    const sVill = sellerVillage.trim().toLowerCase();
+    const bVill = buyerVillage.trim().toLowerCase();
+
+    // If seller and buyer are in the exact same village, auto-covered
+    if (sVill === bVill) return true;
+
+    try {
+      const transporters = await this.prisma.user.findMany({
+        where: {
+          role: 'TRANSPORTER',
+          applicationStatus: 'APPROVED',
+          deletedAt: null,
+        },
+        include: {
+          routeDetail: true,
+          milkVanDetail: true,
+        }
+      });
+
+      const normalize = (val: any): string => {
+        if (typeof val === 'string') return val.toLowerCase();
+        if (Array.isArray(val)) return val.map(v => String(v).toLowerCase()).join(' ');
+        if (typeof val === 'object' && val !== null) return JSON.stringify(val).toLowerCase();
+        return '';
+      };
+
+      for (const t of transporters) {
+        const routeText = [
+          t.routeDetail?.operatingArea,
+          normalize(t.routeDetail?.pickupLocations),
+          normalize(t.routeDetail?.dropLocations),
+          t.milkVanDetail?.sangathanName,
+          t.milkVanDetail?.centerName,
+          normalize(t.milkVanDetail?.assignedVillages),
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const coversSeller = routeText.includes(sVill);
+        const coversBuyer = routeText.includes(bVill);
+
+        if (coversSeller && coversBuyer) {
+          return true;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[checkTransporterRouteCoverage Error]:', err.message);
+    }
+
+    // Default to true if no transporter route data is found yet to avoid blocking short distance orders
+    return true;
   }
 }

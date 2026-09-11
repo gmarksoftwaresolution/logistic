@@ -285,23 +285,41 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
     if (isDirectFlow) {
       let targetDropShgId = order.dropShgId;
       if (!targetDropShgId && order.buyer) {
-        const bVillage = (order.buyer.village || '').trim().toLowerCase();
+        const normalizeStr = (s?: string | null) => (s ? s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase() : '');
+        const bVillageNorm = normalizeStr(order.buyer.village);
         const bPincode = (order.buyer.pincode || '').trim().toLowerCase();
+
         const shgUsers = await tx.user.findMany({
           where: { role: 'SHG', applicationStatus: 'APPROVED', deletedAt: null },
           include: { address: true }
         });
-        const matchedDropShg = shgUsers.find((u: any) => {
-          const v = (u.address?.village || '').trim().toLowerCase();
+
+        // 1. Priority 1: Match BOTH Village AND Pincode
+        let matchedDropShg = shgUsers.find((u: any) => {
+          const vNorm = normalizeStr(u.address?.village);
           const p = (u.address?.pincode || '').trim().toLowerCase();
-          return (bVillage && v && (v === bVillage || v.includes(bVillage) || bVillage.includes(v))) || (bPincode && p && p === bPincode);
-        }) || shgUsers[0];
+          return bVillageNorm && vNorm && (vNorm === bVillageNorm || vNorm.includes(bVillageNorm) || bVillageNorm.includes(vNorm)) && (!bPincode || !p || p === bPincode);
+        });
+
+        // 2. Priority 2: Match Village exact/substring
+        if (!matchedDropShg && bVillageNorm) {
+          matchedDropShg = shgUsers.find((u: any) => {
+            const vNorm = normalizeStr(u.address?.village);
+            return vNorm && (vNorm === bVillageNorm || vNorm.includes(bVillageNorm) || bVillageNorm.includes(vNorm));
+          });
+        }
 
         if (matchedDropShg) {
           targetDropShgId = String(matchedDropShg.id);
-          await tx.order.update({
-            where: { id: order.id },
-            data: { dropShgId: targetDropShgId }
+          await tx.order.updateMany({
+            where: {
+              OR: [
+                { id: order.id },
+                { orderId: order.id },
+                ...(order.orderId ? [{ id: order.orderId }, { orderId: order.orderId }] : [])
+              ]
+            },
+            data: { dropShgId: targetDropShgId, dropShgStatus: 'PENDING' }
           }).catch(() => {});
         }
       }
@@ -311,7 +329,6 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
         await tx.orderAssignment.deleteMany({
           where: {
             orderId: order.id,
-            assigneeId: dropShgIdStr,
             role: 'DROP',
             assigneeType: 'SHG'
           }
@@ -769,9 +786,6 @@ export class QrVerificationEngine {
             { qrCodeValue: mappedPclId },
             { verificationToken: decoded.parcelId },
             { verificationToken: decoded.verificationToken },
-            { orderId: rawScan },
-            { orderId: cleanScanId },
-            { orderId: `ORD-${cleanScanId}` },
           ]
         }
       });
@@ -1100,6 +1114,7 @@ export class QrVerificationEngine {
         let dropShgStatus = order.dropShgStatus;
         let dropTransporterStatus = order.dropTransporterStatus;
 
+        let orderPhase = order.phase || 'PICKUP';
         if (normalizedMainStatus === 'PARCEL_PICKED' || (normalizedMainStatus as string) === 'PARCEL_AT_SHG' || mainStatus === 'PARCEL_AT_SHG') {
           pickupShgStatus = 'PICKED';
           pickupTransporterStatus = 'PENDING';
@@ -1123,18 +1138,24 @@ export class QrVerificationEngine {
           dropTransporterStatus = 'PENDING';
           await triggerTransporterDropBroadcast(tx, order.id);
         } else if (normalizedMainStatus === 'OUT_FOR_DELIVERY' || mainStatus === 'DISPATCHED' || mainStatus === 'IN_TRANSIT_TO_BUYER' || mainStatus === 'IN_TRANSIT_TO_DROP_SHG' || mainStatus === 'IN_TRANSIT_TO_SHG') {
+          orderPhase = 'DROP';
+          pickupTransporterStatus = 'COMPLETED';
           dropTransporterStatus = 'PICKED';
+          if (!dropShgStatus || dropShgStatus === 'PENDING') dropShgStatus = 'ACCEPTED';
         } else if (normalizedMainStatus === 'AT_BUYER_SHG' || mainStatus === 'PARCEL_WITH_DROP_SHG' || mainStatus === 'PARCEL_AT_DROP_SHG') {
+          orderPhase = 'DROP';
           dropTransporterStatus = 'COMPLETED';
-          dropShgStatus = 'PICKED';
+          dropShgStatus = 'COMPLETED';
         } else if (normalizedMainStatus === 'DELIVERED') {
-          dropShgStatus = 'DROPPED';
+          orderPhase = 'DROP';
+          dropShgStatus = 'COMPLETED';
           dropTransporterStatus = 'COMPLETED';
         }
 
         await tx.order.update({
           where: { id: order.id },
           data: {
+            phase: orderPhase,
             mainStatus,
             pickupShgStatus,
             pickupTransporterStatus,
@@ -1147,14 +1168,15 @@ export class QrVerificationEngine {
         await tx.$executeRawUnsafe(`
           UPDATE public."Order"
           SET 
-            "mainStatus" = $1,
-            "pickupShgStatus" = $2,
-            "pickupTransporterStatus" = $3,
-            "dropShgStatus" = $4,
-            "dropTransporterStatus" = $5,
+            "phase" = $1,
+            "mainStatus" = $2,
+            "pickupShgStatus" = $3,
+            "pickupTransporterStatus" = $4,
+            "dropShgStatus" = $5,
+            "dropTransporterStatus" = $6,
             "updatedAt" = NOW()
-          WHERE id = $6;
-        `, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
+          WHERE id = $7;
+        `, orderPhase, mainStatus, pickupShgStatus, pickupTransporterStatus, dropShgStatus, dropTransporterStatus, order.id);
 
         if (sessionType === 'PICKUP' && normalizeStatus(transition.nextParcelStatus) === 'PARCEL_PICKED') {
           await tx.orderAssignment.updateMany({
@@ -1351,14 +1373,22 @@ export class QrVerificationEngine {
       let dropTransporterId = order.dropTransporterId;
 
       if (roleUpper === 'TRANSPORTER') {
-        if (isPhase2DropLeg || order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg') {
-          dropTransporterStatus = 'COMPLETED';
+        const isDirect = order.flowType === 'DIRECT_SHG_TO_SHG' || order.flowType === 'shg_to_shg';
+        if (isDirect) {
+          pickupShgStatus = 'COMPLETED';
+          pickupTransporterStatus = 'COMPLETED';
+          pickupTransporterId = String(userIdFinal);
+          dropTransporterId = String(userIdFinal);
+          dropTransporterStatus = 'ACCEPTED';
+          dropShgStatus = 'PENDING';
+          mainStatus = 'IN_TRANSIT';
+        } else if (isPhase2DropLeg) {
+          dropTransporterStatus = 'PICKED';
           dropTransporterId = String(userIdFinal);
           pickupShgStatus = 'COMPLETED';
-          pickupTransporterStatus = 'IN_TRANSIT';
-          pickupTransporterId = String(userIdFinal);
+          pickupTransporterStatus = 'COMPLETED';
           dropShgStatus = 'PENDING_TRANSPORTER';
-          mainStatus = 'IN_TRANSIT';
+          mainStatus = 'IN_TRANSIT_TO_DROP_SHG';
         } else {
           // Transporter picking up from Pickup SHG to carry to GMU Hub
           pickupShgStatus = 'DROPPED';

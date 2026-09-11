@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import logoImg from '../assets/logo.png';
 import { useAppContext } from '../context/AppContext';
+import { ProfileModal } from './ProfileModal';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -30,6 +31,7 @@ interface LayoutProps {
 export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('gmu_sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -56,6 +58,60 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     returnDropNewOrders,
     returnDropCompletedOrders,
   } = useAppContext();
+
+  const [clearedNotifications, setClearedNotifications] = useState(false);
+
+  const liveNotifications = React.useMemo(() => {
+    if (clearedNotifications) return [];
+    const list: { id: string; title: string; desc: string; time: string }[] = [];
+
+    (pickupNewOrders || []).slice(0, 3).forEach((o: any) => {
+      list.push({
+        id: `new-${o.id || o.uuid}`,
+        title: 'New Order Placed',
+        desc: `Order #${o.id || o.orderId || 'New'} awaiting pickup assignment.`,
+        time: 'Just now',
+      });
+    });
+
+    (pickupWarehouseOrders || []).slice(0, 3).forEach((o: any) => {
+      list.push({
+        id: `wh-${o.id || o.uuid}`,
+        title: 'Warehouse Stock Received',
+        desc: `Order #${o.id || o.orderId || 'Stock'} in GMU Hub storage.`,
+        time: '15 mins ago',
+      });
+    });
+
+    (dropAssignedOrders || []).slice(0, 3).forEach((o: any) => {
+      list.push({
+        id: `drop-${o.id || o.uuid}`,
+        title: 'Drop Leg In Transit',
+        desc: `Order #${o.id || o.orderId || 'Drop'} assigned to Transporter.`,
+        time: '30 mins ago',
+      });
+    });
+
+    [...(pickupRejectedOrders || []), ...(dropRejectedOrders || [])].slice(0, 2).forEach((o: any) => {
+      list.push({
+        id: `rej-${o.id || o.uuid}`,
+        title: 'Order Rejection Alert',
+        desc: `Order #${o.id || o.orderId || 'Rej'} was rejected by partner.`,
+        time: '1 hour ago',
+      });
+    });
+
+    if (list.length === 0) {
+      list.push({
+        id: 'sys-active',
+        title: 'Logistics Engine Online',
+        desc: 'GMU Hub active and listening for live order updates.',
+        time: 'Now',
+      });
+    }
+
+    return list;
+  }, [pickupNewOrders, pickupWarehouseOrders, dropAssignedOrders, pickupRejectedOrders, dropRejectedOrders, clearedNotifications]);
 
   const allOrders = [
     ...pickupNewOrders,
@@ -97,8 +153,6 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
     { id: 'inventory-management', label: 'Inventory Management', icon: Package },
     { id: 'shg-management', label: 'Community Management', icon: Users },
     { id: 'transporter-management', label: 'Transporter Management', icon: Truck },
-    { id: 'shg-demo-portal', label: 'SHG Demo Portal (Temporary)', icon: Users },
-    { id: 'transporter-demo-portal', label: 'Transporter Demo Portal (Temporary)', icon: Truck },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -113,8 +167,30 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
   } catch (e) {
     user = null;
   }
-  const userName = user?.fullName || user?.name || 'GMU Hub Admin';
-  const userRole = user?.role || user?.userType || 'Warehouse Head';
+
+  const rawPhone = user?.mobileNumber || user?.phoneNumber || user?.mobile || '';
+  const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+
+  const userName = user?.fullName || (
+    cleanPhone === '2222222222'
+      ? 'Gadhinglaj GMU Hub'
+      : cleanPhone === '3333333333'
+        ? 'Wagharali GMU Hub'
+        : cleanPhone === '1111111111'
+          ? 'Nesari GMU Hub'
+          : 'GMU Hub Admin'
+  );
+
+  const userRole = (
+    cleanPhone === '2222222222'
+      ? 'HUB-GADHINGLAJ'
+      : cleanPhone === '3333333333'
+        ? 'HUB-WAGHARALI'
+        : cleanPhone === '1111111111'
+          ? 'HUB-NESARI'
+          : (user?.role || user?.userType || 'INDIVIDUAL')
+  );
+
   const userInitials = userName.substring(0, 1).toUpperCase();
 
   const handleLogout = () => {
@@ -267,18 +343,8 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
             </h1>
           </div>
 
-          {/* Top Bar Search, Alerts, profile */}
+          {/* Top Bar Alerts, profile */}
           <div className="flex items-center gap-3 md:gap-5">
-            {/* Topbar Search */}
-            <div className="relative hidden sm:block max-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Global search..."
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#073318]/50"
-              />
-            </div>
-
             {/* Notification Bell */}
             <div className="relative">
               <button
@@ -286,32 +352,35 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
                 className="p-2 hover:bg-slate-50 rounded-full text-slate-600 relative transition-colors cursor-pointer"
               >
                 <Bell className="h-5 w-5" />
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+                {liveNotifications.length > 0 && !clearedNotifications && (
+                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+                )}
               </button>
 
               {/* Notification Popover Dropdown */}
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50">
                   <div className="px-4 py-2 border-b border-slate-150 flex items-center justify-between">
-                    <span className="font-bold text-xs text-[#073318]">Notifications</span>
+                    <span className="font-bold text-xs text-[#073318]">Notifications ({liveNotifications.length})</span>
                     <button
-                      onClick={() => setShowNotifications(false)}
-                      className="text-[10px] text-blue-600 font-bold hover:underline"
+                      onClick={() => setClearedNotifications(true)}
+                      className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer"
                     >
                       Clear all
                     </button>
                   </div>
                   <div className="max-h-60 overflow-y-auto text-xs text-slate-600">
-                    <div className="p-3 hover:bg-slate-50 border-b border-slate-100 cursor-pointer">
-                      <p className="font-bold text-[#073318] mb-0.5">New Order Placed</p>
-                      <p className="text-slate-500">Order ORD-PICK-102 requires SHG approval.</p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">5 mins ago</span>
-                    </div>
-                    <div className="p-3 hover:bg-slate-50 border-b border-slate-100 cursor-pointer">
-                      <p className="font-bold text-[#073318] mb-0.5">Barcode Generated</p>
-                      <p className="text-slate-500">Item ORD-PICK-301 ready for storage shelving.</p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">2 hours ago</span>
-                    </div>
+                    {liveNotifications.length === 0 ? (
+                      <div className="p-4 text-center text-slate-400 font-medium">No notifications</div>
+                    ) : (
+                      liveNotifications.map((n) => (
+                        <div key={n.id} className="p-3 hover:bg-slate-50 border-b border-slate-100 cursor-pointer">
+                          <p className="font-bold text-[#073318] mb-0.5">{n.title}</p>
+                          <p className="text-slate-500">{n.desc}</p>
+                          <span className="text-[10px] text-slate-400 mt-1 block">{n.time}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -320,15 +389,19 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
             <div className="h-5 w-[1px] bg-slate-200" />
 
             {/* User Profile Avatar */}
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-full bg-[#B2D534]/20 border border-[#B2D534]/50 flex items-center justify-center text-[#073318] font-bold text-sm">
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="flex items-center gap-2 hover:bg-slate-50 p-1 rounded-xl transition-colors cursor-pointer text-left"
+              title="View GMU Coordinator & Hub Profile"
+            >
+              <div className="h-9 w-9 rounded-full bg-[#E2F1AD] border border-[#B2D534] flex items-center justify-center text-[#073318] font-bold text-sm shadow-xs">
                 {userInitials}
               </div>
               <div className="hidden lg:block text-left">
                 <p className="text-xs font-bold text-[#073318] leading-tight">{userName}</p>
-                <p className="text-[10px] text-slate-400">{userRole}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{userRole}</p>
               </div>
-            </div>
+            </button>
           </div>
         </header>
 
@@ -337,6 +410,12 @@ export const Layout = ({ children, currentPage, onNavigate }: LayoutProps) => {
           {children}
         </main>
       </div>
+
+      {/* Profile Popup Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   );
 };

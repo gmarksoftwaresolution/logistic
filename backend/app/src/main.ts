@@ -47,6 +47,7 @@ async function bootstrap() {
   app.use(urlencoded({ limit: '5mb', extended: true }));
 
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
+  app.useStaticAssets(uploadsDir, { prefix: '/api/uploads/' });
 
   app.enableCors();
   app.useGlobalInterceptors(new LoggingInterceptor());

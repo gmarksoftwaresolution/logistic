@@ -145,11 +145,16 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
   const displayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
   pendingBatches.forEach((b) => {
-    if (b.pickupCount > 0) {
+    const isDirect = b.flowType === 'shg_to_shg' || String(b.flowType || '').toLowerCase() === 'direct_shg_to_shg';
+    if (isDirect) {
       displayEntries.push({ batch: b, type: 'pickup' });
-    }
-    if (b.dropCount > 0) {
-      displayEntries.push({ batch: b, type: 'drop' });
+    } else {
+      if (b.pickupCount > 0) {
+        displayEntries.push({ batch: b, type: 'pickup' });
+      }
+      if (b.dropCount > 0) {
+        displayEntries.push({ batch: b, type: 'drop' });
+      }
     }
   });
 

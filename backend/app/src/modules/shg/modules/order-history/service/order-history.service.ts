@@ -250,6 +250,7 @@ export class OrderHistoryService {
       }
     }
 
+<<<<<<< HEAD
     if (!sellerName && (cleanId || order.orderId)) {
       const pickupOrderObj = await (this.prisma as any).pickupOrder?.findFirst({
         where: {
@@ -275,6 +276,8 @@ export class OrderHistoryService {
       }
     }
 
+=======
+>>>>>>> 1d32d31ac0a4a069fcc114c9b60c380e6110455e
     let buyerName = order.buyer?.buyerName || order.buyer?.fullName || '';
     let buyerMobile = order.buyer?.mobileNumber || order.buyer?.phoneNumber || '';
     let buyerVillage = order.buyer?.village || order.buyer?.addressLine1 || '';
@@ -304,6 +307,7 @@ export class OrderHistoryService {
       }
     }
 
+<<<<<<< HEAD
     if (!buyerName && (cleanId || order.orderId)) {
       const dropOrderObj = await (this.prisma as any).dropOrder?.findFirst({
         where: {
@@ -329,6 +333,8 @@ export class OrderHistoryService {
       }
     }
 
+=======
+>>>>>>> 1d32d31ac0a4a069fcc114c9b60c380e6110455e
     const parcels = order.parcels || [];
     const items = parcels.map((p: any) => ({
       code: p.parcelId,

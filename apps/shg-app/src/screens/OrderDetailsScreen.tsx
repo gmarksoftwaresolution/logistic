@@ -68,47 +68,50 @@ const OrderDetailsScreen: React.FC<Props> = ({
   const source = translateRoutePart(rawSource, t);
   const destination = translateRoutePart(rawDestination, t);
 
-  // 1. Determine if we are in Pickup or Delivery phase
-  // For drop orders:
-  // - When accepted (status === 'Accepted'), SHG is picking up from the Transporter (show Transporter details)
-  // - Once picked up (status === 'PickedUp'), SHG is delivering to the Buyer (show Buyer details)
-  const isDeliveryPhase = order.status === 'PickedUp'
-    || (order.id.startsWith('RTO-') && order.legType === 'drop');
+  // 1. Determine if we are in Pickup or Delivery phase for this SHG
+  // - Pickup SHG: before seller pickup -> Seller Details; after seller pickup -> Transporter Details
+  // - Drop SHG: before transporter pickup -> Transporter Details; after transporter pickup -> Buyer Details
+  const isDropLeg = order.legType === 'drop' || (order as any).phase === 'DROP';
+  const isDeliveryPhase = order.status === 'PickedUp' || (order.id.startsWith('RTO-') && isDropLeg);
 
-  // 2. Resolve active side details
   const activeRawName = isDeliveryPhase ? rawDestination : rawSource;
   let activeType: 'transporter' | 'seller' | 'buyer';
 
-  if (isDeliveryPhase) {
-    if (rawDestination.toLowerCase() === 'transporter') {
-      activeType = 'transporter';
-    } else {
+  if (isDropLeg) {
+    if (isDeliveryPhase) {
       activeType = 'buyer';
+    } else {
+      activeType = 'transporter';
     }
   } else {
-    // Pickup phase logic
-    if (rawSource.toLowerCase() === 'transporter') {
+    if (isDeliveryPhase) {
       activeType = 'transporter';
     } else {
       activeType = 'seller';
     }
-  }  // 3. Set details values dynamically
-  let detailsTitle = t('su_transporter_details') || "Transporter Details";
-  let headerIcon: any = "car-outline";
-  let nameLabel = t('su_person_name') || "Person Name";
+  }
+
+  // 3. Set details values dynamically
+  let detailsTitle = t('su_seller_details') || "Seller Details";
+  let headerIcon: any = "storefront-outline";
+  let nameLabel = t('su_seller_name') || "Seller Name";
   let nameValue = activeRawName;
-  let mobileLabel = t('su_transporter_mobile_number') || "Transporter Mobile Number";
-  let mobileValue = order.transporterMobile || "N/A";
+  let mobileLabel = t('su_seller_mobile_number') || "Seller Mobile Number";
+  let mobileValue = order.mobile || "N/A";
   let addressOrVehicleLabel = "Vehicle Number";
   let addressOrVehicleIcon: any = "car-outline";
   let addressOrVehicleValue = order.vehicleNumber || "N/A";
 
-  if (isDeliveryPhase && activeType === 'transporter') {
+  if (activeType === 'transporter') {
+    detailsTitle = t('su_transporter_details') || "Transporter Details";
+    headerIcon = "car-outline";
     nameLabel = "Transporter Name";
+    nameValue = order.transporterName || (order as any).transporterPersonName || order.transporter?.fullName || (order as any).transporter?.name || (activeRawName && activeRawName.toLowerCase() !== 'transporter' ? activeRawName : '') || "Assigned Transporter";
     mobileLabel = "Transporter Mobile Number";
-    addressOrVehicleLabel = "Transporter Address";
-    addressOrVehicleIcon = "location-outline";
-    addressOrVehicleValue = order.transporterAddress || "N/A";
+    mobileValue = order.transporterMobile || (order as any).transporterPhone || order.transporter?.phoneNumber || (order as any).transporter?.mobileNumber || "N/A";
+    addressOrVehicleLabel = isDeliveryPhase ? "Transporter Address" : "Vehicle Number";
+    addressOrVehicleIcon = isDeliveryPhase ? "location-outline" : "car-outline";
+    addressOrVehicleValue = isDeliveryPhase ? (order.transporterAddress || "N/A") : (order.vehicleNumber || (order.transporter as any)?.transporterDetail?.vehicleNumber || "N/A");
   }
 
   let villageLabel = "Village";

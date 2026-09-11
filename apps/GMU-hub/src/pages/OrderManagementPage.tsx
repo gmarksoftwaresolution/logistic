@@ -27,6 +27,7 @@ import {
   Layers,
   QrCode,
   Plus,
+  ShoppingCart,
   ChevronDown,
   ChevronUp,
   RefreshCw,
@@ -54,6 +55,7 @@ const CANONICAL_STATUS_MAP: Record<string, string> = {
   'transporter accepted': 'Transporter Route Assigned & Accepted',
   'accepted_pickup': 'Transporter Route Assigned & Accepted',
   'picked up by transporter (in transit to hub)': 'Picked up by Transporter',
+  'picked up by transporter (in direct transit to drop shg)': 'Picked up by Transporter',
   'picked up by transporter': 'Picked up by Transporter',
   'transporter pickup': 'Picked up by Transporter',
   'transporter_pickup': 'Picked up by Transporter',
@@ -101,14 +103,15 @@ const getExpectedDeliveryDate = (startDate: string | undefined) => {
 
 const STAGE_ORDER: Record<string, number> = {
   'Order Placed & Registered': 1,
-  'Collected & Scanned by SHG': 2,
-  'Transporter Route Assigned & Accepted': 3,
-  'Picked up by Transporter': 4,
-  'Received & Quality Checked at GMU Hub': 5,
-  'Dispatched from Hub': 6,
-  'Transporter Picked Up from Hub': 7,
-  'Received at Destination SHG Center': 8,
-  'Delivered & Handed Over to Buyer': 9,
+  'Pickup SHG Assigned & Accepted': 2,
+  'Collected & Scanned by SHG': 3,
+  'Transporter Route Assigned & Accepted': 4,
+  'Picked up by Transporter': 5,
+  'Received & Quality Checked at GMU Hub': 6,
+  'Dispatched from Hub': 7,
+  'Transporter Picked Up from Hub': 8,
+  'Received at Destination SHG Center': 9,
+  'Delivered & Handed Over to Buyer': 10,
 };
 
 const getUpdatedTimeAgo = (order: any) => {
@@ -2314,9 +2317,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
         {/* Modern Header Section */}
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1">Track every parcel from Seller to Buyer.</p>
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-[#073318]/80 to-[#073318] p-3.5 rounded-2xl border border-[#073318]/40 shadow-sm">
+                <ShoppingCart className="h-7 w-7 text-[#B2D534]" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-extrabold text-[#073318] tracking-tight">Order Management</h2>
+                <p className="text-sm font-medium text-slate-500 mt-1">Track every parcel from Seller to Buyer.</p>
+              </div>
             </div>
           </div>
 
