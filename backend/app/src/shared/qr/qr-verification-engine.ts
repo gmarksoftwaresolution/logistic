@@ -55,6 +55,12 @@ export function normalizeStatus(status: string): ParcelStatus {
 export function decodeQrData(data: string): QrContent {
   let trimmed = (data || '').trim();
 
+  if (trimmed.startsWith('BARCODE:')) {
+    trimmed = trimmed.replace('BARCODE:', '').trim();
+  } else if (trimmed.startsWith('QRINFO:')) {
+    trimmed = trimmed.replace('QRINFO:', '').trim();
+  }
+
   // If payload is a URL containing data= query param or URL encoded
   if (trimmed.includes('data=')) {
     try {
@@ -388,17 +394,22 @@ export async function triggerTransporterPickupBroadcast(tx: any, orderId: string
       }
 
       if (matchedTransporters.length > 0) {
-        matchedTransporters.forEach((tr: any) => assigneeIds.add(String(tr.id)));
+        matchedTransporters.forEach((tr: any) => {
+          assigneeIds.add(String(tr.id));
+          if (tr.authId) assigneeIds.add(String(tr.authId));
+        });
       }
     }
 
-    if (assigneeIds.size === 0) {
-      const allTransporters = await tx.user.findMany({
-        where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null },
-        select: { id: true }
-      });
-      allTransporters.forEach((tr: any) => assigneeIds.add(String(tr.id)));
-    }
+    // Always include all approved transporters so any active transporter can view & accept available pickups
+    const allTransporters = await tx.user.findMany({
+      where: { role: 'TRANSPORTER', applicationStatus: 'APPROVED', deletedAt: null },
+      select: { id: true, authId: true }
+    });
+    allTransporters.forEach((tr: any) => {
+      assigneeIds.add(String(tr.id));
+      if (tr.authId) assigneeIds.add(String(tr.authId));
+    });
 
     for (const assigneeId of assigneeIds) {
       await tx.orderAssignment.deleteMany({

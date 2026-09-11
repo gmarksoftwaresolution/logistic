@@ -2468,6 +2468,20 @@ export class OrderManagementService implements OnModuleInit {
       },
     });
 
+    await this.prisma.parcel.updateMany({
+      where: {
+        OR: [
+          { orderId: order.id },
+          { orderId: order.orderId },
+        ]
+      },
+      data: {
+        parcelStatus: 'STORED',
+        currentHolderType: 'WAREHOUSE',
+        currentHolderId: 'HUB',
+      }
+    }).catch(() => {});
+
     return this.storeInventory(order.id);
   }
 
@@ -2479,13 +2493,13 @@ export class OrderManagementService implements OnModuleInit {
       order.buyerVillage || '',
       order.buyerPincode || '',
       order.buyerPostOffice || '',
-    );
+    ).catch(() => []);
     let allocatedShgId = order.dropShgId;
-    if (!allocatedShgId && matchingShgs.length > 0) {
+    if (!allocatedShgId && matchingShgs && matchingShgs.length > 0) {
       allocatedShgId = String(matchingShgs[0].id);
     }
     if (!allocatedShgId) {
-      const defaultShg = await this.prisma.user.findFirst({ where: { role: 'SHG' } });
+      const defaultShg = await this.prisma.user.findFirst({ where: { role: 'SHG' } }).catch(() => null);
       if (defaultShg) allocatedShgId = String(defaultShg.id);
     }
 
@@ -2504,6 +2518,20 @@ export class OrderManagementService implements OnModuleInit {
         warehouseReceivedAt: new Date(),
       },
     });
+
+    await this.prisma.parcel.updateMany({
+      where: {
+        OR: [
+          { orderId: order.id },
+          { orderId: order.orderId },
+        ]
+      },
+      data: {
+        parcelStatus: 'STORED',
+        currentHolderType: 'WAREHOUSE',
+        currentHolderId: 'HUB',
+      }
+    }).catch(() => {});
 
     // 3. Ensure SHG OrderAssignment record exists with status ACCEPTED
     if (allocatedShgId) {

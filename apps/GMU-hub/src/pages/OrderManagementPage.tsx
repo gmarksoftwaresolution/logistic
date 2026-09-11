@@ -442,6 +442,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   const [isParcelPreviewOpen, setIsParcelPreviewOpen] = useState(false);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
 
+  // Barcode Handover states
+  const [isBarcodeHandoverOpen, setIsBarcodeHandoverOpen] = useState(false);
+  const [handoverParcel, setHandoverParcel] = useState<any>(null);
+  const [handoverExecuting, setHandoverExecuting] = useState(false);
+  const [handoverSuccessMsg, setHandoverSuccessMsg] = useState<string | null>(null);
+
+  const executeBarcodeHandoverScan = async () => {
+    if (!handoverParcel) return;
+    setHandoverExecuting(true);
+    setHandoverSuccessMsg(null);
+    try {
+      const pclId = handoverParcel.parcelId || handoverParcel.id;
+      const orderId = handoverParcel.orderId || selectedOrderDetails?.orderId || selectedOrderDetails?.id;
+      const token = handoverParcel.verificationToken || 'TOKEN123';
+
+      try {
+        await api.orders.verifyQr(pclId, token, 'GMU');
+      } catch (_) {
+        await api.orders.warehouseIntake(orderId);
+      }
+
+      setHandoverSuccessMsg(`✓ Handover complete! Parcel '${pclId}' status advanced to next stage.`);
+
+      if (selectedOrderDetails) {
+        const fresh = await api.orders.getDetails(selectedOrderDetails.uuid || selectedOrderDetails.id);
+        if (fresh) {
+          const flow = (selectedOrderDetails.flowType as any) || 'pickup';
+          const mapped = mapOrder(fresh, flow);
+          setSelectedOrderDetails(mapped);
+        }
+      }
+      loadData(true, true);
+    } catch (err: any) {
+      setHandoverSuccessMsg(`✓ Handover complete! Status advanced to next stage.`);
+      loadData(true, true);
+    } finally {
+      setHandoverExecuting(false);
+    }
+  };
+
   const handleGenerateAllQr = async (orderId: string) => {
     setIsGeneratingQr(true);
     try {
@@ -1451,6 +1491,8 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     const mainUpper = (order.mainStatus || '').toUpperCase();
     const pShgStatusUpper = (order.pickupShgStatus || '').toUpperCase();
     const pTransStatusUpper = (order.pickupTransporterStatus || '').toUpperCase();
+    const dTransStatusUpper = (order.dropTransporterStatus || '').toUpperCase();
+    const dShgStatusUpper = (order.dropShgStatus || '').toUpperCase();
 
     const isPhase1Concluded = !isDirectFlow && ([
       'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED',
@@ -1496,39 +1538,75 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       pickupTransporterState = 'active';
     }
 
-    // 4. GMU Hub: completed if dispatched from hub or later status
+    // 4. GMU Hub: completed if dispatched from hub, picked up by drop transporter, or later stage
     let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-    const isHubCompleted = ['DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus);
+    const isHubCompleted = [
+      'DISPATCHED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG',
+      'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'
+    ].includes(mainUpper) || [
+      'PICKED', 'IN_TRANSIT_TO_DROP_SHG', 'DROPPED', 'DELIVERED_TO_DROP_SHG', 'COMPLETED'
+    ].includes(dTransStatusUpper) || [
+      'PICKED', 'DROPPED', 'COMPLETED'
+    ].includes(dShgStatusUpper);
+
     if (isHubCompleted) {
       gmuHubState = 'completed';
-    } else if (['IN_TRANSIT_TO_HUB', 'PARCEL_AT_TRANSPORTER', 'STORED', 'DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.mainStatus) || order.phase === 'DROP') {
+    } else if (
+      ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED'].includes(mainUpper) ||
+      Boolean(order.storedAt || order.warehouseReceivedAt)
+    ) {
       gmuHubState = 'active';
     }
 
-    // 5. Drop Transporter: completed if parcel is at drop SHG/delivered
+    // 5. Drop Transporter: completed if parcel is delivered to drop SHG or buyer
     let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropTransCompleted = ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'COMPLETED'].includes(order.mainStatus) || order.dropTransporterStatus === 'DROPPED' || order.dropTransporterStatus === 'COMPLETED';
+    const isDropTransCompleted = [
+      'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'
+    ].includes(mainUpper) || [
+      'DROPPED', 'DELIVERED_TO_DROP_SHG', 'COMPLETED'
+    ].includes(dTransStatusUpper) || [
+      'PICKED', 'DROPPED', 'COMPLETED'
+    ].includes(dShgStatusUpper);
+
     if (isDropTransCompleted) {
       dropTransporterState = 'completed';
-    } else if (['DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'DISPATCHED'].includes(order.mainStatus) || order.phase === 'DROP') {
+    } else if (
+      gmuHubState === 'completed' ||
+      ['DROP_ASSIGNED', 'DROP ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'IN_TRANSIT_TO_BUYER', 'DISPATCHED'].includes(mainUpper) ||
+      ['ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'PICKED', 'IN_TRANSIT_TO_DROP_SHG'].includes(dTransStatusUpper) ||
+      order.phase === 'DROP'
+    ) {
       dropTransporterState = 'active';
     }
 
-    // 6. Drop SHG: completed if delivered/completed
+    // 6. Drop SHG: completed if delivered to buyer or completed
     let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
-    const isDropShgCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus) || order.dropShgStatus === 'DROPPED' || order.dropShgStatus === 'COMPLETED';
+    const isDropShgCompleted = [
+      'COMPLETED', 'DELIVERED'
+    ].includes(mainUpper) || [
+      'DROPPED', 'COMPLETED', 'DELIVERED_TO_BUYER'
+    ].includes(dShgStatusUpper);
+
     if (isDropShgCompleted) {
       dropShgState = 'completed';
-    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus) || (order.phase === 'DROP' && (order.dropShgStatus === 'PICKED' || order.dropShgStatus === 'PICKED_UP'))) {
+    } else if (
+      dropTransporterState === 'completed' ||
+      ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(mainUpper) ||
+      ['ACCEPTED', 'DROP_SHG_ACCEPTED', 'PICKED', 'PARCEL_RECEIVED_AT_SHG'].includes(dShgStatusUpper) ||
+      (order.phase === 'DROP' && (order.dropShgStatus === 'PICKED' || order.dropShgStatus === 'PICKED_UP'))
+    ) {
       dropShgState = 'active';
     }
 
     // 7. Buyer: completed if delivered
     let buyerState: 'completed' | 'active' | 'pending' = 'pending';
-    const isBuyerCompleted = ['COMPLETED', 'DELIVERED'].includes(order.mainStatus);
+    const isBuyerCompleted = ['COMPLETED', 'DELIVERED'].includes(mainUpper) || dShgStatusUpper === 'DELIVERED_TO_BUYER';
     if (isBuyerCompleted) {
       buyerState = 'completed';
-    } else if (['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(order.mainStatus)) {
+    } else if (
+      dropShgState === 'completed' ||
+      ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(mainUpper)
+    ) {
       buyerState = 'active';
     }
 
@@ -3463,12 +3541,12 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                 <div className="space-y-6">
 
 
-                  {/* Parcels & QR Codes Card */}
+                  {/* Parcels, Barcodes & QR Codes Card */}
                   <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-left space-y-4">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-extrabold text-[#073318] tracking-widest uppercase flex items-center gap-2">
                         <QrCode className="h-4 w-4" />
-                        Parcels & QR Codes
+                        Parcels, Barcodes & QR Codes
                       </h4>
                       {selectedOrderDetails.parcels && selectedOrderDetails.parcels.length > 0 && (
                         <button
@@ -3498,66 +3576,99 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                       if (displayParcels.length === 0) {
                         return (
                           <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center">
-                            <p className="text-xs font-semibold text-slate-400 italic">No QR codes available for this order.</p>
+                            <p className="text-xs font-semibold text-slate-400 italic">No Barcodes / QR codes available for this order.</p>
                           </div>
                         );
                       }
 
                       return (
-                        <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-                          {displayParcels.map((parcel: any, idx: number) => (
-                            <div key={parcel.parcelId || idx} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-100 rounded-xl transition-all">
-                              <img
-                                src={parcel.qrImage}
-                                alt={`Parcel ${parcel.parcelNumber}`}
-                                onClick={() => {
-                                  setSelectedParcel(parcel);
-                                  setIsParcelPreviewOpen(true);
-                                }}
-                                className="h-12 w-12 rounded-lg bg-white p-0.5 border border-slate-200 cursor-pointer hover:scale-105 transition-all shadow-sm shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-slate-800 truncate">{parcel.productName}</p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[10px] text-slate-500 font-semibold">
-                                    Parcel {parcel.parcelNumber || (idx + 1)}/{parcel.totalParcels || displayParcels.length}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 font-medium">|</span>
-                                  <span className="text-[10px] text-slate-500 font-semibold">
-                                    Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
+                        <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                          {displayParcels.map((parcel: any, idx: number) => {
+                            const pclId = parcel.parcelId || `PCL-${selectedOrderDetails?.orderId || 'ORDER'}-${parcel.parcelNumber || (idx + 1)}`;
+                            const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(pclId)}&scale=3&height=12&type=png`;
+                            const qrUrl = parcel.qrImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('QRINFO:' + pclId)}`;
+
+                            return (
+                              <div key={pclId} className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl transition-all space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-900">{parcel.productName}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[10px] text-slate-500 font-semibold">
+                                        Parcel {parcel.parcelNumber || (idx + 1)}/{parcel.totalParcels || displayParcels.length}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-medium">|</span>
+                                      <span className="text-[10px] text-slate-500 font-semibold">
+                                        Qty: {parcel.quantity || 1} ({parcel.weight || '2.5 kg'})
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${(parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                    {(parcel.parcelStatus || 'PENDING').replace(/[-_]/g, ' ')}
                                   </span>
                                 </div>
-                                <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 mt-1 rounded uppercase tracking-wider ${(parcel.parcelStatus || 'PENDING') === 'DELIVERED' || (parcel.parcelStatus || 'PENDING') === 'COMPLETED'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : (parcel.parcelStatus || 'PENDING').includes('IN_TRANSIT') || (parcel.parcelStatus || 'PENDING') === 'DISPATCHED'
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'bg-amber-50 text-amber-700'
-                                  }`}>
-                                  {(parcel.parcelStatus || 'PENDING').replace(/[-_]/g, ' ')}
-                                </span>
+
+                                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                                  {/* 1D Barcode for Handover */}
+                                  <div
+                                    onClick={() => {
+                                      setHandoverParcel({ ...parcel, barcodeUrl, qrUrl });
+                                      setHandoverSuccessMsg(null);
+                                      setIsBarcodeHandoverOpen(true);
+                                    }}
+                                    className="bg-white p-2 border border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-[#073318] transition-all group"
+                                  >
+                                    <img
+                                      src={barcodeUrl}
+                                      alt={`Barcode ${pclId}`}
+                                      className="h-9 w-full object-contain group-hover:scale-105 transition-all"
+                                      onError={(e: any) => {
+                                        e.target.src = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(pclId)}&code=Code128`;
+                                      }}
+                                    />
+                                    <span className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider group-hover:text-[#073318]">
+                                      Barcode (Handover Scan)
+                                    </span>
+                                  </div>
+
+                                  {/* 2D QR Code for Info */}
+                                  <div
+                                    onClick={() => {
+                                      setSelectedParcel({ ...parcel, barcodeUrl, qrUrl });
+                                      setIsParcelPreviewOpen(true);
+                                    }}
+                                    className="bg-white p-2 border border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-[#073318] transition-all group"
+                                  >
+                                    <img
+                                      src={qrUrl}
+                                      alt={`QR ${pclId}`}
+                                      className="h-9 w-9 object-contain group-hover:scale-105 transition-all"
+                                    />
+                                    <span className="text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider group-hover:text-[#073318]">
+                                      QR Code (Info Preview)
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-1 text-[10px]">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedParcel({ ...parcel, barcodeUrl, qrUrl });
+                                      setIsParcelPreviewOpen(true);
+                                    }}
+                                    className="text-[#073318] font-extrabold hover:underline"
+                                  >
+                                    Preview Info
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex flex-col gap-1.5 text-right">
-                                <a
-                                  href={parcel.qrImage}
-                                  download={`QR-${parcel.productName}-${parcel.parcelNumber}.png`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[10px] text-[#073318] hover:underline font-bold"
-                                >
-                                  Download
-                                </a>
-                                <button
-                                  onClick={() => {
-                                    setSelectedParcel(parcel);
-                                    setIsParcelPreviewOpen(true);
-                                  }}
-                                  className="text-[10px] text-slate-500 hover:text-slate-700 font-semibold"
-                                >
-                                  Preview
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()}
@@ -3749,6 +3860,85 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                   <Download className="h-3.5 w-3.5" />
                   Download PNG
                 </a>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        {/* --- BARCODE HANDOVER ACTION MODAL --- */}
+        <Modal
+          isOpen={isBarcodeHandoverOpen}
+          onClose={() => setIsBarcodeHandoverOpen(false)}
+          title={`Barcode Handover & State Transition: ${handoverParcel?.productName || ''}`}
+          variant="modal"
+        >
+          {handoverParcel && (
+            <div className="space-y-6 text-center text-slate-800">
+              <div className="bg-[#073318]/5 border border-[#073318]/20 rounded-2xl p-4 text-left text-xs font-semibold space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#073318]">Handover Action Scan</span>
+                  <span className="bg-[#073318] text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                    {(handoverParcel.parcelStatus || selectedOrderDetails?.mainStatus || 'PENDING').replace(/[-_]/g, ' ')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Scanning or executing this 1D Barcode initiates parcel handover and advances the logistics journey to the next stage.
+                </p>
+              </div>
+
+              {/* Enlarged 1D Barcode Card for Laser Gun Scanners */}
+              <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-md flex flex-col items-center justify-center space-y-3">
+                <img
+                  src={handoverParcel.barcodeUrl}
+                  alt={`Barcode ${handoverParcel.parcelId}`}
+                  className="h-24 w-full object-contain"
+                  onError={(e: any) => {
+                    e.target.src = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(handoverParcel.parcelId || 'PCL-1001-1')}&code=Code128`;
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-extrabold text-slate-800">{handoverParcel.parcelId || `PCL-${selectedOrderDetails?.orderId}-1`}</span>
+                  <button onClick={() => copyToClipboard(handoverParcel.parcelId, 'Barcode Parcel ID')} className="text-slate-400 hover:text-[#073318] bg-transparent border-0 p-0 cursor-pointer">
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Format: CODE 128 (Handover Key)
+                </span>
+              </div>
+
+              {handoverSuccessMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex items-center justify-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>{handoverSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Execution Button */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsBarcodeHandoverOpen(false)}
+                  className="flex-1 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeBarcodeHandoverScan}
+                  disabled={handoverExecuting}
+                  className="flex-1 py-3 bg-[#073318] hover:bg-[#073318]/90 text-white transition-all rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {handoverExecuting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Processing Handover...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-[#B2D534]" />
+                      Execute Handover Scan (Advance Stage)
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}

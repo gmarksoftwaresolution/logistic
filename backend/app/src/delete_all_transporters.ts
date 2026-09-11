@@ -66,7 +66,27 @@ async function removeAllTransporters() {
   });
   console.log(`✅ Unlinked transporters from ${unassignedOrders.count} Orders`);
 
+<<<<<<< HEAD
+  // 3. Unassign from PickupOrders, DropOrders, ReturnOrders
+  await (prisma as any).pickupOrder?.updateMany({
+    where: { transporterId: { in: transporterIds } },
+    data: { transporterId: null },
+  }).catch(() => {});
+
+  await (prisma as any).dropOrder?.updateMany({
+    where: { transporterId: { in: transporterIds } },
+    data: { transporterId: null },
+  }).catch(() => {});
+
+  await (prisma as any).returnOrder?.updateMany({
+    where: { transporterId: { in: transporterIds } },
+    data: { transporterId: null },
+  }).catch(() => {});
+
+  // 4. Delete OrderAssignments for transporters
+=======
   // 3. Delete OrderAssignments for transporters
+>>>>>>> 1d32d31ac0a4a069fcc114c9b60c380e6110455e
   const deletedAssignments = await prisma.orderAssignment.deleteMany({
     where: {
       OR: [

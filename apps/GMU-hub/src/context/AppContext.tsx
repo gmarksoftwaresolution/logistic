@@ -899,13 +899,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cleanId = String(id || '').replace(/^ORD-/, '');
       const order = pickupAssignedOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) || 
                     pickupWarehouseOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) ||
-                    pickupNewOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) as any;
+                    pickupNewOrders.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) ||
+                    incomingInventory.find((o: any) => o.id === id || o.uuid === id || o.orderId === id || o.orderId === cleanId) as any;
       const targetId = order?.uuid || order?.id || id;
-      await api.orders.warehouseIntake(targetId);
+      await api.orders.warehouseIntake(targetId).catch(() => {});
     }
 
-    // Background non-blocking refresh of all inventory and drop queues
-    Promise.allSettled([
+    // Refresh all inventory and drop queues
+    await Promise.allSettled([
       loadInventoryStored(),
       loadInventoryTransporterReturn(),
       loadInventoryBuyerReturn(),

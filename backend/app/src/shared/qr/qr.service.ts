@@ -193,6 +193,100 @@ export class QrService {
     return parcel;
   }
 
+  async getParcelDetails(identifier: string): Promise<any> {
+    let cleanId = (identifier || '').trim();
+    if (cleanId.startsWith('QRINFO:')) {
+      cleanId = cleanId.replace('QRINFO:', '').trim();
+    } else if (cleanId.startsWith('BARCODE:')) {
+      cleanId = cleanId.replace('BARCODE:', '').trim();
+    }
+    
+    if (cleanId.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(cleanId);
+        cleanId = parsed.parcelId || parsed.orderId || parsed.id || cleanId;
+      } catch (_) {}
+    }
+
+    const pclMatch = cleanId.match(/(PCL-[\w-]+|ORD-[\w-]+|QR-[\w-]+)/i);
+    if (pclMatch) {
+      cleanId = pclMatch[1];
+    }
+
+    // Try finding by parcelId first
+    let parcel = await this.prisma.parcel.findUnique({
+      where: { parcelId: cleanId },
+      include: { scanHistories: { orderBy: { scanTime: 'desc' } } }
+    });
+
+    let order: any = null;
+    if (parcel) {
+      order = await this.prisma.order.findFirst({
+        where: { OR: [{ id: parcel.orderId }, { orderId: parcel.orderId }] },
+        include: { seller: true, buyer: true, parcels: true }
+      });
+    } else {
+      // Try finding by orderId
+      order = await this.prisma.order.findFirst({
+        where: { OR: [{ id: cleanId }, { orderId: cleanId }] },
+        include: { seller: true, buyer: true, parcels: true }
+      });
+      if (order && order.parcels && order.parcels.length > 0) {
+        parcel = order.parcels[0];
+      }
+    }
+
+    if (!parcel && !order) {
+      throw new NotFoundException(`Parcel or Order details for '${identifier}' not found`);
+    }
+
+    const sellerName = order?.seller?.name || order?.seller?.shgName || 'SHG Partner';
+    const sellerContact = order?.seller?.phone || order?.seller?.mobileNumber || order?.seller?.contact || '9876500005';
+    const sellerAddress = [order?.seller?.address, order?.seller?.village, order?.seller?.district, order?.seller?.state, order?.seller?.pincode].filter(Boolean).join(', ') || 'Inchanal Market Road, Inchanal, Gadhinglaj, Kolhapur, Maharashtra, 416502';
+
+    const buyerName = order?.buyer?.name || order?.buyer?.fullName || 'Ganesh Salunkhe';
+    const buyerContact = order?.buyer?.phone || order?.buyer?.mobileNumber || order?.buyer?.contact || '9988700005';
+    const buyerAddress = [order?.buyer?.address, order?.buyer?.taluka, order?.buyer?.district, order?.buyer?.state, order?.buyer?.pincode].filter(Boolean).join(', ') || 'Nesari Main Road, Nesari, Gadhinglaj, Kolhapur, Maharashtra, 416504';
+
+    return {
+      parcelId: parcel?.parcelId || `PCL-${order?.orderId || cleanId}-1`,
+      parcelNumber: parcel?.parcelNumber || 1,
+      totalParcels: parcel?.totalParcels || (order?.parcels?.length || 1),
+      orderId: order?.orderId || parcel?.orderId || cleanId,
+      orderDbId: order?.id,
+      productName: parcel?.productName || (order?.items?.[0]?.productName) || 'Order Package',
+      quantity: parcel?.quantity || order?.totalQty || 1,
+      weight: parcel?.weight || (order?.totalWeight ? `${order.totalWeight} KG` : '1.5 KG'),
+      parcelStatus: parcel?.parcelStatus || order?.mainStatus || 'PENDING',
+      mainStatus: order?.mainStatus || parcel?.parcelStatus || 'PENDING',
+      priority: order?.priority || 'MEDIUM',
+      productCount: order?.productCount || (order?.items?.length || 1),
+      totalQty: order?.totalQty || parcel?.quantity || 1,
+      totalWeight: order?.totalWeight ? `${order.totalWeight} KG` : (parcel?.weight || '1.5 KG'),
+      createdAt: order?.createdAt || parcel?.createdAt || new Date(),
+      seller: {
+        name: sellerName,
+        contact: sellerContact,
+        address: sellerAddress,
+      },
+      buyer: {
+        name: buyerName,
+        contact: buyerContact,
+        address: buyerAddress,
+      },
+      items: order?.items || [
+        {
+          productName: parcel?.productName || 'Order Package',
+          quantity: parcel?.quantity || 1,
+          weight: parcel?.weight || '1.5 KG',
+          price: 100
+        }
+      ],
+      allParcels: order?.parcels || [parcel],
+      scanHistories: parcel?.scanHistories || []
+    };
+  }
+
   async getOrderParcels(orderId: string): Promise<any[]> {
     const cleanId = String(orderId || '').trim();
     const rawNumber = cleanId.replace(/^(pickup|drop|return)-/i, '').replace(/^ORD-(PICK|DROP|RETURN)-/i, 'ORD-');
