@@ -334,90 +334,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   tabBarContainer: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#F1F5F9',
-    borderWidth: 1,
-    borderRadius: moderateScale(28),
-    padding: scale(4),
     flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: scale(12),
+    padding: scale(4),
     marginHorizontal: scale(16),
     marginTop: verticalScale(12),
     marginBottom: verticalScale(8),
-    gap: scale(2),
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: verticalScale(4) },
-        shadowOpacity: 0.04,
-        shadowRadius: moderateScale(10),
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
   tabButton: {
-    paddingVertical: verticalScale(8),
-    paddingHorizontal: scale(4),
-    borderRadius: moderateScale(22),
-    backgroundColor: 'transparent',
+    flex: 1,
+    paddingVertical: verticalScale(10),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: scale(10),
   },
-  tabButtonAll: {
-    flex: 0.7,
-  },
-  tabButtonPickup: {
-    flex: 1.1,
-  },
-  tabButtonDrop: {
-    flex: 1.25,
-  },
+  tabButtonAll: {},
+  tabButtonPickup: {},
+  tabButtonDrop: {},
   tabButtonActive: {
-    backgroundColor: '#073318',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#073318',
-        shadowOffset: { width: 0, height: verticalScale(3) },
-        shadowOpacity: 0.15,
-        shadowRadius: moderateScale(4),
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    backgroundColor: Colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   tabText: {
-    fontFamily: Fonts.bold,
-    fontSize: moderateScale(11),
+    fontFamily: Fonts.semiBold,
+    fontSize: moderateScale(13),
     color: '#64748B',
   },
   tabTextActive: {
+    fontFamily: Fonts.bold,
     color: '#FFFFFF',
-    fontFamily: Fonts.extraBold,
   },
   badgePill: {
     paddingHorizontal: scale(6),
     paddingVertical: verticalScale(1),
     borderRadius: moderateScale(12),
-    marginLeft: scale(3),
+    marginLeft: scale(4),
   },
   badgePillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   badgePillInactive: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#CBD5E1',
   },
   badgeText: {
-    fontSize: moderateScale(10),
+    fontSize: moderateScale(10.5),
     fontFamily: Fonts.extraBold,
   },
   badgeTextActive: {
     color: '#FFFFFF',
   },
   badgeTextInactive: {
-    color: '#64748B',
+    color: '#475569',
   },
   scrollContainer: {
     paddingHorizontal: scale(16),

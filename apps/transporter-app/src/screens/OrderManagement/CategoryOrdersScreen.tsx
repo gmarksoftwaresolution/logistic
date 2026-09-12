@@ -130,6 +130,9 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }
   };
 
+  // Tab filter state: 'all' (default), 'new', 'return'
+  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'return'>('all');
+
   // Track accordion expansion states per area. Collapsed by default.
   const [expandedAreas, setExpandedAreas] = useState<Record<string, boolean>>({});
 
@@ -140,8 +143,24 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     }));
   };
 
-  // New items view
-  const pendingBatches = batches.filter((b) => b.status === 'NEW_ORDER');
+  // Helper to identify return order
+  const checkIsReturnOrder = (b: BatchOrder): boolean => {
+    return Boolean(
+      b.isRTO ||
+      (b as any).returnType === 'TRANSPORTER_RETURN' ||
+      (b as any).returnType === 'RTO' ||
+      b.products?.some(p => (p as any).isRTO)
+    );
+  };
+
+  // Filter pending batches based on selected tab
+  const pendingBatches = batches.filter((b) => {
+    if (b.status !== 'NEW_ORDER') return false;
+    const isReturn = checkIsReturnOrder(b);
+    if (activeTab === 'new') return !isReturn;
+    if (activeTab === 'return') return isReturn;
+    return true; // 'all' tab includes both fresh (new) and return orders
+  });
 
   const displayEntries: { batch: BatchOrder; type: 'pickup' | 'drop' }[] = [];
   pendingBatches.forEach((b) => {
@@ -211,7 +230,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScreenHeader
-        title={t('orders.new_orders', { defaultValue: 'New Orders' })}
+        title={t('orders.incoming_orders', { defaultValue: 'Incoming Orders' })}
         subtitle={t('orders.new_orders_subtitle', { defaultValue: 'Expandable area routes & compact notifications' })}
         showBackButton={true}
         showProfile={false}
@@ -269,6 +288,46 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
               </Text>
             </View>
           </View>
+
+          {/* Visual Progress Bar */}
+          <View style={styles.progressBarWrapper}>
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, { width: `${usagePercent}%`, backgroundColor: statusColor }]} />
+            </View>
+          </View>
+        </View>
+
+        {/* 🏷️ 3 Tab Filter Bar: All | New | Return */}
+        <View style={styles.tabBarContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'all' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('all')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'all' && styles.tabButtonTextActive]}>
+              {t('orders.tab_all', { defaultValue: 'All' })}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'new' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('new')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'new' && styles.tabButtonTextActive]}>
+              {t('orders.tab_new', { defaultValue: 'New' })}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'return' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('return')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'return' && styles.tabButtonTextActive]}>
+              {t('orders.tab_return', { defaultValue: 'Return' })}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1164,6 +1223,38 @@ const styles = StyleSheet.create({
   },
   capacitySuggestionTextExceeded: {
     color: '#B91C1C',
+  },
+  // 🏷️ Tab Filter Bar Styles
+  tabBarContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: scale(10),
+    padding: scale(3),
+    marginTop: verticalScale(10),
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: verticalScale(7),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: scale(8),
+  },
+  tabButtonActive: {
+    backgroundColor: Colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabButtonText: {
+    fontFamily: Fonts.semiBold,
+    fontSize: moderateScale(13),
+    color: '#64748B',
+  },
+  tabButtonTextActive: {
+    fontFamily: Fonts.bold,
+    color: '#FFFFFF',
   },
 });
 

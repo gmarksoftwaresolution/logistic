@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
   const {
+    batches,
     newOrdersCount,
     acceptedOrdersCount,
     upcomingOrdersCount,
@@ -30,6 +31,20 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
     activities,
     refreshBatchesList,
   } = useOrderManagement();
+
+  // Return Orders count
+  const returnOrdersCount = useMemo(() => {
+    if (!Array.isArray(batches)) return 0;
+    return batches.filter(
+      (b) =>
+        Boolean(
+          b.isRTO ||
+          (b as any).returnType === 'TRANSPORTER_RETURN' ||
+          (b as any).returnType === 'RTO' ||
+          b.products?.some((p) => (p as any).isRTO)
+        )
+    ).length;
+  }, [batches]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -171,6 +186,32 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
             </LinearGradient>
           </TouchableOpacity>
 
+          {/* 🟡 Card 3: Return */}
+          <TouchableOpacity
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#D97706' }]}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('ReturnOrders')}
+          >
+            <LinearGradient
+              colors={['#D97706', '#F59E0B']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientCardInner}
+            >
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitleCustom, { color: '#FFFFFF' }]}>{t('orders.return') || 'Return'}</Text>
+                <View style={[styles.iconBoxCustom, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <RotateCcw size={scale(16)} color="#FFFFFF" strokeWidth={2.5} />
+                  <View style={[styles.badgeDotIndicator, { backgroundColor: '#FFFFFF' }]} />
+                </View>
+              </View>
+              <View>
+                <Text style={styles.countNumberWhite}>{returnOrdersCount}</Text>
+                <Text style={[styles.subtitleTextCustom, { color: 'rgba(255,255,255,0.8)' }]}>{t('orders.return_desc') || 'Return Orders'}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* 🟠 Card 3: Accepted */}
           <TouchableOpacity
             style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#D34800' }]}
@@ -223,9 +264,9 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* 🟢 Card 5: Completed (Full Width) */}
+          {/* 🟢 Card 6: Completed */}
           <TouchableOpacity
-            style={[styles.summaryCardWrapper, { width: '100%', shadowColor: '#005A12' }]}
+            style={[styles.summaryCardWrapper, { width: '48%', shadowColor: '#005A12' }]}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('OrderBatchCompleted')}
           >

@@ -9,6 +9,7 @@ import OrderBatchRejectedScreen from '../screens/OrderManagement/OrderBatchRejec
 import OrderBatchCompletedScreen from '../screens/OrderManagement/OrderBatchCompletedScreen';
 import OrderBatchPickupDetailScreen from '../screens/OrderManagement/OrderBatchPickupDetailScreen';
 import ActivityOrderDetailScreen from '../screens/OrderManagement/ActivityOrderDetailScreen';
+import ReturnOrdersScreen from '../screens/OrderManagement/ReturnOrdersScreen';
 
 // Legacy components fallback import
 import GmuDetailScreen from '../screens/OrderManagement/GmuDetailScreen';
@@ -22,6 +23,7 @@ export type OrderManagementStackParamList = {
   UpcomingOrders: undefined;
   OrderBatchRejected: undefined;
   OrderBatchCompleted: undefined;
+  ReturnOrders: { activeTab?: 'pickup' | 'drop' } | undefined;
   OrderBatchPickupDetail: { batchId: string };
   ActivityOrderDetail: { batchId: string };
 
@@ -42,6 +44,7 @@ const OrderManagementStackNavigator = () => {
       <Stack.Screen name="UpcomingOrders" component={UpcomingOrdersScreen} />
       <Stack.Screen name="OrderBatchRejected" component={OrderBatchRejectedScreen} />
       <Stack.Screen name="OrderBatchCompleted" component={OrderBatchCompletedScreen} />
+      <Stack.Screen name="ReturnOrders" component={ReturnOrdersScreen} />
       <Stack.Screen name="OrderBatchPickupDetail" component={OrderBatchPickupDetailScreen} />
       <Stack.Screen
         name="ActivityOrderDetail"

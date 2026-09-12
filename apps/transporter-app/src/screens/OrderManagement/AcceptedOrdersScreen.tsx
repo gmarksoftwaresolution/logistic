@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     top: scale(4),
     bottom: scale(4),
     left: scale(4),
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.primary,
     borderRadius: scale(12),
     ...Platform.select({
       ios: {
@@ -446,11 +446,11 @@ const styles = StyleSheet.create({
   },
   navTabActiveText: {
     fontFamily: Fonts.bold,
-    color: Colors.primary,
+    color: '#FFFFFF',
   },
   navTabTextActive: {
     fontFamily: Fonts.bold,
-    color: Colors.primary,
+    color: '#FFFFFF',
   },
   container: {
     paddingHorizontal: scale(20),
