@@ -240,7 +240,15 @@ async function seedAndAllocateOrders() {
       });
     }
 
-    console.log(`✅ Order ${orderIdVal} allocated:`);
+    // Update main order barcode to contain comma-separated list of all parcel barcodes
+    const createdParcels = await prisma.parcel.findMany({ where: { orderId: createdOrder.id } });
+    const allBarcodeStr = createdParcels.map(p => p.parcelId).join(', ') || `PCL-2026-${cleanNum}-1`;
+    await prisma.order.update({
+      where: { id: createdOrder.id },
+      data: { barcode: allBarcodeStr }
+    });
+
+    console.log(`✅ Order ${orderIdVal} allocated (Barcodes: "${allBarcodeStr}"):`);
     console.log(`   - Seller: ${seller.sellerName} (${seller.village}) -> Pickup SHG: ${pickupShg.fullName}`);
     console.log(`   - Buyer: ${buyer.buyerName} (${buyer.village}) -> Drop SHG: ${dropShg.fullName}`);
     console.log(`   - Transporter: ${pickupTransporter?.fullName || 'None'} (Pickup & Drop Assigned)`);

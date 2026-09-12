@@ -234,7 +234,15 @@ async function resetAndSeed20Orders() {
       });
     }
 
-    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporters Broadcasted: ${approvedTransporters.length} | Products: [${prod1.name}, ${prod2.name}]`);
+    // Update main order barcode to contain comma-separated list of all parcel barcodes
+    const createdParcels = await prisma.parcel.findMany({ where: { orderId: createdOrder.id } });
+    const allBarcodeStr = createdParcels.map(p => p.parcelId).join(', ') || `PCL-2026-${cleanNum}-1`;
+    await prisma.order.update({
+      where: { id: createdOrder.id },
+      data: { barcode: allBarcodeStr }
+    });
+
+    console.log(`  - Created Order ${orderIdVal} | SHG: ${assignedShg?.authId || assignedShg?.id || 'N/A'} | Transporters Broadcasted: ${approvedTransporters.length} | Barcodes: "${allBarcodeStr}"`);
   }
 
   console.log('\n================================================================');

@@ -125,11 +125,14 @@ async function seedRealProducts() {
       });
     }
 
-    // Update main order total products, quantity, weight, and barcode
+    // Update main order total products, quantity, weight, and barcode containing all parcel barcodes
+    const createdParcels = await prisma.parcel.findMany({ where: { orderId: order.id } });
+    const allBarcodeStr = createdParcels.map(p => p.parcelId).join(', ') || `PCL-${cleanId}-1`;
+
     await prisma.order.update({
       where: { id: order.id },
       data: {
-        barcode: `QR-${cleanId}-PCL-1`,
+        barcode: allBarcodeStr,
         productCount: selectedProducts.length,
         totalQty: totalQty,
         totalWeight: totalWeight,
