@@ -30,6 +30,7 @@ interface OrderCardProps {
   transporterId?: string;
   verificationPending?: boolean;
   onSendOtp?: () => void;
+  otpButtonLabel?: string;
   rawOrder?: any;
   hideTransporter?: boolean;
 }
@@ -57,6 +58,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   transporterId,
   verificationPending,
   onSendOtp,
+  otpButtonLabel,
   rawOrder,
   hideTransporter = false,
 }) => {
@@ -133,9 +135,9 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 activeOpacity={0.8}
                 className="self-start flex-row items-center px-2.5 py-0.5 rounded-[6px] border border-[#059669] bg-[#059669] shadow-xs"
               >
-                <Ionicons name="key-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Ionicons name="shield-checkmark-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text className="text-[10.5px] font-extrabold text-white tracking-wide">
-                  Send OTP (1234)
+                  {otpButtonLabel || "Send OTP (1234)"}
                 </Text>
               </TouchableOpacity>
             )}

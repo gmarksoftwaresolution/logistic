@@ -10,13 +10,15 @@ import {
   Animated,
   Linking,
   RefreshControl,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/Colors';
 import ScreenHeader from '../../components/ScreenHeader';
 import { useOrderManagement, BatchOrder, HUB_CONTACT } from '../../context/OrderManagementContext';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
-import { Package, MapPin, Eye, RotateCcw } from 'lucide-react-native';
+import { Package, MapPin, Eye, RotateCcw, CheckCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { isHubPoint } from '../../constants/hub';
 
@@ -24,9 +26,11 @@ type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
 
 const ReturnOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, navigation }) => {
   const { t } = useTranslation();
-  const { batches, refreshBatchesList } = useOrderManagement();
+  const { batches, refreshBatchesList, finalizePickup } = useOrderManagement();
   const [activeTab, setActiveTab] = useState<'pickup' | 'drop'>(route.params?.activeTab || 'pickup');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPickupBatch, setSelectedPickupBatch] = useState<BatchOrder | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -43,6 +47,23 @@ const ReturnOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, 
       console.error('Failed to refresh return batches:', e);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleOpenPickupConfirm = (batch: BatchOrder) => {
+    setSelectedPickupBatch(batch);
+  };
+
+  const handleConfirmPickup = async () => {
+    if (!selectedPickupBatch || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await finalizePickup(selectedPickupBatch.id);
+      setSelectedPickupBatch(null);
+    } catch (err) {
+      console.error('Failed to complete return pickup:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -70,18 +91,24 @@ const ReturnOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, 
   const isReturnBatch = (b: BatchOrder): boolean => {
     return Boolean(
       b.isRTO ||
+      b.isReturn ||
+      b.returnType === 'BUYER_RETURN' ||
+      b.returnType === 'TRANSPORTER_RETURN' ||
+      b.returnType === 'RTO' ||
+      (b as any).returnType === 'BUYER_RETURN' ||
       (b as any).returnType === 'TRANSPORTER_RETURN' ||
       (b as any).returnType === 'RTO' ||
-      b.products?.some(p => (p as any).isRTO)
+      (b as any).isReturn ||
+      b.products?.some(p => (p as any).isRTO || (p as any).isReturn)
     );
   };
 
   const { sortedPickupEntries, sortedDropEntries } = useMemo(() => {
     const allReturnBatches = batches.filter(isReturnBatch);
 
-    // 1. Pickup Return Orders (Status: NEW_ORDER or ACCEPTED_PICKUP)
+    // 1. Pickup Return Orders (Status: ACCEPTED_PICKUP)
     const pickupBatches = allReturnBatches.filter(
-      (b) => b.status === 'NEW_ORDER' || b.status === 'ACCEPTED_PICKUP'
+      (b) => b.status === 'ACCEPTED_PICKUP'
     );
     const pickupEntries: DisplayEntry[] = pickupBatches.map((b) => ({ batch: b, type: 'pickup' }));
 
@@ -180,14 +207,26 @@ const ReturnOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, 
                         <Text style={styles.detailBtnText}>View Details</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={styles.mapBtn}
-                        onPress={() => handleNavigateMap(batch, type)}
-                        activeOpacity={0.8}
-                      >
-                        <MapPin size={scale(14)} color="#FFFFFF" style={{ marginRight: scale(4) }} />
-                        <Text style={styles.mapBtnText}>Navigate</Text>
-                      </TouchableOpacity>
+                      {isPickup ? (
+                        <TouchableOpacity
+                          style={styles.pickupBtn}
+                          onPress={() => handleOpenPickupConfirm(batch)}
+                          activeOpacity={0.8}
+                          disabled={isSubmitting && selectedPickupBatch?.id === batch.id}
+                        >
+                          <CheckCircle size={scale(14)} color="#FFFFFF" style={{ marginRight: scale(4) }} />
+                          <Text style={styles.pickupBtnText}>Pickup</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.mapBtn}
+                          onPress={() => handleNavigateMap(batch, type)}
+                          activeOpacity={0.8}
+                        >
+                          <MapPin size={scale(14)} color="#FFFFFF" style={{ marginRight: scale(4) }} />
+                          <Text style={styles.mapBtnText}>Navigate</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
                 );
@@ -253,6 +292,64 @@ const ReturnOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route, 
         {renderOrderList(sortedPickupEntries, 'pickup')}
         {renderOrderList(sortedDropEntries, 'drop')}
       </ScrollView>
+
+      {/* 📦 Confirmation Dialog for Pickup */}
+      <Modal
+        visible={!!selectedPickupBatch}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isSubmitting) setSelectedPickupBatch(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconBox}>
+              <CheckCircle size={scale(28)} color={Colors.primary} strokeWidth={2.5} />
+            </View>
+
+            <Text style={styles.modalTitle}>Confirm Pickup</Text>
+
+            {selectedPickupBatch && (
+              <View style={styles.modalOrderIdChip}>
+                <Text style={styles.modalOrderIdText}>
+                  {selectedPickupBatch.displayId || selectedPickupBatch.id}
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.modalMessage}>
+              Are you sure you want to pickup?
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  if (!isSubmitting) setSelectedPickupBatch(null);
+                }}
+                activeOpacity={0.8}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, isSubmitting && { opacity: 0.7 }]}
+                onPress={handleConfirmPickup}
+                activeOpacity={0.8}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmBtnText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -399,6 +496,20 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(13),
     color: Colors.primary,
   },
+  pickupBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    paddingVertical: verticalScale(9),
+    borderRadius: scale(10),
+  },
+  pickupBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: '#FFFFFF',
+  },
   mapBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -411,6 +522,103 @@ const styles = StyleSheet.create({
   mapBtnText: {
     fontFamily: Fonts.bold,
     fontSize: moderateScale(13),
+    color: '#FFFFFF',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: scale(20),
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: moderateScale(20),
+    paddingHorizontal: scale(24),
+    paddingVertical: verticalScale(24),
+    width: '100%',
+    maxWidth: scale(360),
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  modalIconBox: {
+    width: scale(52),
+    height: scale(52),
+    borderRadius: scale(26),
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: verticalScale(12),
+  },
+  modalTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(18),
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  modalOrderIdChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(6),
+    marginTop: verticalScale(6),
+  },
+  modalOrderIdText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(13),
+    color: Colors.primary,
+  },
+  modalMessage: {
+    fontFamily: Fonts.medium,
+    fontSize: moderateScale(14),
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: verticalScale(12),
+    marginBottom: verticalScale(20),
+    lineHeight: moderateScale(20),
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(12),
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(12),
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  modalCancelBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
+    color: '#64748B',
+  },
+  modalConfirmBtn: {
+    flex: 1.2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(12),
+    backgroundColor: Colors.primary,
+  },
+  modalConfirmBtnText: {
+    fontFamily: Fonts.bold,
+    fontSize: moderateScale(14),
     color: '#FFFFFF',
   },
 });

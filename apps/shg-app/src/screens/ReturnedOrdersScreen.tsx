@@ -25,6 +25,9 @@ import Toast from 'react-native-toast-message';
 import { getRouteForOrder, getInfoForOrder, translateRoutePart, getFormattedOrderId, getModalAddresses } from '../utils/orderHelpers';
 import { AddressDetailsModal } from '../components/AddressDetailsModal';
 
+import { ReturnOtpModal } from '../components/ReturnOtpModal';
+import { SellerDeliveryOtpModal } from '../components/SellerDeliveryOtpModal';
+
 type Props = CompositeScreenProps<
   NativeStackScreenProps<OrdersStackParamList, 'ReturnedOrders'>,
   CompositeScreenProps<
@@ -38,7 +41,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const context = useContext(LanguageContext);
   const { user } = useUser();
-  const { returnedOrders, highlightedOrders, receiveOrder, refreshOrdersList } = useOrders();
+  const { returnedOrders, highlightedOrders, receiveOrder, refreshOrdersList, deliverOrder } = useOrders();
 
   if (!context || !user) return null;
   const { t } = context;
@@ -91,13 +94,100 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  // Return OTP Modal state
+  const [returnOtpModalVisible, setReturnOtpModalVisible] = useState(false);
+  const [selectedReturnOrder, setSelectedReturnOrder] = useState<Order | null>(null);
+
+  const handleReturnPickupPress = (order: Order) => {
+    const isSecondLegReturnDrop = ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus || order.status || '');
+    if (isSecondLegReturnDrop) {
+      setModalConfig({
+        visible: true,
+        title: "Confirm Pickup",
+        message: "Are you sure you want to pickup?",
+        confirmText: "Submit",
+        cancelText: "Cancel",
+        showInput: false,
+        onConfirm: async () => {
+          try {
+            await receiveOrder(order);
+            Toast.show({
+              type: 'success',
+              text1: 'Pickup Confirmed',
+              text2: 'Parcel received from Transporter and moved to Drop (Return).',
+            });
+          } catch (err: any) {
+            console.error('Failed to confirm return drop pickup:', err);
+            Toast.show({
+              type: 'error',
+              text1: 'Error',
+              text2: err?.response?.data?.message || 'Failed to complete pickup',
+            });
+          }
+        }
+      });
+      return;
+    }
+
+    // FIRST RETURN PICKUP FLOW (Buyer -> SHG) - 100% UNTOUCHED
+    setSelectedReturnOrder({ ...order });
+    setReturnOtpModalVisible(true);
+  };
+
+  const handleCloseReturnOtpModal = () => {
+    setReturnOtpModalVisible(false);
+    setSelectedReturnOrder(null);
+  };
+
+  const handleVerifyReturnOtp = async (otp: string) => {
+    if (!selectedReturnOrder) return;
+    const targetOrder = selectedReturnOrder;
+    await receiveOrder(targetOrder, otp);
+    Toast.show({
+      type: 'success',
+      text1: 'Pickup Verified',
+      text2: 'Parcel received from Buyer and moved to Drop (Return).',
+    });
+    handleCloseReturnOtpModal();
+  };
+
+  // Seller Delivery OTP Modal State (Scenario 2: SHG -> Seller)
+  const [sellerOtpModalVisible, setSellerOtpModalVisible] = useState(false);
+  const [selectedSellerDropOrder, setSelectedSellerDropOrder] = useState<Order | null>(null);
+
+  const handleSellerDropPress = (order: Order) => {
+    setSelectedSellerDropOrder(order);
+    setSellerOtpModalVisible(true);
+  };
+
+  const handleVerifySellerDeliveryOtp = async (otp: string) => {
+    if (!selectedSellerDropOrder) return;
+    await deliverOrder(selectedSellerDropOrder, otp);
+    setSellerOtpModalVisible(false);
+    setSelectedSellerDropOrder(null);
+    Toast.show({
+      type: 'success',
+      text1: 'Return Delivered',
+      text2: 'Return order delivered to seller and moved to Completed section.',
+    });
+  };
+
   // Confirm Modal State
   const [barcodeInput, setBarcodeInput] = useState('');
-  const [modalConfig, setModalConfig] = useState({
+  const [modalConfig, setModalConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText?: string;
+    showInput: boolean;
+    onConfirm: (code?: string) => Promise<void>;
+  }>({
     visible: false,
     title: '',
     message: '',
     confirmText: 'Confirm',
+    cancelText: 'Cancel',
     showInput: false,
     onConfirm: (code?: string) => Promise.resolve(),
   });
@@ -105,23 +195,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   const [selectedAddressOrder, setSelectedAddressOrder] = useState<Order | null>(null);
 
   const handleQRScan = (order: Order) => {
-    setBarcodeInput('');
-    setModalConfig({
-      visible: true,
-      title: t('confirm_pickup') || "Confirm Pickup",
-      message: (t('confirm_pickup_message') || `Please scan or enter the original delivery QR/barcode to collect "{parcel}".`).replace('{parcel}', order.parcelName),
-      confirmText: t('su_confirm_358') || 'Confirm',
-      showInput: true,
-      onConfirm: async (scannedCode?: string) => {
-        try {
-          await receiveOrder(order, scannedCode);
-          Toast.show({ type: 'success', text1: t('su_success_388') || 'Success', text2: t('parcel_received_msg') || 'Parcel successfully received and moved to the Delivery tab.' });
-        } catch (error: any) {
-          const errMsg = error.response?.data?.message || 'Failed to confirm pickup';
-          Toast.show({ type: 'error', text1: 'Error', text2: Array.isArray(errMsg) ? errMsg[0] : errMsg });
-        }
-      }
-    });
+    handleReturnPickupPress(order);
   };
 
   const handleHandoverScan = (order: Order) => {
@@ -145,7 +219,7 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleEyeDetails = (order: Order) => {
-    navigation.navigate('OrderDetails', { order });
+    (navigation.navigate as any)('ReturnOrderDetails', { order });
   };
 
   return (
@@ -290,6 +364,8 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
 
+            const isSecondLegReturnDrop = ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(item.mainStatus || item.status || '');
+
             return (
               <OrderCard
                 orderIdText={orderIdText}
@@ -298,8 +374,8 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
-                showScanner={true}
-                onScan={() => handleQRScan(item)}
+                onSendOtp={() => handleReturnPickupPress(item)}
+                otpButtonLabel={isSecondLegReturnDrop ? 'Pickup' : 'Pickup (OTP)'}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
@@ -351,10 +427,11 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
             ) : null
           }
           renderItem={({ item }) => {
+            const isSecondLegReturnDrop = ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(item.mainStatus || item.status || '');
             const routeStr = getRouteForOrder(item);
             const routeParts = routeStr.split('>');
             const source = translateRoutePart(routeParts[0]?.trim() || 'Transporter', t);
-            const destination = translateRoutePart(routeParts[1]?.trim() || 'Buyer', t);
+            const destination = translateRoutePart(routeParts[1]?.trim() || (isSecondLegReturnDrop ? 'Seller' : 'Buyer'), t);
             const orderIdText = `#${getFormattedOrderId(item)}`;
             const info = getInfoForOrder(item);
 
@@ -366,8 +443,9 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
                 qty={item.remainingQty || 1}
                 date={info.date}
                 time={info.time}
-                showScanner={true}
-                onScan={() => handleHandoverScan(item)}
+                onSendOtp={isSecondLegReturnDrop ? () => handleSellerDropPress(item) : undefined}
+                otpButtonLabel={isSecondLegReturnDrop ? 'Drop' : undefined}
+                showScanner={false}
                 onPressCard={() => handleEyeDetails(item)}
                 onViewAddress={() => setSelectedAddressOrder(item)}
                 isHighlighted={highlightedOrders[item.id]}
@@ -395,19 +473,20 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
         title={modalConfig.title}
         message={modalConfig.message}
         confirmText={modalConfig.confirmText}
-        showInput={(modalConfig as any).showInput}
+        cancelText={modalConfig.cancelText || 'Cancel'}
+        showInput={modalConfig.showInput}
         inputValue={barcodeInput}
         onInputChange={setBarcodeInput}
         inputPlaceholder="Scan or enter delivery QR/barcode"
         onCancel={() => {
-          setModalConfig({ ...modalConfig, visible: false } as any);
+          setModalConfig(prev => ({ ...prev, visible: false }));
           setBarcodeInput('');
         }}
         onConfirm={async () => {
-          if ((modalConfig as any).onConfirm) {
-            await (modalConfig as any).onConfirm(barcodeInput);
+          if (modalConfig.onConfirm) {
+            await modalConfig.onConfirm(barcodeInput);
           }
-          setModalConfig({ ...modalConfig, visible: false } as any);
+          setModalConfig(prev => ({ ...prev, visible: false }));
           setBarcodeInput('');
         }}
       />
@@ -425,6 +504,27 @@ const ReturnedOrdersScreen: React.FC<Props> = ({ navigation }) => {
           />
         );
       })()}
+
+      {/* Buyer Return OTP Modal */}
+      <ReturnOtpModal
+        visible={returnOtpModalVisible}
+        onClose={handleCloseReturnOtpModal}
+        onVerify={handleVerifyReturnOtp}
+        orderIdText={selectedReturnOrder ? getFormattedOrderId(selectedReturnOrder) : ''}
+        buyerMobile={selectedReturnOrder ? (selectedReturnOrder.buyer?.mobileNumber || selectedReturnOrder.buyer?.phoneNumber || selectedReturnOrder.mobile || (selectedReturnOrder as any).buyerMobile || 'N/A') : ''}
+      />
+
+      {/* Seller Delivery OTP Modal (Scenario 2: SHG -> Seller) */}
+      <SellerDeliveryOtpModal
+        visible={sellerOtpModalVisible}
+        onClose={() => {
+          setSellerOtpModalVisible(false);
+          setSelectedSellerDropOrder(null);
+        }}
+        onVerify={handleVerifySellerDeliveryOtp}
+        orderIdText={selectedSellerDropOrder ? `#${getFormattedOrderId(selectedSellerDropOrder)}` : ''}
+        sellerMobile={selectedSellerDropOrder?.sellerMobile || selectedSellerDropOrder?.seller?.mobileNumber || selectedSellerDropOrder?.seller?.phoneNumber || selectedSellerDropOrder?.mobile || ''}
+      />
     </SafeAreaView>
   );
 };

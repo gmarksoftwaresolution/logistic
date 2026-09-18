@@ -259,6 +259,7 @@ export interface AppContextType {
 
   readyToStore: (orderId: string) => void;
   dispatchInventory: (orderId: string) => void;
+  dispatchBuyerReturn: (orderId: string) => Promise<void>;
   intakePickupOrders: (orderIds: string[]) => void;
   intakeReturnOrder: (orderId: string, returnType: 'pickup' | 'drop') => void;
   mapOrder: (o: any, flowType?: 'pickup' | 'drop' | 'return') => any;
@@ -820,8 +821,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadReturnsBuyer = async (status?: string, date?: string) => {
     const data = await api.orders.getReturnsBuyer(status, date);
     const mapped = sortNewestFirst(data.map((o: any) => mapOrder(o, 'return')));
-    setReturnPickupNewOrders(mapped.filter((o: any) => !['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'COMPLETED', 'RETURN_COMPLETED'].includes(o.mainStatus)));
-    setReturnPickupCompletedOrders(mapped.filter((o: any) => o.mainStatus === 'BUYER_RETURN_COMPLETED'));
+    setReturnPickupNewOrders(mapped.filter((o: any) => !['BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'COMPLETED', 'DELIVERED'].includes(o.mainStatus)));
+    setReturnPickupCompletedOrders(mapped.filter((o: any) => ['BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'COMPLETED', 'DELIVERED'].includes(o.mainStatus)));
   };
 
   const loadInventoryStored = async (status?: string, date?: string) => {
@@ -886,6 +887,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       loadInventoryStored(),
       loadInventoryTransporterReturn(),
       loadInventoryBuyerReturn(),
+      loadCounts()
+    ]);
+  };
+
+  const dispatchBuyerReturn = async (orderId: string) => {
+    const order = returnPickupInventory.find((item) => item.id === orderId || (item as any).uuid === orderId || (item as any).orderId === orderId) as any;
+    const targetId = order?.uuid || order?.id || orderId;
+    await api.orders.dispatchBuyerReturn(targetId);
+    await Promise.all([
+      loadInventoryStored(),
+      loadInventoryTransporterReturn(),
+      loadInventoryBuyerReturn(),
+      loadInventoryDispatched(),
       loadCounts()
     ]);
   };
@@ -1199,6 +1213,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         readyToStore,
         dispatchInventory,
+        dispatchBuyerReturn,
         intakePickupOrders,
         intakeReturnOrder,
         requestBuyerReturn,

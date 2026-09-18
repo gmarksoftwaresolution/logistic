@@ -82,6 +82,7 @@ export interface Order {
   sellerMobile?: string;
   buyerMobile?: string;
   tracking?: any[];
+  returnType?: string;
 }
 
 interface OrderContextType {
@@ -115,7 +116,18 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
 
 
+const extractCleanRawId = (orderObj: any): string => {
+  if (!orderObj) return '';
+  const candidate = orderObj.uuid || orderObj.orderId || orderObj.id || '';
+  return String(candidate)
+    .replace(/^pickup-/, '')
+    .replace(/^drop-/, '')
+    .replace(/^undefined-/, '')
+    .replace(/^ORD-/, '');
+};
+
 const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: boolean): Order => {
+  const cleanType = (type && String(type) !== 'undefined') ? type : (dbOrder.legType || 'pickup');
   const items = dbOrder.items || [];
   const parcelName = items.map((i: any) => i.product?.name).filter(Boolean).join(', ') || '';
   const category = items[0]?.product?.category || '';
@@ -126,8 +138,6 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
 
   const dbQty = orderItems.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
   const qty = dbQty > 0 ? dbQty : 1;
-
-
 
   const toAddressStr = (addr: any): string => {
     if (!addr) return '';
@@ -193,15 +203,26 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
   const isGeneratedReturn = dbOrder.masterOrder?.orderNumber?.startsWith('RET-') || String(masterId).startsWith('RET-') || String(dbOrder.dropOrderNumber).startsWith('RET-');
   const isGeneratedNewOrder = dbOrder.masterOrder?.orderNumber?.startsWith('ORD-1769749895005') || String(masterId).startsWith('ORD-1769749895005') || String(dbOrder.pickupOrderNumber).startsWith('ORD-1769749895005') || String(dbOrder.dropOrderNumber).startsWith('ORD-1769749895005');
 
-  const finalAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (type === 'pickup' ? actualPickupAddress : actualDropAddress)));
-  const finalSourceAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (type === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress));
+  const finalAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (cleanType === 'pickup' ? dbOrder.seller?.fullName : dbOrder.deliveryAddress) : (cleanType === 'pickup' ? actualPickupAddress : actualDropAddress)));
+  const finalSourceAddress = toAddressStr(isGeneratedReturn ? dbOrder.deliveryAddress : (isGeneratedNewOrder ? (cleanType === 'pickup' ? dbOrder.seller?.fullName : actualPickupAddress) : actualPickupAddress));
 
-  let isReturnFlag = isReturnOrder !== undefined ? isReturnOrder : !!dbOrder.status?.startsWith('RETURN');
+  const hasReturnIndicator = dbOrder.returnType === 'BUYER_RETURN' ||
+    dbOrder.returnType === 'TRANSPORTER_RETURN' ||
+    dbOrder.status?.startsWith('RETURN') ||
+    dbOrder.mainStatus?.startsWith('RETURN') ||
+    String(dbOrder.orderId || '').startsWith('RET-') ||
+    String(dbOrder.id || '').startsWith('RET-');
+
+  let isReturnFlag = !!hasReturnIndicator || !!isReturnOrder;
+  if (hasReturnIndicator) isReturnFlag = true;
   if (isGeneratedNewOrder) isReturnFlag = false;
   if (isGeneratedReturn) isReturnFlag = true;
 
+  const rawDbId = (dbOrder.orderId || dbOrder.id || masterId || '').replace(/^ORD-/, '');
+
   return {
-    id: `${type}-${dbOrder.id}`,
+    id: `${cleanType}-${rawDbId}`,
+    uuid: dbOrder.uuid || dbOrder.id || '',
     orderId: dbOrder.orderId
       ? (dbOrder.orderId.startsWith('ORD-') ? dbOrder.orderId : `ORD-${dbOrder.orderId}`)
       : (dbOrder.orderNumber ? (dbOrder.orderNumber.startsWith('ORD-') ? dbOrder.orderNumber : `ORD-${dbOrder.orderNumber}`) : (dbOrder.masterOrder?.orderNumber || (String(masterId).length > 20 ? `ORD-${masterId.slice(0, 8)}` : `ORD-${masterId}`))),
@@ -219,9 +240,44 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     deliveryDay: dateStr,
     date: dateStr,
     status: (() => {
-      const mStatus = dbOrder.mainStatus || dbOrder.masterOrder?.status || '';
-      const pStatus = dbOrder.status || dbOrder.mainStatus || '';
-      const shgStatus = dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '';
+      const mStatus = (dbOrder.mainStatus || dbOrder.status || dbOrder.masterOrder?.status || '').toUpperCase();
+      const pStatus = (dbOrder.status || dbOrder.mainStatus || '').toUpperCase();
+      const shgStatus = (dbOrder.pickupShgStatus || dbOrder.pickup_shg_status || '').toUpperCase();
+
+      if (isReturnFlag || dbOrder.returnType === 'BUYER_RETURN') {
+        const isBuyerReturnSecondLeg = ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(mStatus);
+        const isBuyerReturnFirstLeg = ['RETURN_PENDING', 'RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'RETURN_PARCEL_AT_TRANSPORTER', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB', 'INVENTORY_BUYER_RETURN', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED'].includes(mStatus);
+
+        const isDropPhase = isBuyerReturnSecondLeg || (!isBuyerReturnFirstLeg && (dbOrder.phase === 'DROP' || type === 'drop'));
+
+        if (isDropPhase) {
+          const dShgStatus = (dbOrder.dropShgStatus || dbOrder.drop_shg_status || '').toUpperCase();
+          const isDropCompleted = dShgStatus === 'DELIVERED' || dShgStatus === 'COMPLETED' || dShgStatus === 'DROPPED' || mStatus === 'DELIVERED' || mStatus === 'COMPLETED' || mStatus === 'RETURN_COMPLETED' || mStatus === 'BUYER_RETURN_COMPLETED';
+          if (isDropCompleted) {
+            return 'COMPLETED';
+          }
+          const isDropPicked = dShgStatus === 'PICKED' || mStatus === 'PARCEL_AT_DROP_SHG';
+          if (isDropPicked) {
+            return 'PickedUp';
+          }
+          return 'Accepted';
+        }
+
+        const isReturnPostPickup = [
+          'RETURN_PARCEL_AT_SHG',
+          'RETURN_TRANSPORTER_PENDING',
+          'RETURN_TRANSPORTER_REQUESTED',
+          'RETURN_TRANSPORTER_ACCEPTED',
+          'RETURN_IN_TRANSIT_TO_HUB',
+          'RETURN_COMPLETED',
+          'BUYER_RETURN_COMPLETED'
+        ].includes(mStatus) || shgStatus === 'PICKED' || shgStatus === 'DROPPED';
+
+        if (isReturnPostPickup) {
+          return 'PickedUp';
+        }
+        return 'Accepted';
+      }
 
       if (type === 'pickup') {
         const isPickupCompleted = [
@@ -281,6 +337,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
       }
     })(),
     isReturn: isReturnFlag,
+    returnType: dbOrder.returnType || (isReturnFlag ? 'BUYER_RETURN' : undefined),
     barcode: dbOrder.barcode || dbOrder.masterOrder?.barcode || '',
     image: items[0]?.product?.image || '',
     currentHolder: (dbOrder.status === 'PENDING' || dbOrder.status === 'RETURN_PENDING') ? 'Seller' : 'SHG',
@@ -338,7 +395,6 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     dropShgStatus: dbOrder.dropShgStatus || dbOrder.masterOrder?.dropShgStatus || '',
     pickupTransporterStatus: dbOrder.pickupTransporterStatus || '',
     mainStatus: dbOrder.mainStatus || '',
-    uuid: dbOrder.id || '',
     sellerMobile: dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || dbOrder.masterOrder?.items?.[0]?.seller?.mobileNumber || '',
     buyerMobile: dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || '',
     tracking: dbOrder.tracking || dbOrder.masterOrder?.tracking || [],
@@ -390,14 +446,20 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }, 30000);
   };
 
+  const isPollingPausedRef = useRef<boolean>(false);
+  const isRefreshingRef = useRef<boolean>(false);
+
   const orders = [...incomingOrders, ...acceptedOrders, ...deliveredOrders, ...pendingOrders, ...returnedOrders];
 
   const refreshOrdersList = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
       setIsOrdersLoading(true);
       const token = await AsyncStorage.getItem(STORAGE_KEYS.JWT_TOKEN);
       if (!token) {
         setIsOrdersLoading(false);
+        isRefreshingRef.current = false;
         return;
       }
 
@@ -437,21 +499,27 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       rawPickups.forEach((o: any) => {
-        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+        if (o.returnType !== 'BUYER_RETURN' && !o.mainStatus?.startsWith('RETURN') && (o.status === 'PENDING' || o.status === 'RETURN_PENDING')) {
           axiosInstance.post(`/orders/new/${o.id}/accept`, { legType: o.legType || 'pickup' }).catch(() => { });
         }
       });
 
       rawReturns.forEach((o: any) => {
-        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING') {
+        if (o.status === 'PENDING' || o.status === 'RETURN_PENDING' || o.status === 'RETURN_SHG_PENDING') {
           axiosInstance.post(`/orders/returns/${o.id}/accept`).catch(() => { });
         }
       });
 
-      const mappedPickups = rawPickups.map((o: any) => {
+      const filteredRawPickups = rawPickups.filter((o: any) =>
+        o.returnType !== 'BUYER_RETURN' &&
+        !o.mainStatus?.startsWith('RETURN') &&
+        !o.status?.startsWith('RETURN')
+      );
+
+      const mappedPickups = filteredRawPickups.map((o: any) => {
         const isDropLeg = o.legType === 'drop' || o.phase === 'DROP' || ['STORED', 'HUB_RECEIVED', 'PARCEL_AT_HUB', 'PARCEL_AT_GMU', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_BUYER', 'IN_TRANSIT_TO_DROP_SHG', 'DISPATCHED', 'PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'AT_BUYER_SHG'].includes(o.mainStatus || o.status);
         const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : (o.legType || 'pickup'), false);
-        if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
+        if (!isDropLeg && (o.legType === 'pickup' || o.phase === 'PICKUP') && (order.status === 'COMPLETED' || o.pickupShgStatus === 'DROPPED')) {
           order.status = 'COMPLETED';
           const pIdx = localPickedUp.indexOf(order.id);
           if (pIdx !== -1) {
@@ -473,6 +541,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const allMapped = [...mappedPickups, ...mappedDrops];
 
       const finalMapped = allMapped.filter(order => {
+        if (order.isReturn || order.returnType === 'BUYER_RETURN' || order.returnType === 'TRANSPORTER_RETURN' || order.mainStatus?.startsWith('RETURN') || order.status?.startsWith('RETURN')) return false;
         if (order.legType === 'pickup') {
           const hasDropOrder = allMapped.some(o => o.legType === 'drop' && o.orderId === order.orderId);
           if (hasDropOrder && ['PARCEL_AT_DROP_SHG', 'PARCEL_WITH_DROP_SHG', 'IN_TRANSIT_TO_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED'].includes(order.mainStatus || '')) {
@@ -524,7 +593,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
       }
 
-      const sortedIncoming = finalMapped.filter(o => o.status === 'assigned').sort((a, b) => {
+      const sortedIncoming = finalMapped.filter(o => o.status === 'assigned' && !o.isReturn && o.returnType !== 'BUYER_RETURN' && o.returnType !== 'TRANSPORTER_RETURN' && !o.mainStatus?.startsWith('RETURN')).sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -537,7 +606,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
       setIncomingOrders(Array.from(uniqueIncomingMap.values()));
 
-      const sortedAccepted = finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected).sort((a, b) => {
+      const sortedAccepted = finalMapped.filter(o => (o.status === 'Accepted' || o.status === 'PickedUp') && !o.isRedirected && !o.isReturn && o.returnType !== 'BUYER_RETURN' && o.returnType !== 'TRANSPORTER_RETURN' && !o.mainStatus?.startsWith('RETURN')).sort((a, b) => {
         const aNum = parseInt(a.id.split('-').pop() || '0', 10);
         const bNum = parseInt(b.id.split('-').pop() || '0', 10);
         return bNum - aNum;
@@ -572,7 +641,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setRedirectedOrders(Array.from(uniqueRedirectedMap.values()));
 
       const mappedReturns = rawReturns.map((o: any) => {
-        const order = mapDbOrderToUi(o, o.legType, true);
+        const isBuyerReturnSecondLeg = ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(o.mainStatus || o.status);
+        const isDropLeg = isBuyerReturnSecondLeg || (o.returnType !== 'BUYER_RETURN' && o.phase === 'DROP');
+        const order = mapDbOrderToUi(o, isDropLeg ? 'drop' : 'pickup', true);
+        order.phase = isDropLeg ? 'DROP' : 'PICKUP';
+        order.legType = isDropLeg ? 'drop' : 'pickup';
         if (localRescheduled[order.id]) {
           order.rescheduledDate = localRescheduled[order.id].date;
           order.rescheduledTime = localRescheduled[order.id].time;
@@ -589,18 +662,11 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const activeReturns = mappedReturns.filter(o => o.status !== 'REJECTED' && o.status !== 'COMPLETED' && o.status !== 'assigned');
 
-      const sortedReturned = finalMapped.filter(o => o.status === 'RETURNED').sort((a, b) => {
-        const aNum = parseInt(a.id.split('-').pop() || '0', 10);
-        const bNum = parseInt(b.id.split('-').pop() || '0', 10);
-        return bNum - aNum;
-      });
-
-      const allReturned = [...sortedReturned, ...activeReturns];
       const uniqueReturnedMap = new Map<string, Order>();
-      allReturned.forEach(o => uniqueReturnedMap.set(o.id, o));
+      activeReturns.forEach(o => uniqueReturnedMap.set(o.orderId, o));
       localAcceptedReturnsRef.current.forEach(o => {
-        if (!uniqueReturnedMap.has(o.id)) {
-          uniqueReturnedMap.set(o.id, o);
+        if (!uniqueReturnedMap.has(o.orderId)) {
+          uniqueReturnedMap.set(o.orderId, o);
         }
       });
 
@@ -618,7 +684,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const isDrop = o.legType === 'drop' || o.phase === 'DROP' || o.dropShgStatus === 'DROPPED' || o.dropShgStatus === 'DELIVERED' || o.dropShgStatus === 'COMPLETED' || o.mainStatus === 'PARCEL_AT_DROP_SHG';
           return mapDbOrderToUi(o, isDrop ? 'drop' : (o.legType || 'pickup'), false);
         })
-        .filter((o: any) => !activeOrderIds.has(o.orderId));
+        .filter((o: any) => !activeOrderIds.has(o.orderId) && !o.isReturn && o.returnType !== 'BUYER_RETURN' && o.returnType !== 'TRANSPORTER_RETURN' && !o.mainStatus?.startsWith('RETURN'));
       const mappedCompletedReturns = (rawCompleted.returnOrders || []).map((o: any) => mapDbOrderToUi(o, o.legType || 'drop', true));
       const completedFromActive = finalMapped.filter(o => o.status === 'COMPLETED' || isRedirectedPickedUp(o));
       const allCompleted = [...mappedCompletedNew, ...mappedCompletedReturns, ...completedFromActive, ...localCompletedReturnsRef.current, ...localCompletedOrdersRef.current];
@@ -631,6 +697,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       console.warn('Error fetching live order lists from backend:', error);
     } finally {
       setIsOrdersLoading(false);
+      isRefreshingRef.current = false;
     }
   }, [refreshUpcomingOrders]);
 
@@ -676,10 +743,10 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => subscription.remove();
   }, [refreshOrdersList]);
 
-  // Real-time Background Polling Heartbeat (every 4 seconds when app is active and user is logged in)
+  // Real-time Background Polling Heartbeat (every 4 seconds when app is active, user is logged in, and no active OTP verification is in progress)
   useEffect(() => {
     const poller = setInterval(() => {
-      if (AppState.currentState === 'active' && lastTokenRef.current) {
+      if (AppState.currentState === 'active' && lastTokenRef.current && !isPollingPausedRef.current && !isRefreshingRef.current) {
         refreshOrdersList().catch(() => { });
       }
     }, 4000);
@@ -833,12 +900,16 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
+    isPollingPausedRef.current = true;
     try {
-      const rawId = order.id.replace('pickup-', '').replace('drop-', '');
-      if (order.isReturn && order.status === 'Accepted') {
+      const rawId = extractCleanRawId(order);
+      const isReturnPickup = (order.isReturn || order.returnType === 'BUYER_RETURN' || order.orderId?.startsWith('RET-') || order.id?.startsWith('RET-')) && order.status !== 'PickedUp' && order.status !== 'COMPLETED';
+
+      if (isReturnPickup) {
         const endpoint = `/orders/returns/pickup/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
         return;
       }
@@ -848,15 +919,19 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
         const paramLegType = (activeType === 'transporter' || order.isReturn) ? 'handover' : 'pickup';
         await axiosInstance.post(endpoint, { legType: paramLegType, code: code || '1234' });
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
       } else {
         const endpoint = `/orders/new/pickup/${rawId}/complete`;
         await axiosInstance.post(endpoint, { legType: 'drop', code: code || order.handoverCode || '1234' });
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
       }
     } catch (error) {
       console.error(`Error completing pickup for order ${order.id}:`, error);
       throw error;
+    } finally {
+      isPollingPausedRef.current = false;
     }
   };
 
@@ -866,6 +941,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const deliverOrder = async (order: Order, code?: string) => {
+    isPollingPausedRef.current = true;
     try {
       const rawId = order.id.replace('pickup-', '').replace('drop-', '');
 
@@ -878,14 +954,24 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setDeliveredOrders(prev => [...prev, completedOrder]);
 
         applyHighlight(order.id);
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
         return;
       }
 
-      if (order.isReturn) {
+      const isReturn =
+        order.isReturn ||
+        order.returnType === 'BUYER_RETURN' ||
+        order.returnType === 'TRANSPORTER_RETURN' ||
+        order.status?.startsWith('RETURN') ||
+        order.mainStatus?.startsWith('RETURN') ||
+        ['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG'].includes(order.mainStatus || '');
+
+      if (isReturn) {
         const endpoint = `/orders/returns/dilivery/${rawId}/complete`;
         await axiosInstance.post(endpoint, { code: code || '1234' });
         applyHighlight(order.id);
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
         return;
       }
@@ -904,6 +990,7 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const completedOrder = { ...order, status: 'COMPLETED' as any };
         localCompletedOrdersRef.current = [...localCompletedOrdersRef.current, completedOrder];
 
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
       } else {
         const endpoint = `/orders/new/dilivery/${rawId}/complete`;
@@ -912,10 +999,17 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const completedOrder = { ...order, status: 'COMPLETED' as any };
         localCompletedOrdersRef.current = [...localCompletedOrdersRef.current, completedOrder];
 
+        isPollingPausedRef.current = false;
         await refreshOrdersList();
       }
-    } catch (error) {
-      console.error(`Error completing order ${order.id}:`, error);
+    } catch (error: any) {
+      // Do NOT trigger console.error for expected 400 validation failures (such as invalid OTP) to prevent RN RedBox/LogBox dev screens
+      if (error?.response?.status !== 400) {
+        console.warn(`[deliverOrder] Error completing order ${order.id}:`, error?.message || error);
+      }
+      throw error;
+    } finally {
+      isPollingPausedRef.current = false;
     }
   };
 

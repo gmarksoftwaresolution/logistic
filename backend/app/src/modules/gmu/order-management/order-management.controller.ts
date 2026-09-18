@@ -468,6 +468,18 @@ export class OrderManagementController {
     return this.service.redispatchOrder(id);
   }
 
+  @Post(':id/dispatch-buyer-return')
+  @ApiOperation({ summary: 'Dispatch a buyer return order to the transporter for Seller return leg' })
+  async dispatchBuyerReturn(@Param('id') id: string) {
+    return this.service.dispatchBuyerReturn(id);
+  }
+
+  @Post(':id/buyer-return-dispatch')
+  @ApiOperation({ summary: 'Alias: Dispatch a buyer return order to the transporter for Seller return leg' })
+  async buyerReturnDispatch(@Param('id') id: string) {
+    return this.service.dispatchBuyerReturn(id);
+  }
+
   @Post(':id/simulate-reschedule-timeout')
   @ApiOperation({ summary: 'Simulation endpoint to trigger immediate auto-broadcast timeout for rescheduled orders' })
   async simulateRescheduleTimeout(@Param('id') id: string) {

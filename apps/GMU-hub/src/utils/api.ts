@@ -229,6 +229,7 @@ export const api = {
     buyerReturnTransporterPicked: (id: string) => request(`/orders/${id}/buyer-return/transporter-picked`, { method: 'POST' }),
     buyerReturnTransporterDelivered: (id: string) => request(`/orders/${id}/buyer-return/transporter-delivered`, { method: 'POST' }),
     buyerReturnIntake: (id: string) => request(`/orders/${id}/buyer-return/intake`, { method: 'POST' }),
+    dispatchBuyerReturn: (id: string) => request(`/orders/${id}/dispatch-buyer-return`, { method: 'POST' }),
 
     // ── Exception Lifecycle ───────────────────────────────────────────────────
     completeOrder: (id: string) => request(`/orders/${id}/complete`, { method: 'POST' }),

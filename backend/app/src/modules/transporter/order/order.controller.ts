@@ -191,5 +191,23 @@ export class OrderController {
   async bulkAccept(@Request() req: any, @Body('orders') orders: { id: string | number; type: 'pickup' | 'drop' }[]) {
     return this.orderService.bulkAccept(orders, req.user.id);
   }
+
+  @Post('returns/:id/accept')
+  @ApiOperation({ summary: 'Accept a return order assignment' })
+  async acceptReturn(@Param('id') id: string, @Request() req: any) {
+    return this.orderService.acceptReturn(id, req.user.id);
+  }
+
+  @Post('returns/pickup/:id/complete')
+  @ApiOperation({ summary: 'Collect return order from SHG' })
+  async collectReturnFromShg(@Param('id') id: string, @Request() req: any) {
+    return this.orderService.collectReturnFromShg(id, req.user.id);
+  }
+
+  @Post('returns/:id/collect')
+  @ApiOperation({ summary: 'Collect return order from SHG alias' })
+  async collectReturnFromShgAlias(@Param('id') id: string, @Request() req: any) {
+    return this.orderService.collectReturnFromShg(id, req.user.id);
+  }
 }
 

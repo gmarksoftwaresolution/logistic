@@ -227,6 +227,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
   // Return Sub-Tabs: transporter | buyer
   const [activeReturnSubTab, setActiveReturnSubTab] = useState<'transporter' | 'buyer'>('transporter');
 
+  // Completed Sub-Tabs: new | return
+  const [completedSubTab, setCompletedSubTab] = useState<'new' | 'return'>('new');
+
 
 
   // Modals state
@@ -1352,31 +1355,55 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     ].includes(order.mainStatus);
 
     if (isBuyerReturn) {
-      // 1. Buyer: always completed
+      // 1. Buyer: always completed (Return Origin)
       const buyerState = 'completed';
 
-      // 2. SHG: active if status is PENDING or ACCEPTED, completed if PICKED or later
-      let shgState: 'completed' | 'active' | 'pending' = 'pending';
-      if (['RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || ['PICKED', 'RETURN_PICKED_BY_SHG'].includes(order.pickupShgStatus || '')) {
-        shgState = 'completed';
+      // 2. Pickup SHG: active if status is PENDING or ACCEPTED, completed if PICKED or later
+      let pickupShgState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_PICKED_BY_SHG', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_PARCEL_AT_SHG', 'RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED', 'DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus) || ['PICKED', 'RETURN_PICKED_BY_SHG'].includes(order.pickupShgStatus || '')) {
+        pickupShgState = 'completed';
       } else if (['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PICKED_BY_SHG'].includes(order.mainStatus)) {
-        shgState = 'active';
+        pickupShgState = 'active';
       }
 
-      // 3. Transporter: active if PENDING or ACCEPTED, completed if IN_TRANSIT or later
-      let transporterState: 'completed' | 'active' | 'pending' = 'pending';
-      if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) || order.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB') {
-        transporterState = 'completed';
-      } else if (['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_PICKED_BY_SHG', 'RETURN_PARCEL_AT_SHG'].includes(order.mainStatus)) {
-        transporterState = 'active';
+      // 3. Pickup Transporter: active if in transit, completed if delivered to hub or intake stored
+      let pickupTransporterState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['INVENTORY_BUYER_RETURN', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus) || ['DELIVERED_TO_HUB', 'COMPLETED', 'DROPPED'].includes(order.pickupTransporterStatus || '')) {
+        pickupTransporterState = 'completed';
+      } else if (['RETURN_IN_TRANSIT_TO_HUB'].includes(order.mainStatus) || order.pickupTransporterStatus === 'IN_TRANSIT_TO_HUB') {
+        pickupTransporterState = 'active';
+      } else if (['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_REQUESTED', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_PARCEL_AT_SHG'].includes(order.mainStatus)) {
+        pickupTransporterState = 'active';
       }
 
-      // 4. GMU Hub: active if IN_TRANSIT or RECEIVED, completed if INVENTORY/COMPLETED
+      // 4. GMU Hub: active if in transit to hub or received at hub (INVENTORY_BUYER_RETURN), completed once return is fully completed or dispatched
       let gmuHubState: 'completed' | 'active' | 'pending' = 'pending';
-      if (['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus)) {
+      if (['RETURN_COMPLETED', 'DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus)) {
         gmuHubState = 'completed';
-      } else if (['RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED'].includes(order.mainStatus)) {
+      } else if (['INVENTORY_BUYER_RETURN', 'RETURN_IN_TRANSIT_TO_HUB', 'BUYER_RETURN_COMPLETED', 'RETURN_PARCEL_AT_GMU', 'RETURN_PARCEL_AT_HUB'].includes(order.mainStatus)) {
         gmuHubState = 'active';
+      }
+
+      // 5. Drop Transporter
+      let dropTransporterState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['DELIVERED_TO_SELLER', 'DROPPED', 'COMPLETED', 'DELIVERED_TO_SHG'].includes(order.dropTransporterStatus || '') || ['PARCEL_AT_DROP_SHG', 'RETURN_COMPLETED', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus)) {
+        dropTransporterState = 'completed';
+      } else if (['DISPATCHED', 'DROP_TRANSPORTER_ACCEPTED', 'IN_TRANSIT_TO_DROP_SHG'].includes(order.mainStatus) || ['PENDING', 'ACCEPTED', 'PICKED', 'IN_TRANSIT', 'DROP_TRANSPORTER_ACCEPTED'].includes(order.dropTransporterStatus || '')) {
+        dropTransporterState = 'active';
+      }
+
+      // 6. Drop SHG
+      let dropShgState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_COMPLETED', 'DELIVERED_TO_SELLER', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus) || ['DROPPED', 'DELIVERED', 'COMPLETED'].includes(order.dropShgStatus || '')) {
+        dropShgState = 'completed';
+      } else if (['PARCEL_AT_DROP_SHG'].includes(order.mainStatus) || ['PICKED'].includes(order.dropShgStatus || '')) {
+        dropShgState = 'active';
+      }
+
+      // 7. Seller (Destination): pending or completed
+      let sellerState: 'completed' | 'active' | 'pending' = 'pending';
+      if (['RETURN_COMPLETED', 'DELIVERED_TO_SELLER', 'COMPLETED', 'DELIVERED'].includes(order.mainStatus)) {
+        sellerState = 'completed';
       }
 
       return [
@@ -1385,10 +1412,10 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           label: 'Buyer',
           state: buyerState,
           details: {
-            'Person Name': order.buyerName || 'N/A',
-            'Role': 'Consignee / Buyer',
-            'Mobile Number': order.buyerMobile || 'N/A',
-            'Address': order.buyerAddress || 'N/A',
+            'Person Name': order.buyerName || order.buyer?.fullName || 'N/A',
+            'Role': 'Consignee / Buyer (Return Origin)',
+            'Mobile Number': order.buyerMobile || order.buyer?.mobile || 'N/A',
+            'Address': order.buyerAddress || order.buyer?.address || 'N/A',
             'Order ID': order.id,
             'Accepted (Date & Time)': formatIndianDateTime(order.createdAt),
             'Status': 'RETURN_INITIATED',
@@ -1396,34 +1423,34 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
           }
         },
         {
-          id: 'shg',
-          label: 'SHG',
-          state: shgState,
-          details: order.pickupShgDetails || order.shgDetails ? {
-            'Person Name': order.pickupShgDetails?.name || order.shgDetails?.name || 'N/A',
+          id: 'pickup_shg',
+          label: 'Pickup SHG',
+          state: pickupShgState,
+          details: (order.pickupShgDetails || order.dropShgDetails || order.shgDetails) ? {
+            'Person Name': order.pickupShgDetails?.name || order.dropShgDetails?.name || order.shgDetails?.name || 'N/A',
             'Role': 'Return Pickup SHG',
-            'Mobile': order.pickupShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
-            'Address': order.pickupShgDetails?.address || order.shgDetails?.address || 'N/A',
+            'Mobile': order.pickupShgDetails?.mobile || order.dropShgDetails?.mobile || order.shgDetails?.mobile || 'N/A',
+            'Address': order.pickupShgDetails?.address || order.dropShgDetails?.address || order.shgDetails?.address || 'N/A',
             'Order ID': order.id,
             'Accepted (Date & Time)': formatIndianDateTime(order.pickupShgAcceptedAt || order.pickupShgDetails?.acceptedAt),
             'Pickup (Date & Time)': formatIndianDateTime(order.pickupShgPickedAt || order.pickupShgDetails?.pickedAt),
-            'Status': order.shgStatus || 'PENDING',
+            'Status': order.pickupShgStatus || order.shgStatus || 'PENDING',
             'History': getLogsForStage(['RETURN_SHG_PENDING', 'RETURN_SHG_ACCEPTED', 'RETURN_PARCEL_AT_SHG'])
           } : null
         },
         {
-          id: 'transporter',
-          label: 'Transporter',
-          state: transporterState,
-          details: order.pickupTransporterDetails || order.transporterDetails ? {
-            'Person Name': order.pickupTransporterDetails?.name || order.transporterDetails?.name || 'N/A',
-            'Role': 'Return Transporter',
-            'Mobile': order.pickupTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
-            'Address': order.pickupTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
+          id: 'pickup_transporter',
+          label: 'Pickup Transporter',
+          state: pickupTransporterState,
+          details: (order.pickupTransporterDetails || order.dropTransporterDetails || order.transporterDetails) ? {
+            'Person Name': order.pickupTransporterDetails?.name || order.dropTransporterDetails?.name || order.transporterDetails?.name || 'N/A',
+            'Role': 'Return Pickup Transporter',
+            'Mobile': order.pickupTransporterDetails?.mobile || order.dropTransporterDetails?.mobile || order.transporterDetails?.mobile || 'N/A',
+            'Address': order.pickupTransporterDetails?.address || order.dropTransporterDetails?.address || order.transporterDetails?.address || 'N/A',
             'Order ID': order.id,
             'Accepted (Date & Time)': formatIndianDateTime(order.pickupTransporterAcceptedAt || order.pickupTransporterDetails?.acceptedAt),
             'Pickup (Date & Time)': formatIndianDateTime(order.pickupTransporterPickedAt || order.pickupTransporterDetails?.pickedAt),
-            'Status': order.transporterStatus || 'PENDING',
+            'Status': order.pickupTransporterStatus || order.transporterStatus || 'PENDING',
             'History': getLogsForStage(['RETURN_TRANSPORTER_PENDING', 'RETURN_TRANSPORTER_ACCEPTED', 'RETURN_IN_TRANSIT_TO_HUB'])
           } : null
         },
@@ -1438,6 +1465,46 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
             'Drop (Stored Date & Time)': formatIndianDateTime(order.storedAt || order.storedDate),
             'Status': ['INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'].includes(order.mainStatus) ? 'STORED' : (order.mainStatus === 'BUYER_RETURN_COMPLETED' ? 'RECEIVED' : 'PENDING'),
             'History': getLogsForStage(['BUYER_RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN', 'RETURN_COMPLETED'])
+          }
+        },
+        {
+          id: 'drop_transporter',
+          label: 'Drop Transporter',
+          state: dropTransporterState,
+          details: (order.dropTransporterDetails || order.transporterDetails) ? {
+            'Person Name': order.dropTransporterDetails?.name || 'Waiting for Transporter',
+            'Role': 'Return Drop Transporter',
+            'Mobile': order.dropTransporterDetails?.mobile || 'N/A',
+            'Address': order.dropTransporterDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': 'PENDING'
+          } : null
+        },
+        {
+          id: 'drop_shg',
+          label: 'Drop SHG',
+          state: dropShgState,
+          details: (order.dropShgDetails || order.shgDetails) ? {
+            'Person Name': order.dropShgDetails?.name || 'N/A',
+            'Role': 'Return Drop SHG',
+            'Mobile': order.dropShgDetails?.mobile || 'N/A',
+            'Address': order.dropShgDetails?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': 'PENDING'
+          } : null
+        },
+        {
+          id: 'seller',
+          label: 'Seller',
+          state: sellerState,
+          details: {
+            'Person Name': order.sellerName || order.seller?.fullName || 'N/A',
+            'Role': 'Seller / Original Owner (Return Destination)',
+            'Mobile Number': order.sellerMobile || order.seller?.mobile || 'N/A',
+            'Address': order.sellerAddress || order.seller?.address || 'N/A',
+            'Order ID': order.id,
+            'Status': sellerState === 'completed' ? 'RETURNED_TO_SELLER' : 'PENDING_RETURN',
+            'History': getLogsForStage(['RETURN_COMPLETED', 'SELLER'])
           }
         }
       ];
@@ -1825,24 +1892,54 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
     })
   );
 
-  const completedOrdersList = filterAndSearchOrders(
+  const completedNewOrdersList = filterAndSearchOrders(
     allMergedOrders.filter((o: any) =>
       !isOrderRejected(o) &&
       !isOrderReturn(o) &&
-      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER', 'RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED'].includes(o.mainStatus)
+      o.returnType !== 'BUYER_RETURN' &&
+      ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'].includes(o.mainStatus)
+    )
+  );
+
+  const completedReturnOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) =>
+      !isOrderRejected(o) &&
+      (isOrderReturn(o) || o.returnType === 'BUYER_RETURN') &&
+      ['RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED', 'COMPLETED', 'DELIVERED'].includes(o.mainStatus)
+    )
+  );
+
+  const completedOrdersList = filterAndSearchOrders(
+    allMergedOrders.filter((o: any) =>
+      !isOrderRejected(o) &&
+      (
+        (!isOrderReturn(o) && o.returnType !== 'BUYER_RETURN' && ['DELIVERED', 'COMPLETED', 'PARCEL_AT_BUYER'].includes(o.mainStatus)) ||
+        ((isOrderReturn(o) || o.returnType === 'BUYER_RETURN') && ['RETURN_COMPLETED', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED', 'COMPLETED', 'DELIVERED'].includes(o.mainStatus))
+      )
     )
   );
 
   const transporterReturnOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => isOrderReturn(o) && isTransporterReturnOrder(o))
+    allMergedOrders.filter((o: any) =>
+      isOrderReturn(o) &&
+      isTransporterReturnOrder(o) &&
+      !['INVENTORY_TRANSPORTER_RETURN', 'TRANSPORTER_RETURN_COMPLETED', 'STORED_IN_HUB'].includes(o.mainStatus)
+    )
   );
 
   const buyerReturnOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => isOrderReturn(o) && !isTransporterReturnOrder(o))
+    allMergedOrders.filter((o: any) =>
+      isOrderReturn(o) &&
+      !isTransporterReturnOrder(o) &&
+      !['INVENTORY_BUYER_RETURN', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'STORED_IN_HUB', 'DISPATCHED'].includes(o.mainStatus)
+    )
   );
 
   const returnOrdersList = filterAndSearchOrders(
-    allMergedOrders.filter((o: any) => isOrderReturn(o))
+    allMergedOrders.filter((o: any) =>
+      isOrderReturn(o) &&
+      !['INVENTORY_BUYER_RETURN', 'INVENTORY_TRANSPORTER_RETURN', 'BUYER_RETURN_COMPLETED', 'TRANSPORTER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'STORED_IN_HUB', 'DISPATCHED'].includes(o.mainStatus)
+    )
   );
 
   const transporterRejectOrdersList = filterAndSearchOrders(
@@ -2179,7 +2276,7 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       accessor: (row: any) => {
         const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
         const main = (row.mainStatus || '').toUpperCase();
-        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
         const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
         return (
           <div className="flex flex-col gap-1 items-start">
@@ -2196,8 +2293,9 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
       accessor: (row: any) => {
         const ptStatus = (row.pickupTransporterStatus || '').toUpperCase();
         const main = (row.mainStatus || '').toUpperCase();
-        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
+        const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(main);
         const isPrePickup = !isPickedUp && row.returnType !== 'TRANSPORTER_RETURN';
+        const isAlreadyIntaked = ['INVENTORY_BUYER_RETURN', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'HUB_INTAKE', 'STORED_IN_HUB'].includes(main);
         return (
           <div className="flex items-center gap-2">
             <button
@@ -2212,18 +2310,18 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
               <span>View</span>
             </button>
 
-            {!isPrePickup && (
+            {!isPrePickup && !isAlreadyIntaked && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleIntakeClick(row, isTransporterReturnOrder(row) ? 'return-drop' : 'return-pickup');
                 }}
-                title="In Take"
+                title="Intake / Receive"
                 className="px-2.5 py-1.5 bg-[#073318] hover:bg-[#073318]/90 text-white rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
               >
                 <QrCode className="h-3.5 w-3.5 text-[#B2D534]" />
-                <span>IN TTAKE</span>
+                <span>INTAKE</span>
               </button>
             )}
           </div>
@@ -2465,12 +2563,14 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                             key={order.id}
                             className="bg-white border border-slate-205/85 rounded-2xl pt-7 pb-4 px-5 shadow-sm hover:shadow-md transition-all duration-300 text-left flex flex-col lg:flex-row items-center justify-between gap-4 relative overflow-hidden pl-6"
                           >
-                            {/* Decorative Left Border based on Priority */}
-                            <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${order.priority?.toLowerCase() === 'high'
-                              ? 'bg-[#EF4444]'
-                              : order.priority?.toLowerCase() === 'medium'
-                                ? 'bg-[#F59E0B]'
-                                : 'bg-[#10B981]'
+                            {/* Decorative Left Border based on Priority / Return */}
+                            <div className={`absolute left-0 top-0 bottom-0 w-[5px] ${(isBuyerReturnOrder(order) || order.returnType === 'BUYER_RETURN')
+                              ? 'bg-[#F97316]'
+                              : order.priority?.toLowerCase() === 'high'
+                                ? 'bg-[#EF4444]'
+                                : order.priority?.toLowerCase() === 'medium'
+                                  ? 'bg-[#F59E0B]'
+                                  : 'bg-[#10B981]'
                               }`} />
 
                             {/* Center Column (Visual Journey Stepper) */}
@@ -2621,11 +2721,15 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
                               <div className="flex flex-col items-center text-center space-y-0.5">
                                 <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-0.5 ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED'
                                   ? 'bg-purple-100 text-purple-900 border border-purple-300'
-                                  : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
+                                  : (isBuyerReturnOrder(order) || order.returnType === 'BUYER_RETURN')
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs'
+                                    : 'bg-[#073318]/10 text-[#073318] border border-[#073318]/20'
                                   } rounded-full uppercase tracking-wider`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : 'bg-[#073318]'
+                                  <span className={`h-1.5 w-1.5 rounded-full ${(order.mainStatus || '').toUpperCase() === 'REDIRECTED' ? 'bg-purple-600' : (isBuyerReturnOrder(order) || order.returnType === 'BUYER_RETURN') ? 'bg-amber-500' : 'bg-[#073318]'
                                     }`} />
-                                  {order.mainStatus.replace(/[-_]/g, ' ')}
+                                  {order.mainStatus === 'INVENTORY_BUYER_RETURN'
+                                    ? 'Return Received at Hub / Awaiting Dispatch'
+                                    : order.mainStatus.replace(/[-_]/g, ' ')}
                                 </span>
                                 <span className="block text-[10px] text-slate-400 font-semibold">
                                   • {getUpdatedTimeAgo(order)}
@@ -2795,23 +2899,85 @@ export const OrderManagementPage = ({ onNavigate }: { onNavigate: (page: string)
 
         {/* ---------------- SECTION 3: COMPLETED ORDERS ---------------- */}
         {activeTopTab === 'completed' && (
-          <div className="space-y-4">
-            {completedOrdersList.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
-                <span className="text-4xl block">✓</span>
-                <p className="text-sm">No completed orders found matching the filter criteria.</p>
-              </div>
+          <div className="space-y-6">
+            {/* Completed Sub-Tabs Navigation */}
+            <div className="flex items-center gap-3 bg-white p-2 border border-slate-205/85 rounded-2xl shadow-xs">
+              <button
+                onClick={() => setCompletedSubTab('new')}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${completedSubTab === 'new'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                  }`}
+              >
+                <Package className={`h-4 w-4 ${completedSubTab === 'new' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
+                <span>New Orders</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${completedSubTab === 'new'
+                    ? 'bg-[#B2D534] text-[#073318]'
+                    : 'bg-slate-200 text-slate-700'
+                    }`}
+                >
+                  {completedNewOrdersList.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setCompletedSubTab('return')}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${completedSubTab === 'return'
+                  ? 'bg-[#073318] text-white shadow-md'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                  }`}
+              >
+                <RefreshCw className={`h-4 w-4 ${completedSubTab === 'return' ? 'text-[#B2D534]' : 'text-slate-500'}`} />
+                <span>Return Orders</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-black ${completedSubTab === 'return'
+                    ? 'bg-[#B2D534] text-[#073318]'
+                    : 'bg-slate-200 text-slate-700'
+                    }`}
+                >
+                  {completedReturnOrdersList.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Sub-tab content */}
+            {completedSubTab === 'new' ? (
+              completedNewOrdersList.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                  <span className="text-4xl block">✓</span>
+                  <p className="text-sm">No completed new orders found matching the filter criteria.</p>
+                </div>
+              ) : (
+                <DataTable
+                  columns={completedColumns}
+                  data={completedNewOrdersList}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewOrder}
+                  onRefresh={() => loadData(true)}
+                  hideDateAndRefresh={true}
+                  hideSearchAndFilters={true}
+                />
+              )
             ) : (
-              <DataTable
-                columns={completedColumns}
-                data={completedOrdersList}
-                selectedDate={dateFilter}
-                onDateChange={setDateFilter}
-                onRowDoubleClick={handleViewOrder}
-                onRefresh={() => loadData(true)}
-                hideDateAndRefresh={true}
-                hideSearchAndFilters={true}
-              />
+              completedReturnOrdersList.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 space-y-3 font-semibold shadow-xs">
+                  <span className="text-4xl block">✓</span>
+                  <p className="text-sm">No completed return orders found matching the filter criteria.</p>
+                </div>
+              ) : (
+                <DataTable
+                  columns={completedColumns}
+                  data={completedReturnOrdersList}
+                  selectedDate={dateFilter}
+                  onDateChange={setDateFilter}
+                  onRowDoubleClick={handleViewOrder}
+                  onRefresh={() => loadData(true)}
+                  hideDateAndRefresh={true}
+                  hideSearchAndFilters={true}
+                />
+              )
             )}
           </div>
         )}

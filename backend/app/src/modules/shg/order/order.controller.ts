@@ -105,7 +105,7 @@ export class OrderController {
     @Param('id') id: string,
     @GetUser() user: User,
   ) {
-    return this.orderService.acceptDrop(id, user.id);
+    return this.orderService.acceptReturnOrder(id, user.id);
   }
 
 
@@ -124,7 +124,7 @@ export class OrderController {
     @GetUser() user: User,
     @Body('code') code?: string,
   ) {
-    return this.orderService.pickupDrop(id, user.id, code);
+    return this.orderService.completeReturnPickupFromBuyer(id, user.id, code);
   }
 
   @Post('returns/dilivery/:id/complete')

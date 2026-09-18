@@ -63,6 +63,9 @@ export interface BatchOrder {
   masterOrderId?: number;
   handoverCode?: string;
   isRTO?: boolean;
+  isReturn?: boolean;
+  returnType?: string;
+  mainStatus?: string;
   isPickupRedirected?: boolean;
   isRedirected?: boolean;
   shgContact: {
@@ -368,24 +371,27 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         const pickupShgTaluka = isRedirected ? (o.seller?.taluka || '') : (shgObj.taluka || shgObj.address?.taluka || o.seller?.taluka || '');
         const pickupShgDistrict = isRedirected ? (o.seller?.district || '') : (shgObj.district || shgObj.address?.district || o.seller?.district || '');
 
-        const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
-        const pickupPoint = isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'Pickup Village');
-        const dropPoint = isDirect ? (o.buyer?.village || o.dropShgDetails?.village || o.buyerVillage || 'Buyer Village') : HUB_CONFIG.name;
+        const isBuyerReturn = o.returnType === 'BUYER_RETURN' || o.isReturn || (o.mainStatus || '').includes('RETURN');
+        const isDirect = !isBuyerReturn && (o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG');
+        const pickupPoint = isBuyerReturn ? (pickupShgVillage || o.buyer?.village || 'SHG Center') : (isRedirected ? (o.seller?.village || o.seller?.addressLine1 || 'Seller Address') : (o.shg?.address?.village || o.seller?.village || 'Pickup Village'));
+        const dropPoint = isBuyerReturn ? HUB_CONFIG.name : (isDirect ? (o.buyer?.village || o.dropShgDetails?.village || o.buyerVillage || 'Buyer Village') : HUB_CONFIG.name);
         const flowTypeVal = isDirect ? ('shg_to_shg' as FlowType) : ('shg_to_gmu' as FlowType);
 
         return {
           id: `pickup-${o.id}`,
-          displayId: o.masterOrder?.orderNumber || `ORD-PICK-${o.masterOrderId || o.id}`,
-          areaName: isDirect ? (o.buyer?.village || o.seller?.village || 'Direct Delivery') : (isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A')),
+          displayId: o.masterOrder?.orderNumber || (isBuyerReturn ? (o.orderId || `ORD-${o.id}`) : `ORD-PICK-${o.masterOrderId || o.id}`),
+          areaName: isBuyerReturn ? (pickupShgVillage || o.buyer?.village || 'Nesari') : (isDirect ? (o.buyer?.village || o.seller?.village || 'Direct Delivery') : (isRedirected ? (o.seller?.village || o.seller?.taluka || 'Seller Address') : (o.shg?.address?.taluka || o.seller?.taluka || 'N/A'))),
           flowType: flowTypeVal,
           isRedirected: isRedirected,
-          shgName: isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A'),
+          isReturn: isBuyerReturn,
+          returnType: o.returnType,
+          shgName: isBuyerReturn ? pickupShgName : (isRedirected ? (o.seller?.sellerName || o.seller?.fullName || 'Seller Direct Pickup') : (o.shg?.shgDetail?.shgName || o.shg?.shgName || 'N/A')),
           pickupPointName: pickupPoint,
           dropPointName: dropPoint,
           pickupCount: 1,
           dropCount: isDirect ? 1 : 0,
-          totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 1,
-          totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || 5} kg`,
+          totalQty: o.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || (o.parcels ? o.parcels.length : (o.totalQty || 1)),
+          totalWeight: `${o.items?.reduce((sum: number, item: any) => sum + ((item.product?.weight || 0) * (item.quantity || 1)), 0) || o.totalWeight || 5} kg`,
           status: (() => {
             const mStatus = (o.mainStatus || '').toUpperCase();
             const ptStatus = (o.pickupTransporterStatus || '').toUpperCase();
@@ -412,13 +418,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
               return 'REJECTED' as const;
             }
             // Normal completed pickup
-            if (ptStatus === 'COMPLETED' || ptStatus === 'DELIVERED_TO_HUB' || ['HUB_RECEIVED', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus)) {
+            if (ptStatus === 'COMPLETED' || ptStatus === 'DELIVERED_TO_HUB' || ['HUB_RECEIVED', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'INVENTORY_BUYER_RETURN'].includes(mStatus)) {
               return 'DROP_COMPLETED' as const;
             }
-            if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(mStatus)) {
+            if (['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'RETURN_IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'IN_TRANSIT', 'IN_DIRECT_TRANSIT'].includes(mStatus)) {
               return 'PICKUP_COMPLETED' as const;
             }
-            if (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes(ptStatus) || mStatus === 'TRANSPORTER_ACCEPTED' || mStatus === 'PICKUP_TRANSPORTER_ACCEPTED') {
+            if (['ACCEPTED', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED'].includes(ptStatus) || mStatus === 'TRANSPORTER_ACCEPTED' || mStatus === 'PICKUP_TRANSPORTER_ACCEPTED' || mStatus === 'RETURN_TRANSPORTER_ACCEPTED') {
               return 'ACCEPTED_PICKUP' as const;
             }
             return 'NEW_ORDER' as const;
@@ -444,7 +450,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           // Store the pickup's masterOrderId so we can look up the drop order later
           masterOrderId: o.masterOrderId,
           handoverCode: o.handoverCode,
-          isRTO: o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)]),
+          isRTO: Boolean(o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)]),
           shgContact: (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || Boolean(resolvedRejectedMap[`pickup-${o.id}`] || resolvedRejectedMap[String(o.id)] || resolvedRejectedMap[getCleanNumber(o.id || o.orderId)])) ? {
             name: HUB_CONTACT.name,
             crpName: HUB_CONTACT.name,
@@ -524,7 +530,7 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       const mappedDrops = rawDrops.map((o: any) => {
         const isDirect = o.flowType === 'DIRECT_SHG_TO_SHG' || o.flowType === 'shg_to_shg' || String(o.flowType || '').toUpperCase() === 'DIRECT_SHG_TO_SHG';
         const rawId = String(o.orderId || o.id || '105');
-        const cleanNum = rawId.replace(/^(ORD-)+(2026-)?/, '');
+        const cleanNum = rawId.replace(/^(ORD-)+/i, '').replace(/^(2026-)+/i, '');
         const bId = `drop-${o.id}`;
         const isPickupFinished = resolvedDropPickups.includes(bId);
 
@@ -559,15 +565,18 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
           dropShgObj?.address?.pincode || dropShgPincode
         ].filter(Boolean).join(', ') || o.buyer?.fullAddress || 'N/A';
 
-        const dropPointVillage = dropShgVillage !== 'N/A' ? dropShgVillage : (o.buyer?.village || dropShgObj?.village || 'Local Village');
-        const pickupPointVillage = isDirect ? (o.seller?.village || o.shg?.address?.village || 'Pickup Village') : HUB_CONFIG.name;
+        const isBuyerReturn = o.returnType === 'BUYER_RETURN' || o.isReturn || (o.mainStatus || '').includes('RETURN');
+        const dropPointVillage = isBuyerReturn ? (o.seller?.village || pickupShgVillage || 'Seller Location') : (dropShgVillage !== 'N/A' ? dropShgVillage : (o.buyer?.village || dropShgObj?.village || 'Local Village'));
+        const pickupPointVillage = isBuyerReturn ? HUB_CONFIG.name : (isDirect ? (o.seller?.village || o.shg?.address?.village || 'Pickup Village') : HUB_CONFIG.name);
         const flowTypeVal = isDirect ? ('shg_to_shg' as FlowType) : ('gmu_to_shg' as FlowType);
 
         return {
           id: bId,
-          displayId: `ORD-2026-${cleanNum}`,
-          areaName: dropShgVillage,
+          displayId: (isBuyerReturn && o.orderId) ? o.orderId : `ORD-2026-${cleanNum}`,
+          areaName: isBuyerReturn ? (o.seller?.village || pickupShgVillage || 'Nesari') : dropShgVillage,
           flowType: flowTypeVal,
+          isReturn: Boolean(isBuyerReturn),
+          returnType: o.returnType,
           shgName: dropShgName,
           pickupPointName: pickupPointVillage,
           dropPointName: dropPointVillage,
@@ -586,6 +595,23 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
             const isPickedUp = ['PICKED', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'DROPPED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(ptStatus) || ['IN_TRANSIT_TO_HUB', 'PARCEL_PICKED', 'DELIVERED_TO_HUB', 'COMPLETED'].includes(mStatus);
             const isLocalRejected = Boolean(resolvedRejectedMap[bId] || resolvedRejectedMap[rawId] || resolvedRejectedMap[cleanNum] || resolvedRejectedMap[o.orderId]);
             const isRTO = (o.isRTO || o.returnType === 'TRANSPORTER_RETURN' || isLocalRejected) && isPickedUp;
+
+            // Buyer return drop flow (GMU Hub -> Seller)
+            if (isBuyerReturn && o.returnType === 'BUYER_RETURN') {
+              if (mStatus === 'REJECTED' || dtStatus === 'REJECTED' || isLocalRejected) {
+                return 'REJECTED' as const;
+              }
+              if (dtStatus === 'COMPLETED' || dtStatus === 'DELIVERED' || mStatus === 'PARCEL_AT_DROP_SHG' || mStatus === 'BUYER_RETURN_COMPLETED' || mStatus === 'COMPLETED') {
+                return 'DROP_COMPLETED' as const;
+              }
+              if (dtStatus === 'PICKED' || dtStatus === 'IN_TRANSIT_TO_SELLER' || dtStatus === 'IN_TRANSIT_TO_DROP_SHG' || mStatus === 'IN_TRANSIT_TO_DROP_SHG') {
+                return 'PICKUP_COMPLETED' as const;
+              }
+              if (['DROP_TRANSPORTER_ACCEPTED', 'TRANSPORTER_ACCEPTED', 'ACCEPTED'].includes(dtStatus) || mStatus === 'DROP_TRANSPORTER_ACCEPTED') {
+                return 'ACCEPTED_PICKUP' as const;
+              }
+              return 'NEW_ORDER' as const;
+            }
 
             // Rule 2: If parcel WAS picked up (or delivery rejected), keep active in DROP section with updated hub return address until Hub takes in return parcel!
             if (isRTO) {
@@ -754,10 +780,13 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       if (serverCompletedDrops.length > 0) {
         setCompletedBatches(prev => {
           const safePrev = Array.isArray(prev) ? prev : [];
-          const existingIds = new Set(safePrev.map(b => b.id));
-          const newCompleted = serverCompletedDrops.filter(b => !existingIds.has(b.id));
-          if (newCompleted.length === 0) return safePrev;
-          const updated = [...safePrev, ...newCompleted];
+          const serverMap = new Map(serverCompletedDrops.map(b => [b.id, b]));
+          const updated = safePrev.map(b => serverMap.get(b.id) || b);
+          serverCompletedDrops.forEach(b => {
+            if (!updated.some(item => item.id === b.id)) {
+              updated.push(b);
+            }
+          });
           AsyncStorage.setItem('completed_batches', JSON.stringify(updated)).catch(() => { });
           return updated;
         });
@@ -842,6 +871,12 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
 
         const storedDropPickups = await AsyncStorage.getItem('completed_drop_pickups');
         if (storedDropPickups) setCompletedDropPickups(JSON.parse(storedDropPickups));
+
+        const storedCompleted = await AsyncStorage.getItem('completed_batches');
+        if (storedCompleted) setCompletedBatches(JSON.parse(storedCompleted));
+
+        const storedRejected = await AsyncStorage.getItem('rejected_batches');
+        if (storedRejected) setRejectedBatches(JSON.parse(storedRejected));
 
         await refreshBatchesList();
       } catch (err) {
@@ -1097,9 +1132,15 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
       );
 
       const batchToLog = batchesRef.current.find(b => b.id === batchId);
-      // No activity log on accept — activity only updates on Confirm Pickup / Confirm Delivery
+      const isReturn = batchToLog && ((batchToLog as any).returnType === 'BUYER_RETURN' || (batchToLog as any).returnType === 'TRANSPORTER_RETURN' || batchToLog.isRTO);
 
-      await api.post(`/orders/${type}/${rawId}/accept`);
+      if (isReturn) {
+        await api.post(`/orders/returns/${rawId}/accept`).catch(async () => {
+          await api.post(`/orders/${type}/${rawId}/accept`);
+        });
+      } else {
+        await api.post(`/orders/${type}/${rawId}/accept`);
+      }
       if (!skipToast) {
         showToast(`Accepted`, 'success');
       }
@@ -1312,7 +1353,15 @@ export const OrderManagementProvider: React.FC<{ children: React.ReactNode }> = 
         )
       );
 
-      await api.post(`/orders/pickup/${rawPickupId}/complete`, { code });
+      const isReturn = batchToLog && ((batchToLog as any).returnType === 'BUYER_RETURN' || (batchToLog as any).returnType === 'TRANSPORTER_RETURN' || batchToLog.isRTO);
+
+      if (isReturn) {
+        await api.post(`/orders/returns/pickup/${rawPickupId}/complete`, { code }).catch(async () => {
+          await api.post(`/orders/returns/${rawPickupId}/collect`, { code });
+        });
+      } else {
+        await api.post(`/orders/pickup/${rawPickupId}/complete`, { code });
+      }
       showToast('Pickup Confirmed', 'success');
 
       // Confirm with fresh server data

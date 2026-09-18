@@ -32,16 +32,23 @@ const OrderManagementMainScreen: React.FC<{ navigation: any }> = ({ navigation }
     refreshBatchesList,
   } = useOrderManagement();
 
-  // Return Orders count
+  // Return Orders count (Accepted Return Pickups + Return Drops)
   const returnOrdersCount = useMemo(() => {
     if (!Array.isArray(batches)) return 0;
     return batches.filter(
       (b) =>
+        (b.status === 'ACCEPTED_PICKUP' || b.status === 'PICKUP_COMPLETED') &&
         Boolean(
           b.isRTO ||
+          b.isReturn ||
+          b.returnType === 'BUYER_RETURN' ||
+          b.returnType === 'TRANSPORTER_RETURN' ||
+          b.returnType === 'RTO' ||
+          (b as any).returnType === 'BUYER_RETURN' ||
           (b as any).returnType === 'TRANSPORTER_RETURN' ||
           (b as any).returnType === 'RTO' ||
-          b.products?.some((p) => (p as any).isRTO)
+          (b as any).isReturn ||
+          b.products?.some((p) => (p as any).isRTO || (p as any).isReturn)
         )
     ).length;
   }, [batches]);

@@ -45,6 +45,17 @@ const CompletedOrderDetailsScreen: React.FC<Props> = ({
   const formattedOrderId = getFormattedOrderId(order);
   const info = getInfoForOrder(order);
 
+  const formatTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Dynamic Contact Details Card (Seller vs Buyer)
   let detailsTitle = t('su_seller_details') || "Seller Details";
   let headerIcon: any = "storefront-outline";

@@ -103,7 +103,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
 
     try {
       await acceptBatch(batchId);
-      navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
+      const isReturn = targetBatch ? checkIsReturnOrder(targetBatch) : false;
+      if (isReturn) {
+        navigation.navigate('ReturnOrders', { activeTab: 'pickup' });
+      } else {
+        navigation.navigate('AcceptedOrders', { activeTab: 'pickup' });
+      }
     } catch (err) {
       console.error('Failed to accept single batch:', err);
     }
@@ -122,7 +127,12 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
     try {
       await acceptBatchIds(ids);
       setShowSuccessModal(false);
-      navigation.navigate('AcceptedOrders');
+      const anyReturn = areaBatches.some(checkIsReturnOrder);
+      if (anyReturn && activeTab === 'return') {
+        navigation.navigate('ReturnOrders', { activeTab: 'pickup' });
+      } else {
+        navigation.navigate('AcceptedOrders');
+      }
     } catch (err) {
       console.error('Failed to accept bulk batches:', err);
     } finally {
@@ -147,9 +157,15 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
   const checkIsReturnOrder = (b: BatchOrder): boolean => {
     return Boolean(
       b.isRTO ||
+      b.isReturn ||
+      b.returnType === 'BUYER_RETURN' ||
+      b.returnType === 'TRANSPORTER_RETURN' ||
+      b.returnType === 'RTO' ||
+      (b as any).returnType === 'BUYER_RETURN' ||
       (b as any).returnType === 'TRANSPORTER_RETURN' ||
       (b as any).returnType === 'RTO' ||
-      b.products?.some(p => (p as any).isRTO)
+      (b as any).isReturn ||
+      b.products?.some(p => (p as any).isRTO || (p as any).isReturn)
     );
   };
 

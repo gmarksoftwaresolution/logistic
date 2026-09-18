@@ -60,6 +60,8 @@ export class OrderService {
               'PARCEL_AT_SHG',
               'PARCEL_AT_PICKUP_SHG',
               'RETURN_PARCEL_AT_SHG',
+              'RETURN_TRANSPORTER_ACCEPTED',
+              'RETURN_IN_TRANSIT_TO_HUB',
               'TRANSPORTER_ACCEPTED',
               'IN_TRANSIT',
               'IN_DIRECT_TRANSIT',
@@ -74,7 +76,10 @@ export class OrderService {
               'DISPATCHED',
               'DELIVERED',
               'COMPLETED',
-              'REJECTED'
+              'REJECTED',
+              'INVENTORY_BUYER_RETURN',
+              'BUYER_RETURN_COMPLETED',
+              'RETURN_COMPLETED'
             ]
           }
         },
@@ -93,6 +98,9 @@ export class OrderService {
           pickupTransporterId: true,
           dropShgId: true,
           dropTransporterId: true,
+          returnTransporterId: true,
+          pickupReturnShgId: true,
+          returnType: true,
           mainStatus: true,
           pickupShgStatus: true,
           pickupTransporterStatus: true,
@@ -170,6 +178,17 @@ export class OrderService {
       const activePickupOrders = orders.filter((o: any) => {
         const pTransStatus = (o.pickupTransporterStatus || '').toUpperCase();
         const mStatus = (o.mainStatus || '').toUpperCase();
+        if (o.returnType === 'BUYER_RETURN' || o.returnType === 'TRANSPORTER_RETURN' || mStatus.includes('RETURN')) {
+          const isAssignedReturnTransporter = idVariants.includes(String(o.returnTransporterId)) ||
+            o.assignments?.some((a: any) => a.role === 'RETURN' && a.assigneeType === 'TRANSPORTER' && idVariants.includes(String(a.assigneeId)));
+          if (!isAssignedReturnTransporter) {
+            return false;
+          }
+          if (pTransStatus === 'COMPLETED' || ['HUB_RECEIVED', 'RETURN_RECEIVED_AT_HUB', 'BUYER_RETURN_COMPLETED', 'RETURN_COMPLETED', 'COMPLETED'].includes(mStatus)) {
+            return false;
+          }
+          return true;
+        }
         if (pTransStatus === 'COMPLETED' || ['IN_TRANSIT', 'IN_DIRECT_TRANSIT', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus)) {
           return false;
         }
@@ -179,10 +198,11 @@ export class OrderService {
       return activePickupOrders.map((o: any) => {
         const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
 
-        const directShgId = o.pickupShgId;
-        const assignShgId = o.assignments?.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'SHG')?.assigneeId;
+        const isReturn = o.returnType === 'BUYER_RETURN' || o.returnType === 'TRANSPORTER_RETURN' || (o.mainStatus || '').includes('RETURN');
+        const directShgId = isReturn ? (o.pickupReturnShgId || o.dropShgId || o.pickupShgId) : o.pickupShgId;
+        const assignShgId = o.assignments?.find((a: any) => (isReturn ? (a.role === 'DROP' || a.role === 'RETURN') : a.role === 'PICKUP') && a.assigneeType === 'SHG')?.assigneeId;
         const holderShgId = o.parcels?.find((p: any) => p.currentHolderType === 'SHG')?.currentHolderId;
-        const sellerVillageNorm = normalizeStr(o.seller?.village);
+        const sellerVillageNorm = normalizeStr(isReturn ? (o.buyer?.village || o.seller?.village) : o.seller?.village);
 
         const shgUser = allShgUsers.find(u =>
           (directShgId && (String(u.id) === String(directShgId) || u.authId === String(directShgId))) ||
@@ -306,6 +326,10 @@ export class OrderService {
           pickupShgId: o.pickupShgId,
           dropShgId: o.dropShgId,
           pickupTransporterId: o.pickupTransporterId,
+          returnTransporterId: o.returnTransporterId,
+          pickupReturnShgId: o.pickupReturnShgId,
+          returnType: o.returnType,
+          isReturn: isReturn,
           pickupTransporterStatus: o.pickupTransporterStatus || 'PENDING',
           pickupShgStatus: o.pickupShgStatus,
           dropShgStatus: o.dropShgStatus,
@@ -354,7 +378,7 @@ export class OrderService {
           assigneeId: { in: idVariants },
           assigneeType: 'TRANSPORTER',
           role: 'DROP',
-          status: { in: ['PENDING', 'ACCEPTED', 'REJECTED'] },
+          status: { in: ['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'] },
         },
         select: { orderId: true }
       });
@@ -380,10 +404,27 @@ export class OrderService {
 
       const activeOrders = orders.slice(0, 50);
 
-      const allShgUsers = await this.prisma.user.findMany({
-        where: { role: 'SHG', applicationStatus: 'APPROVED' },
+      const shgIds = new Set<string>();
+      activeOrders.forEach((o: any) => {
+        if (o.dropShgId) shgIds.add(String(o.dropShgId));
+        if (o.pickupShgId) shgIds.add(String(o.pickupShgId));
+        (o.assignments || []).forEach((a: any) => {
+          if (a.assigneeType === 'SHG' && a.assigneeId) shgIds.add(String(a.assigneeId));
+        });
+      });
+      const numericShgIds = Array.from(shgIds).map(id => parseInt(id, 10)).filter(n => !isNaN(n));
+      const authShgIds = Array.from(shgIds).filter(id => isNaN(parseInt(id, 10)));
+
+      const allShgUsers = shgIds.size > 0 ? await this.prisma.user.findMany({
+        where: {
+          role: 'SHG',
+          OR: [
+            ...(numericShgIds.length > 0 ? [{ id: { in: numericShgIds } }] : []),
+            ...(authShgIds.length > 0 ? [{ authId: { in: authShgIds } }] : []),
+          ]
+        },
         include: { address: true, shgDetail: true }
-      }).catch(() => []);
+      }).catch(() => []) : [];
 
       const normalizeStr = (s?: string | null): string => {
         if (!s) return '';
@@ -514,6 +555,8 @@ export class OrderService {
           dropTransporterId: o.dropTransporterId,
           dropTransporterStatus: o.dropTransporterStatus || 'PENDING',
           mainStatus: o.mainStatus,
+          returnType: o.returnType,
+          isReturn: o.returnType === 'BUYER_RETURN' || o.returnType === 'TRANSPORTER_RETURN' || (o.mainStatus || '').includes('RETURN'),
           seller: o.seller,
           buyer: o.buyer,
           dropShg: dropShgData,
@@ -592,6 +635,11 @@ export class OrderService {
   async acceptPickup(pickupOrderId: any, transporterId: number) {
     const order = await this.findOrderFlexible(pickupOrderId);
     const transporterUuid = String(transporterId);
+
+    const isReturnOrder = order.returnType === 'BUYER_RETURN' || order.returnType === 'TRANSPORTER_RETURN' || (order.mainStatus || '').includes('RETURN');
+    if (isReturnOrder) {
+      return this.acceptReturn(pickupOrderId, transporterId);
+    }
 
     const orderWeight = order.totalWeight ? Number(order.totalWeight) : 5;
     await this.checkToleranceCapacity(transporterId, orderWeight);
@@ -923,6 +971,53 @@ export class OrderService {
   }
 
   async completeDropPickup(dropOrderId: any, transporterId: number, code?: string) {
+    const order = await this.findOrderFlexible(dropOrderId);
+    const transporterUuid = String(transporterId);
+
+    if (order.returnType === 'BUYER_RETURN' && order.phase === 'DROP') {
+      await this.prisma.orderAssignment.updateMany({
+        where: {
+          orderId: order.id,
+          assigneeId: transporterUuid,
+          assigneeType: 'TRANSPORTER',
+          role: 'DROP',
+        },
+        data: { status: 'ACCEPTED' }
+      }).catch(() => {});
+
+      const updated = await this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          dropTransporterId: transporterUuid,
+          dropTransporterStatus: 'PICKED',
+          mainStatus: 'IN_TRANSIT_TO_DROP_SHG',
+        }
+      });
+
+      const parcels = await this.prisma.parcel.findMany({
+        where: {
+          OR: [{ orderId: order.id }, { orderId: order.orderId }]
+        }
+      });
+      for (const p of parcels) {
+        await this.prisma.parcelScanHistory.create({
+          data: {
+            parcelId: p.parcelId,
+            orderId: order.orderId || order.id,
+            productId: p.productId,
+            productName: p.productName,
+            userRole: 'TRANSPORTER',
+            userId: transporterUuid,
+            action: 'RETURN_DROP_TRANSPORTER_PICKUP_FROM_HUB',
+            scanResult: 'SUCCESS',
+            remarks: 'Return parcel picked up from GMU Hub by Drop Transporter',
+          }
+        }).catch(() => {});
+      }
+
+      return updated;
+    }
+
     return this.acceptDrop(dropOrderId, transporterId);
   }
 
@@ -1189,5 +1284,84 @@ export class OrderService {
       throw new NotFoundException(`Order with ID/OrderId ${strId} not found`);
     }
     return order;
+  }
+
+  async acceptReturn(orderId: any, transporterId: any) {
+    const order = await this.findOrderFlexible(orderId);
+    const transporterUuid = String(transporterId);
+
+    // If this is a return DROP leg (Hub -> Seller)
+    if (order.phase === 'DROP' || order.dropTransporterStatus === 'PENDING' || order.mainStatus === 'DISPATCHED') {
+      await this.prisma.orderAssignment.updateMany({
+        where: {
+          orderId: order.id,
+          assigneeId: transporterUuid,
+          assigneeType: 'TRANSPORTER',
+          role: 'DROP',
+        },
+        data: { status: 'ACCEPTED' }
+      });
+
+      return this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          dropTransporterId: transporterUuid,
+          dropTransporterStatus: 'DROP_TRANSPORTER_ACCEPTED',
+          mainStatus: 'DROP_TRANSPORTER_ACCEPTED',
+        }
+      });
+    }
+
+    // Return Pickup leg (SHG -> Hub) - Existing flow unchanged
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+        assigneeType: 'TRANSPORTER',
+        role: 'RETURN',
+      },
+      data: { status: 'ACCEPTED' }
+    });
+
+    return this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        returnTransporterId: transporterUuid,
+        pickupTransporterStatus: 'ACCEPTED',
+        mainStatus: 'RETURN_TRANSPORTER_ACCEPTED',
+      }
+    });
+  }
+
+  async collectReturnFromShg(orderId: any, transporterId: any) {
+    const order = await this.findOrderFlexible(orderId);
+    const transporterUuid = String(transporterId);
+
+    // Update SHG assignments to COMPLETED
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+        assigneeType: 'SHG',
+      },
+      data: { status: 'COMPLETED' }
+    });
+
+    // Update Transporter return assignment to COMPLETED
+    await this.prisma.orderAssignment.updateMany({
+      where: {
+        orderId: order.id,
+        assigneeType: 'TRANSPORTER',
+        role: 'RETURN',
+      },
+      data: { status: 'COMPLETED' }
+    });
+
+    return this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        mainStatus: 'RETURN_IN_TRANSIT_TO_HUB',
+        pickupTransporterStatus: 'IN_TRANSIT_TO_HUB',
+        dropShgStatus: 'DROPPED',
+      }
+    });
   }
 }

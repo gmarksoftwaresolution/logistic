@@ -25,6 +25,7 @@ import UpcomingOrdersScreen from '../screens/UpcomingOrdersScreen';
 import AcceptedOrdersScreen from '../screens/AcceptedOrdersScreen';
 import DropScreen from '../screens/DropScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
+import { ReturnOrderDetailsScreen } from '../screens/ReturnOrderDetailsScreen';
 import CompletedOrderDetailsScreen from '../screens/CompletedOrderDetailsScreen';
 import VehicleSuggestionDetailsScreen from '../screens/VehicleSuggestionDetailsScreen';
 import ReturnedOrdersScreen from '../screens/ReturnedOrdersScreen';
@@ -194,6 +195,7 @@ function OrdersStackNavigator() {
       <OrdersStack.Screen name="ReturnedOrders" component={ReturnedOrdersScreen} />
       <OrdersStack.Screen name="RedirectedOrders" component={RedirectedOrdersScreen} />
       <OrdersStack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+      <OrdersStack.Screen name="ReturnOrderDetails" component={ReturnOrderDetailsScreen} />
       <OrdersStack.Screen name="CompletedOrderDetails" component={CompletedOrderDetailsScreen} />
       <OrdersStack.Screen name="VehicleSuggestionDetails" component={VehicleSuggestionDetailsScreen} />
     </OrdersStack.Navigator>
