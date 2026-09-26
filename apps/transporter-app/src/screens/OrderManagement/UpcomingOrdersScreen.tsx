@@ -17,6 +17,7 @@ import { useOrderManagement, UpcomingOrder } from '../../context/OrderManagement
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, Phone, X, Calendar, ArrowRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import FlowBadge from '../../components/FlowBadge';
 
 export const UpcomingOrdersScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
@@ -157,6 +158,7 @@ export const UpcomingOrdersScreen: React.FC<{ navigation: any }> = ({ navigation
 
             return (
               <View key={item.id} style={styles.orderCard}>
+                <FlowBadge flowType={(item as any).flowType} isRedirected={(item as any).isRedirected || (item as any).isPickupRedirected} />
                 {/* Top Row: Order ID Only */}
                 <View style={styles.cardHeader}>
                   <Text style={styles.orderIdText}>{item.displayId || `#${item.orderId}`}</Text>

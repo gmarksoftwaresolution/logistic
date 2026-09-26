@@ -192,29 +192,7 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
     }
   };
 
-  // 1. Process server tracking array if available
-  if (order.tracking && Array.isArray(order.tracking) && order.tracking.length > 0) {
-    order.tracking.forEach((t: any) => {
-      const rawTitle = t.status || t.action || t.title || '';
-      const ts = t.timestamp || t.scanTime || t.createdAt || t.updatedAt;
-      addEvent(rawTitle, ts, t.remarks);
-    });
-  }
-
-  // 2. Process product scan histories if available
-  const scanHistoriesList: any[] = [];
-  if (Array.isArray(order.products)) {
-    order.products.forEach((p: any) => {
-      if (Array.isArray(p.scanHistories)) {
-        p.scanHistories.forEach((sh: any) => {
-          scanHistoriesList.push(sh);
-          addEvent(sh.status || sh.location || 'Parcel Scanned', sh.scanTime || sh.createdAt, sh.remarks);
-        });
-      }
-    });
-  }
-
-  // 3. Detect Phase 1 (Pickup Leg: Seller ➔ Hub) vs Phase 2 (Drop Leg: Hub ➔ Destination SHG) vs Master Journey
+  // Detect Phase 1 (Pickup Leg: Seller ➔ Hub) vs Phase 2 (Drop Leg: Hub ➔ Destination SHG) vs Master Journey
   const isExplicitPickup =
     order.type === 'pickup' ||
     order.legType === 'pickup' ||
@@ -234,250 +212,272 @@ export const TrackingHistoryModal: React.FC<TrackingHistoryModalProps> = ({
   const isPickupOnly = isExplicitPickup && !isConsolidatedMaster;
   const isDropOnly = isExplicitDrop && !isConsolidatedMaster;
 
-  const statusUpper = String(order.mainStatus || order.status || order.batchStatus || '').toUpperCase();
-  const pickupShgStatusUpper = String(order.pickupShgStatus || '').toUpperCase();
-  const pickupTransporterStatusUpper = String(order.pickupTransporterStatus || '').toUpperCase();
-  const dropTransporterStatusUpper = String(order.dropTransporterStatus || '').toUpperCase();
-  const dropShgStatusUpper = String(order.dropShgStatus || '').toUpperCase();
-
-  const products = Array.isArray(order.products) ? order.products : [];
-  const isAnyProductPicked = products.some((p: any) => p.status === 'picked' || p.status === 'completed');
-  const isAnyProductCompleted = products.some((p: any) => p.status === 'completed');
-
-  const rawCreatedAt = order.createdAt || order.orderDate || order.created_at || order.timestamp || order.date;
-  const baseDate = rawCreatedAt ? new Date(rawCreatedAt) : new Date();
-  const latestDate = order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date());
-
-  const baseMs = !isNaN(baseDate.getTime()) ? baseDate.getTime() : Date.now();
-  const latestMs = !isNaN(latestDate.getTime()) ? latestDate.getTime() : Date.now();
-
-  const getStepTime = (explicitTime: any, stepIndex: number, totalActiveSteps: number) => {
-    if (explicitTime) return explicitTime;
-    if (stepIndex === 0) return new Date(baseMs).toISOString();
-    if (stepIndex === totalActiveSteps - 1 && latestMs > baseMs) return new Date(latestMs).toISOString();
-    const diff = Math.max(0, latestMs - baseMs);
-    if (diff > 0 && totalActiveSteps > 1) {
-      const stepMs = baseMs + Math.round((diff * stepIndex) / (totalActiveSteps - 1));
-      return new Date(stepMs).toISOString();
-    }
-    const offsetMs = baseMs + (stepIndex * 5 * 60 * 1000);
-    return new Date(Math.min(offsetMs, Date.now())).toISOString();
-  };
-
-  const shgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_PICKUP'))?.scanTime;
-  const transScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_PICKUP'))?.scanTime;
-  const hubScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('WAREHOUSE_INTAKE'))?.scanTime;
-  const dropTransScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_DROP'))?.scanTime;
-  const dropShgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_DROP'))?.scanTime;
-  const deliveryScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('FINAL_DELIVERY'))?.scanTime;
-
-  // -------------------------------------------------------------
-  // A. PHASE 1: PICKUP ORDERS (Seller SHG ➔ GMU Hub Receive)
-  // -------------------------------------------------------------
-  if (isPickupOnly) {
-    let stageLevel = 1;
-
-    // Stage 2: SHG Scanned
-    if (
-      ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
-      pickupShgStatusUpper.includes('PICK') || pickupShgStatusUpper.includes('ACCEPT') ||
-      order.pickupCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 2);
+  // 1. Process server tracking array if available (Primary Source of Truth from backend enrichOrdersWithAuditTimeline)
+  if (order.tracking && Array.isArray(order.tracking) && order.tracking.length > 0) {
+    order.tracking.forEach((t: any) => {
+      const rawTitle = t.title || t.status || t.action || '';
+      const ts = t.timestamp || t.scanTime || t.createdAt || t.updatedAt;
+      addEvent(rawTitle, ts, t.remarks);
+    });
+  } else {
+    // 2. Legacy fallback processing for un-enriched objects
+    const scanHistoriesList: any[] = [];
+    if (Array.isArray(order.products)) {
+      order.products.forEach((p: any) => {
+        if (Array.isArray(p.scanHistories)) {
+          p.scanHistories.forEach((sh: any) => {
+            scanHistoriesList.push(sh);
+            addEvent(sh.status || sh.location || 'Parcel Scanned', sh.scanTime || sh.createdAt, sh.remarks);
+          });
+        }
+      });
     }
 
-    // Stage 3: Transporter Accepted
-    if (
-      ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
-      pickupTransporterStatusUpper.includes('ACCEPT') ||
-      order.isAccepted ||
-      order.pickupCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 3);
+    const statusUpper = String(order.mainStatus || order.status || order.batchStatus || '').toUpperCase();
+    const pickupShgStatusUpper = String(order.pickupShgStatus || '').toUpperCase();
+    const pickupTransporterStatusUpper = String(order.pickupTransporterStatus || '').toUpperCase();
+    const dropTransporterStatusUpper = String(order.dropTransporterStatus || '').toUpperCase();
+    const dropShgStatusUpper = String(order.dropShgStatus || '').toUpperCase();
+
+    const products = Array.isArray(order.products) ? order.products : [];
+    const isAnyProductPicked = products.some((p: any) => p.status === 'picked' || p.status === 'completed');
+    const isAnyProductCompleted = products.some((p: any) => p.status === 'completed');
+
+    const rawCreatedAt = order.createdAt || order.orderDate || order.created_at || order.timestamp || order.date;
+    const baseDate = rawCreatedAt ? new Date(rawCreatedAt) : new Date();
+    const latestDate = order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date());
+
+    const baseMs = !isNaN(baseDate.getTime()) ? baseDate.getTime() : Date.now();
+    const latestMs = !isNaN(latestDate.getTime()) ? latestDate.getTime() : Date.now();
+
+    const getStepTime = (explicitTime: any, stepIndex: number, totalActiveSteps: number) => {
+      if (explicitTime) return explicitTime;
+      if (stepIndex === 0) return new Date(baseMs).toISOString();
+      if (stepIndex === totalActiveSteps - 1 && latestMs > baseMs) return new Date(latestMs).toISOString();
+      const diff = Math.max(0, latestMs - baseMs);
+      if (diff > 0 && totalActiveSteps > 1) {
+        const stepMs = baseMs + Math.round((diff * stepIndex) / (totalActiveSteps - 1));
+        return new Date(stepMs).toISOString();
+      }
+      const offsetMs = baseMs + (stepIndex * 5 * 60 * 1000);
+      return new Date(Math.min(offsetMs, Date.now())).toISOString();
+    };
+
+    const shgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_PICKUP'))?.scanTime;
+    const transScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_PICKUP'))?.scanTime;
+    const hubScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('WAREHOUSE_INTAKE'))?.scanTime;
+    const dropTransScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('TRANSPORTER_DROP'))?.scanTime;
+    const dropShgScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('SHG_DROP'))?.scanTime;
+    const deliveryScanTime = scanHistoriesList.find((s: any) => String(s.action || '').toUpperCase().includes('FINAL_DELIVERY'))?.scanTime;
+
+    // -------------------------------------------------------------
+    // A. PHASE 1: PICKUP ORDERS (Seller SHG ➔ GMU Hub Receive)
+    // -------------------------------------------------------------
+    if (isPickupOnly) {
+      let stageLevel = 1;
+
+      // Stage 2: SHG Scanned
+      if (
+        ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
+        pickupShgStatusUpper.includes('PICK') || pickupShgStatusUpper.includes('ACCEPT') ||
+        order.pickupCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 2);
+      }
+
+      // Stage 3: Transporter Accepted
+      if (
+        ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
+        pickupTransporterStatusUpper.includes('ACCEPT') ||
+        order.isAccepted ||
+        order.pickupCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 3);
+      }
+
+      // Stage 4: Picked up by Transporter
+      if (
+        ['PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
+        pickupTransporterStatusUpper.includes('PICK') ||
+        isAnyProductPicked ||
+        order.pickupCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 4);
+      }
+
+      // Stage 5: Received & Quality Checked at GMU Hub (FINAL PHASE 1 END STEP)
+      if (
+        ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED', 'PICKUP_COMPLETED'].includes(statusUpper) ||
+        order.pickupCompleted ||
+        isAnyProductCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 5);
+      }
+
+      const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
+
+      const p1CreatedAt = rawCreatedAt;
+      const p1ShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
+      const p1TransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
+      const p1TransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
+      const p1HubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || (statusUpper === 'HUB_RECEIVED' || statusUpper === 'PARCEL_AT_GMU' || statusUpper === 'STORED' ? order.updatedAt : null) || rawCreatedAt;
+
+      if (stageLevel >= 1) addEvent('Order Placed & Registered', p1CreatedAt);
+      if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', p1ShgPickedAt);
+      if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', p1TransAcceptedAt);
+      if (stageLevel >= 4) addEvent('Picked up by Transporter', p1TransPickedAt);
+      if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', p1HubReceivedAt);
     }
 
-    // Stage 4: Picked up by Transporter
-    if (
-      ['PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED'].includes(statusUpper) ||
-      pickupTransporterStatusUpper.includes('PICK') ||
-      isAnyProductPicked ||
-      order.pickupCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 4);
+    // -------------------------------------------------------------
+    // B. PHASE 2: DROP ORDERS (GMU Hub ➔ Destination SHG Center)
+    // -------------------------------------------------------------
+    else if (isDropOnly) {
+      let stageLevel = 1;
+
+      // Stage 2: Transporter Drop Accepted
+      if (
+        ['ACCEPTED_DROP', 'DROP_ACCEPTED', 'OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropTransporterStatusUpper.includes('ACCEPT') ||
+        order.isAccepted ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 2);
+      }
+
+      // Stage 3: Picked Up from Hub
+      if (
+        ['OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropTransporterStatusUpper.includes('PICK') ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 3);
+      }
+
+      // Stage 4: In Transit
+      if (
+        ['OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 4);
+      }
+
+      // Stage 5: Received at Destination SHG (FINAL PHASE 2 END STEP)
+      if (
+        ['AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropShgStatusUpper.includes('ACCEPT') || dropShgStatusUpper.includes('RECV') ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 5);
+      }
+
+      const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
+
+      const p2DispatchedAt = order.dispatchedAt || order.hubDispatchedAt || rawCreatedAt;
+      const p2TransAcceptedAt = order.acceptedAt || order.dropTransporterAcceptedAt || dropAssignment?.updatedAt || dropAssignment?.createdAt || p2DispatchedAt;
+      const p2TransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
+      const p2InTransitAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
+      const p2DropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || p2DispatchedAt;
+
+      if (stageLevel >= 1) addEvent('Order Ready for Dispatch at GMU Hub', p2DispatchedAt);
+      if (stageLevel >= 2) addEvent('Transporter Drop Route Assigned & Accepted', p2TransAcceptedAt);
+      if (stageLevel >= 3) addEvent('Transporter Picked Up from GMU Hub', p2TransPickedAt);
+      if (stageLevel >= 4) addEvent('In Transit to Destination SHG', p2InTransitAt);
+      if (stageLevel >= 5) addEvent('Received & Handed Over at Destination SHG Center', p2DropShgReceivedAt);
     }
 
-    // Stage 5: Received & Quality Checked at GMU Hub (FINAL PHASE 1 END STEP)
-    if (
-      ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'COMPLETED', 'PICKUP_COMPLETED'].includes(statusUpper) ||
-      order.pickupCompleted ||
-      isAnyProductCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 5);
+    // -------------------------------------------------------------
+    // C. CONSOLIDATED MASTER JOURNEY (Full End-to-End Transfer)
+    // -------------------------------------------------------------
+    else {
+      let stageLevel = 1;
+
+      if (
+        ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        pickupShgStatusUpper.includes('PICK') || pickupShgStatusUpper.includes('ACCEPT') ||
+        order.pickupCompleted || order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 2);
+      }
+
+      if (
+        ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        pickupTransporterStatusUpper.includes('ACCEPT') ||
+        order.isAccepted ||
+        order.pickupCompleted || order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 3);
+      }
+
+      if (
+        ['PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        pickupTransporterStatusUpper.includes('PICK') ||
+        isAnyProductPicked ||
+        order.pickupCompleted || order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 4);
+      }
+
+      if (
+        ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        order.dropCompleted ||
+        isAnyProductCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 5);
+      }
+
+      if (
+        ['DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropTransporterStatusUpper.includes('PICK') ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 6);
+      }
+
+      if (
+        ['OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropTransporterStatusUpper.includes('PICK') ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 7);
+      }
+
+      if (
+        ['AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
+        dropShgStatusUpper.includes('ACCEPT') || dropShgStatusUpper.includes('RECV') ||
+        order.dropCompleted
+      ) {
+        stageLevel = Math.max(stageLevel, 8);
+      }
+
+      const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
+      const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
+
+      const mCreatedAt = rawCreatedAt;
+      const mShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
+      const mTransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
+      const mTransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
+      const mHubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || rawCreatedAt;
+      const mDispatchedAt = order.dispatchedAt || order.hubDispatchedAt || dropAssignment?.createdAt || mHubReceivedAt;
+      const mDropTransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || mDispatchedAt;
+      const mDropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || mDropTransPickedAt;
+
+      if (stageLevel >= 1) addEvent('Order Placed & Registered', mCreatedAt);
+      if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', mShgPickedAt);
+      if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', mTransAcceptedAt);
+      if (stageLevel >= 4) addEvent('Picked up by Transporter', mTransPickedAt);
+      if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', mHubReceivedAt);
+      if (stageLevel >= 6) addEvent('Dispatched from Hub', mDispatchedAt);
+      if (stageLevel >= 7) addEvent('Transporter Picked Up from Hub', mDropTransPickedAt);
+      if (stageLevel >= 8) addEvent('Received at Destination SHG Center', mDropShgReceivedAt);
     }
-
-    const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
-
-    const p1CreatedAt = rawCreatedAt;
-    const p1ShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
-    const p1TransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
-    const p1TransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
-    const p1HubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || (statusUpper === 'HUB_RECEIVED' || statusUpper === 'PARCEL_AT_GMU' || statusUpper === 'STORED' ? order.updatedAt : null) || rawCreatedAt;
-
-    if (stageLevel >= 1) addEvent('Order Placed & Registered', p1CreatedAt);
-    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', p1ShgPickedAt);
-    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', p1TransAcceptedAt);
-    if (stageLevel >= 4) addEvent('Picked up by Transporter', p1TransPickedAt);
-    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', p1HubReceivedAt);
-  }
-
-  // -------------------------------------------------------------
-  // B. PHASE 2: DROP ORDERS (GMU Hub ➔ Destination SHG Center)
-  // -------------------------------------------------------------
-  else if (isDropOnly) {
-    let stageLevel = 1;
-
-    // Stage 2: Transporter Drop Accepted
-    if (
-      ['ACCEPTED_DROP', 'DROP_ACCEPTED', 'OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropTransporterStatusUpper.includes('ACCEPT') ||
-      order.isAccepted ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 2);
-    }
-
-    // Stage 3: Picked Up from Hub
-    if (
-      ['OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropTransporterStatusUpper.includes('PICK') ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 3);
-    }
-
-    // Stage 4: In Transit
-    if (
-      ['OUT_FOR_DELIVERY', 'AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 4);
-    }
-
-    // Stage 5: Received at Destination SHG (FINAL PHASE 2 END STEP)
-    if (
-      ['AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropShgStatusUpper.includes('ACCEPT') || dropShgStatusUpper.includes('RECV') ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 5);
-    }
-
-    const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
-
-    const p2DispatchedAt = order.dispatchedAt || order.hubDispatchedAt || rawCreatedAt;
-    const p2TransAcceptedAt = order.acceptedAt || order.dropTransporterAcceptedAt || dropAssignment?.updatedAt || dropAssignment?.createdAt || p2DispatchedAt;
-    const p2TransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
-    const p2InTransitAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || p2DispatchedAt;
-    const p2DropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || p2DispatchedAt;
-
-    if (stageLevel >= 1) addEvent('Order Ready for Dispatch at GMU Hub', p2DispatchedAt);
-    if (stageLevel >= 2) addEvent('Transporter Drop Route Assigned & Accepted', p2TransAcceptedAt);
-    if (stageLevel >= 3) addEvent('Transporter Picked Up from GMU Hub', p2TransPickedAt);
-    if (stageLevel >= 4) addEvent('In Transit to Destination SHG', p2InTransitAt);
-    if (stageLevel >= 5) addEvent('Received & Handed Over at Destination SHG Center', p2DropShgReceivedAt);
-  }
-
-  // -------------------------------------------------------------
-  // C. CONSOLIDATED MASTER JOURNEY (Full End-to-End Transfer)
-  // -------------------------------------------------------------
-  else {
-    let stageLevel = 1;
-
-    if (
-      ['PARCEL_AT_SHG', 'RETURN_PARCEL_AT_SHG', 'TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      pickupShgStatusUpper.includes('PICK') || pickupShgStatusUpper.includes('ACCEPT') ||
-      order.pickupCompleted || order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 2);
-    }
-
-    if (
-      ['TRANSPORTER_ACCEPTED', 'PICKUP_TRANSPORTER_ACCEPTED', 'ACCEPTED_PICKUP', 'PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      pickupTransporterStatusUpper.includes('ACCEPT') ||
-      order.isAccepted ||
-      order.pickupCompleted || order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 3);
-    }
-
-    if (
-      ['PARCEL_PICKED', 'IN_TRANSIT_TO_HUB', 'PICKUP_COMPLETED', 'HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      pickupTransporterStatusUpper.includes('PICK') ||
-      isAnyProductPicked ||
-      order.pickupCompleted || order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 4);
-    }
-
-    if (
-      ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      order.dropCompleted ||
-      isAnyProductCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 5);
-    }
-
-    if (
-      ['DISPATCHED', 'OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropTransporterStatusUpper.includes('PICK') ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 6);
-    }
-
-    if (
-      ['OUT_FOR_DELIVERY', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropTransporterStatusUpper.includes('PICK') ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 7);
-    }
-
-    if (
-      ['AT_BUYER_SHG', 'DROP_COMPLETED', 'DELIVERED', 'COMPLETED'].includes(statusUpper) ||
-      dropShgStatusUpper.includes('ACCEPT') || dropShgStatusUpper.includes('RECV') ||
-      order.dropCompleted
-    ) {
-      stageLevel = Math.max(stageLevel, 8);
-    }
-
-    const pickupAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'PICKUP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'PICKUP') : null;
-    const dropAssignment = Array.isArray(order.assignments) ? order.assignments.find((a: any) => a.role === 'DROP' && a.assigneeType === 'TRANSPORTER') || order.assignments?.find((a: any) => a.role === 'DROP') : null;
-
-    const mCreatedAt = rawCreatedAt;
-    const mShgPickedAt = shgScanTime || order.shgPickedUpAt || order.collectedAt || order.pickedUpAt || pickupAssignment?.createdAt || rawCreatedAt;
-    const mTransAcceptedAt = order.acceptedAt || order.transporterAcceptedAt || pickupAssignment?.updatedAt || pickupAssignment?.createdAt || rawCreatedAt;
-    const mTransPickedAt = transScanTime || order.transporterPickedUpAt || pickupAssignment?.updatedAt || rawCreatedAt;
-    const mHubReceivedAt = hubScanTime || order.warehouseReceivedAt || order.storedAt || order.atGmuAt || rawCreatedAt;
-    const mDispatchedAt = order.dispatchedAt || order.hubDispatchedAt || dropAssignment?.createdAt || mHubReceivedAt;
-    const mDropTransPickedAt = dropTransScanTime || order.dropTransporterPickedUpAt || dropAssignment?.updatedAt || mDispatchedAt;
-    const mDropShgReceivedAt = dropShgScanTime || order.deliveredAt || order.dropShgReceivedAt || order.dropShgAcceptedAt || order.updatedAt || mDropTransPickedAt;
-
-    if (stageLevel >= 1) addEvent('Order Placed & Registered', mCreatedAt);
-    if (stageLevel >= 2) addEvent('Collected & Scanned by SHG', mShgPickedAt);
-    if (stageLevel >= 3) addEvent('Transporter Route Assigned & Accepted', mTransAcceptedAt);
-    if (stageLevel >= 4) addEvent('Picked up by Transporter', mTransPickedAt);
-    if (stageLevel >= 5) addEvent('Received & Quality Checked at GMU Hub', mHubReceivedAt);
-    if (stageLevel >= 6) addEvent('Dispatched from Hub', mDispatchedAt);
-    if (stageLevel >= 7) addEvent('Transporter Picked Up from Hub', mDropTransPickedAt);
-    if (stageLevel >= 8) addEvent('Received at Destination SHG Center', mDropShgReceivedAt);
   }
 
   // Sort timeline list by stage order integer
   const timelineList = Array.from(eventsMap.values())
     .sort((a, b) => (a.orderIdx || 99) - (b.orderIdx || 99));
 
-  // Secondary filter for Phase 1 vs Phase 2
+  // Filter timeline list by user leg context (isPickupOnly / isDropOnly) using real backend timestamps
   const filteredTimeline = timelineList.filter((item) => {
     if (isPickupOnly) {
       return !['Dispatched from Hub', 'Transporter Picked Up from Hub', 'Received at Destination SHG Center', 'Delivered & Handed Over to Buyer'].includes(item.title);

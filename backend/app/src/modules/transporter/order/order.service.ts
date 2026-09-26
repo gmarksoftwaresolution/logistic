@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { enrichOrdersWithAuditTimeline } from '../../../common/utils/audit-timeline.util';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -185,7 +186,7 @@ export class OrderService {
         return true;
       });
 
-      return activePickupOrders.map((o: any) => {
+      const mapped = activePickupOrders.map((o: any) => {
         const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
 
         const directShgId = o.pickupShgId;
@@ -332,6 +333,7 @@ export class OrderService {
           parcels: o.parcels || [],
         };
       });
+      return enrichOrdersWithAuditTimeline(mapped, this.prisma);
     } catch (err) {
       console.error('[OrderService] Error fetching assigned pickups:', err);
       return [];
@@ -403,7 +405,7 @@ export class OrderService {
         return s.replace(/[^a-z0-9]/gi, '').trim().toLowerCase();
       };
 
-      return activeOrders.map((o: any) => {
+      const mapped = activeOrders.map((o: any) => {
         const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
 
         const dropShgIdVal = o.dropShgId;
@@ -546,6 +548,7 @@ export class OrderService {
           })) : (o.items || [])
         };
       });
+      return enrichOrdersWithAuditTimeline(mapped, this.prisma);
     } catch (err) {
       console.error('[OrderService] Error fetching assigned drops:', err);
       return [];
@@ -614,8 +617,13 @@ export class OrderService {
         orderId: order.id,
         assigneeId: transporterUuid,
         assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+        acceptedAt: null,
       },
-      data: { status: 'ACCEPTED' }
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
     });
 
     // Delete other pending transporter assignments for this pickup leg to prevent leaks
@@ -663,14 +671,16 @@ export class OrderService {
             assigneeId: transporterUuid,
             assigneeType: 'TRANSPORTER',
             role: 'PICKUP',
-            status: 'ACCEPTED'
+            status: 'ACCEPTED',
+            acceptedAt: new Date()
           },
           {
             orderId: order.id,
             assigneeId: transporterUuid,
             assigneeType: 'TRANSPORTER',
             role: 'DROP',
-            status: 'ACCEPTED'
+            status: 'ACCEPTED',
+            acceptedAt: new Date()
           }
         ]
       }).catch(() => { });
@@ -733,8 +743,13 @@ export class OrderService {
         orderId: order.id,
         assigneeId: transporterUuid,
         assigneeType: 'TRANSPORTER',
+        status: 'PENDING',
+        acceptedAt: null,
       },
-      data: { status: 'ACCEPTED' }
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
     });
 
     await this.prisma.order.update({

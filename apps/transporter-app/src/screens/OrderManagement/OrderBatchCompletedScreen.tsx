@@ -16,6 +16,7 @@ import { Package, ArrowRight, CheckCircle, History, MapPin, Truck } from 'lucide
 import { Ionicons } from '@expo/vector-icons';
 import { HUB_CONFIG } from '../../constants/hub';
 import { useTranslation } from 'react-i18next';
+import FlowBadge from '../../components/FlowBadge';
 import { TrackingHistoryModal } from '../../components/TrackingHistoryModal';
 
 const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
@@ -154,8 +155,9 @@ const OrderBatchCompletedScreen: React.FC<{ navigation: any }> = ({ navigation }
             <Text style={styles.emptyCardText}>{t('orders.no_completed_transfers', { defaultValue: 'No completed shipments found.' })}</Text>
           </View>
         ) : (
-          journeys.map((journey) => (
-            <View key={journey.masterOrderId || journey.id} style={styles.premiumBatchCard}>
+          journeys.map((journey, index) => (
+            <View key={journey.id || index} style={styles.premiumBatchCard}>
+              <FlowBadge flowType={journey.flowType} isRedirected={journey.isRedirected || (journey as any).isPickupRedirected} />
               {/* Header: ID & Status Badge */}
               <View style={styles.cardHeaderRow}>
                 <View style={styles.idGroup}>

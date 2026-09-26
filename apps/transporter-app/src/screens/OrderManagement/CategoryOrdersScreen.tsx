@@ -19,6 +19,7 @@ import { useOrderManagement, BatchOrder } from '../../context/OrderManagementCon
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, ChevronDown, ChevronRight, Check, X, MapPin, ArrowRight, Info, Truck, Scale, AlertCircle, Gauge } from 'lucide-react-native';
 import WalkthroughElement from '../../components/WalkthroughElement';
+import FlowBadge from '../../components/FlowBadge';
 import { HUB_CONFIG, isHubPoint } from '../../constants/hub';
 import { useTranslation } from 'react-i18next';
 
@@ -353,15 +354,16 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                      navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'pickup' });
                                    }}
                                  >
-                                  <View style={styles.widgetTopRow}>
-                                    <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
-                                  </View>
+                                   <FlowBadge flowType={batch.flowType} isRedirected={batch.isRedirected || (batch as any).isPickupRedirected} />
+                                   <View style={styles.widgetTopRow}>
+                                     <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
+                                   </View>
                                   <Text style={styles.widgetRouteText} numberOfLines={2}>{routeText}</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), flexWrap: 'wrap' }}>
                                     <Text style={styles.widgetTotalsText}>{batch.pickupCount} {t('orders.items')} • {batch.totalWeight}</Text>
-                                    <View style={[styles.legTagBox, { backgroundColor: batch.flowType === 'shg_to_shg' ? '#FEF2F2' : '#EFF6FF' }]}>
-                                      <Text style={[styles.legTagText, { color: batch.flowType === 'shg_to_shg' ? '#DC2626' : '#2563EB' }]}>
-                                        {batch.flowType === 'shg_to_shg' ? '⚡ Direct SHG-to-SHG' : t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}
+                                    <View style={[styles.legTagBox, { backgroundColor: '#EFF6FF' }]}>
+                                      <Text style={[styles.legTagText, { color: '#2563EB' }]}>
+                                        {batch.flowType === 'shg_to_shg' ? '⚡ SHG → SHG' : t('orders.pickup_orders', { defaultValue: 'Pickup Order' })}
                                       </Text>
                                     </View>
                                   </View>
@@ -423,6 +425,7 @@ const CategoryOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                                      navigation.navigate('ActivityOrderDetail', { batchId: batch.id, type: 'drop' });
                                    }}
                                  >
+                                   <FlowBadge flowType={batch.flowType} isRedirected={batch.isRedirected || (batch as any).isPickupRedirected} />
                                     <View style={styles.widgetTopRow}>
                                       <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                                     </View>

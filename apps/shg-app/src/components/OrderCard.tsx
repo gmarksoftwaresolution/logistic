@@ -31,6 +31,7 @@ interface OrderCardProps {
   verificationPending?: boolean;
   onSendOtp?: () => void;
   rawOrder?: any;
+  flowType?: string;
   hideTransporter?: boolean;
 }
 
@@ -58,11 +59,24 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   verificationPending,
   onSendOtp,
   rawOrder,
+  flowType,
   hideTransporter = false,
 }) => {
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const context = useContext(LanguageContext);
   const { t } = context!;
+
+  const checkRedirected =
+    Boolean(isRedirected) ||
+    Boolean(rawOrder?.isRedirected) ||
+    Boolean(rawOrder?.isPickupRedirected) ||
+    rawOrder?.pickupShgStatus === 'REDIRECTED' ||
+    rawOrder?.mainStatus === 'REDIRECTED';
+
+  const cleanFlow = String(flowType || rawOrder?.flowType || '').toUpperCase();
+  const checkDirect =
+    cleanFlow === 'DIRECT_SHG_TO_SHG' ||
+    cleanFlow === 'SHG_TO_SHG';
 
   return (
     <HighlightCardWrapper isHighlighted={isHighlighted}>
@@ -92,6 +106,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
         {/* Left Content Side */}
         <View className="flex-1 pr-2">
+          {/* Flow Type Badge */}
+          {checkRedirected ? null : checkDirect ? (
+            <View className="self-start flex-row items-center px-2 py-0.5 rounded-[6px] bg-blue-100 mb-1">
+              <View className="w-1.5 h-1.5 rounded-full bg-blue-600 mr-1.5" />
+              <Text className="text-[10px] font-bold text-blue-800 tracking-wide uppercase">SHG → SHG</Text>
+            </View>
+          ) : (
+            <View className="self-start flex-row items-center px-2 py-0.5 rounded-[6px] bg-emerald-100 mb-1">
+              <View className="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5" />
+              <Text className="text-[10px] font-bold text-emerald-800 tracking-wide uppercase">NORMAL</Text>
+            </View>
+          )}
+
           {/* Order ID Badge / Highlight */}
           <View className="flex-row items-center">
             <Text className="text-[11px] font-semibold text-slate-700 tracking-wider">

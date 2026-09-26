@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../../../common/prisma/prisma.service';
 import { HistoryQueryDto, OrderHistoryStatus } from '../dto/history-query.dto';
 import { IHistoryStats, IHistoryResponse } from '../interfaces/history.interface';
+import { enrichOrdersWithAuditTimeline } from '../../../../../common/utils/audit-timeline.util';
 
 @Injectable()
 export class OrderHistoryService {
@@ -290,11 +291,11 @@ export class OrderHistoryService {
       weightValue: parseFloat(p.weight) || 1,
     }));
 
-    // Compile scan history logs for tracking
     const scanHistories = parcels.flatMap((p: any) => p.scanHistories || []);
     scanHistories.sort((a: any, b: any) => new Date(a.scanTime).getTime() - new Date(b.scanTime).getTime());
 
-    const tracking = scanHistories.map((sh: any) => ({
+    const [enriched] = await enrichOrdersWithAuditTimeline([order], this.prisma);
+    const tracking = enriched?.tracking && enriched.tracking.length > 0 ? enriched.tracking : scanHistories.map((sh: any) => ({
       id: sh.id,
       status: sh.action || sh.currentStage || sh.scanResult || 'Stage Completed',
       timestamp: sh.scanTime,

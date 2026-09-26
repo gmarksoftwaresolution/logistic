@@ -73,135 +73,222 @@ export class OrderManagementService implements OnModuleInit {
       if (t.authId) allTransporterIdVariants.push(t.authId);
     });
 
-    // Fetch Order Assignments for the date range
+    // Fetch Order Assignments assigned or accepted on or before endOfDay of target date
     const assignments = await this.prisma.orderAssignment.findMany({
       where: {
         assigneeType: 'TRANSPORTER',
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+        OR: [
+          { createdAt: { lte: endOfDay } },
+          { acceptedAt: { lte: endOfDay } },
+        ],
       },
       include: {
-        order: true,
+        order: {
+          include: {
+            parcels: {
+              include: {
+                scanHistories: true,
+              },
+            },
+            redirectedOrders: true,
+          },
+        },
       },
     });
 
-    // Fetch Orders created or modified on this date involving transporters
-    const orders = await this.prisma.order.findMany({
+    const orderIds = Array.from(new Set(assignments.map((a) => a.orderId)));
+    const verificationRecords = await this.prisma.verificationRecord.findMany({
       where: {
-        OR: [
-          { createdAt: { gte: startOfDay, lte: endOfDay } },
-          { updatedAt: { gte: startOfDay, lte: endOfDay } },
-          { dispatchedAt: { gte: startOfDay, lte: endOfDay } },
-          { deliveredAt: { gte: startOfDay, lte: endOfDay } },
-        ],
-        AND: [
-          {
-            OR: [
-              { pickupTransporterId: { in: allTransporterIdVariants } },
-              { dropTransporterId: { in: allTransporterIdVariants } },
-              { returnTransporterId: { in: allTransporterIdVariants } },
-            ],
-          },
-        ],
+        orderId: { in: orderIds },
+        status: 'VERIFIED',
       },
-      include: {
-        assignments: {
-          where: { assigneeType: 'TRANSPORTER' },
-        },
-      },
+    });
+
+    const verificationRecordsMap = new Map<string, any[]>();
+    verificationRecords.forEach((v) => {
+      if (!verificationRecordsMap.has(v.orderId)) {
+        verificationRecordsMap.set(v.orderId, []);
+      }
+      verificationRecordsMap.get(v.orderId)!.push(v);
     });
 
     const transporterReports = filteredTransporters.map((transporter) => {
       const idVariants = [String(transporter.id), transporter.authId].filter(Boolean) as string[];
 
-      const tAssignments = assignments.filter((a) => idVariants.includes(String(a.assigneeId)));
+      // Filter assignments belonging to this transporter
+      const tAssignments = assignments.filter((a) => {
+        const isTargetTransporter = idVariants.includes(String(a.assigneeId));
+        if (!isTargetTransporter) return false;
 
-      const tOrders = orders.filter((o) =>
-        idVariants.includes(String(o.pickupTransporterId)) ||
-        idVariants.includes(String(o.dropTransporterId)) ||
-        idVariants.includes(String(o.returnTransporterId)) ||
-        o.assignments.some((a) => idVariants.includes(String(a.assigneeId)))
-      );
+        // Primary source of truth: Assignment status must be ACCEPTED or COMPLETED or REJECTED
+        if (a.status !== 'ACCEPTED' && a.status !== 'COMPLETED' && a.status !== 'REJECTED') return false;
 
-      const uniqueOrderIds = new Set<string>();
-      tAssignments.forEach((a) => uniqueOrderIds.add(a.orderId));
-      tOrders.forEach((o) => uniqueOrderIds.add(o.id));
-
-      const sellerPickupCount =
-        tAssignments.filter((a) => a.role === 'PICKUP').length +
-        tOrders.filter(
-          (o) =>
-            idVariants.includes(String(o.pickupTransporterId)) &&
-            !tAssignments.some((a) => a.orderId === o.id && a.role === 'PICKUP')
-        ).length;
-
-      const shgDropCount =
-        tAssignments.filter((a) => a.role === 'DROP').length +
-        tOrders.filter(
-          (o) =>
-            idVariants.includes(String(o.dropTransporterId)) &&
-            !tAssignments.some((a) => a.orderId === o.id && a.role === 'DROP')
-        ).length;
-
-      const totalAllocated = Math.max(tAssignments.length, uniqueOrderIds.size);
-
-      let completedCount = 0;
-      let undeliveredCount = 0;
-
-      tOrders.forEach((o) => {
-        const isPickup =
-          idVariants.includes(String(o.pickupTransporterId)) ||
-          tAssignments.some((a) => a.orderId === o.id && a.role === 'PICKUP');
-        const isDrop =
-          idVariants.includes(String(o.dropTransporterId)) ||
-          tAssignments.some((a) => a.orderId === o.id && a.role === 'DROP');
-
-        const ptStatus = (o.pickupTransporterStatus || '').toUpperCase();
-        const dtStatus = (o.dropTransporterStatus || '').toUpperCase();
-        const mStatus = (o.mainStatus || '').toUpperCase();
-
-        const dShgStatus = (o.dropShgStatus || '').toUpperCase();
-
-        const isPickupCompleted =
-          ['COMPLETED', 'DELIVERED_TO_HUB', 'DROPPED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB'].includes(ptStatus) ||
-          ['HUB_RECEIVED', 'PARCEL_AT_GMU', 'PARCEL_AT_HUB', 'STORED', 'BARCODE_GENERATED', 'DROP_PENDING', 'DROP_ASSIGNED', 'DROP_SHG_ACCEPTED', 'DROP_TRANSPORTER_ACCEPTED', 'DISPATCHED', 'IN_TRANSIT_TO_DROP_SHG', 'PARCEL_AT_DROP_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus);
-
-        const isDropCompleted =
-          ['COMPLETED', 'DROPPED', 'DELIVERED'].includes(dtStatus) ||
-          ['DELIVERED', 'DROPPED'].includes(dShgStatus) ||
-          ['PARCEL_AT_DROP_SHG', 'AT_BUYER_SHG', 'DELIVERED', 'COMPLETED'].includes(mStatus);
-
-        const isRejected =
-          ptStatus === 'REJECTED' ||
-          dtStatus === 'REJECTED' ||
-          mStatus === 'REJECTED' ||
-          dtStatus === 'SHG_NOT_AVAILABLE';
-
-        if (isRejected) {
-          undeliveredCount++;
-        } else if ((isPickup && isPickupCompleted) || (isDrop && isDropCompleted)) {
-          completedCount++;
+        // If order leg is explicitly assigned/accepted by another transporter, exclude
+        const o = a.order;
+        if (a.role === 'PICKUP' && o?.pickupTransporterId && !idVariants.includes(String(o.pickupTransporterId))) {
+          return false;
         }
+        if (a.role === 'DROP' && o?.dropTransporterId && !idVariants.includes(String(o.dropTransporterId))) {
+          return false;
+        }
+
+        return true;
       });
 
-      const extraRejectedAssignments = tAssignments.filter(
-        (a) => a.status === 'REJECTED' && !tOrders.some((o) => o.id === a.orderId && o.mainStatus === 'REJECTED')
-      ).length;
-      undeliveredCount += extraRejectedAssignments;
+      let acceptedCount = 0;
+      let carriedForwardCount = 0;
+      let completedTodayCount = 0;
+      let pendingEodCount = 0;
+      let undeliveredCount = 0;
+      let sellerPickupCount = 0;
+      let shgDropCount = 0;
 
-      const extraCompletedAssignments = tAssignments.filter(
-        (a) =>
-          a.status === 'COMPLETED' &&
-          !tOrders.some((o) => o.id === a.orderId && ['DELIVERED', 'COMPLETED', 'HUB_RECEIVED'].includes(o.mainStatus))
-      ).length;
-      completedCount += extraCompletedAssignments;
+      tAssignments.forEach((a) => {
+        const o = a.order;
+        const ptStatus = (o?.pickupTransporterStatus || '').toUpperCase();
+        const dtStatus = (o?.dropTransporterStatus || '').toUpperCase();
+        const mStatus = (o?.mainStatus || '').toUpperCase();
 
-      completedCount = Math.min(completedCount, totalAllocated);
-      undeliveredCount = Math.min(undeliveredCount, totalAllocated - completedCount);
+        const isPickup = a.role === 'PICKUP';
+        const isDrop = a.role === 'DROP';
 
-      const pendingCount = Math.max(0, totalAllocated - completedCount - undeliveredCount);
+        const isPickupTransporterMatch = Boolean(o?.pickupTransporterId) && idVariants.includes(String(o?.pickupTransporterId));
+        const isDropTransporterMatch = Boolean(o?.dropTransporterId) && idVariants.includes(String(o?.dropTransporterId));
+
+        // 1. Immutable Transporter Acceptance Timestamp
+        // Uses dedicated a.acceptedAt if present.
+        // For legacy records (a.acceptedAt === null), zero date fabrication rule:
+        // isAcceptedToday = false, isAcceptedBefore = false, isAcceptedByEod = false.
+        const acceptedDate = a.acceptedAt ? new Date(a.acceptedAt) : null;
+
+        const isAcceptedToday = acceptedDate !== null && acceptedDate >= startOfDay && acceptedDate <= endOfDay;
+        const isAcceptedBefore = acceptedDate !== null && acceptedDate < startOfDay;
+        const isAcceptedByEod = acceptedDate !== null && acceptedDate <= endOfDay;
+
+        // 2. Physical Event Completion Timestamps for Pickup vs SHG Drop
+        let pickupCompletionTime: Date | null = null;
+        let dropCompletionTime: Date | null = null;
+
+        const scans = (o as any)?.parcels?.flatMap((p: any) => p.scanHistories || []) || [];
+
+        // Primary: ParcelScanHistory events matching this transporter/assignment
+        const pickupScan = scans.find(
+          (s: any) => s.action === 'TRANSPORTER_PICKUP' && (!s.userId || idVariants.includes(String(s.userId)))
+        );
+        if (pickupScan?.scanTime) {
+          pickupCompletionTime = new Date(pickupScan.scanTime);
+        }
+
+        // Primary for SHG Drop: SHG_DROP_RECEIVE scan when this transporter is assigned to the DROP leg (Not buyer delivery!)
+        const isDropTransporterCompleted =
+          isDropTransporterMatch &&
+          ['COMPLETED', 'DROPPED', 'DELIVERED', 'PARCEL_AT_DROP_SHG'].includes(dtStatus);
+
+        if (isDropTransporterMatch && (isDropTransporterCompleted || a.status === 'COMPLETED')) {
+          const dropScan = scans.find((s: any) => s.action === 'SHG_DROP_RECEIVE');
+          if (dropScan?.scanTime) {
+            dropCompletionTime = new Date(dropScan.scanTime);
+          }
+        }
+
+        // Secondary: VerificationRecord matching this transporter
+        const orderVerifs = verificationRecordsMap.get(a.orderId) || [];
+        if (!pickupCompletionTime) {
+          const pickupVerif = orderVerifs.find(
+            (v: any) =>
+              v.verificationType === 'PICKUP' &&
+              v.verifiedTime &&
+              (!v.verifiedBy || idVariants.includes(String(v.verifiedBy)) || idVariants.includes(String(v.senderId)))
+          );
+          if (pickupVerif?.verifiedTime) pickupCompletionTime = new Date(pickupVerif.verifiedTime);
+        }
+        if (!dropCompletionTime) {
+          const dropVerif = orderVerifs.find(
+            (v: any) =>
+              v.verificationType === 'DROP' &&
+              v.verifiedTime &&
+              (!v.verifiedBy || idVariants.includes(String(v.verifiedBy)) || idVariants.includes(String(v.receiverId)))
+          );
+          if (dropVerif?.verifiedTime) dropCompletionTime = new Date(dropVerif.verifiedTime);
+        }
+
+        // Tertiary: RedirectedOrder matching this transporter
+        if (!pickupCompletionTime) {
+          const redir = (o as any)?.redirectedOrders?.find(
+            (r: any) => !r.transporterId || idVariants.includes(String(r.transporterId))
+          );
+          if (redir?.pickedUpAt) pickupCompletionTime = new Date(redir.pickedUpAt);
+        }
+        if (!dropCompletionTime) {
+          const redir = (o as any)?.redirectedOrders?.find(
+            (r: any) => !r.transporterId || idVariants.includes(String(r.transporterId))
+          );
+          if (redir?.completedAt) dropCompletionTime = new Date(redir.completedAt);
+        }
+
+        // Legacy Fallback: ONLY when assignment status is COMPLETED and no scan/verification record exists
+        if (!pickupCompletionTime && isPickup && a.status === 'COMPLETED') {
+          pickupCompletionTime = new Date(a.updatedAt);
+        }
+        if (!dropCompletionTime && isDrop && a.status === 'COMPLETED') {
+          dropCompletionTime = new Date(a.updatedAt);
+        }
+
+        const completionTime = isPickup ? pickupCompletionTime : dropCompletionTime;
+        const isLegCompleted = completionTime !== null;
+
+        // 3. Rejection Event Timestamp
+        let rejectionTime: Date | null = null;
+        const isLegRejected =
+          a.status === 'REJECTED' ||
+          (isPickup && ptStatus === 'REJECTED') ||
+          (isDrop && (dtStatus === 'REJECTED' || dtStatus === 'SHG_NOT_AVAILABLE')) ||
+          mStatus === 'REJECTED' ||
+          mStatus === 'CANCELLED';
+
+        if (isLegRejected) {
+          rejectionTime = new Date(a.updatedAt);
+        }
+
+        // Event-Based Resolutions
+        const isCompletedBeforeStart = isLegCompleted && completionTime < startOfDay;
+        const isRejectedBeforeStart = isLegRejected && rejectionTime !== null && rejectionTime < startOfDay;
+        const isResolvedBeforeStart = isCompletedBeforeStart || isRejectedBeforeStart;
+
+        const isCompletedOnTargetDate = isLegCompleted && completionTime >= startOfDay && completionTime <= endOfDay;
+        const isRejectedOnTargetDate = isLegRejected && rejectionTime !== null && rejectionTime >= startOfDay && rejectionTime <= endOfDay;
+
+        const isCompletedByEod = isLegCompleted && completionTime <= endOfDay;
+        const isRejectedByEod = isLegRejected && rejectionTime !== null && rejectionTime <= endOfDay;
+        const isResolvedByEod = isCompletedByEod || isRejectedByEod;
+
+        // A. Accepted Today
+        if (isAcceptedToday) {
+          acceptedCount++;
+        }
+
+        // B. Carried Forward: Accepted before target date AND unresolved entering target date
+        if (isAcceptedBefore && !isResolvedBeforeStart) {
+          carriedForwardCount++;
+        }
+
+        // C. Completed Today: Leg completion event occurred on target date
+        if (isCompletedOnTargetDate) {
+          completedTodayCount++;
+          if (isPickup) sellerPickupCount++;
+          if (isDrop) shgDropCount++;
+        }
+
+        // D. Undelivered: Rejection event occurred on target date
+        if (isRejectedOnTargetDate) {
+          undeliveredCount++;
+        }
+
+        // E. Pending EOD: Accepted by EOD and unresolved at EOD
+        if (isAcceptedByEod && !isResolvedByEod) {
+          pendingEodCount++;
+        }
+      });
 
       const vehicleNum =
         (transporter.transporterDetail as any)?.vehicleNumber ||
@@ -221,21 +308,31 @@ export class OrderManagementService implements OnModuleInit {
         mobileNumber: transporter.phoneNumber || 'N/A',
         transporterCode: codeStr,
         vehicleNumber: vehicleNum,
-        totalAllocated,
-        completed: completedCount,
-        pending: pendingCount,
+        accepted: acceptedCount,
+        carriedForward: carriedForwardCount,
+        completedToday: completedTodayCount,
+        pendingEod: pendingEodCount,
         undelivered: undeliveredCount,
         sellerPickup: sellerPickupCount,
         shgDrop: shgDropCount,
+        // Retain backward compatibility properties
+        totalAllocated: acceptedCount,
+        completed: completedTodayCount,
+        pending: pendingEodCount,
       };
     });
 
     const summary = {
       totalTransporters: transporterReports.length,
-      totalAllocated: transporterReports.reduce((sum, r) => sum + r.totalAllocated, 0),
-      completed: transporterReports.reduce((sum, r) => sum + r.completed, 0),
-      pending: transporterReports.reduce((sum, r) => sum + r.pending, 0),
+      accepted: transporterReports.reduce((sum, r) => sum + r.accepted, 0),
+      carriedForward: transporterReports.reduce((sum, r) => sum + r.carriedForward, 0),
+      completedToday: transporterReports.reduce((sum, r) => sum + r.completedToday, 0),
+      pendingEod: transporterReports.reduce((sum, r) => sum + r.pendingEod, 0),
       undelivered: transporterReports.reduce((sum, r) => sum + r.undelivered, 0),
+      // Backward compatibility aliases
+      totalAllocated: transporterReports.reduce((sum, r) => sum + r.accepted, 0),
+      completed: transporterReports.reduce((sum, r) => sum + r.completedToday, 0),
+      pending: transporterReports.reduce((sum, r) => sum + r.pendingEod, 0),
     };
 
     return {

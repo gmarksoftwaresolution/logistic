@@ -12,7 +12,8 @@ import {
   RefreshCw,
   AlertCircle,
   Phone,
-  FileText
+  FileText,
+  ArrowRightCircle
 } from 'lucide-react';
 
 interface TransporterReportRow {
@@ -21,20 +22,30 @@ interface TransporterReportRow {
   mobileNumber: string;
   transporterCode: string;
   vehicleNumber: string;
-  totalAllocated: number;
-  completed: number;
-  pending: number;
+  accepted: number;
+  carriedForward: number;
+  completedToday: number;
+  pendingEod: number;
   undelivered: number;
   sellerPickup: number;
   shgDrop: number;
+  // Compatibility fallbacks
+  totalAllocated?: number;
+  completed?: number;
+  pending?: number;
 }
 
 interface SummaryData {
   totalTransporters: number;
-  totalAllocated: number;
-  completed: number;
-  pending: number;
+  accepted: number;
+  carriedForward: number;
+  completedToday: number;
+  pendingEod: number;
   undelivered: number;
+  // Compatibility fallbacks
+  totalAllocated?: number;
+  completed?: number;
+  pending?: number;
 }
 
 interface DayEndClosurePageProps {
@@ -50,9 +61,10 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryData>({
     totalTransporters: 0,
-    totalAllocated: 0,
-    completed: 0,
-    pending: 0,
+    accepted: 0,
+    carriedForward: 0,
+    completedToday: 0,
+    pendingEod: 0,
     undelivered: 0,
   });
   const [transporters, setTransporters] = useState<TransporterReportRow[]>([]);
@@ -63,12 +75,13 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
     try {
       const res = await api.orders.getDayEndClosure(date, search);
       if (res && res.success) {
-        setSummary(res.summary || {
-          totalTransporters: 0,
-          totalAllocated: 0,
-          completed: 0,
-          pending: 0,
-          undelivered: 0,
+        setSummary({
+          totalTransporters: res.summary?.totalTransporters ?? 0,
+          accepted: res.summary?.accepted ?? res.summary?.totalAllocated ?? 0,
+          carriedForward: res.summary?.carriedForward ?? 0,
+          completedToday: res.summary?.completedToday ?? res.summary?.completed ?? 0,
+          pendingEod: res.summary?.pendingEod ?? res.summary?.pending ?? 0,
+          undelivered: res.summary?.undelivered ?? 0,
         });
         setTransporters(res.transporters || []);
       } else {
@@ -137,7 +150,7 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search transporter..."
+              placeholder="Search transporter by name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#073318] focus:border-transparent transition-all"
@@ -154,7 +167,7 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
         </div>
 
         {/* Top Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Card 1: Total Transporters */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
@@ -165,53 +178,67 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
             </div>
             <div className="mt-3">
               <span className="text-2xl font-bold text-slate-900">{summary.totalTransporters}</span>
-              <p className="text-xs text-slate-500 mt-0.5">Active on selected date</p>
+              <p className="text-xs text-slate-500 mt-0.5">Active on date</p>
             </div>
           </div>
 
-          {/* Card 2: Total Allocated */}
+          {/* Card 2: Accepted */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Allocated</span>
+              <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Accepted</span>
               <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
                 <Package className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl font-bold text-slate-900">{summary.totalAllocated}</span>
-              <p className="text-xs text-slate-500 mt-0.5">Assigned orders</p>
+              <span className="text-2xl font-bold text-blue-700">{summary.accepted}</span>
+              <p className="text-xs text-slate-500 mt-0.5">Accepted today</p>
             </div>
           </div>
 
-          {/* Card 3: Completed / Delivered */}
+          {/* Card 3: Carried Forward */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Completed / Delivered</span>
+              <span className="text-xs font-semibold text-purple-700 uppercase tracking-wider">Carried Forward</span>
+              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <ArrowRightCircle className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl font-bold text-purple-700">{summary.carriedForward}</span>
+              <p className="text-xs text-slate-500 mt-0.5">From previous dates</p>
+            </div>
+          </div>
+
+          {/* Card 4: Completed Today */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Completed Today</span>
               <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl font-bold text-emerald-700">{summary.completed}</span>
-              <p className="text-xs text-slate-500 mt-0.5">Successfully fulfilled</p>
+              <span className="text-2xl font-bold text-emerald-700">{summary.completedToday}</span>
+              <p className="text-xs text-slate-500 mt-0.5">Fulfilled today</p>
             </div>
           </div>
 
-          {/* Card 4: Pending */}
+          {/* Card 5: Pending EOD */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending</span>
+              <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Pending EOD</span>
               <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl font-bold text-amber-700">{summary.pending}</span>
-              <p className="text-xs text-slate-500 mt-0.5">In-transit / Processing</p>
+              <span className="text-2xl font-bold text-amber-700">{summary.pendingEod}</span>
+              <p className="text-xs text-slate-500 mt-0.5">Unresolved at EOD</p>
             </div>
           </div>
 
-          {/* Card 5: Undelivered */}
+          {/* Card 6: Undelivered */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">Undelivered</span>
@@ -221,7 +248,7 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
             </div>
             <div className="mt-3">
               <span className="text-2xl font-bold text-rose-700">{summary.undelivered}</span>
-              <p className="text-xs text-slate-500 mt-0.5">Rejected / Failed</p>
+              <p className="text-xs text-slate-500 mt-0.5">Rejected / Cancelled</p>
             </div>
           </div>
         </div>
@@ -269,12 +296,13 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3.5 px-4">Transporter</th>
-                    <th className="py-3.5 px-4 text-center">Total Allocated</th>
-                    <th className="py-3.5 px-4 text-center text-emerald-700">Completed / Delivered</th>
-                    <th className="py-3.5 px-4 text-center text-amber-700">Pending</th>
+                    <th className="py-3.5 px-4 text-center text-blue-700">Accepted</th>
+                    <th className="py-3.5 px-4 text-center text-purple-700">Carried Forward</th>
+                    <th className="py-3.5 px-4 text-center text-emerald-700">Completed Today</th>
+                    <th className="py-3.5 px-4 text-center text-amber-700">Pending EOD</th>
                     <th className="py-3.5 px-4 text-center text-rose-700">Undelivered</th>
-                    <th className="py-3.5 px-4 text-center">Seller Pickup</th>
-                    <th className="py-3.5 px-4 text-center">SHG Drop</th>
+                    {/* <th className="py-3.5 px-4 text-center">Seller Pickup</th> */}
+                    {/* <th className="py-3.5 px-4 text-center">SHG Drop</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-sm">
@@ -300,39 +328,47 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-800">
-                        {row.totalAllocated}
+                      <td className="py-3.5 px-4 text-center font-bold text-blue-700">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                          {row.accepted ?? row.totalAllocated ?? 0}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center font-bold text-purple-700">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                          {row.carriedForward ?? 0}
+                        </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center font-bold text-emerald-700">
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {row.completed}
+                          {row.completedToday ?? row.completed ?? 0}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center font-bold text-amber-700">
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                          {row.pending}
+                          {row.pendingEod ?? row.pending ?? 0}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center font-bold text-rose-700">
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                          {row.undelivered}
+                          {row.undelivered ?? 0}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-medium text-slate-700">
+                      {/* <td className="py-3.5 px-4 text-center font-medium text-slate-700">
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold">
-                          {row.sellerPickup}
+                          {row.sellerPickup ?? 0}
                         </span>
-                      </td>
+                      </td> */}
 
-                      <td className="py-3.5 px-4 text-center font-medium text-slate-700">
+                      {/* <td className="py-3.5 px-4 text-center font-medium text-slate-700">
                         <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold">
-                          {row.shgDrop}
+                          {row.shgDrop ?? 0}
                         </span>
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
@@ -344,3 +380,4 @@ export const DayEndClosurePage: React.FC<DayEndClosurePageProps> = ({ onNavigate
     </Layout>
   );
 };
+

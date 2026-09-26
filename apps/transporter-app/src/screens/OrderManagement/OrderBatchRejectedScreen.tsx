@@ -14,6 +14,7 @@ import { useOrderManagement, BatchOrder } from '../../context/OrderManagementCon
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye, XCircle } from 'lucide-react-native';
 import { HUB_CONFIG } from '../../constants/hub';
+import FlowBadge from '../../components/FlowBadge';
 import { useTranslation } from 'react-i18next';
 
 const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
@@ -139,6 +140,7 @@ const OrderBatchRejectedScreen: React.FC<{ navigation: any }> = ({ navigation })
                               navigation.navigate('OrderBatchPickupDetail', { batchId: batch.id, type: type })
                             }
                           >
+                            <FlowBadge flowType={batch.flowType} isRedirected={batch.isRedirected || (batch as any).isPickupRedirected} />
                             <View style={styles.cardHeaderRow}>
                               <View style={styles.idGroup}>
                                 <Text style={styles.batchIdText}>{batch.displayId || batch.id}</Text>

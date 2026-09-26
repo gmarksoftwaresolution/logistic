@@ -19,6 +19,7 @@ import { HUB_CONFIG, isHubPoint } from '../../constants/hub';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { Package, MapPin, ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import FlowBadge from '../../components/FlowBadge';
 import { FloatingScannerButton } from '../../components/FloatingScannerButton/FloatingScannerButton';
 
 type DisplayEntry = { batch: BatchOrder; type: 'pickup' | 'drop' };
@@ -262,6 +263,7 @@ const AcceptedOrdersScreen: React.FC<{ route: any; navigation: any }> = ({ route
                     }
                   >
                     <View style={styles.widgetLeftData}>
+                      <FlowBadge flowType={batch.flowType} isRedirected={batch.isRedirected || (batch as any).isPickupRedirected} />
                       <View style={styles.widgetTopRow}>
                         <Text style={styles.widgetBatchIdText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{batch.displayId || batch.id}</Text>
                       </View>

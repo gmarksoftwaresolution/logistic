@@ -3828,7 +3828,7 @@ export default function SignupScreen({
                       setVillageError('');
                     }
                     // Keep all villages under pincode available, prioritizing cleanOpt at the top
-                    const rawVils = [cleanOpt, ...(allPincodeVils || [])].filter(Boolean);
+                    const rawVils = [cleanOpt, ...(villageList || [])].filter(Boolean);
                     const sortedVils = rawVils.filter((v, idx, arr) => arr.indexOf(v) === idx);
                     setVillageList(sortedVils);
                     setShowPostOfficeMenu(false);

@@ -342,6 +342,7 @@ const mapDbOrderToUi = (dbOrder: any, type: 'pickup' | 'drop', isReturnOrder?: b
     sellerMobile: dbOrder.seller?.phoneNumber || dbOrder.seller?.mobileNumber || dbOrder.masterOrder?.items?.[0]?.seller?.mobileNumber || '',
     buyerMobile: dbOrder.buyer?.phoneNumber || dbOrder.buyer?.mobileNumber || dbOrder.masterOrder?.buyer?.phoneNumber || dbOrder.masterOrder?.buyer?.mobileNumber || '',
     tracking: dbOrder.tracking || dbOrder.masterOrder?.tracking || [],
+    createdAt: dbOrder.createdAt || dbOrder.created_at || dbOrder.orderDate || dbOrder.date || null,
     pickedUpAt: dbOrder.redirectedOrder?.pickedUpAt || (dbOrder.pickupTransporterStatus === 'PICKED' || dbOrder.pickupTransporterStatus === 'PARCEL_PICKED' || dbOrder.mainStatus === 'IN_TRANSIT_TO_HUB' ? dbOrder.updatedAt : null) || '',
   };
 };

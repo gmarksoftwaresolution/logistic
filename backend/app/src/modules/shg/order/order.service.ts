@@ -3,6 +3,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { VehicleSuggestionService } from './vehicle-suggestion.service';
 import { EarningsService } from '../earnings/earnings.service';
 import { triggerTransporterPickupBroadcast } from '../../../shared/qr/qr-verification-engine';
+import { enrichOrdersWithAuditTimeline } from '../../../common/utils/audit-timeline.util';
 
 @Injectable()
 export class OrderService {
@@ -243,7 +244,7 @@ export class OrderService {
 
     const transporterMap = new Map(transporters.map(t => [String(t.id), t]));
 
-    return matchedOrders.map((o: any) => {
+    const mapped = matchedOrders.map((o: any) => {
       const transId = o.pickupTransporterId || o.dropTransporterId;
       const transporterUser = transId ? transporterMap.get(transId) : null;
       const cleanOrderId = (o.orderId || o.id).replace(/^ORD-/, '');
@@ -384,6 +385,7 @@ export class OrderService {
         products: o.parcels || [],
       };
     });
+    return enrichOrdersWithAuditTimeline(mapped, this.prisma);
   }
 
   async getCompletedOrders(shgId: number | string, mobileNumber?: string) {
@@ -568,12 +570,19 @@ export class OrderService {
               otherDetails: transporterUser.otherDetails || [],
             };
           })(),
+          createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+          date: o.createdAt,
+          orderDate: o.createdAt,
+          products: o.parcels || [],
         };
       });
 
+      const enrichedFormatted = await enrichOrdersWithAuditTimeline(formatted, this.prisma);
+
       return {
-        newOrders: formatted.filter(o => o.status !== 'RETURN_COMPLETED'),
-        returnOrders: formatted.filter(o => o.status === 'RETURN_COMPLETED'),
+        newOrders: enrichedFormatted.filter((o: any) => o.status !== 'RETURN_COMPLETED'),
+        returnOrders: enrichedFormatted.filter((o: any) => o.status === 'RETURN_COMPLETED'),
       };
     } catch (err: any) {
       console.error('[getCompletedOrders Error]:', err?.message || err);
